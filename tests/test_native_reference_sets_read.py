@@ -5,10 +5,15 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, redirect as flask_redirect, request
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+from flask_login import LoginManager
+from werkzeug.exceptions import HTTPException
 
 from oneirodex.runtime_native.reference_sets_read import create_reference_sets_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+from oneirodex.utils.error_envelope import http_error_code, wants_json_error
 
 
 def _client(*, role='admin', data=None):
@@ -18,7 +23,7 @@ def _client(*, role='admin', data=None):
     user = SimpleNamespace(
         id=71, user_id='reference-sets-user', role=role,
         is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     login_manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -46,13 +51,26 @@ def _client(*, role='admin', data=None):
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    session_data = {'_user_id': '71:fingerprint', '_fresh': True}
+    session_data = {'_user_id': login_identity_for(71), '_fresh': True}
     client.csrf_token = generate_csrf_token(session_data, flask_app.config['SECRET_KEY'])
     client.cookies.set(
         'session',
         dump_session_cookie(session_data, flask_app.config['SECRET_KEY']),
     )
     return client
+
+
+def _install_legacy_error_envelope(app):
+    @app.errorhandler(HTTPException)
+    def handle_http_error(error):
+        if not wants_json_error(request):
+            return error.get_response()
+        from oneirodex.utils.api_response import api_error
+
+        return api_error(
+            error.description or error.name or 'Request failed',
+            code=http_error_code(error.code), status=error.code or 500,
+        )
 
 
 def test_reference_sets_read_keeps_payload_cache_and_head_contract():
@@ -113,6 +131,53 @@ def test_reference_sets_upload_checks_csrf_then_preserves_upload_contract(monkey
     assert calls[0]['raw'] == b'contents'
 
 
+def test_reference_sets_upload_reports_legacy_xml_parse_detail(monkeypatch):
+    from oneirodex import db
+    from xml.etree.ElementTree import ParseError
+
+    monkeypatch.setattr(db.session, 'rollback', lambda: None)
+    client = _client(data=SimpleNamespace(
+        read=lambda: {},
+        upload=lambda **_kwargs: (_ for _ in ()).throw(ParseError('no element found: line 1, column 19')),
+    ))
+    response = client.post(
+        '/api/reference-sets',
+        data={'library_platform': 'NES', 'region': 'USA', 'source': 'mame'},
+        files={'file': ('bad.xml', b'<datafile><machine>')},
+        headers={'X-CSRFToken': client.csrf_token},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['message'] == 'Failed to parse DAT: no element found: line 1, column 19'
+
+
+def test_legacy_reference_sets_invalid_form_redirect_keeps_html_content_type():
+    client = _client()
+    missing_csrf = client.post('/admin/reference_sets', data={'field': 'value'})
+    invalid_form = client.post(
+        '/admin/reference_sets', data={'csrf_token': client.csrf_token},
+        headers={'X-CSRFToken': client.csrf_token}, follow_redirects=False,
+    )
+
+    assert missing_csrf.status_code == 400
+    assert invalid_form.status_code == 302
+    expected = flask_redirect('/admin/reference_sets', code=302)
+    assert invalid_form.headers['content-type'] == expected.headers['Content-Type']
+    assert invalid_form.content == expected.get_data()
+    assert invalid_form.headers['location'] == '/admin/reference_sets'
+
+    delete_client = _client(data=SimpleNamespace(read=lambda: {}, delete=lambda _set_id: False))
+    missing_set = delete_client.post(
+        '/admin/reference_sets',
+        data={'csrf_token': delete_client.csrf_token, 'action': 'delete', 'set_id': '3'},
+        headers={'X-CSRFToken': delete_client.csrf_token}, follow_redirects=False,
+    )
+    assert missing_set.status_code == 302
+    assert missing_set.headers['content-type'] == expected.headers['Content-Type']
+    assert missing_set.content == expected.get_data()
+    assert missing_set.headers['location'] == '/admin/reference_sets'
+
+
 def test_reference_set_delete_checks_csrf_and_keeps_not_found_contract():
     calls = []
     client = _client(data=SimpleNamespace(read=lambda: {}, delete=lambda set_id: calls.append(set_id) or set_id == 17))
@@ -128,6 +193,52 @@ def test_reference_set_delete_checks_csrf_and_keeps_not_found_contract():
     assert deleted.json()['id'] == 17
     assert missing.status_code == 404
     assert calls == [17, 18]
+
+
+def test_reference_set_delete_rejects_paths_flask_integer_converter_does_not_match():
+    from oneirodex.routes_apis.reference_sets import apis_bp
+
+    legacy_app = Flask(__name__)
+    legacy_app.config['SECRET_KEY'] = 'legacy-reference-sets-secret'
+    login_manager = LoginManager()
+    login_manager.init_app(legacy_app)
+    login_manager.login_view = 'login'
+    login_manager.user_loader(lambda _user_id: None)
+    _install_legacy_error_envelope(legacy_app)
+    legacy_app.register_blueprint(apis_bp, url_prefix='/api')
+    legacy_client = legacy_app.test_client()
+    native_client = _client()
+
+    for path in (
+        '/api/reference-sets/not-an-integer',
+        '/api/reference-sets/-1',
+        '/api/admin/reference-sets/not-an-integer',
+        '/api/admin/reference-sets/-1',
+    ):
+        legacy = legacy_client.delete(path)
+        native = native_client.delete(path)
+        assert native.status_code == legacy.status_code == 404
+        if path.startswith('/api/reference-sets/'):
+            # The direct TestClient mounts only this router; the application
+            # 404 handler that supplies Flask's JSON envelope is installed by
+            # the ASGI app and is checked in exact-image parity replays.
+            continue
+        assert native.headers['content-type'].startswith('application/json')
+        assert native.headers['content-type'] == legacy.headers['Content-Type']
+        assert native.json() == legacy.json
+        assert native.headers.get('location') == legacy.headers.get('Location')
+
+
+def test_reference_set_numeric_delete_route_does_not_capture_static_post_actions():
+    client = _client()
+
+    for path in (
+        '/api/reference-sets/rehash',
+        '/api/reference-sets/repair-preview',
+    ):
+        response = client.delete(path)
+        assert response.status_code == 405
+        assert 'POST' in response.headers.get('allow', '')
 
 
 def test_reference_sets_member_api_keeps_legacy_bare_list_and_upload_shape():
@@ -202,6 +313,13 @@ def test_reference_set_rehash_and_repair_preview_keep_admin_action_contracts():
         '/api/reference-sets/rehash', json={'platform': 'NES'},
         headers={'X-CSRFToken': client.csrf_token},
     )
+    vendor_json_rehash = client.post(
+        '/api/reference-sets/rehash', data='{"platform":"NES"}',
+        headers={
+            'Content-Type': 'application/vnd.api+json',
+            'X-CSRFToken': client.csrf_token,
+        },
+    )
     preview = client.post(
         '/api/reference-sets/repair-preview',
         json={'library_platform': 'NES', 'region': 'USA', 'limit': 5},
@@ -211,15 +329,25 @@ def test_reference_set_rehash_and_repair_preview_keep_admin_action_contracts():
         '/api/reference-sets/repair-preview', json={'unknown': 'field'},
         headers={'X-CSRFToken': client.csrf_token},
     )
+    non_object_preview = client.post(
+        '/api/reference-sets/repair-preview', json=[],
+        headers={'X-CSRFToken': client.csrf_token},
+    )
 
     assert missing_platform.status_code == 400
     assert rehashed.json() == {'platform': 'NES', 'hashed': 2, 'skipped': 1}
+    assert vendor_json_rehash.json() == {'platform': 'NES', 'hashed': 2, 'skipped': 1}
     assert preview.json()['candidate_count'] == 3
     assert calls[0] == ('rehash', 'NES')
-    assert calls[1][0] == 'preview'
-    assert calls[1][1]['limit'] == 5
+    assert calls[1] == ('rehash', 'NES')
+    assert calls[2][0] == 'preview'
+    assert calls[2][1]['limit'] == 5
     assert invalid_preview.status_code == 422
     assert 'unknown' in invalid_preview.json()['detail']
+    assert non_object_preview.status_code == 422
+    assert non_object_preview.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of RepairPreviewBody',
+    }
 
 
 def test_reference_sets_data_uses_current_catalog_helpers(monkeypatch):
@@ -274,6 +402,9 @@ def test_legacy_reference_sets_form_upload_uses_hidden_csrf_and_redirects():
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/reference_sets'
+    expected = flask_redirect('/admin/reference_sets', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
     assert calls[0]['raw'] == b'dat-payload'
     assert calls[0]['uploader_id'] == 71
     from oneirodex.runtime_native.session_compat import load_session_cookie

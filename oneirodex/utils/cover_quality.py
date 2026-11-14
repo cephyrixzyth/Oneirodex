@@ -22,6 +22,11 @@ from PIL import ImageStat
 from PIL.Image import DecompressionBombError
 
 from oneirodex.utils.cover_art_studio import render_cover_art
+from oneirodex.utils.image_upload_limits import (
+    GAME_IMAGE_MAX_PIXELS,
+    ImageWorkBusy,
+    image_decode_work_slot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +54,21 @@ def inspect_cover_file(path: str) -> str | None:
         return f'cover unreadable: {exc}'
 
     try:
-        with PILImage.open(path) as im:
-            im.load()
-            width, height = im.size
-            if min(width, height) < MIN_EDGE_PX:
-                return 'cover too small'
-            sample = im.convert('L').resize(
-                (_SAMPLE_EDGE, _SAMPLE_EDGE),
-                PILImage.Resampling.BOX,
-            )
-            stdev = ImageStat.Stat(sample).stddev[0]
+        with image_decode_work_slot():
+            with PILImage.open(path) as im:
+                width, height = im.size
+                if width <= 0 or height <= 0 or width * height > GAME_IMAGE_MAX_PIXELS:
+                    return 'cover pixel count too large'
+                if min(width, height) < MIN_EDGE_PX:
+                    return 'cover too small'
+                im.load()
+                sample = im.convert('L').resize(
+                    (_SAMPLE_EDGE, _SAMPLE_EDGE),
+                    PILImage.Resampling.BOX,
+                )
+                stdev = ImageStat.Stat(sample).stddev[0]
+    except ImageWorkBusy:
+        return 'image processing busy'
     except DecompressionBombError:
         return 'cover pixel count too large'
     except OSError as exc:
@@ -79,6 +89,8 @@ def replace_cover_if_degenerate(path: str, title: str | None) -> tuple[bool, str
     reason = inspect_cover_file(path)
     if reason is None:
         return True, None
+    if reason == 'image processing busy':
+        return False, 'Image processing is busy. Try again shortly.'
 
     logger.info('Replacing degenerate cover %s (%s)', path, reason)
     try:

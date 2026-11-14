@@ -11,10 +11,14 @@
 }
 
 .od-open-path__panel {
+  box-sizing: border-box;
   width: min(40rem, 100%);
+  max-height: calc(100dvh - 2rem);
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 1rem 1.1rem 1.15rem;
   border-radius: var(--od-radius-2xl);
   border: 1px solid var(--od-border);

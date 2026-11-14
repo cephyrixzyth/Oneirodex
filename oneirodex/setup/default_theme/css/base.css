@@ -956,8 +956,11 @@ form textarea {
 
 .popup-menu .menu-button:hover,
 .menu-item > a:hover,
-.menu-item > button:hover {
-    background-color: color-mix(in srgb, var(--od-accent) 20%, transparent);
+.menu-item > button:hover,
+.popup-menu .menu-button:focus-visible,
+.menu-item > a:focus-visible,
+.menu-item > button:focus-visible {
+    background-color: color-mix(in srgb, var(--od-accent) 30%, var(--od-surface));
     color: var(--od-text);
 }
 

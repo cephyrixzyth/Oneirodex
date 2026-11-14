@@ -4,7 +4,7 @@
 
 `oneirodex/utils/validation.py` adds `@validate_body(Model)`. It reads
 `request.get_json(silent=True)`, validates it against a `pydantic.BaseModel`
-from `oneirodex/schemas/`, and on failure returns **one** shape:
+from `oneirodex/schemas/`, and by default on failure returns **one** shape:
 
 ```
 api_error('Invalid request.', code='unprocessable', detail={field: message})   # HTTP 422
@@ -36,8 +36,9 @@ envelope. Do **not** wrap those routes with the flat helper.
        ...
    ```
 
-   Decorators apply bottom-up, so auth runs first and validation second. A
-   `@validate_body` route with no auth decorator above it is a bug.
+   Decorators apply bottom-up, so auth runs first and validation second.
+   Protected routes must retain their auth decorators. Public authentication
+   entrypoints instead retain their token/password and CSRF checks.
 3. Delete the now-redundant `data = request.get_json(...)` line and the
    `if not data.get('x'): return api_error(...)` guards the model now covers.
 4. Keep *semantic* checks that need the DB or app state (does this row exist,
@@ -50,6 +51,17 @@ envelope. Do **not** wrap those routes with the flat helper.
 Partial-success batch routes use `@validate_batch_body(Model, limit=N)` the
 same way (innermost, under auth). Pass `extra_on_error=` when the refusal
 also carries `cap` / `requested` / per-id `results`.
+
+### Existing multi-method and error contracts
+
+Use `methods={'POST'}` on a GET/POST view when GET only inspects state. Use
+`on_error=` when adoption must preserve an established sanitized rejection.
+The email-confirmation route uses `EmailConfirmationBody`: exact passwords,
+8-character minimum, 1,024-byte UTF-8 maximum, legacy unknown-key tolerance,
+and unchanged password/mismatch messages. GET does not activate an account.
+Native confirmation keeps its existing bounded-body and parser behavior;
+these checks do not assert that every legacy/native malformed-body response
+is identical.
 
 ### `detail` shape
 
@@ -101,6 +113,11 @@ Flask blueprints (`/api` for `routes_apis/`).
 | `routes_apis/client.py` | `POST /api/client/lifecycle` (`client_lifecycle_post`) | `ClientLifecycleBody` |
 | `routes_apis/wanted.py` | `POST /api/updates/wanted` (`updates_wanted_add`) | `AddWantedBody` |
 | `routes_apis/wanted.py` | `POST /api/updates/wanted/fulfill` (`updates_wanted_fulfill`) | `FulfillWantedBody` |
+
+The native wanted-update adapter accepts `application/json` and structured
+`application/*+json` bodies, matching Flask's JSON media-type check. A body
+with another or missing content type is treated as an empty object and fails
+required-field validation without mutating the wanted list.
 | `routes_apis/vr.py` | `PATCH /api/games/<uuid>/vr_compat` (`game_vr_compat_patch`) | `VrCompatBody` |
 | `routes_apis/storage.py` | `POST /api/storage/hardlink/preview` (`hardlink_preview`) | `HardlinkBody` |
 | `routes_apis/storage.py` | `POST /api/storage/hardlink/apply` (`hardlink_apply`) | `HardlinkBody` |
@@ -180,6 +197,38 @@ Flask blueprints (`/api` for `routes_apis/`).
   naming `__root__`. Unknown uuid still 404 after a well-formed body.
 - **`quality_profiles_set_active`** — missing `id` / `active_id` /
   `profile_id` was 400, now 422 naming `__root__`. Unknown ids still 404.
+- **`patch_catalog_attach`** — an empty body or either individually missing
+  `game_uuid` / `source_url` keeps the current concise 400
+  (`Provide a game UUID and source URL.`) rather than the
+  legacy 422 field detail. This is retained under the P18 owner decision to
+  preserve clearer current behavior. Whitespace-only source URLs and unknown
+  fields return the legacy 422 with field details. Malformed/non-object JSON
+  and missing or non-JSON Content-Type also return legacy-shaped 422 responses;
+  JSON bytes under a wrong media type are rejected. `application/*+json` vendor
+  media types are accepted as in the legacy route. Exact-image replay confirms
+  matching successful/repeated attachments, one persisted guide URL
+  after retry, and rejection of a `file://` source; provider/database failure
+  branches remain under review. Evidence is in the private parity matrix.
+- **`retroachievements_match`** — body decoding follows Flask's JSON media-type
+  rule: `application/json` and `application/*+json` are parsed, while absent
+  or non-JSON media types validate as an empty object and return the legacy
+  422 missing-`platform` error. Malformed and non-object JSON retain the
+  legacy root validation error. An exact v1.1.8/current replay matched 11
+  request-decoding cases; provider-failure, broader role, and UI branches
+  remain open. Evidence: `retroachievements-match-json-edges-exact-r268-20261022.json`
+  in the private parity artifacts.
+- **`artwork_apply`** — the endpoint now parses only `application/json` and
+  `application/*+json`, matching Flask for missing, text/plain, and
+  application/octet-stream Content-Type. R272 matched all 12 exact-image
+  status cases. It retains field-specific `url` errors for malformed and
+  non-object JSON instead of the legacy generic root error under the saved
+  P18 improvement decision. Provider and file outcomes remain open.
+- **`reference_sets_rehash`** — `application/*+json` vendor media types are
+  parsed like Flask. The exact R269 replay matched 11 of 13 invalid/missing
+  platform cases. The saved P18 decision retains the current controlled 400
+  for malformed JSON (legacy 500) and the current URL-encoded `platform`
+  alias (legacy only accepts `library_platform`). Valid-platform file hashing
+  and UI branches remain open; see the private R269 parity artifact.
 - **`games_batch_favorite`** — missing `favorite` / `uuids` was 400 with
   `updated`/`skipped`/`errors`/`limit`. Now 422 `unprocessable` with the
   same extra keys plus `detail` naming the field. Over-limit is still 400.
@@ -214,7 +263,10 @@ Leave these until the contract can be preserved; do not force them.
 - `routes_apis/library.py` create/edit endpoints accept multipart image uploads
   as well as JSON. They use `read_json_body()` only for the JSON branch and
   retain their existing form and field validation; a JSON-only decorator would
-  break the multipart contract.
+  break the multipart contract. Native library creation accepts only Flask's
+  JSON media types (`application/json` / `application/*+json`), not
+  `application/jsonp`. Evidence:
+  `.artifacts/parity-v1.1.8/library-create-json-media-20261022.json`.
 
 ### `routes_apis/scan.py` (+ `scan_unmatched.py`, `scan_unmatched_edit.py` since H-D.4)
 
@@ -251,7 +303,9 @@ Leave these until the contract can be preserved; do not force them.
 - `rename_preview` / `rename_apply` — missing `game_uuid` is 404, not a
   presence guard.
 - `library_tools_backfill_steam_metadata` — every field optional; the *success*
-  body carries `updated` / `skipped` / `errors`.
+  body carries `updated` / `skipped` / `errors`. Malformed JSON and truthy
+  non-object JSON return 400 `bad_request` before a backfill can run. Empty
+  bodies and falsey JSON values keep the legacy default behavior.
 
 ### `routes_apis/chat.py`
 
@@ -332,6 +386,10 @@ Leave these until the contract can be preserved; do not force them.
 ### `routes_apis/patch_catalog.py`
 
 - `patch_catalog_search` — `q` / `game_uuid` are query arguments, not JSON.
+- `patch_catalog_attach` treats only `application/json` and
+  `application/*+json` as JSON media types, matching Flask validation;
+  `text/plain+json` is rejected as an absent JSON body. Evidence:
+  `.artifacts/parity-v1.1.8/patch-catalog-json-media-20261022.json`.
 
 ### `routes_apis/providers.py`
 
@@ -343,16 +401,65 @@ Leave these until the contract can be preserved; do not force them.
   success**.
 - `routes_apis/rtc.py` — every field optional with defaults.
 - `routes_apis/assists.py` PUT — every field optional.
-- `routes_apis/locale.py` — also reads `request.form`.
+- `routes_apis/locale.py` — also reads `request.form`; vendor
+  `application/*+json` follows Flask's JSON parser, while non-application
+  `+json` remains a form parse. Evidence:
+  `.artifacts/parity-v1.1.8/locale-json-media-20261022.json`.
 - `routes_apis/notifications.py` — all-optional toggles.
 - `routes_apis/download.py` — JSON + query args.
 - `routes_apis/imports_playnite.py` — file or JSON.
 - `routes_apis/game_mods_api.py` create — all fields optional.
 - `routes_apis/licensed_catalog.py` refresh / `reference_sets.py` rehash —
-  also `request.form`.
+  also `request.form`. Licensed-catalog refresh uses Flask's
+  `application/json` / `application/*+json` classifier; `application/jsonp`
+  cannot trigger a refresh. Evidence:
+  `.artifacts/parity-v1.1.8/licensed-catalog-json-media-20261022.json`.
 - GET+PUT sharing one view: `remote_play`, `ambient_lighting`,
   `challenge_solver`, `loading_icons`, `metadata_providers`, `scan_match`
   config.
+
+### `routes_apis/game_mods_api.py` request media type
+
+The native game-mod body reader accepts both `application/json` and
+`application/*+json`, matching Flask's `request.get_json(silent=True)` used by
+`@validate_body`. A focused regression compares the legacy validator with a
+native mod create using `application/vnd.oneirodex+json`; both preserve the
+submitted `id` and `name`. See
+`.artifacts/parity-v1.1.8/game-mod-vendor-json-content-type-20261022.json`.
+This closes only the vendor-JSON request parsing case. The game-mod routes
+remain partially verified overall.
+
+### `routes_apis/game_servers.py` request media type
+
+The native game-server reader also accepts `application/json` and
+`application/*+json`, matching legacy `request.get_json(silent=True)` for
+create and update bodies. The focused create regression preserves
+`display_name` and `connect_string` under `application/vnd.oneirodex+json` on
+both the legacy validator and native route. Evidence:
+`.artifacts/parity-v1.1.8/game-server-vendor-json-content-type-20261022.json`.
+This closes only the vendor-JSON body case; game-server routes remain partially
+verified overall.
+
+### `routes_apis/scan_unmatched.py` bad-match feedback media type
+
+The native bad-match feedback reader accepts `application/json` and
+`application/*+json`, matching the legacy route's `request.get_json(silent=True)`.
+A focused regression confirms both parsers retain the `reason` and `note` fields
+for `application/vnd.oneirodex+json`; the native route records the feedback
+instead of treating the body as an empty clear request. Evidence:
+`.artifacts/parity-v1.1.8/unmatched-feedback-vendor-json-content-type-20261022.json`.
+The unmatched-feedback route remains partially verified overall.
+
+### `routes_apis/scan_unmatched_edit.py` batch mark-kind media type
+
+The native unmatched-mutation body reader accepts `application/json` and
+`application/*+json`, matching the legacy batch mark-kind route's
+`request.get_json(silent=True)`. A focused regression confirms the submitted
+IDs, kind, name, and summary reach the current mutation adapter for
+`application/vnd.oneirodex+json`. Evidence:
+`.artifacts/parity-v1.1.8/unmatched-mark-kind-vendor-json-content-type-20261022.json`.
+This closes only the batch mark-kind request parsing case; unmatched mutation
+routes remain partially verified overall.
 
 ### `routes_admin_ext/system.py`
 
@@ -379,6 +486,21 @@ Leave these until the contract can be preserved; do not force them.
 
 - `settings.py` / `attract_mode.py` — pass-through bags / "no data provided".
 - `library_delete.py` — JSON + form + query; `body_status='error'` extras.
+  Single-delete media detection follows Flask's JSON rule (`application/json`
+  and `application/*+json`) for parser selection and JSON-vs-form CSRF errors.
+  Vendor JSON CSRF case: `.artifacts/parity-v1.1.8/library-delete-vendor-json-content-type-20261022.json`.
+- Native single and batch library scan body parsing uses the same JSON media
+  rule as Flask. Vendor `+json` is parsed; misleading `application/jsonp` is
+  treated as non-JSON and cannot start a scan. Evidence:
+  `.artifacts/parity-v1.1.8/library-scan-json-media-types-20261022.json`.
+- Native default-theme reset follows Flask's JSON media-type classification:
+  `application/*+json` uses the JSON response, while `text/plain+json` keeps
+  the classic redirect-and-flash response. Evidence:
+  `.artifacts/parity-v1.1.8/theme-reset-json-media-types-20261022.json`.
+- Legacy unmatched-form CSRF responses use Flask's full JSON media rule too:
+  `text/plain+json` remains a form-style HTML error, while
+  `application/*+json` gets the JSON error envelope. Evidence:
+  `.artifacts/parity-v1.1.8/unmatched-form-csrf-json-media-20261022.json`.
 
 ### `routes_arr.py`
 

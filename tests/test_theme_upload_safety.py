@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 import json
 from pathlib import Path
+import stat
 from threading import Barrier
 import zipfile
 
@@ -84,6 +85,77 @@ def test_upload_rejects_traversal_before_extracting(manager, monkeypatch):
     with manager.app.test_request_context():
         assert manager.upload_theme(archive) is None
     assert not extracted
+    assert not list(Path(manager.app.config['UPLOAD_FOLDER']).glob('temp_theme_*'))
+
+
+def test_upload_rejects_windows_ambiguous_members_before_extracting(manager, monkeypatch):
+    original_extractall = zipfile.ZipFile.extractall
+    extracted = []
+
+    def track_extractall(self, *args, **kwargs):
+        extracted.append(True)
+        return original_extractall(self, *args, **kwargs)
+
+    monkeypatch.setattr(zipfile.ZipFile, 'extractall', track_extractall)
+    unsafe_members = (
+        'css/.. /outside.css',
+        'css/.../outside.css',
+        'css/CON.txt',
+        'css/COM¹.txt',
+        'css/CONOUT$.txt',
+        'css/style.css:alternate',
+        'css/bad\x01name.css',
+    )
+
+    for index, member in enumerate(unsafe_members):
+        archive = _theme_zip(f'Unsafe {index}', extra={member: b'bad'})
+        with manager.app.test_request_context():
+            assert manager.upload_theme(archive) is None
+
+    assert not extracted
+    assert not list(Path(manager.app.config['UPLOAD_FOLDER']).glob('temp_theme_*'))
+
+
+def test_upload_rejects_invalid_theme_name_before_install(manager):
+    archive = _theme_zip('CON')
+    with manager.app.test_request_context():
+        assert manager.upload_theme(archive) is None
+    assert not list(Path(manager.theme_folder).iterdir())
+
+
+def test_upload_rejects_symlink_entries_before_extracting(manager):
+    archive = _theme_zip('Symlink Theme')
+    with zipfile.ZipFile(archive, 'a') as output:
+        link = zipfile.ZipInfo('css/external.css')
+        link.create_system = 3
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        output.writestr(link, '../../outside.css')
+    archive.seek(0)
+
+    with manager.app.test_request_context():
+        assert manager.upload_theme(archive) is None
+
+    assert not list(Path(manager.theme_folder).iterdir())
+    assert not Path(manager.app.config['UPLOAD_FOLDER'], 'outside.css').exists()
+
+
+def test_upload_removes_partial_theme_after_post_copy_failure(manager, monkeypatch):
+    original_copytree = themes.shutil.copytree
+    copied_destinations = []
+
+    def copy_then_fail(source, destination, *args, **kwargs):
+        original_copytree(source, destination, *args, **kwargs)
+        copied_destinations.append(Path(destination))
+        raise OSError('injected post-copy failure')
+
+    monkeypatch.setattr(themes.shutil, 'copytree', copy_then_fail)
+
+    with manager.app.test_request_context():
+        result = manager.upload_theme(_theme_zip('Partial Theme'))
+
+    assert result is None
+    assert len(copied_destinations) == 1
+    assert not copied_destinations[0].exists()
     assert not list(Path(manager.app.config['UPLOAD_FOLDER']).glob('temp_theme_*'))
 
 

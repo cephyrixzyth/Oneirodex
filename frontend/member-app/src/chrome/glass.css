@@ -176,11 +176,12 @@
   font-weight: 650;
 }
 
-/* Aurora toast host (member SPA — replaces $.notify) — top-right, auto-dismiss */
+/* Aurora toast host (member SPA — replaces $.notify) — below top navigation,
+   so notices never cover the controls they report on. */
 .od-toast-host {
   position: fixed;
   z-index: 2400;
-  top: 1rem;
+  top: calc(var(--od-topbar-reserve-h, var(--od-topbar-h, 3.25rem)) + 0.5rem);
   right: 1rem;
   bottom: auto;
   display: flex;

@@ -7,9 +7,8 @@ from typing import Any, Callable
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
-from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
-from .oidc_status import _set_session_cookie
+from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
 
 _PREFERENCE_FIELDS = (
@@ -17,6 +16,9 @@ _PREFERENCE_FIELDS = (
     'notify_chat', 'notify_free_games', 'email_notify_social',
     'email_digest_daily', 'share_activity',
 )
+NOTIFICATION_READ_BODY_MAX_BYTES = 64 * 1024
+NOTIFICATION_READ_IDS_MAX = 500
+_BODY_TOO_LARGE = object()
 
 
 class NotificationData:
@@ -74,7 +76,9 @@ class NotificationData:
     def publish_test_event(self, user):
         from oneirodex.utils.event_bus import event_bus
 
-        event = event_bus.publish('test', message='ping', user=user.name)
+        event = event_bus.publish(
+            'test', message='ping', user=user.name, visibility_user_id=user.id,
+        )
         return event.to_dict()
 
 
@@ -133,20 +137,42 @@ def create_notifications_router(
                 if scope_response is not None:
                     response = scope_response
                 else:
-                    payload = _json_object(await request.body())
-                    all_read = bool(payload.get('all'))
-                    ids = payload.get('ids') if isinstance(payload.get('ids'), list) else []
-                    cleaned = []
-                    for value in ids:
-                        try:
-                            cleaned.append(int(value))
-                        except (TypeError, ValueError, OverflowError):
-                            continue
-                    from oneirodex.utils.api_contract import api_ok_payload
+                    raw_body = await _bounded_request_body(
+                        request, NOTIFICATION_READ_BODY_MAX_BYTES,
+                    )
+                    if raw_body is _BODY_TOO_LARGE:
+                        response = _api_error(
+                            'Request body is too large.', 'payload_too_large',
+                            limit=NOTIFICATION_READ_BODY_MAX_BYTES,
+                        )
+                    else:
+                        payload = _notification_write_json_object(raw_body)
+                        if payload is None:
+                            response = _api_error(
+                                'Something went wrong on our end. The error has been logged.',
+                                'internal',
+                            )
+                        else:
+                            all_read = bool(payload.get('all'))
+                            ids = payload.get('ids') if isinstance(payload.get('ids'), list) else []
+                            if len(ids) > NOTIFICATION_READ_IDS_MAX:
+                                response = _api_error(
+                                    'Too many notification IDs.', 'payload_too_large',
+                                    limit=NOTIFICATION_READ_IDS_MAX,
+                                    requested=len(ids),
+                                )
+                            else:
+                                cleaned = []
+                                for value in ids:
+                                    try:
+                                        cleaned.append(int(value))
+                                    except (TypeError, ValueError, OverflowError):
+                                        continue
+                                from oneirodex.utils.api_contract import api_ok_payload
 
-                    response = JSONResponse(api_ok_payload(data.mark_read(
-                        auth.user.id, cleaned, all_read=all_read
-                    )))
+                                response = JSONResponse(api_ok_payload(data.mark_read(
+                                    auth.user.id, cleaned, all_read=all_read
+                                )))
             _finish(response, flask_app, request, auth)
             return response
 
@@ -163,13 +189,45 @@ def create_notifications_router(
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:
-                scope_name = 'write:social' if request.method == 'POST' else 'read:social'
-                scope_response = _require_scope(auth, scope_name)
-                if scope_response is not None:
-                    response = scope_response
-                elif request.method == 'POST':
-                    payload = _json_object(await request.body())
-                    data.update_preferences(auth.user, payload)
+                required_scopes = (
+                    ('read:social', 'write:social')
+                    if request.method == 'POST'
+                    else ('read:social',)
+                )
+                for scope_name in required_scopes:
+                    scope_response = _require_scope(auth, scope_name)
+                    if scope_response is not None:
+                        response = scope_response
+                        break
+            if response is None:
+                if request.method == 'POST':
+                    raw_body = await _bounded_request_body(
+                        request, NOTIFICATION_READ_BODY_MAX_BYTES,
+                    )
+                    if raw_body is _BODY_TOO_LARGE:
+                        response = _api_error(
+                            'Request body is too large.', 'payload_too_large',
+                            limit=NOTIFICATION_READ_BODY_MAX_BYTES,
+                        )
+                    else:
+                        payload = _notification_write_json_object(
+                            raw_body, allow_membership_only=True,
+                        )
+                        if payload is None:
+                            response = _api_error(
+                                'Something went wrong on our end. The error has been logged.',
+                                'internal',
+                            )
+                        else:
+                            data.update_preferences(auth.user, payload)
+                            from oneirodex.utils.api_contract import api_ok_payload
+
+                            response = JSONResponse(api_ok_payload())
+                elif request.method == 'HEAD':
+                    # Flask's legacy handler only selected the preference
+                    # projection for GET. Automatic HEAD called the view with
+                    # method=HEAD, fell through the empty update branch, and
+                    # returned the standard success envelope.
                     from oneirodex.utils.api_contract import api_ok_payload
 
                     response = JSONResponse(api_ok_payload())
@@ -292,6 +350,51 @@ def _json_object(raw_body: bytes) -> dict:
     except (TypeError, ValueError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+async def _bounded_request_body(request, max_bytes: int):
+    """Collect at most max_bytes, stopping as soon as a chunk exceeds the cap."""
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                return _BODY_TOO_LARGE
+        except ValueError:
+            pass
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            return _BODY_TOO_LARGE
+        body.extend(chunk)
+    return bytes(body)
+
+
+def _notification_write_json_object(
+    raw_body: bytes, *, allow_membership_only: bool = False,
+) -> dict | None:
+    """Preserve the legacy outcomes for malformed notification write bodies.
+
+    The old routes silently accepted empty/malformed JSON. Their truthy
+    non-object outcomes differed by operation: preference membership tests
+    accept arrays/strings, while integer/bool values and all non-object
+    mark-read payloads fail. ``None`` signals that the caller must return the
+    same generic internal-error envelope without allowing a TypeError to escape.
+    """
+    import json
+
+    try:
+        payload = json.loads(raw_body or b'{}')
+    except (TypeError, ValueError):
+        return {}
+    if not payload:
+        return {}
+    if isinstance(payload, dict):
+        return payload
+    if allow_membership_only and isinstance(payload, (list, str)):
+        if any(key in payload for key in _PREFERENCE_FIELDS):
+            return None
+        return {}
+    return None
 
 
 def _finish(response, flask_app, request, auth):

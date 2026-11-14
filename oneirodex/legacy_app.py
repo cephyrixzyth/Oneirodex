@@ -66,7 +66,17 @@ def create_app(config_object=None):
         if app.config.get('SQLALCHEMY_DATABASE_URI') != test_db_url:
             raise RuntimeError('CRITICAL: App test database configuration mismatch; connection details withheld.')
         logger.info('PYTEST MODE: validated test database configuration')
-    
+
+    # Apply the custom-emoji body cap before Flask-WTF's before-request hook
+    # reads request.form to locate a CSRF token. Route-level limits alone run
+    # too late: the multipart parser would already have consumed the body.
+    @app.before_request
+    def _limit_custom_emoji_upload_body():
+        from flask import request
+        from oneirodex.utils.custom_emoji import limit_custom_emoji_request_body
+
+        limit_custom_emoji_request_body(request)
+
     csrf.init_app(app)
     apply_proxy_fix(app)
     apply_security_headers(app)
@@ -88,6 +98,8 @@ def create_app(config_object=None):
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = 'login.login'
+    from oneirodex.utils.api_tokens import load_user_from_request
+    login_manager.request_loader(load_user_from_request)
     cache.init_app(app)
 
     from werkzeug.exceptions import HTTPException
@@ -190,7 +202,7 @@ def create_app(config_object=None):
         """Check if setup is required and redirect accordingly."""
         from flask import request, redirect
         from oneirodex.utils.setup import should_redirect_to_setup, get_setup_redirect_url
-        
+
         # Skip setup checks for certain endpoints
         exempt_endpoints = {
             'setup.setup', 'setup.setup_submit', 'setup.setup_smtp', 'setup.setup_igdb',
@@ -200,7 +212,7 @@ def create_app(config_object=None):
             'static', 'favicon', 'site.favicon',
             'info.pulse', 'info.awake',
         }
-        
+
         # Skip setup checks for API endpoints (they should handle their own authentication)
         # and for unauthenticated health probes used by Docker / Unraid.
         if request.endpoint and (
@@ -210,7 +222,7 @@ def create_app(config_object=None):
             request.path in ('/pulse', '/awake')
         ):
             return
-        
+
         # Check if we need to redirect to setup
         if should_redirect_to_setup():
             setup_url = get_setup_redirect_url()

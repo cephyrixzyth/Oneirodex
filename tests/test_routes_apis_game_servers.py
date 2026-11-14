@@ -7,6 +7,7 @@ import pytest
 
 from oneirodex.models import Game, GameServer, Library, User
 from oneirodex.platform import LibraryPlatform
+from oneirodex.utils.api_tokens import generate_api_token
 
 
 @pytest.fixture
@@ -160,6 +161,40 @@ class TestGameServersApi:
         body = response.get_json()
         assert body['reachable'] is True
         assert body['method'] == 'http'
+
+    def test_bearer_reads_require_social_scope_but_sessions_keep_access(
+        self, client, regular_user, db_session,
+    ):
+        server = GameServer(display_name='Scoped', connect_string='host:7')
+        db_session.add(server)
+        db_session.commit()
+        token, raw = generate_api_token(regular_user, 'library-only', ['read:library'])
+        headers = {'Authorization': f'Bearer {raw}'}
+        paths = (
+            '/api/game-servers',
+            f'/api/game-servers/{server.uuid}',
+            f'/api/game-servers/{server.uuid}/status',
+            '/api/game-servers/acl-check',
+        )
+
+        for path in paths:
+            denied = client.get(path, headers=headers)
+            assert denied.status_code == 403
+            assert denied.get_json()['error'] == 'Missing scope: read:social'
+            assert denied.get_json()['detail'] == {'required_scope': 'read:social'}
+
+        token.scopes = ['read:social']
+        db_session.commit()
+        with patch(
+            'oneirodex.routes_apis.game_servers.probe_server_health',
+            return_value={'reachable': True, 'method': 'http', 'status_code': 200, 'error': None},
+        ):
+            allowed = [client.get(path, headers=headers) for path in paths]
+        assert [response.status_code for response in allowed] == [200, 200, 200, 200]
+
+        _login(client, regular_user)
+        session_read = client.get('/api/game-servers')
+        assert session_read.status_code == 200
 
     def test_regular_user_cannot_update(self, client, regular_user, db_session):
         server = GameServer(display_name='Locked', connect_string='host:1')

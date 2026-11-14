@@ -13,6 +13,7 @@ from sqlalchemy import select
 from oneirodex.models import Game, Library, User
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils import client_commands as cc
+from oneirodex.utils import client_lifecycle
 from oneirodex.utils.api_tokens import generate_api_token
 from oneirodex.routes_apis.tokens import TOKEN_SCOPE_PRESETS
 
@@ -22,6 +23,7 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 def world(app, db_session, tmp_path, monkeypatch):
     monkeypatch.setattr(cc, '_library_root', lambda: str(tmp_path))
+    monkeypatch.setattr(client_lifecycle, '_library_root', lambda: str(tmp_path))
     uid = str(uuid4())
     user = User(name=f'fc_{uid[:8]}', email=f'fc_{uid[:8]}@example.com', role='user', user_id=uid, state=True)
     user.set_password('password123')
@@ -107,6 +109,37 @@ def test_nacked_command_comes_back(client, app, world):
     assert fake.nack([first[0]['id']]).get_json()['released'] == 1
     again = fake.heartbeat().get_json()['commands']
     assert [c['game_uuid'] for c in again] == [world['game'].uuid]
+
+
+def test_new_preset_supports_heartbeat_without_widening_existing_tokens(client, app, world, db_session):
+    web = _web(client, app, world['user'])
+    queued = web.post('/api/client/commands', json={'game_uuid': world['game'].uuid, 'action': 'install'})
+    assert queued.status_code == 201
+    row, old_raw = generate_api_token(world['user'], 'old-companion', ['read:library', 'write:download'])
+
+    old_companion = FakeCompanion(app, old_raw)
+    denied = old_companion.heartbeat()
+    assert denied.status_code == 403
+    assert denied.get_json()['detail']['required_scope'] == 'write:presence'
+    old_companion._fresh_request()
+    delegated = old_companion.http.post(
+        '/api/tokens', json={'name': 'no-escalation', 'preset': 'companion'},
+        headers=old_companion.headers,
+    )
+    assert delegated.status_code == 403
+    assert delegated.get_json()['detail']['denied_scopes'] == ['write:presence']
+    db_session.refresh(row)
+    assert row.scopes == ['read:library', 'write:download']
+
+    FakeCompanion._fresh_request()
+    created = web.post('/api/tokens', json={'name': 'new-companion', 'preset': 'companion'})
+    assert created.status_code == 201
+    assert set(created.get_json()['token']['scopes']) == {'read:library', 'write:download', 'write:presence'}
+    delivered = FakeCompanion(app, created.get_json()['secret']).heartbeat()
+    assert delivered.status_code == 200
+    assert [(c['game_uuid'], c['action']) for c in delivered.get_json()['commands']] == [
+        (world['game'].uuid, 'install'),
+    ]
 
 
 def test_a_browser_session_never_receives_the_install_queue(client, app, world):

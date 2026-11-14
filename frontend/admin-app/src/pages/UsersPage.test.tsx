@@ -59,6 +59,7 @@ afterEach(() => {
 test('the roster is the editor — no classic-editor dest (W33-11)', async () => {
   mockFetch()
   render(<UsersPage />)
+  expect(document.title).toBe('Users · Oneirodex Admin')
   expect(await screen.findByText('Ada')).toBeInTheDocument()
   expect(screen.queryByText(/classic/i)).toBeNull()
   expect(screen.getByRole('button', { name: 'Edit Ada account' })).toBeInTheDocument()

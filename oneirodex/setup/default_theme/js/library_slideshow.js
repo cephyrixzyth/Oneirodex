@@ -70,19 +70,47 @@ const showDetailsDebounced = debounce(function(element, gameUuid, rowid) {
             }
         })
         .then(screenshots => {
-            let detailsHtml = '<div class="slideshow-container"><div class="slides-wrapper">';
-            screenshots.forEach((url, index) => {
-                detailsHtml += `<div class="screenshot-slide" style="display: ${index === 0 ? 'block' : 'none'};"><img src="${url}" class="screenshot"></div>`;
+            const slideshow = document.createElement('div');
+            slideshow.className = 'slideshow-container';
+            const slidesWrapper = document.createElement('div');
+            slidesWrapper.className = 'slides-wrapper';
+            (Array.isArray(screenshots) ? screenshots : []).forEach((url, index) => {
+                if (typeof url !== 'string') return;
+                const slide = document.createElement('div');
+                slide.className = 'screenshot-slide';
+                slide.style.display = index === 0 ? 'block' : 'none';
+                const image = document.createElement('img');
+                image.className = 'screenshot';
+                image.src = url;
+                slide.appendChild(image);
+                slidesWrapper.appendChild(slide);
             });
-            detailsHtml += '</div></div>'; // End slideshow container
+            slideshow.appendChild(slidesWrapper);
 
-            detailsHtml += `<div class="game-info-box" style="animation: fadein 0.5s;">
-                                <div class="game-name">${element.dataset.name}</div>
-                                <div class="game-size chip file-size-chip">${element.dataset.size}</div>
-                                <div>${element.dataset.genres.split(', ').map(genre => `<span class="chip">${genre}</span>`).join('')}</div>
-                            </div>`;
+            const gameInfo = document.createElement('div');
+            gameInfo.className = 'game-info-box';
+            gameInfo.style.animation = 'fadein 0.5s';
 
-            detailsDiv.innerHTML = detailsHtml;
+            const gameName = document.createElement('div');
+            gameName.className = 'game-name';
+            gameName.textContent = element.dataset.name || '';
+            gameInfo.appendChild(gameName);
+
+            const gameSize = document.createElement('div');
+            gameSize.className = 'game-size chip file-size-chip';
+            gameSize.textContent = element.dataset.size || '';
+            gameInfo.appendChild(gameSize);
+
+            const genres = document.createElement('div');
+            (element.dataset.genres || '').split(', ').filter(Boolean).forEach(genre => {
+                const chip = document.createElement('span');
+                chip.className = 'chip';
+                chip.textContent = genre;
+                genres.appendChild(chip);
+            });
+            gameInfo.appendChild(genres);
+
+            detailsDiv.replaceChildren(slideshow, gameInfo);
 
             startSlideshowForGameUuid(gameUuid);
             detailsDiv.classList.remove('hidden');

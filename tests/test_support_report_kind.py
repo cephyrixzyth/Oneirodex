@@ -39,16 +39,35 @@ def login(client, user):
 def _create(client, **body):
     payload = {'title': 'Something to report'}
     payload.update(body)
+    if payload.get('sync_to_github'):
+        preview = client.post('/api/support/preview', json=payload).get_json()['preview']
+        payload.update({key: preview[key] for key in ['request_id', 'preview_token']})
     return client.post('/api/support/tickets', json=payload)
 
 
 class TestReportKind:
     def test_defaults_to_issue_when_unstated(self, client, member):
         login(client, member)
-        response = _create(client)
+        with patch('oneirodex.routes_apis.support.create_github_issue') as create_issue:
+            response = _create(client)
 
         assert response.status_code == 201
         assert response.get_json()['ticket']['kind'] == 'issue'
+        assert response.get_json()['ticket']['github_sync'] == 'local_only'
+        create_issue.assert_not_called()
+
+    def test_github_sync_requires_explicit_opt_in(self, client, member, monkeypatch):
+        monkeypatch.setenv('SUPPORT_GITHUB_TOKEN', 'synthetic-support-operator')
+        login(client, member)
+        with patch(
+            'oneirodex.routes_apis.support.create_github_issue',
+            return_value={'ok': True, 'number': 17, 'url': 'https://github.com/example/repo/issues/17'},
+        ) as create_issue:
+            response = _create(client, sync_to_github=True)
+
+        assert response.status_code == 201
+        assert response.get_json()['ticket']['github_sync'] == 'synced'
+        create_issue.assert_called_once()
 
     def test_an_enhancement_is_recorded_as_one(self, client, db_session, member):
         login(client, member)
@@ -80,13 +99,17 @@ class TestReportKind:
         rows = client.get('/api/support/tickets').get_json()['tickets']
         assert any(row.get('kind') == 'enhancement' for row in rows)
 
-    def test_ticket_submission_is_limited_per_account(self, client, member):
+    def test_ticket_submission_is_limited_per_account(self, client, member, monkeypatch):
+        monkeypatch.setenv('SUPPORT_GITHUB_TOKEN', 'synthetic-support-operator')
         login(client, member)
         with patch(
             'oneirodex.routes_apis.support.create_github_issue',
             return_value={'ok': False, 'skipped': True},
         ) as create_issue:
-            responses = [_create(client, title=f'Report {index}') for index in range(5)]
+            responses = [
+                _create(client, title=f'Report {index}', sync_to_github=True)
+                for index in range(5)
+            ]
             rejected = _create(client, title='One too many')
 
         assert all(response.status_code == 201 for response in responses)

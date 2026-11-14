@@ -46,7 +46,10 @@ def scan_filters_api(body: ScanFilterBody | None = None):
 
     payload = body.model_dump()
     kind = str(payload.get('kind') or 'name').strip().lower()
-    pattern = str(payload.get('pattern') or '').strip()
+    raw_pattern = payload.get('pattern')
+    if not isinstance(raw_pattern, str):
+        return api_error('Pattern must be text.', code='bad_request')
+    pattern = raw_pattern.strip()
     if kind not in {'name', 'dir', 'regex'}:
         return api_error('Choose a valid filter type.', code='bad_request')
     if not pattern or len(pattern) > 200:
@@ -113,7 +116,9 @@ def edit_filters():
         flash('New scanning filter added.')
         return redirect(url_for('admin2.edit_filters'))
 
-    errors = form.filter_pattern.errors or ['Enter a valid scanning filter.']
+    errors = [*form.filter_pattern.errors, *form.case_sensitive.errors]
+    if not errors:
+        errors = ['Enter a valid scanning filter.']
     for error in errors:
         flash(error, 'danger')
     return redirect(url_for('admin2.edit_filters'))

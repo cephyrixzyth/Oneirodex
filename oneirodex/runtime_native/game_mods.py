@@ -8,7 +8,12 @@ from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+from .query_compat import first_query_value
+from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+
+GAME_MODS_BODY_MAX_BYTES = 512 * 1024
 
 
 _SCHEMAS = {
@@ -176,11 +181,16 @@ def create_game_mods_router(
 
     @router.api_route('/api/mods/summary', methods=['GET', 'HEAD'])
     async def mods_summary(request: Request):
-        return await _run(request, **opts, handler=_summary)
+        return await _run(
+            request, **opts, handler=_summary, read_scope='read:library',
+        )
 
     @router.api_route('/api/games/{game_uuid:str}/mods/catalog', methods=['GET', 'HEAD'])
     async def mods_catalog(game_uuid: str, request: Request):
-        return await _run(request, **opts, handler=_catalog, game_uuid=game_uuid)
+        return await _run(
+            request, **opts, handler=_catalog, game_uuid=game_uuid,
+            read_scope='read:library',
+        )
 
     @router.api_route('/api/games/{game_uuid:str}/mods/profiles/import', methods=['POST'])
     async def import_profile(game_uuid: str, request: Request):
@@ -192,7 +202,10 @@ def create_game_mods_router(
 
     @router.api_route('/api/games/{game_uuid:str}/mods/profiles/{profile_id:str}/export', methods=['GET', 'HEAD'])
     async def export_profile(game_uuid: str, profile_id: str, request: Request):
-        return await _run(request, **opts, handler=_export_profile, game_uuid=game_uuid, profile_id=profile_id)
+        return await _run(
+            request, **opts, handler=_export_profile, game_uuid=game_uuid,
+            profile_id=profile_id, read_scope='read:library',
+        )
 
     @router.api_route('/api/games/{game_uuid:str}/mods/profiles/{profile_id:str}', methods=['DELETE'])
     async def delete_profile(game_uuid: str, profile_id: str, request: Request):
@@ -203,6 +216,7 @@ def create_game_mods_router(
         return await _run(
             request, **opts, handler=_profiles, game_uuid=game_uuid,
             schema='profile' if request.method == 'POST' else None,
+            read_scope='read:library',
         )
 
     @router.api_route('/api/games/{game_uuid:str}/mods/pack', methods=['PATCH'])
@@ -219,7 +233,10 @@ def create_game_mods_router(
     @router.api_route('/api/games/{game_uuid:str}/mods', methods=['GET', 'POST', 'PUT', 'HEAD'])
     async def game_mods(game_uuid: str, request: Request):
         schema = 'row' if request.method == 'POST' else 'bulk' if request.method == 'PUT' else None
-        return await _run(request, **opts, handler=_game_mods, game_uuid=game_uuid, schema=schema)
+        return await _run(
+            request, **opts, handler=_game_mods, game_uuid=game_uuid,
+            schema=schema, read_scope='read:library',
+        )
 
     return router
 
@@ -232,7 +249,7 @@ def mount_game_mods_routes(app: FastAPI, flask_app, **kwargs):
 async def _run(
     request, *, flask_app, data, find_user, find_token, commit_token_touch,
     load_user_id, login_manager, database_scope, handler, game_uuid=None,
-    mod_id=None, profile_id=None, schema=None,
+    mod_id=None, profile_id=None, schema=None, read_scope=None,
 ):
     scope = database_scope(flask_app) if database_scope else nullcontext()
     with scope:
@@ -250,6 +267,8 @@ async def _run(
         body = None
         if response is None and auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
+        if response is None and read_scope and request.method in ('GET', 'HEAD'):
+            response = require_bearer_scope(auth, read_scope)
         if response is None and schema:
             body, response = await _validate_body(request, schema)
         if response is None:
@@ -309,17 +328,17 @@ async def _catalog(request, app, data, auth, *, game_uuid, **_):
     if denied:
         return denied
     sources = data.catalog_sources()
-    source = (request.query_params.get('source') or '').strip().lower()
+    source = (first_query_value(request.query_params, 'source') or '').strip().lower()
     if source not in sources:
         return _error(400, 'bad_request', 'Unknown catalogue source', sources=sources)
     try:
         pack = data.load_mods(app, game_uuid)
         try:
-            limit = int(request.query_params.get('limit')) if request.query_params.get('limit') is not None else None
+            limit = int(first_query_value(request.query_params, 'limit')) if first_query_value(request.query_params, 'limit') is not None else None
         except (TypeError, ValueError):
             limit = None
         result = data.catalog_search(
-            app, source, game.name or '', (request.query_params.get('q') or '').strip(),
+            app, source, game.name or '', (first_query_value(request.query_params, 'q') or '').strip(),
             limit, pack['mods'],
         )
     except Exception:
@@ -388,7 +407,7 @@ async def _profiles(request, app, data, auth, *, game_uuid, body, **_):
     if denied:
         return denied
     try:
-        if request.method == 'GET':
+        if request.method in ('GET', 'HEAD'):
             return _ok({'game_uuid': game_uuid, **data.list_profiles(app, game_uuid)})
         profile = data.create_profile(app, game_uuid, body.name, body.mod_ids)
         return _ok({'profile': profile, **data.list_profiles(app, game_uuid)}, status=201)
@@ -479,9 +498,19 @@ async def _validate_body(request, schema_key):
     from oneirodex.utils.validation import format_validation_errors
 
     payload = {}
-    if request.headers.get('content-type', '').lower().startswith('application/json'):
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    ):
+        raw_body = await read_bounded_body(request, GAME_MODS_BODY_MAX_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            return None, _error(
+                413, 'payload_too_large', 'Request body is too large',
+            )
         try:
-            value = await request.json()
+            import json
+
+            value = json.loads(raw_body or b'{}')
             payload = value if isinstance(value, dict) else {}
         except Exception:
             payload = {}

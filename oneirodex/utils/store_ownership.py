@@ -24,6 +24,9 @@ import io
 from sqlalchemy import func, select
 
 from oneirodex.runtime_native.db_session import native_db as db
+from oneirodex.utils.launcher_imports import MAX_TITLES
+from oneirodex.utils.store_ownership_limits import MAX_OWNERSHIP_CSV_BYTES
+from oneirodex.utils.store_credentials import has_store_credential
 from oneirodex.models import StoreAccount, UserOwnedTitle
 # H-D.4 split: these moved to sibling modules as pure moves. Public names are
 # re-exported here because callers and tests import them from this module.
@@ -199,10 +202,11 @@ def import_store_csv(user_id: int, store: str, csv_text: str) -> dict:
         raise ValueError(f'Unsupported store: {store}')
     if not is_ownership_sync_enabled():
         raise PermissionError('Store ownership sync is disabled by administrator')
+    if len(csv_text.encode('utf-8', errors='replace')) > MAX_OWNERSHIP_CSV_BYTES:
+        raise ValueError('CSV import exceeds the 16 MiB size limit')
 
     reader = csv.reader(io.StringIO(csv_text))
-    count = 0
-    matched = 0
+    pending: list[tuple[str, str | None]] = []
     skipped = 0
     for row in reader:
         parsed = _parse_store_csv_row(row, store)
@@ -212,6 +216,13 @@ def import_store_csv(user_id: int, store: str, csv_text: str) -> dict:
         if len(external_id) > EXTERNAL_APP_ID_MAX:
             skipped += 1
             continue
+        if len(pending) >= MAX_TITLES:
+            raise ValueError(f'That export has more than {MAX_TITLES} titles')
+        pending.append((external_id, name))
+
+    count = 0
+    matched = 0
+    for external_id, name in pending:
         title_row = upsert_owned_title(user_id, store, external_id, name)
         count += 1
         if title_row.matched_game_uuid:
@@ -297,7 +308,7 @@ def get_ownership_summary(user_id: int) -> dict:
             'opt_in': (store in unofficial_store_opt_in()) if unofficial else None,
             'connected': account is not None,
             'external_account_id': account.external_account_id if account else None,
-            'has_credential': bool(account.credential) if account else False,
+            'has_credential': has_store_credential(account),
             'owned_count': owned_count,
             'matched_count': matched_count,
             # The UI needs to be able to say "snapshot from 3 weeks ago" rather

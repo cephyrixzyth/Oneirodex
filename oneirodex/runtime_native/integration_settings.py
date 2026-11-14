@@ -11,6 +11,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect, _set_session_cookie
+from .form_compat import first_form_value
 from .request_auth import request_auth_context
 
 _OIDC_ADMIN_FIELDS = {
@@ -42,6 +43,7 @@ class IntegrationSettingsData:
         from oneirodex.utils.cache import cache
         from oneirodex.utils.event_logging import log_system_event
         from oneirodex.utils.global_settings import global_settings_row_or_create
+        from oneirodex.utils.secret_store import write_global_secret
         from oneirodex.utils.oidc import oidc_readiness_report
 
         row = global_settings_row_or_create()
@@ -50,7 +52,7 @@ class IntegrationSettingsData:
         row.oidc_issuer_url = payload['oidc_issuer_url'].strip() or None
         row.oidc_client_id = payload['oidc_client_id'].strip() or None
         if payload['oidc_client_secret'].strip():
-            row.oidc_client_secret = payload['oidc_client_secret'].strip()
+            write_global_secret(row, 'oidc_client_secret', payload['oidc_client_secret'].strip())
         row.oidc_redirect_uri = payload['oidc_redirect_uri'].strip() or None
         row.oidc_scopes = payload['oidc_scopes'].strip() or 'openid email profile'
         row.oidc_role_claim = payload['oidc_role_claim'].strip() or 'groups'
@@ -90,6 +92,7 @@ class IntegrationSettingsData:
 
 def _oidc_public_settings(row) -> dict:
     from oneirodex.utils.oidc import oidc_readiness_report
+    from oneirodex.utils.secret_store import has_global_secret
 
     return {
         'oidc_enabled': bool(row and row.oidc_enabled),
@@ -97,7 +100,7 @@ def _oidc_public_settings(row) -> dict:
         'oidc_issuer_url': (getattr(row, 'oidc_issuer_url', None) if row else None) or '',
         'oidc_client_id': (getattr(row, 'oidc_client_id', None) if row else None) or '',
         'oidc_client_secret_configured': bool(
-            (getattr(row, 'oidc_client_secret', None) if row else None) or os.getenv('OIDC_CLIENT_SECRET')
+            has_global_secret(row, 'oidc_client_secret') or os.getenv('OIDC_CLIENT_SECRET')
         ),
         'oidc_redirect_uri': (getattr(row, 'oidc_redirect_uri', None) if row else None) or '',
         'oidc_scopes': (getattr(row, 'oidc_scopes', None) if row else None) or 'openid email profile',
@@ -147,10 +150,46 @@ def create_integration_settings_router(
     @router.api_route('/api/admin/integrations/community', methods=['GET', 'HEAD', 'PUT'])
     async def integration_settings(request: Request):
         is_oidc = request.url.path.endswith('/oidc') or request.url.path.endswith('/oidc/save')
+        content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+        legacy_community_form = (
+            request.url.path == '/admin/integrations/community'
+            and request.method == 'POST'
+            and content_type in {'application/x-www-form-urlencoded', 'multipart/form-data'}
+        )
+        community_form = None
+        legacy_form_error = None
+        if legacy_community_form:
+            from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+            raw_body = await read_bounded_body(request, _MAX_BODY)
+            if raw_body is BODY_TOO_LARGE:
+                legacy_form_error = 'too_large'
+            else:
+                replay = Request(request.scope, receive=_body_receive(raw_body))
+                try:
+                    community_form = await replay.form(
+                        max_files=0, max_fields=8, max_part_size=_MAX_BODY,
+                    )
+                except Exception:
+                    legacy_form_error = 'invalid'
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             csrf_response = None
-            if request.method in ('PUT', 'POST'):
+            if legacy_form_error == 'too_large':
+                from oneirodex.utils.api_contract import api_error_payload
+
+                payload, status = api_error_payload(
+                    'Request body is too large.', code='payload_too_large', status=413,
+                )
+                csrf_response = JSONResponse(payload, status_code=status)
+            elif legacy_form_error is not None:
+                from oneirodex.utils.api_contract import api_error_payload
+
+                payload, status = api_error_payload(
+                    'Invalid community settings form.', code='bad_request',
+                )
+                csrf_response = JSONResponse(payload, status_code=status)
+            elif request.method in ('PUT', 'POST'):
                 from .csrf_compat import csrf_error_response
                 from .request_auth import _lifetime_seconds
                 from .session_compat import load_session_cookie
@@ -161,7 +200,14 @@ def create_integration_settings_router(
                     max_age=_lifetime_seconds(flask_app.config.get('PERMANENT_SESSION_LIFETIME', 31_536_000)),
                     fallback_secret_keys=flask_app.config.get('SECRET_KEY_FALLBACKS') or (),
                 )
-                csrf_response = csrf_error_response(request, session, flask_app.config)
+                csrf_token = None
+                if legacy_community_form and community_form is not None:
+                    field_name = str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
+                    value = first_form_value(community_form, field_name)
+                    csrf_token = str(value) if value is not None else None
+                csrf_response = csrf_error_response(
+                    request, session, flask_app.config, token=csrf_token,
+                )
             auth = None
             if csrf_response is None:
                 auth = request_auth_context(
@@ -184,6 +230,39 @@ def create_integration_settings_router(
                 elif auth.token is not None and not auth.has_scope('admin'):
                     payload, status = api_error_payload('This token does not have the admin scope', code='forbidden')
                     response = JSONResponse(payload, status_code=status)
+                elif legacy_community_form:
+                    from oneirodex.utils.security import validate_community_chat_url
+
+                    raw_url = (
+                        str(first_form_value(community_form, 'community_chat_url') or '')
+                        if community_form is not None else ''
+                    )
+                    label = (
+                        str(first_form_value(community_form, 'community_chat_label') or 'Open community')
+                        .strip()[:120]
+                        if community_form is not None else 'Open community'
+                    )
+                    ok, normalized_or_error = validate_community_chat_url(raw_url.strip())
+                    if not ok:
+                        auth.session_data.setdefault('_flashes', []).append(('error', normalized_or_error))
+                    else:
+                        try:
+                            data.community_save(normalized_or_error, label or 'Open community')
+                            auth.session_data.setdefault('_flashes', []).append(('success', 'Community chat link saved.'))
+                        except Exception:
+                            from oneirodex.runtime_native.db_session import native_db as db
+                            import logging
+
+                            db.session.rollback()
+                            logging.getLogger(__name__).warning('Community settings save failed')
+                            auth.session_data.setdefault('_flashes', []).append(('error', 'Failed to save community chat link.'))
+                    from .response_compat import flask_redirect_response
+
+                    response = flask_redirect_response(
+                        '/admin/integrations#community', status_code=302,
+                    )
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, flask_app, auth)
                 elif request.method in ('PUT', 'POST'):
                     body = await _read_json(request)
                     if body is None:
@@ -269,3 +348,16 @@ def _save_community(data, payload):
 def mount_integration_settings_routes(app: FastAPI, flask_app, **kwargs):
     app.include_router(create_integration_settings_router(flask_app, **kwargs))
     return app
+
+
+def _body_receive(body: bytes):
+    sent = False
+
+    async def receive():
+        nonlocal sent
+        if sent:
+            return {'type': 'http.request', 'body': b'', 'more_body': False}
+        sent = True
+        return {'type': 'http.request', 'body': body, 'more_body': False}
+
+    return receive

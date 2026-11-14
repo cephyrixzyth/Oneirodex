@@ -48,6 +48,20 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
 
+  # --- Rust desktop companion ---
+  - package-ecosystem: cargo
+    directory: "/clients/desktop/src-tauri"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      rust-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

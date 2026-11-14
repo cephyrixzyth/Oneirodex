@@ -13,9 +13,9 @@ from oneirodex.utils.smtp_settings import validate_smtp_data
 from oneirodex.utils.smtp_settings import smtp_public_state
 
 
-def _client(*, role='admin', test_result=True):
+def _client(*, role='admin', test_result=True, legacy_save=None):
     flask_app = Flask(__name__)
-    flask_app.config.update(SECRET_KEY='native-smtp-read-secret', CSP_ENABLED=False)
+    flask_app.config.update(SECRET_KEY='native-smtp-read-secret', CSP_ENABLED=False, TESTING=True)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=71, user_id='smtp-user', role=role,
@@ -38,6 +38,29 @@ def _client(*, role='admin', test_result=True):
             'password_saved': bool(validated['smtp_password']),
         }}
 
+    def legacy_test():
+        if isinstance(test_result, BaseException):
+            raise test_result
+        if test_result is None:
+            return None
+        if isinstance(test_result, tuple):
+            return test_result
+        return bool(test_result), (
+            'Connection successful' if test_result
+            else 'Connection failed: Authentication error'
+        )
+
+    data_access = SimpleNamespace(
+        read=lambda: {'settings': {
+            'smtp_server': 'mail.example', 'password_saved': True,
+        }},
+        save=save,
+        test_connection=lambda: test_result,
+        test_connection_legacy=legacy_test,
+    )
+    if legacy_save is not None:
+        data_access.save_legacy = legacy_save
+
     router = create_smtp_settings_router(
         flask_app,
         find_user=lambda user_id: user if user_id == 71 else None,
@@ -45,13 +68,7 @@ def _client(*, role='admin', test_result=True):
         commit_token_touch=lambda _token: None,
         load_user_id=lambda value: user if value.split(':', 1)[0] == '71' else None,
         login_manager=login_manager,
-        data_access=SimpleNamespace(
-            read=lambda: {'settings': {
-                'smtp_server': 'mail.example', 'password_saved': True,
-            }},
-            save=save,
-            test_connection=lambda: test_result,
-        ),
+        data_access=data_access,
         database_scope=lambda _app: nullcontext(),
     )
     app = FastAPI()
@@ -159,10 +176,158 @@ def test_legacy_smtp_save_path_preserves_status_and_hides_password():
     assert 'private-password' not in response.text
 
 
+def test_legacy_smtp_post_uses_compatibility_save_and_exact_response():
+    calls = []
+    client = _client(legacy_save=lambda payload: calls.append(payload))
+    payload = {
+        'smtp_enabled': False,
+        'smtp_server': ' invalid hostname ',
+        'smtp_port': 'not-a-number',
+        'smtp_username': ' user ',
+        'smtp_use_tls': 'unchecked',
+        'smtp_default_sender': 'not-an-email',
+    }
+
+    response = client.post(
+        '/admin/smtp_settings', json=payload,
+        headers={'X-CSRFToken': client.csrf_token},
+    )
+
+    assert response.status_code == 200
+    assert calls == [payload]
+    assert client.saved == []  # strict modern PUT validator was bypassed
+    assert response.json() == {
+        'ok': True,
+        'error': None,
+        'error_code': None,
+        'success': True,
+        'status': 'success',
+        'message': 'SMTP settings updated successfully',
+    }
+
+
+def test_legacy_smtp_disabled_save_preserves_v118_field_semantics(monkeypatch):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.utils import global_settings
+    from oneirodex.runtime_native.smtp_settings_read import SmtpSettingsData
+
+    settings = SimpleNamespace(
+        smtp_enabled=True, smtp_server='old.example', smtp_port=2525,
+        smtp_username='old-user', smtp_password='saved-secret',
+        smtp_use_tls=True, smtp_default_sender='old@example.com',
+    )
+    session = SimpleNamespace(commits=0)
+    session.commit = lambda: setattr(session, 'commits', session.commits + 1)
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=session))
+    monkeypatch.setattr(global_settings, 'global_settings_row_or_create', lambda: settings)
+
+    SmtpSettingsData().save_legacy({
+        'smtp_enabled': False,
+        'smtp_server': ' invalid hostname ',
+        'smtp_port': 'not-a-number',
+        'smtp_username': ' user ',
+        'smtp_password': '',
+        'smtp_use_tls': 'unchecked',
+        'smtp_default_sender': 'not-an-email',
+    })
+
+    assert settings.smtp_enabled is False
+    assert settings.smtp_port == 2525
+    assert settings.smtp_server == ' invalid hostname '
+    assert settings.smtp_username == ' user '
+    assert settings.smtp_password == 'saved-secret'
+    assert settings.smtp_use_tls == 'unchecked'
+    assert settings.smtp_default_sender == 'not-an-email'
+    assert session.commits == 1
+
+
+def test_legacy_smtp_enabled_validation_keeps_v118_error_order(monkeypatch):
+    import pytest
+
+    from oneirodex.runtime_native import db_session
+    from oneirodex.utils import global_settings
+    from oneirodex.runtime_native.smtp_settings_read import SmtpSettingsData
+
+    settings = SimpleNamespace(smtp_password='')
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=SimpleNamespace()))
+    monkeypatch.setattr(global_settings, 'global_settings_row_or_create', lambda: settings)
+
+    with pytest.raises(ValueError, match='SMTP password is required when SMTP is enabled'):
+        SmtpSettingsData().save_legacy({
+            'smtp_enabled': True,
+            'smtp_server': 'smtp.example.com',
+            'smtp_port': 587,
+            'smtp_username': 'mailer',
+            'smtp_default_sender': '',
+        })
+
+
 def test_legacy_smtp_test_path_keeps_failure_at_http_200():
     client = _client(test_result=False)
     response = client.post('/admin/smtp_test', headers={'X-CSRFToken': client.csrf_token})
 
     assert response.status_code == 200
     assert response.json()['success'] is False
-    assert 'password' not in response.text.lower()
+    assert response.json()['message'] == 'Connection failed: Authentication error'
+
+
+def test_legacy_smtp_test_path_preserves_success_result_and_missing_settings():
+    client = _client(test_result=(True, {'status': 'Connection successful'}))
+    response = client.post('/admin/smtp_test', headers={'X-CSRFToken': client.csrf_token})
+    assert response.status_code == 200
+    assert response.json()['result'] == {'status': 'Connection successful'}
+
+    client = _client(test_result=None)
+    response = client.post('/admin/smtp_test', headers={'X-CSRFToken': client.csrf_token})
+    assert response.status_code == 400
+    assert response.json()['message'] == 'SMTP settings not configured'
+
+
+def test_legacy_smtp_test_result_redacts_saved_secret():
+    from oneirodex.runtime_native.smtp_settings_read import _redact_smtp_result
+
+    assert _redact_smtp_result(
+        {'message': 'server echoed private-token'}, 'private-token'
+    ) == {'message': 'server echoed [redacted]'}
+
+
+def test_legacy_smtp_unexpected_test_exception_uses_legacy_500_envelope():
+    client = _client(test_result=RuntimeError('private error details'))
+    response = client.post('/admin/smtp_test', headers={'X-CSRFToken': client.csrf_token})
+
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
+    assert response.json()['message'] == 'Something went wrong on our end. The error has been logged.'
+    assert 'private error details' not in response.text
+
+
+def test_legacy_smtp_post_matches_flask_json_parse_edges():
+    client = _client()
+    malformed = client.post(
+        '/admin/smtp_settings', data='not-json',
+        headers={'X-CSRFToken': client.csrf_token, 'Content-Type': 'application/json'},
+    )
+    assert malformed.status_code == 400
+    assert malformed.text == (
+        '<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n'
+        '<h1>Bad Request</h1>\n'
+        '<p>The browser (or proxy) sent a request that this server could not understand.</p>\n'
+    )
+
+    wrong_type = client.post(
+        '/admin/smtp_settings', data='{}',
+        headers={'X-CSRFToken': client.csrf_token, 'Content-Type': 'text/plain'},
+    )
+    assert wrong_type.status_code == 415
+    assert wrong_type.text == (
+        '<!doctype html>\n<html lang=en>\n<title>415 Unsupported Media Type</title>\n'
+        '<h1>Unsupported Media Type</h1>\n'
+        '<p>Did not attempt to load JSON data because the request Content-Type was not &#39;application/json&#39;.</p>\n'
+    )
+
+    null_value = client.post(
+        '/admin/smtp_settings', content='null',
+        headers={'X-CSRFToken': client.csrf_token, 'Content-Type': 'application/json'},
+    )
+    assert null_value.status_code == 500
+    assert '500 Internal Server Error' in null_value.text

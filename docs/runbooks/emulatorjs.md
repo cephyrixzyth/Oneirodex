@@ -20,8 +20,18 @@ cores are served from this origin. There is no CDN fallback in the shell.
 EmulatorJS is included in the container image from the pinned release. Keep it
 enabled to offer both browser engines, or turn **Enable EmulatorJS** off in
 Admin → Emulators. WebRetro remains the default unless an admin changes it.
-The manual fetch script remains available for local development; production
-images obtain the pinned `<version>.7z` release asset during the Docker build.
+The fetch script requires a SHA-256 digest before downloading and unpacking a
+release. The image currently pins EmulatorJS 4.2.3 and the digest published for
+its [GitHub release asset](https://github.com/EmulatorJS/EmulatorJS/releases/tag/v4.2.3):
+`07d451bc06fa3ad04ab30d9b94eb63ac34ad0babee52d60357b002bde8f3850b`.
+When changing `EMULATORJS_VERSION`, update `EMULATORJS_SHA256` to the matching
+asset digest at the same time. Local fetches must pass both `--version` and
+`--sha256`.
+The install target is fixed to the app's bundled EmulatorJS data directory.
+Custom `EMULATORJS_DATA_DIR` targets are disabled so the script cannot
+recursively replace shared temporary paths or caller-selected directories.
+The script canonicalizes the bundled target and refuses it if it resolves
+outside the app tree before replacing files.
 The upstream release currently publishes a 7z archive rather than the old
 `EmulatorJS.zip` URL, so the fetch script extracts it with `7z` before locating
 `data/loader.js`.

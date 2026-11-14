@@ -99,7 +99,9 @@ test('library creation can browse server folders and returns focus to the opener
   await user.click(await screen.findByRole('button', { name: /ps2/i }))
   await user.click(screen.getByRole('button', { name: 'Use this folder' }))
 
-  expect(screen.getByLabelText('Folder path inside the server')).toHaveValue('/storage/games/ps2')
+  expect(screen.getByLabelText('Folder path inside the server (optional)')).toHaveValue(
+    '/storage/games/ps2',
+  )
   expect(opener).toHaveFocus()
 })
 
@@ -185,7 +187,10 @@ test('manual create form creates a library and queues its first scan', async () 
   )
   await user.type(await screen.findByLabelText('Library name'), 'NES Games')
   await user.selectOptions(screen.getByLabelText('Platform'), 'NES')
-  await user.type(screen.getByLabelText('Folder path inside the server'), '/storage/games/nes')
+  await user.type(
+    screen.getByLabelText('Folder path inside the server (optional)'),
+    '/storage/games/nes',
+  )
   await user.click(screen.getByRole('button', { name: 'Create library and start scan' }))
 
   expect(await screen.findByText('Library created and first scan queued.')).toBeInTheDocument()

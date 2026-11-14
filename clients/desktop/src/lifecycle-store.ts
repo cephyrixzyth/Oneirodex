@@ -126,22 +126,31 @@ export async function pullLifecycleRegistryFromServer(
 export interface PersistedLifecycleRegistryOptions {
   initial?: GameLifecycleRecord[]
   persist?: (records: GameLifecycleRecord[]) => void | Promise<void>
+  onPersistenceError?: (error: unknown) => void
 }
 
 export function createPersistedLifecycleRegistry(
   options: PersistedLifecycleRegistryOptions = {},
 ): LifecycleRegistry {
+  let persistenceQueue: Promise<void> = Promise.resolve()
   const registry = createLifecycleRegistry({
     initial: options.initial,
     onChange: (records) => {
-      void options.persist?.(records)
+      const snapshot = records.map((record) => ({ ...record }))
+      const save = persistenceQueue.catch(() => undefined).then(() => options.persist?.(snapshot))
+      persistenceQueue = Promise.resolve(save)
+      return save
     },
+    onPersistenceError: options.onPersistenceError,
   })
 
   return registry
 }
 
-export async function hydrateLifecycleRegistry(auth?: AuthStore): Promise<LifecycleRegistry> {
+export async function hydrateLifecycleRegistry(
+  auth?: AuthStore,
+  onPersistenceError?: (error: unknown) => void,
+): Promise<LifecycleRegistry> {
   const initial = await loadLifecycleRegistryFromDisk()
   return createPersistedLifecycleRegistry({
     initial,
@@ -151,6 +160,7 @@ export async function hydrateLifecycleRegistry(auth?: AuthStore): Promise<Lifecy
         await syncLifecycleRegistryToServer(auth, records)
       }
     },
+    onPersistenceError,
   })
 }
 

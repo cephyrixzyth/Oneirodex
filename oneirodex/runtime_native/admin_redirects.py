@@ -5,17 +5,17 @@ from contextlib import nullcontext
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse
+from .response_compat import flask_http_error_response, flask_redirect_response
 
 
 ADMIN_REDIRECTS = {
-    '/admin/help': '/help',
     '/admin/library_tools': '/scan_management?active_tab=tools',
     '/admin/server_logs': '/admin/ops?open=full-log',
     '/admin/system_logs': '/admin/ops?open=full-log',
     '/admin/server_status_page': '/admin/ops',
 }
 ADMIN_QUERY_REDIRECTS = {'/admin/scan_management': '/scan_management'}
+ADMIN_QUERY_REDIRECT_DEFAULTS = {'/admin/scan_management': {'active_tab': 'jobs'}}
 
 
 def is_admin_redirect_path(path: str) -> bool:
@@ -30,6 +30,7 @@ def create_admin_redirect_router(
     commit_token_touch,
     login_manager=None,
     database_scope=None,
+    filter_exists=None,
 ):
     router = APIRouter()
 
@@ -63,7 +64,7 @@ def create_admin_redirect_router(
                 flashes = list(auth.session_data.get('_flashes') or [])
                 flashes.append(('danger', 'You must be an admin to access this page.'))
                 auth.session_data['_flashes'] = flashes
-                response = RedirectResponse('/login', status_code=302)
+                response = flask_redirect_response('/login', status_code=302)
             elif not auth.has_scope('admin'):
                 response = _native_json_error(
                     'This token does not have the admin scope', 'forbidden', 403,
@@ -75,10 +76,14 @@ def create_admin_redirect_router(
                     query = {}
                     for key, value in request.query_params.multi_items():
                         query.setdefault(key, value)
+                    for key, value in ADMIN_QUERY_REDIRECT_DEFAULTS.get(
+                        request.url.path, {},
+                    ).items():
+                        query.setdefault(key, value)
                     if query:
                         target += '?' + urlencode(query)
-                response = RedirectResponse(target, status_code=302)
-            if auth.should_set_session_cookie:
+                response = flask_redirect_response(target, status_code=302)
+            if auth.user is not None and auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
 
         response.headers['Cache-Control'] = 'no-store'
@@ -94,6 +99,7 @@ def create_admin_redirect_router(
 
     @router.api_route('/delete_filter/{filter_id:int}', methods=['GET', 'HEAD'])
     def delete_filter_notice(request: Request, filter_id: int):
+        from .admin_pilot import _native_auth_backend
         from .acquire_status import _login_redirect, _set_session_cookie
         from .admin_pilot import _native_json_error
         from .request_auth import request_auth_context
@@ -119,17 +125,23 @@ def create_admin_redirect_router(
                 flashes = list(auth.session_data.get('_flashes') or [])
                 flashes.append(('danger', 'You must be an admin to access this page.'))
                 auth.session_data['_flashes'] = flashes
-                response = RedirectResponse('/login', status_code=302)
+                response = flask_redirect_response('/login', status_code=302)
             elif not auth.has_scope('admin'):
                 response = _native_json_error(
                     'This token does not have the admin scope', 'forbidden', 403,
+                )
+            elif not _filter_exists(filter_id, filter_exists):
+                response = flask_http_error_response(
+                    404, head=request.method == 'HEAD',
                 )
             else:
                 flashes = list(auth.session_data.get('_flashes') or [])
                 flashes.append(('warning', 'Open Scan Filters and confirm removal there.'))
                 auth.session_data['_flashes'] = flashes
-                response = RedirectResponse('/admin/edit_filters', status_code=302)
-            if auth.should_set_session_cookie or auth.session_data.get('_flashes'):
+                response = flask_redirect_response('/admin/edit_filters', status_code=302)
+            if auth.user is not None and (
+                auth.should_set_session_cookie or auth.session_data.get('_flashes')
+            ):
                 _set_session_cookie(response, flask_app, auth)
 
         response.headers['Cache-Control'] = 'no-store'
@@ -145,3 +157,12 @@ def create_admin_redirect_router(
 def mount_admin_redirect_routes(app: FastAPI, flask_app, **kwargs):
     app.include_router(create_admin_redirect_router(flask_app, **kwargs))
     return app
+
+
+def _filter_exists(filter_id: int, lookup=None) -> bool:
+    if lookup is not None:
+        return bool(lookup(filter_id))
+    from oneirodex.models import ReleaseGroup
+    from oneirodex.runtime_native.db_session import native_db as db
+
+    return db.session.get(ReleaseGroup, filter_id) is not None

@@ -6,11 +6,11 @@ Themes live on the **library volume** (`/app/oneirodex/static/library/themes/...
 
 ## Uploading a theme
 
-Theme ZIP uploads are limited to 25 MiB compressed, 100 MiB total expanded content, and 1,024 archive entries. Unsafe archive paths and special files are rejected before extraction. Each upload uses its own temporary directory; concurrent uploads cannot mix files. If two uploads use the same theme name, one is accepted and the other is refused without replacing the installed theme.
+Theme ZIP uploads are limited to 25 MiB compressed, 100 MiB total expanded content, and 1,024 archive entries. Unsafe or Windows-ambiguous archive paths, reserved device names, and special files are rejected before extraction. Each upload uses its own temporary directory; concurrent uploads cannot mix files. If two uploads use the same theme name, one is accepted and the other is refused without replacing the installed theme. Uploaded theme JavaScript is not executed; shell scripts load only from the shipped default theme. Uploaded CSS and other theme assets remain available.
 
 ## Admin theme management UI
 
-`/admin/themes` provides the installed-theme inventory, ZIP upload, custom-theme deletion, loading-motif selection and confirmed default reset in the shared React admin shell. Upload keeps the existing ZIP limits and archive safety checks; loading motifs use the shared catalogue and settings API. Theme choice for an individual account remains in Preferences. Upload, delete, and reset form posts now dispatch through FastAPI with the existing signed-session and CSRF checks, redirects, and flash behavior. Reset also accepts the React JSON request. The authoring guide is served from React at `/admin/themes/readme`.
+`/admin/themes` provides the installed-theme inventory, ZIP upload, custom-theme deletion, loading-motif selection and confirmed default reset in the shared React admin shell. Rotation picks a motif per session; lock applies the selected motif for everyone. In rotating mode, the page previews the generic motifs; hover or keyboard focus animates one specimen at a time, and a caption gives the size of the full rotation catalogue. Lock mode previews the selected motif. Loading motifs use the shared catalogue and settings API. Theme choice for an individual account remains in Preferences. React upload and delete actions use FastAPI JSON endpoints with the existing signed-session and CSRF checks; reset accepts the React JSON request. Legacy form compatibility routes retain their redirect and flash behavior. The shared upload service does not require Flask to be installed in the FastAPI image. The authoring guide is served from React at `/admin/themes/readme`.
 
 ## Default look
 
@@ -124,6 +124,14 @@ the Loading-icons controls below. It links to Preferences for the actual choice.
 Icon-pack fallback is unchanged: when a theme is selected and no pack is named, the theme's
 `theme.json` `default_icon_pack` applies when present; otherwise the existing preference pack stands
 (new rows still default to `outline`).
+
+Uploaded theme assets share the app's static origin so their CSS, fonts, and artwork can load normally.
+If an uploaded HTML/XHTML, SVG (including compressed SVG), XML/XSLT, or web archive document is
+opened directly, the static response applies a restrictive CSP sandbox: scripts, forms, popups, and
+same-origin privileges are disabled. Theme JavaScript is not selected by member or admin shells;
+their scripts come from the shipped default
+theme. CSS and fonts keep their normal asset behavior. SVG artwork is still served as an image, while
+subresources referenced from inside an active document are blocked by default.
 
 Never edit `oneirodex/static/library/themes/` in git — it is runtime output. Change `oneirodex/setup/default_theme/` and bump generator version when output format changes.
 

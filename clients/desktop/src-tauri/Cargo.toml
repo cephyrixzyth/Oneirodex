@@ -16,16 +16,26 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-zip = "2.2"
+zip = "9.1"
 # Host/scheme parsing for the http:// transport policy in `save_config` — same
 # WHATWG normalisation (0x7f.1, userinfo tricks) the webview's `new URL` applies.
 url = "2"
 # OS credential store (Windows Credential Manager / macOS Keychain / Linux Secret Service)
 keyring = { version = "3.6", default-features = false, features = ["windows-native", "apple-native", "sync-secret-service", "crypto-rust"] }
+fs2 = "0.4"
+# Already locked transitively; native launch identities must survive PID reuse.
+uuid = { version = "=1.24.0", features = ["v4"] }
+# Already locked; safe deterministic reporter paths must accept arbitrary game IDs.
+sha2 = "=0.10.9"
 
 [dev-dependencies]
 # Real temp dirs for the path-traversal / zip-slip unit tests in src/lib.rs.
 tempfile = "3"
+plist = { version = "=1.10.0", features = ["enable_unstable_features_that_may_break_with_minor_version_bumps"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Already locked through Tauri; read declared XML and binary bundle metadata.
+plist = { version = "=1.10.0", features = ["enable_unstable_features_that_may_break_with_minor_version_bumps"] }
 
 [features]
 default = ["custom-protocol"]

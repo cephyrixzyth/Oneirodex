@@ -1,8 +1,9 @@
 """ASGI runtime for Oneirodex.
 
-FastAPI owns application route dispatch. Flask still initializes the shared
-configuration, extension registry, and mapped models during this migration;
-the WSGI fallback has been retired after the legacy method/path inventory
+FastAPI owns normal application route dispatch. Normal startup builds the
+framework-independent runtime configuration and native SQLAlchemy engine;
+Flask app injection remains available for compatibility tests and adapters.
+The WSGI fallback has been retired after the legacy method/path inventory
 reached full native coverage.
 """
 
@@ -21,18 +22,21 @@ from oneirodex.runtime_native import (
 )
 
 import asyncio
+import io
 import json
 import mimetypes
 import os
 import re
 import shutil
 import tempfile
+import threading
 import uuid
 from pathlib import Path
 from importlib import import_module
 
 import aiofiles
-from werkzeug.utils import secure_filename
+from werkzeug.exceptions import RequestedRangeNotSatisfiable
+from werkzeug.utils import secure_filename, send_file as werkzeug_send_file
 
 from sqlalchemy import select
 
@@ -89,6 +93,11 @@ bundle_playable_rom_zip = _lazy_callable(
 resolve_playable_rom_path = _lazy_callable(
     'oneirodex.utils.rom_archive', 'resolve_playable_rom_path'
 )
+
+# Archive expansion is disk-heavy and runs once per Uvicorn worker. Keep one
+# conversion active per worker; requests that need extraction fail quickly
+# instead of accumulating temporary outputs or blocking the ASGI event loop.
+_ROM_EXTRACTION_LIMITER = threading.BoundedSemaphore(1)
 get_allowed_base_directories = _lazy_callable(
     'oneirodex.utils.security', 'get_allowed_base_directories'
 )
@@ -107,10 +116,39 @@ resolve_static_path = _lazy_callable(
     'oneirodex.utils.static_files', 'resolve_static_path'
 )
 static_access = _lazy_callable('oneirodex.utils.static_files', 'static_access')
+theme_document_security_headers = _lazy_callable(
+    'oneirodex.utils.static_files', 'theme_document_security_headers'
+)
 
 
 #: How much of a served file each ``http.response.body`` message carries.
 _FILE_CHUNK_SIZE = 2 * 1024 * 1024
+
+
+def _vary_cookie_required(path: str) -> bool:
+    """Return whether a response can depend on the browser session."""
+    if path.startswith('/static/'):
+        return False
+    return path not in {
+        '/favicon.ico', '/manifest.webmanifest', '/offline', '/pulse', '/awake',
+        '/sw.js', '/vr/sw.js',
+    }
+
+
+def _ensure_cookie_vary(message: dict) -> dict:
+    """Add Cookie to an ASGI response's Vary headers without dropping peers."""
+    if message.get('type') != 'http.response.start':
+        return message
+    headers = list(message.get('headers') or ())
+    vary_values = [value for key, value in headers if key.lower() == b'vary']
+    tokens = {
+        token.strip().lower()
+        for value in vary_values
+        for token in value.decode('latin1').split(',')
+    }
+    if '*' in tokens or 'cookie' in tokens:
+        return message
+    return {**message, 'headers': headers + [(b'vary', b'Cookie')]}
 
 
 def _file_headers(filename: str, size: int) -> list[tuple[bytes, bytes]]:
@@ -167,11 +205,12 @@ def _rom_location(rom_path, cache_dir, real_game, game_is_dir):
 _CLIENT_GONE = (ConnectionResetError, BrokenPipeError, ConnectionAbortedError)
 
 
-def _install_native_api_error_handlers(native_app, config, logger) -> None:
+def _install_native_api_error_handlers(native_app, config, logger, *, routing_app=None) -> None:
     """Keep native API failures in the shared envelope without Flask context."""
     from fastapi import Request
     from starlette.exceptions import HTTPException as StarletteHTTPException
     from starlette.responses import JSONResponse, Response
+    from werkzeug.exceptions import NotFound
 
     from oneirodex.utils.api_contract import api_error_payload
     from oneirodex.utils.error_envelope import http_error_code
@@ -181,7 +220,9 @@ def _install_native_api_error_handlers(native_app, config, logger) -> None:
         400: 'Bad request',
         401: 'Unauthorized',
         403: 'Forbidden',
-        404: 'Not found',
+        # Flask's API HTTPException envelope uses the Werkzeug description for
+        # unmatched routes. Keep ASGI route misses on the same client contract.
+        404: NotFound().description,
         405: 'Method not allowed',
         409: 'Conflict',
         413: 'Request payload is too large',
@@ -189,8 +230,27 @@ def _install_native_api_error_handlers(native_app, config, logger) -> None:
         429: 'Too many requests',
     }
 
-    async def http_error(_request: Request, exc: StarletteHTTPException):
+    async def http_error(request: Request, exc: StarletteHTTPException):
         status = int(exc.status_code or 500)
+        if status == 404 and request.scope.get('route') is None:
+            from oneirodex.runtime_native.response_compat import flask_route_not_found_response
+
+            return flask_route_not_found_response(config, request)
+        if status == 405 and request.method.upper() == 'OPTIONS':
+            from oneirodex.runtime_native.response_compat import flask_auto_options_response
+
+            response = flask_auto_options_response(
+                config, request, route_app=native_app, routing_app=routing_app,
+            )
+            if response is not None:
+                return response
+        if status == 405:
+            from oneirodex.runtime_native.response_compat import flask_http_exception_response
+
+            return flask_http_exception_response(
+                config, request, status, route_app=native_app, routing_app=routing_app,
+                extra_headers=exc.headers,
+            )
         payload, _ = api_error_payload(
             safe_messages.get(status, 'Request failed'),
             code=http_error_code(status),
@@ -441,6 +501,16 @@ def _is_native_admin_whitelist_path(path: str) -> bool:
         return True
     parts = path.strip('/').split('/')
     return len(parts) == 3 and parts[:2] == ['admin', 'whitelist'] and parts[2].isdigit()
+
+
+def _is_native_admin_whitelist_operation(path: str, method: str) -> bool:
+    """Dispatch only the whitelist methods that match a native action route."""
+    method = str(method or '').upper()
+    if path == '/admin/api/whitelist':
+        return method in {'GET', 'HEAD', 'POST'}
+    if path == '/admin/whitelist':
+        return method == 'POST'
+    return _is_native_admin_whitelist_path(path) and method == 'DELETE'
 
 
 def _is_native_admin_plugin_path(path: str) -> bool:
@@ -949,6 +1019,11 @@ def _is_native_free_games_claim_path(path: str) -> bool:
 
 class LazyASGIApp:
     def __init__(self):
+        from oneirodex.utils.logging_setup import install_uvicorn_access_secret_filter
+
+        # Native ASGI startup intentionally avoids the Flask app factory, so
+        # install access-log redaction directly before Uvicorn handles requests.
+        install_uvicorn_access_secret_filter()
         self._app = None
         self._flask_app = None
         self._native_sqlalchemy_engine = None
@@ -1148,6 +1223,7 @@ class LazyASGIApp:
             '/api/tokens',
             '/api/client/capabilities',
             '/api/client/lifecycle',
+            '/api/client/identity',
             '/api/client/heartbeat',
             '/api/client/commands',
             '/api/announcements',
@@ -1184,7 +1260,12 @@ class LazyASGIApp:
                 return
             from oneirodex.runtime_native.app_config import build_runtime_config
             from oneirodex.runtime_native.db_session import create_native_engine
-            from oneirodex.runtime_native.runtime_context import NativeRuntimeContext
+            from oneirodex.runtime_native.runtime_context import (
+                NativeRuntimeContext,
+                install_flask_json_response_compat,
+            )
+
+            install_flask_json_response_compat()
 
             compatibility_app_injected = create_app is not _DEFAULT_CREATE_APP
             if compatibility_app_injected:
@@ -1260,6 +1341,7 @@ class LazyASGIApp:
             from oneirodex.runtime_native.account_password import mount_account_password_routes
             from oneirodex.runtime_native.release_calendar import mount_release_calendar_routes
             from oneirodex.runtime_native.account_tokens import mount_account_tokens_routes
+            from oneirodex.runtime_native.account_sessions import mount_account_sessions_routes
             from oneirodex.runtime_native.client_reads import mount_client_reads_routes
             from oneirodex.runtime_native.announcements import mount_announcements_routes
             from oneirodex.runtime_native.news_feeds import mount_news_feed_routes
@@ -1373,6 +1455,18 @@ class LazyASGIApp:
                 redoc_url=None,
                 openapi_url=None,
             )
+            from oneirodex.runtime_native.bounded_request_body import ASGIBodyLimitMiddleware
+            from oneirodex.utils.security_headers import security_header_values
+
+            native_body_limit = int(
+                self._flask_app.config.get('MAX_CONTENT_LENGTH') or 128 * 1024 * 1024
+            )
+            native_error_headers = security_header_values(self._flask_app.config)
+            self._native_read_api_app.add_middleware(
+                ASGIBodyLimitMiddleware,
+                max_bytes=native_body_limit,
+                response_headers=native_error_headers,
+            )
             self._native_read_api_app.router.redirect_slashes = False
             mount_site_redirect_routes(
                 self._native_read_api_app,
@@ -1403,6 +1497,11 @@ class LazyASGIApp:
             self._native_member_shell_app = FastAPI(
                 docs_url=None, redoc_url=None, openapi_url=None,
             )
+            self._native_member_shell_app.add_middleware(
+                ASGIBodyLimitMiddleware,
+                max_bytes=native_body_limit,
+                response_headers=native_error_headers,
+            )
             self._native_member_shell_app.router.redirect_slashes = False
             self._native_member_shell_app.include_router(create_member_shell_router(
                 self._flask_app,
@@ -1412,6 +1511,7 @@ class LazyASGIApp:
                 self._native_read_api_app,
                 self._flask_app.config,
                 self._flask_app.logger,
+                routing_app=self._flask_app,
             )
             mount_trailers_routes(
                 self._native_read_api_app,
@@ -1827,7 +1927,11 @@ class LazyASGIApp:
                 login_manager=manager,
                 database_scope=lambda app: self._native_database_scope(app),
             )
-            mount_auth_logout_routes(self._native_read_api_app, self._flask_app)
+            mount_auth_logout_routes(
+                self._native_read_api_app,
+                self._flask_app,
+                database_scope=lambda app: self._native_database_scope(app),
+            )
             mount_auth_pages_routes(
                 self._native_read_api_app,
                 self._flask_app,
@@ -2035,6 +2139,15 @@ class LazyASGIApp:
                 database_scope=lambda app: self._native_database_scope(app),
             )
             mount_account_tokens_routes(
+                self._native_read_api_app,
+                self._flask_app,
+                find_user=find_user,
+                find_token=find_token,
+                commit_token_touch=commit_token_touch,
+                login_manager=manager,
+                database_scope=lambda app: self._native_database_scope(app),
+            )
+            mount_account_sessions_routes(
                 self._native_read_api_app,
                 self._flask_app,
                 find_user=find_user,
@@ -2575,6 +2688,7 @@ class LazyASGIApp:
                 login_manager=manager,
                 database_scope=lambda app: self._native_database_scope(app),
             )
+            admin_shell_path = self._static_root / 'dist' / 'admin-pilot' / 'index.html'
             mount_admin_whitelist_routes(
                 self._native_read_api_app,
                 self._flask_app,
@@ -2584,6 +2698,7 @@ class LazyASGIApp:
                 load_user_id=load_user_id,
                 login_manager=manager,
                 database_scope=lambda app: self._native_database_scope(app),
+                shell_path=admin_shell_path,
             )
             mount_admin_plugins_routes(
                 self._native_read_api_app,
@@ -2852,7 +2967,6 @@ class LazyASGIApp:
                 login_manager=manager,
                 database_scope=lambda app: self._native_database_scope(app),
             )
-            admin_shell_path = self._static_root / 'dist' / 'admin-pilot' / 'index.html'
             if not admin_shell_path.is_file() and not compatibility_app_injected:
                 raise RuntimeError('Required built admin React shell is missing from the application static tree.')
             from oneirodex.runtime_native import (
@@ -2910,6 +3024,13 @@ class LazyASGIApp:
             await self._handle_lifespan(receive, send)
         elif scope["type"] == "http":
             path = scope["path"]
+            if _vary_cookie_required(path):
+                cookie_downstream_send = send
+
+                async def send_with_cookie_vary(message):
+                    await cookie_downstream_send(_ensure_cookie_vary(message))
+
+                send = send_with_cookie_vary
 
             # Liveness has no DB, session, or app-context dependency. Keep it
             # available to the container probe without constructing Flask on
@@ -2919,10 +3040,32 @@ class LazyASGIApp:
                 await self._handle_liveness(scope, send)
                 return
 
+            if path == '/pulse' and scope.get('method') != 'OPTIONS':
+                await self._handle_liveness_method_not_allowed(scope, send)
+                return
+
             if path == '/awake' and scope.get('method') in ('GET', 'HEAD'):
                 await self._ensure_native_database()
                 await self._handle_readiness(scope, send)
                 return
+
+            if path == '/awake' and scope.get('method') != 'OPTIONS':
+                await self._handle_get_head_method_not_allowed(scope, send)
+                return
+
+            if (
+                path in ('/manifest.webmanifest', '/offline', '/sw.js', '/vr/sw.js')
+                and scope.get('method') == 'OPTIONS'
+            ):
+                if await self._send_setup_redirect_if_required(scope, send):
+                    return
+
+            if await self._send_legacy_setup_gate_if_required(scope, send):
+                return
+
+            if scope.get('method', '').upper() == 'OPTIONS':
+                if await self._handle_automatic_options(scope, receive, send):
+                    return
 
             if path == '/manifest.webmanifest' and scope.get('method') in ('GET', 'HEAD'):
                 await self._handle_app_manifest(scope, send)
@@ -2932,16 +3075,36 @@ class LazyASGIApp:
                 await self._handle_offline(scope, send)
                 return
 
+            if path == '/offline' and scope.get('method') != 'OPTIONS':
+                await self._handle_get_head_method_not_allowed(scope, send)
+                return
+
+            if path == '/manifest.webmanifest' and scope.get('method') != 'OPTIONS':
+                await self._handle_get_head_method_not_allowed(scope, send)
+                return
+
             if path in ('/sw.js', '/vr/sw.js') and scope.get('method') in ('GET', 'HEAD'):
                 await self._handle_service_worker(scope, send, path)
+                return
+
+            if path in ('/sw.js', '/vr/sw.js') and scope.get('method') != 'OPTIONS':
+                await self._handle_get_head_method_not_allowed(scope, send)
                 return
 
             if path == '/favicon.ico' and scope.get('method') in ('GET', 'HEAD'):
                 await self._handle_favicon(scope, send)
                 return
 
+            if path == '/favicon.ico' and scope.get('method') != 'OPTIONS':
+                await self._handle_get_head_method_not_allowed(scope, send)
+                return
+
             if path == '/api/emulator/installed-cores.js' and scope.get('method') in ('GET', 'HEAD'):
                 await self._handle_installed_cores(scope, send)
+                return
+
+            if path == '/api/emulator/installed-cores.js' and scope.get('method') != 'OPTIONS':
+                await self._handle_api_method_not_allowed(scope, receive, send)
                 return
 
             if (
@@ -2996,6 +3159,112 @@ class LazyASGIApp:
                 return
 
             await self._ensure_flask()
+            from oneirodex.runtime_native.admin_csrf_preflight import (
+                admin_request_wants_json,
+                bearer_admin_csrf_exempt,
+                csrf_session_has_token,
+                empty_admin_mutation_csrf_error,
+                inspect_multipart_csrf_body,
+                inspect_urlencoded_csrf_body,
+                is_admin_mutation_scope,
+                native_route_matches,
+            )
+
+            csrf_error = None
+            native_admin_mutation = is_admin_mutation_scope(scope) and (
+                    native_route_matches(self._native_read_api_app, scope)
+                    or native_route_matches(self._native_admin_pilot, scope)
+            )
+            if native_admin_mutation:
+                csrf_error = empty_admin_mutation_csrf_error(
+                    scope, self._flask_app.config,
+                )
+            headers = {key.lower(): value for key, value in scope.get('headers', ())}
+            content_type = headers.get(b'content-type', b'').split(b';', 1)[0].strip().lower()
+            if (
+                csrf_error is None
+                and native_admin_mutation
+                and content_type in {
+                    b'multipart/form-data', b'application/x-www-form-urlencoded',
+                }
+                and not bearer_admin_csrf_exempt(scope)
+                and not csrf_session_has_token(scope, self._flask_app.config)
+            ):
+                # A body form token cannot validate without the signed
+                # per-session CSRF value. Reject before consuming a request
+                # body that cannot pass CSRF, except on exact Bearer routes
+                # whose handlers validate token and admin scope themselves.
+                csrf_error = empty_admin_mutation_csrf_error(
+                    scope, self._flask_app.config, form_inspected=True,
+                )
+            if (
+                csrf_error is None
+                and (path == '/admin' or path.startswith('/admin/'))
+                and scope.get('method', '').upper() in {'POST', 'PUT', 'PATCH', 'DELETE'}
+                and not bearer_admin_csrf_exempt(scope)
+            ):
+                form_token, replay_receive, form_inspected = await inspect_urlencoded_csrf_body(
+                    scope, receive, self._flask_app.config,
+                )
+                if not form_inspected:
+                    form_token, replay_receive, form_inspected = await inspect_multipart_csrf_body(
+                        scope, receive, self._flask_app.config,
+                    )
+                if form_inspected:
+                    receive = replay_receive
+                    csrf_error = empty_admin_mutation_csrf_error(
+                        scope,
+                        self._flask_app.config,
+                        form_token=form_token,
+                        form_inspected=True,
+                    )
+            if csrf_error is not None:
+                close_replay = getattr(receive, 'close', None)
+                if close_replay is not None:
+                    close_replay()
+                from starlette.responses import HTMLResponse, JSONResponse
+                from oneirodex.utils.security_headers import security_header_values
+
+                response_headers = security_header_values(self._flask_app.config)
+                if admin_request_wants_json(scope):
+                    from oneirodex.utils.api_contract import api_error_payload
+
+                    payload, status = api_error_payload(csrf_error, code='bad_request')
+                    response = JSONResponse(
+                        payload, status_code=status, headers=response_headers,
+                    )
+                else:
+                    response = HTMLResponse(
+                        '<!doctype html>\n<html lang=en>\n'
+                        '<title>400 Bad Request</title>\n<h1>Bad Request</h1>\n'
+                        f'<p>{csrf_error}</p>\n',
+                        status_code=400,
+                        headers=response_headers,
+                    )
+                response.headers.setdefault('Vary', 'Cookie')
+                await response(scope, receive, send)
+                return
+            if await self._send_legacy_setup_gate_if_required(
+                scope, send, after_csrf=True,
+            ):
+                close_replay = getattr(receive, 'close', None)
+                if close_replay is not None:
+                    close_replay()
+                return
+            close_replay = getattr(receive, 'close', None)
+            if close_replay is not None:
+                replay_downstream_send = send
+
+                async def send_with_replay_cleanup(message):
+                    await replay_downstream_send(message)
+                    if (
+                        message.get('type') == 'http.response.body'
+                        and not message.get('more_body', False)
+                    ):
+                        close_replay()
+
+                send = send_with_replay_cleanup
+
             from oneirodex.runtime_native.member_shell import member_shell_route
 
             if (
@@ -3125,6 +3394,18 @@ class LazyASGIApp:
                 await self._native_read_api_app(scope, receive, send)
                 return
 
+            # Admin pages can share a path with their legacy POST compatibility
+            # handler (for example GET /admin/smtp_settings and POST to the
+            # same path). Resolve page GETs to the React shell before the API
+            # router sees the POST-only route and turns the request into 405.
+            if (
+                self._native_admin_pilot is not None
+                and path in self._native_admin_routes
+                and scope.get('method') in ('GET', 'HEAD')
+            ):
+                await self._native_admin_pilot(scope, receive, send)
+                return
+
             if (
                 self._native_read_api_app is not None
                 and (
@@ -3216,13 +3497,8 @@ class LazyASGIApp:
                         _is_native_admin_invites_path(path)
                         and (path != '/admin/manage_invites' or scope.get('method') == 'POST')
                     )
-                    or (
-                        _is_native_admin_whitelist_path(path)
-                        and (
-                            (path == '/admin/api/whitelist' and scope.get('method') in ('GET', 'HEAD', 'POST'))
-                            or (path == '/admin/whitelist' and scope.get('method') == 'POST')
-                            or (path != '/admin/api/whitelist' and scope.get('method') == 'DELETE')
-                        )
+                    or _is_native_admin_whitelist_operation(
+                        path, scope.get('method', ''),
                     )
                     or (
                         _is_native_admin_users_read_path(path)
@@ -3431,13 +3707,8 @@ class LazyASGIApp:
                         _is_native_admin_invites_path(path)
                         and (path != '/admin/manage_invites' or scope.get('method') == 'POST')
                     )
-                    or (
-                        _is_native_admin_whitelist_path(path)
-                        and (
-                            (path == '/admin/api/whitelist' and scope.get('method') in ('GET', 'HEAD', 'POST'))
-                            or (path == '/admin/whitelist' and scope.get('method') == 'POST')
-                            or (path != '/admin/api/whitelist' and scope.get('method') == 'DELETE')
-                        )
+                    or _is_native_admin_whitelist_operation(
+                        path, scope.get('method', ''),
                     )
                     or (
                         path == '/admin/api/system_logs/clear'
@@ -3497,6 +3768,15 @@ class LazyASGIApp:
                     or (
                         path == '/api/admin/igdb/settings'
                         and scope.get('method') == 'PUT'
+                    )
+                    or (
+                        path in {
+                            '/admin/igdb_settings',
+                            '/admin/test_igdb',
+                            '/admin/integrations/igdb/save',
+                            '/admin/integrations/igdb/test',
+                        }
+                        and scope.get('method') == 'POST'
                     )
                     or (
                         path == '/api/arr/config'
@@ -3983,7 +4263,93 @@ class LazyASGIApp:
                          or is_library_edit_route(path))):
                 await self._native_admin_pilot(scope, receive, send)
                 return
+            if (
+                member_shell_route(path)
+                and scope.get('method', '').upper() not in ('GET', 'HEAD', 'OPTIONS')
+            ):
+                # Native member document routes are GET/HEAD-only. Let all
+                # explicit API/admin method handlers above win first, then
+                # preserve Flask's 405 for unsupported methods instead of
+                # letting the native API fallback turn them into 404s.
+                # The invites document retains its legacy browser form POST,
+                # which is dispatched before this fallback. Keep POST in the
+                # 405 Allow header for other methods on that same path.
+                if path == '/user/invites':
+                    await self._send_method_not_allowed(
+                        scope, send, {'GET', 'HEAD', 'OPTIONS', 'POST'},
+                    )
+                else:
+                    await self._handle_get_head_method_not_allowed(scope, send)
+                return
+            if (
+                self._native_admin_pilot is not None
+                and path in self._native_admin_routes
+                and scope.get('method', '').upper() not in ('GET', 'HEAD', 'OPTIONS')
+                and await self._handle_native_admin_method_not_allowed(
+                    scope, send,
+                )
+            ):
+                return
             await self._native_read_api_app(scope, receive, send)
+
+    async def _handle_automatic_options(self, scope, receive, send) -> bool:
+        """Preserve Flask's automatic OPTIONS reply across split native apps."""
+        from starlette.responses import Response
+
+        direct_routes = {
+            '/api/emulator/installed-cores.js',
+            '/awake',
+            '/favicon.ico',
+            '/manifest.webmanifest',
+            '/offline',
+            '/pulse',
+            '/sw.js',
+            '/vr/sw.js',
+        }
+        path = scope.get('path', '/')
+        if path in direct_routes:
+            response = Response(
+                content=b'',
+                status_code=200,
+                headers={
+                    'Allow': 'OPTIONS, GET, HEAD',
+                    **self._configured_security_headers(),
+                },
+                media_type='text/html',
+            )
+            await response(scope, receive, send)
+            return True
+
+        await self._ensure_flask()
+        route_apps = [
+            self._native_read_api_app,
+            self._native_member_shell_app,
+            self._native_admin_pilot,
+        ]
+        route_apps = [app for app in route_apps if app is not None]
+
+        # Some routes deliberately implement OPTIONS. Preserve their handler
+        # instead of replacing it with Flask's generated empty response. A
+        # mounted Starlette app can match every method at its prefix, so walk
+        # into mounts and require an actual route that declares OPTIONS.
+        for app in route_apps:
+            if self._matches_native_options_route(app, scope):
+                await app(scope, receive, send)
+                return True
+
+        from starlette.requests import Request
+        from oneirodex.runtime_native.response_compat import flask_auto_options_response
+
+        response = flask_auto_options_response(
+            self._flask_app,
+            Request(scope, receive),
+            route_app=route_apps,
+            routing_app=self._flask_app,
+        )
+        if response is None:
+            return False
+        await response(scope, receive, send)
+        return True
 
     @staticmethod
     def _configured_security_headers():
@@ -4006,6 +4372,7 @@ class LazyASGIApp:
 
         payload = json.dumps(
             liveness_payload(app_version), separators=(',', ':'), ensure_ascii=False,
+            sort_keys=True,
         ).encode('utf-8') + b'\n'
         headers = {
             'Content-Type': 'application/json',
@@ -4024,6 +4391,119 @@ class LazyASGIApp:
             'more_body': False,
         })
 
+    async def _handle_liveness_method_not_allowed(self, scope, send):
+        """Match Flask's 405 response without constructing an app or DB scope."""
+        await self._handle_get_head_method_not_allowed(scope, send)
+
+    async def _handle_get_head_method_not_allowed(self, scope, send):
+        """Match the shared GET/HEAD 405 contract without constructing Flask."""
+        await self._send_method_not_allowed(
+            scope, send, {'GET', 'HEAD', 'OPTIONS'},
+        )
+
+    async def _handle_native_admin_method_not_allowed(self, scope, send) -> bool:
+        """Preserve Flask's 405 when a native admin shell path has no handler.
+
+        Admin document shells live in a separate FastAPI app from their legacy
+        form/API handlers. The final ASGI fallback otherwise turns a path that
+        exists in the admin pilot into a 404 when its method is unsupported.
+        Collect methods from both native route tables so compatibility POSTs
+        such as SMTP settings remain represented in ``Allow``.
+        """
+        from starlette.routing import Match
+
+        methods: set[str] = set()
+        matched_shell_path = False
+
+        def partial_route_methods(routes, route_scope):
+            """Walk FastAPI routers, including their lazily included routers."""
+            for route in routes:
+                original_router = getattr(route, 'original_router', None)
+                if original_router is not None:
+                    context = getattr(route, 'include_context', None)
+                    prefix = str(getattr(context, 'prefix', '') or '').rstrip('/')
+                    nested_scope = route_scope
+                    if prefix:
+                        path = str(route_scope.get('path') or '')
+                        if path != prefix and not path.startswith(prefix + '/'):
+                            continue
+                        nested_scope = dict(route_scope)
+                        nested_scope['path'] = path[len(prefix):] or '/'
+                    yield from partial_route_methods(
+                        getattr(original_router, 'routes', ()), nested_scope,
+                    )
+                    continue
+
+                match, _child_scope = route.matches(route_scope)
+                if match is Match.PARTIAL:
+                    yield from (getattr(route, 'methods', None) or ())
+
+        for native_app in (self._native_admin_pilot, self._native_read_api_app):
+            router = getattr(native_app, 'router', None)
+            for method in partial_route_methods(
+                getattr(router, 'routes', ()), scope,
+            ):
+                if native_app is self._native_admin_pilot:
+                    matched_shell_path = True
+                methods.add(str(method).upper())
+
+        if not matched_shell_path:
+            return False
+        methods.add('OPTIONS')
+        await self._send_method_not_allowed(scope, send, methods)
+        return True
+
+    async def _send_method_not_allowed(self, scope, send, allowed_methods):
+        """Emit the common HTML 405 while retaining route-specific methods."""
+        body = (
+            b'<!doctype html>\n<html lang=en>\n'
+            b'<title>405 Method Not Allowed</title>\n'
+            b'<h1>Method Not Allowed</h1>\n'
+            b'<p>The method is not allowed for the requested URL.</p>\n'
+        )
+        allowed = {str(method).upper() for method in allowed_methods}
+        preferred_order = ('OPTIONS', 'GET', 'HEAD')
+        ordered = [method for method in preferred_order if method in allowed]
+        ordered.extend(sorted(allowed.difference(ordered)))
+        allow = ', '.join(ordered)
+        headers = {
+            'Allow': allow,
+            'Content-Type': 'text/html; charset=utf-8',
+            'Content-Length': str(len(body)),
+            **self._configured_security_headers(),
+        }
+        await send({
+            'type': 'http.response.start',
+            'status': 405,
+            'headers': [(key.lower().encode('ascii'), value.encode('latin-1'))
+                        for key, value in headers.items()],
+        })
+        await send({
+            'type': 'http.response.body',
+            'body': body,
+            'more_body': False,
+        })
+
+    async def _handle_api_method_not_allowed(self, scope, receive, send):
+        """Return the JSON 405 envelope for native API paths without Flask."""
+        from starlette.responses import Response
+        from oneirodex.utils.api_contract import api_error_payload
+
+        message = 'The method is not allowed for the requested URL.'
+        payload, status = api_error_payload(message, code='bad_request', status=405)
+        body = json.dumps(
+            payload, separators=(',', ':'), ensure_ascii=False, sort_keys=True,
+        ).encode('utf-8') + b'\n'
+        response = Response(
+            content=body,
+            status_code=status,
+            headers={
+                'Content-Type': 'application/json',
+                **self._configured_security_headers(),
+            },
+        )
+        await response(scope, receive, send)
+
     async def _handle_readiness(self, scope, send):
         """Run readiness with request-local DB scope without Flask dispatch."""
         from oneirodex.runtime_native.db_session import native_db
@@ -4035,7 +4515,9 @@ class LazyASGIApp:
             body, status = build_readiness(
                 config=config, database=native_db,
             )
-        payload = json.dumps(body, separators=(',', ':'), ensure_ascii=False).encode('utf-8') + b'\n'
+        payload = json.dumps(
+            body, separators=(',', ':'), ensure_ascii=False, sort_keys=True,
+        ).encode('utf-8') + b'\n'
         header_values = {
             'Content-Type': 'application/json',
             'Content-Length': str(len(payload)),
@@ -4079,13 +4561,14 @@ class LazyASGIApp:
         from oneirodex.utils.pwa_manifest import build_app_manifest
         from oneirodex.utils.processors import get_global_settings
 
-        await self._ensure_native_database()
+        if await self._send_setup_redirect_if_required(scope, send):
+            return
         with self._native_database_scope():
             settings = get_global_settings() or {}
         manifest = build_app_manifest(settings.get('site_name'))
         payload = json.dumps(
-            manifest, separators=(',', ':'), ensure_ascii=False, sort_keys=True,
-        ).encode('utf-8')
+            manifest, separators=(',', ':'), ensure_ascii=True, sort_keys=True,
+        ).encode('utf-8') + b'\n'
         headers = {
             'Content-Type': 'application/manifest+json',
             'Content-Length': str(len(payload)),
@@ -4104,8 +4587,152 @@ class LazyASGIApp:
             'more_body': False,
         })
 
+    async def _send_legacy_setup_gate_if_required(
+        self, scope, send, *, after_csrf=False,
+    ) -> bool:
+        """Apply Flask's before-request setup gate before native dispatch."""
+        path = scope.get('path', '/')
+        method = str(scope.get('method', 'GET')).upper()
+        is_auth_page = (
+            path == '/register'
+            or (path != '/login' and _is_native_auth_page_path(path))
+        )
+        if is_auth_page and method not in {'GET', 'HEAD'}:
+            # Flask-WTF runs before the legacy setup hook on unsafe methods.
+            # Let native form handlers validate CSRF first, then apply the
+            # same setup redirect before doing any form action.
+            return False
+        is_admin_path = path == '/admin' or path.startswith('/admin/')
+        if (
+            is_admin_path
+            and method in {'POST', 'PUT', 'PATCH', 'DELETE'}
+            and not after_csrf
+        ):
+            # Flask-WTF rejects an unsafe admin request before the setup hook.
+            # Let the ASGI preflight preserve that order, then call this gate
+            # again with after_csrf=True before dispatching any admin action.
+            return False
+        if (
+            not (
+                path == '/register'
+                or path == '/scan_management'
+                or is_admin_path
+                or path.startswith('/admin/api/')
+                or is_auth_page
+            )
+        ):
+            return False
+
+        # The native dispatcher also supports database-free route tests and
+        # shell serving. The setup gate needs a configured database to know
+        # whether setup is incomplete. Normal ASGI startup initializes the
+        # native database before serving requests; leave framework-free shell
+        # requests alone instead of constructing the runtime just to check.
+        if self._native_sqlalchemy_engine is None:
+            return False
+
+        await self._ensure_flask()
+
+        from oneirodex.runtime_native.runtime_context import NativeRuntimeContext
+
+        if isinstance(self._flask_app, NativeRuntimeContext):
+            # The native runtime deliberately exposes only URL-build helpers,
+            # not Flask's full URL map. Use method-aware matches from the
+            # mounted ASGI routers so unknown paths and unsupported methods
+            # retain their normal 404/405 behavior.
+            route_exists = (
+                self._matches_native_app_route(self._native_admin_pilot, scope)
+                or self._matches_native_app_route(self._native_read_api_app, scope)
+            )
+            if not route_exists:
+                return False
+        else:
+            from werkzeug.exceptions import HTTPException
+
+            try:
+                self._flask_app.url_map.bind('localhost').match(
+                    path, method=method,
+                )
+            except HTTPException:
+                return False
+
+        return await self._send_setup_redirect_if_required(
+            scope, send, skip_active_step=True,
+        )
+
+    @staticmethod
+    def _matches_native_app_route(app, scope) -> bool:
+        """Return whether a concrete method/path matches a mounted native route."""
+        if app is None:
+            return False
+
+        from starlette.routing import Match
+
+        for route in getattr(getattr(app, 'router', None), 'routes', ()):
+            match, _child_scope = route.matches(scope)
+            if match is Match.FULL:
+                return True
+        return False
+
+    @staticmethod
+    def _matches_native_options_route(app, scope) -> bool:
+        """Return whether a concrete native route explicitly handles OPTIONS."""
+        if app is None:
+            return False
+
+        from starlette.routing import Match
+
+        def matches(routes, route_scope) -> bool:
+            for route in routes:
+                match, child_scope = route.matches(route_scope)
+                if match is Match.NONE:
+                    continue
+                methods = {str(method).upper() for method in (getattr(route, 'methods', ()) or ())}
+                if match is Match.FULL and 'OPTIONS' in methods:
+                    return True
+                child_router = (
+                    getattr(route, 'original_router', None)
+                    or getattr(getattr(route, 'app', None), 'router', None)
+                )
+                if child_router is not None and matches(
+                    getattr(child_router, 'routes', ()), {**route_scope, **child_scope},
+                ):
+                    return True
+            return False
+
+        return matches(
+            getattr(getattr(app, 'router', None), 'routes', ()),
+            {**scope, 'method': 'OPTIONS'},
+        )
+
+    async def _send_setup_redirect_if_required(
+        self, scope, send, *, skip_active_step=False,
+    ) -> bool:
+        """Apply Flask's first-run redirect to direct ASGI documents and assets."""
+        from oneirodex.runtime_native.response_compat import flask_redirect_response
+        from oneirodex.utils.setup import get_setup_redirect_url, should_redirect_to_setup
+
+        await self._ensure_native_database()
+        with self._native_database_scope():
+            if not should_redirect_to_setup():
+                return False
+            target = get_setup_redirect_url()
+            if skip_active_step and target == scope.get('path', '/'):
+                return False
+            response = flask_redirect_response(
+                target, status_code=302,
+            )
+        for key, value in self._configured_security_headers().items():
+            response.headers.setdefault(key, value)
+        if scope.get('method') == 'HEAD':
+            response.body = b''
+        await response(scope, None, send)
+        return True
+
     async def _handle_offline(self, scope, send):
         """Serve the self-contained offline fallback without Flask request state."""
+        if await self._send_setup_redirect_if_required(scope, send):
+            return
         from oneirodex.utils.asset_version import asset_version
         from oneirodex.utils.offline_page import render_offline_page
 
@@ -4133,8 +4760,90 @@ class LazyASGIApp:
             'more_body': False,
         })
 
+    async def _send_conditional_static_file(
+        self,
+        scope,
+        send,
+        candidate: Path,
+        *,
+        mimetype: str,
+        max_age: int | None,
+        additional_headers: dict[str, str] | None = None,
+        security_headers: dict[str, str] | None = None,
+        skip_additional_headers_for_status: tuple[int, ...] = (),
+    ):
+        """Send a trusted static file with Werkzeug-compatible validators and ranges."""
+        try:
+            headers_in = {
+                key.decode('latin-1').upper().replace('-', '_'): value.decode('latin-1')
+                for key, value in scope.get('headers', ())
+            }
+            environ = {
+                'REQUEST_METHOD': scope.get('method', 'GET'),
+                'SCRIPT_NAME': '',
+                'PATH_INFO': scope.get('path', ''),
+                'QUERY_STRING': '',
+                'SERVER_NAME': 'localhost',
+                'SERVER_PORT': '80',
+                'SERVER_PROTOCOL': 'HTTP/1.1',
+                'wsgi.version': (1, 0),
+                'wsgi.url_scheme': scope.get('scheme', 'http'),
+                'wsgi.input': io.BytesIO(),
+                'wsgi.errors': io.StringIO(),
+                'wsgi.multithread': True,
+                'wsgi.multiprocess': False,
+                'wsgi.run_once': False,
+            }
+            for key, value in headers_in.items():
+                if key == 'CONTENT_TYPE':
+                    environ['CONTENT_TYPE'] = value
+                elif key == 'CONTENT_LENGTH':
+                    environ['CONTENT_LENGTH'] = value
+                else:
+                    environ[f'HTTP_{key}'] = value
+
+            response = await asyncio.to_thread(
+                werkzeug_send_file,
+                candidate,
+                environ,
+                mimetype=mimetype,
+                max_age=max_age,
+            )
+        except RequestedRangeNotSatisfiable as exc:
+            response = exc.get_response(environ)
+        except OSError:
+            await self._send_error(send, 404, 'Not Found')
+            return
+
+        response_headers = response.get_wsgi_headers(environ)
+        for key, value in (security_headers or self._configured_security_headers()).items():
+            response_headers.set(key, value)
+        if response.status_code not in skip_additional_headers_for_status:
+            for key, value in (additional_headers or {}).items():
+                response_headers.set(key, value)
+        headers = [(key.lower().encode('ascii'), value.encode('latin-1'))
+                   for key, value in response_headers]
+        status_code = response.status_code
+        await send({
+            'type': 'http.response.start',
+            'status': status_code,
+            'headers': headers,
+        })
+        try:
+            if scope.get('method') == 'HEAD' or status_code == 304:
+                await send({'type': 'http.response.body', 'body': b'', 'more_body': False})
+                return
+            for chunk in response.response:
+                if chunk:
+                    await send({'type': 'http.response.body', 'body': chunk, 'more_body': True})
+            await send({'type': 'http.response.body', 'body': b'', 'more_body': False})
+        finally:
+            response.close()
+
     async def _handle_service_worker(self, scope, send, path: str):
         """Serve origin-scoped PWA workers with the same no-cache policy."""
+        if await self._send_setup_redirect_if_required(scope, send):
+            return
         root = self._static_root or (
             Path(__file__).resolve().parent / 'oneirodex' / 'static'
         )
@@ -4148,30 +4857,18 @@ class LazyASGIApp:
         if candidate is None or not candidate.is_file():
             await self._send_error(send, 404, 'Not Found')
             return
-        try:
-            payload = await asyncio.to_thread(candidate.read_bytes)
-        except OSError:
-            await self._send_error(send, 404, 'Not Found')
-            return
-
-        header_values = {
-            'Content-Type': 'application/javascript; charset=utf-8',
-            'Content-Length': str(len(payload)),
-            'Cache-Control': 'no-cache',
-            'Service-Worker-Allowed': allowed_scope,
-            **self._configured_security_headers(),
-        }
-        headers = [(key.lower().encode('ascii'), value.encode('latin-1'))
-                   for key, value in header_values.items()]
-        await send({'type': 'http.response.start', 'status': 200, 'headers': headers})
-        await send({
-            'type': 'http.response.body',
-            'body': b'' if scope.get('method') == 'HEAD' else payload,
-            'more_body': False,
-        })
+        await self._send_conditional_static_file(
+            scope,
+            send,
+            candidate,
+            mimetype='application/javascript; charset=utf-8',
+            max_age=None,
+            additional_headers={'Service-Worker-Allowed': allowed_scope},
+            skip_additional_headers_for_status=(416,),
+        )
 
     async def _handle_favicon(self, scope, send):
-        """Serve the browser fallback icon with its existing short cache TTL."""
+        """Serve the browser icon with Werkzeug's conditional and range semantics."""
         root = self._static_root or (
             Path(__file__).resolve().parent / 'oneirodex' / 'static'
         )
@@ -4179,26 +4876,15 @@ class LazyASGIApp:
         if candidate is None or not candidate.is_file():
             await self._send_error(send, 404, 'Not Found')
             return
-        try:
-            payload = await asyncio.to_thread(candidate.read_bytes)
-        except OSError:
-            await self._send_error(send, 404, 'Not Found')
-            return
-
-        header_values = {
-            'Content-Type': 'image/vnd.microsoft.icon',
-            'Content-Length': str(len(payload)),
-            'Cache-Control': 'public, max-age=3600',
-            **self._configured_security_headers(),
-        }
-        headers = [(key.lower().encode('ascii'), value.encode('latin-1'))
-                   for key, value in header_values.items()]
-        await send({'type': 'http.response.start', 'status': 200, 'headers': headers})
-        await send({
-            'type': 'http.response.body',
-            'body': b'' if scope.get('method') == 'HEAD' else payload,
-            'more_body': False,
-        })
+        await self._send_conditional_static_file(
+            scope,
+            send,
+            candidate,
+            mimetype='image/vnd.microsoft.icon',
+            max_age=None,
+            additional_headers={'Cache-Control': 'public, max-age=3600'},
+            skip_additional_headers_for_status=(416,),
+        )
 
     async def _handle_confirmation_shell(self, scope, send):
         """Serve the read-only confirmation document for a fresh visitor."""
@@ -4252,7 +4938,11 @@ class LazyASGIApp:
     def _event_visible(self, event, user_id) -> bool:
         """Per-viewer filter for the live streams (utils/event_visibility.py)."""
         payload = getattr(event, 'payload', None) or {}
-        if payload.get('user_id') is None and not payload.get('game_uuid'):
+        if (
+            getattr(event, 'visibility_user_id', None) is None
+            and payload.get('user_id') is None
+            and not payload.get('game_uuid')
+        ):
             return True  # about no member and no game: no lookup needed
         try:
             from oneirodex.utils.event_visibility import event_visible_to
@@ -4478,44 +5168,25 @@ class LazyASGIApp:
         )
 
         # Static is served directly by ASGI, so Flask's after_request never
-        # sees it — these have to be stamped here instead.
-        # Baseline only, no CSP: webretro.html is a static document whose
-        # Emscripten cores would need 'unsafe-eval' anyway.
-        headers = [
-            (b"content-type", content_type.encode("ascii", "ignore")),
-            (b"content-length", str(size).encode()),
-            (b"cache-control", cache_control),
-            *baseline_static_headers(),
-        ]
-
-        await send({
-            "type": "http.response.start",
-            "status": 200,
-            "headers": headers,
-        })
-
-        if scope.get("method") == "HEAD":
-            await send({"type": "http.response.body", "body": b"", "more_body": False})
-            return
-
-        try:
-            async with aiofiles.open(candidate, "rb") as fh:
-                while True:
-                    chunk = await fh.read(65536)
-                    if not chunk:
-                        break
-                    await send({
-                        "type": "http.response.body",
-                        "body": chunk,
-                        "more_body": True,
-                    })
-            await send({"type": "http.response.body", "body": b"", "more_body": False})
-        except Exception as exc:
-            print(f"Error streaming static {path}: {exc}")
-            try:
-                await send({"type": "http.response.body", "body": b"", "more_body": False})
-            except Exception:
-                pass
+        # sees it. Preserve the established cache/security policy while using
+        # Werkzeug for ETag, conditional and byte-range behavior.
+        baseline = {
+            key.decode('ascii').title(): value.decode('latin-1')
+            for key, value in baseline_static_headers()
+        }
+        await self._send_conditional_static_file(
+            scope,
+            send,
+            candidate,
+            mimetype=content_type,
+            max_age=3600 if cache_control == b'public, max-age=3600' else None,
+            additional_headers={
+                **baseline,
+                **theme_document_security_headers(path, content_type),
+                'Cache-Control': cache_control.decode('ascii'),
+            },
+            security_headers=baseline,
+        )
 
     async def _handle_download(self, scope, receive, send):
         """Handle download routes with async file streaming"""
@@ -4666,6 +5337,10 @@ class LazyASGIApp:
         """Handle ROM file downloads for emulator"""
         from oneirodex.models import Game, User
         from oneirodex.utils.rom_archive import ArchiveRomError
+        from oneirodex.utils.rom_archive_types import (
+            DEFAULT_MAX_ROM_OUTPUT_BYTES,
+            RomExpansionBudget,
+        )
 
         rom_match = re.match(r'/api/downloadrom/([a-f0-9-]+)', path)
         if not rom_match:
@@ -4745,26 +5420,97 @@ class LazyASGIApp:
             game_is_dir = os.path.isdir(real_game)
             cache_root = os.path.join(library_dir(self._flask_app.root_path), 'rom_cache')
             os.makedirs(cache_root, exist_ok=True)
-            # Extraction output is request-scoped: retries and concurrent plays
-            # cannot reuse partial files or accumulate unbounded cache contents.
-            cache_dir = tempfile.mkdtemp(prefix=f'{game_uuid}-', dir=cache_root)
+            needs_expansion = game_is_dir or Path(real_game).suffix.lower() in {
+                '.zip', '.7z', '.rar', '.gz', '.cue',
+            }
+            if needs_expansion and not _ROM_EXTRACTION_LIMITER.acquire(blocking=False):
+                await self._send_error(
+                    send,
+                    503,
+                    'ROM conversion is busy. Try again shortly.',
+                    code='rom_processing_busy',
+                )
+                return
+
+            cache_dir = None
+            rom_expansion_lock = None
             try:
+                if needs_expansion:
+                    from oneirodex.utils.rom_archive_lock import (
+                        try_acquire_rom_expansion_lock,
+                    )
+
+                    rom_expansion_lock = try_acquire_rom_expansion_lock(cache_root)
+                    if rom_expansion_lock is None:
+                        await self._send_error(
+                            send,
+                            503,
+                            'ROM conversion is busy. Try again shortly.',
+                            code='rom_processing_busy',
+                        )
+                        return
+
+                    # Respect both the configured per-request ceiling and the
+                    # free-space reserve on the writable library volume. The
+                    # process-shared lock makes this a volume-wide bound even
+                    # when Uvicorn uses multiple worker processes.
+                    configured_limit = int(
+                        self._flask_app.config.get('ROM_MAX_OUTPUT_BYTES')
+                        or DEFAULT_MAX_ROM_OUTPUT_BYTES
+                    )
+                    configured_limit = max(1, configured_limit)
+                    reserve = max(
+                        0,
+                        int(self._flask_app.config.get('ROM_CACHE_RESERVE_BYTES') or 0),
+                    )
+                    free_for_rom = max(0, shutil.disk_usage(cache_root).free - reserve)
+                    rom_budget = RomExpansionBudget(min(configured_limit, free_for_rom))
+                else:
+                    rom_budget = RomExpansionBudget()
+
+                # Extraction output is request-scoped and remains protected by
+                # the limiter until streaming ends and the directory is removed.
+                cache_dir = tempfile.mkdtemp(prefix=f'{game_uuid}-', dir=cache_root)
                 platform_key = library_platform_key(game)
+                source_path = game.full_disk_path
                 try:
-                    rom_path, filename = resolve_playable_rom_path(
-                        game.full_disk_path,
-                        cache_dir=cache_dir,
-                        platform=platform_key,
+                    def resolve_download_target():
+                        rom_path, resolved_filename = resolve_playable_rom_path(
+                            source_path,
+                            cache_dir=cache_dir,
+                            platform=platform_key,
+                            budget=rom_budget,
+                        )
+                        resolved_target, resolved_root, resolved_root_is_resolved = _rom_location(
+                            rom_path, cache_dir, real_game, game_is_dir
+                        )
+                        # Multi-track discs (.cue + .bin/.img/...) need every
+                        # file in one response; WebRetro cannot fetch companions later.
+                        bundled_path, bundled_name = bundle_playable_rom_zip(
+                            resolved_target,
+                            cache_dir,
+                            root=resolved_root if resolved_root_is_resolved else None,
+                            budget=rom_budget,
+                        )
+                        if bundled_path != resolved_target:
+                            resolved_target, resolved_root, resolved_root_is_resolved = (
+                                bundled_path, cache_dir, False
+                            )
+                            resolved_filename = bundled_name
+                        return (
+                            resolved_target,
+                            resolved_root,
+                            resolved_root_is_resolved,
+                            resolved_filename,
+                        )
+
+                    # Archive listing, extraction, CUE bundling, and their file
+                    # copies are synchronous; keep that work off the ASGI loop.
+                    from starlette.concurrency import run_in_threadpool
+
+                    target, root, root_is_resolved, filename = await run_in_threadpool(
+                        resolve_download_target
                     )
-                    target, root, root_is_resolved = _rom_location(rom_path, cache_dir, real_game, game_is_dir)
-                    # Multi-track discs (.cue + .bin/.img/...) need every file in one
-                    # response — WebRetro never gets a second chance to fetch companions.
-                    bundled_path, bundled_name = bundle_playable_rom_zip(
-                        target, cache_dir, root=root if root_is_resolved else None
-                    )
-                    if bundled_path != target:
-                        target, root, root_is_resolved = bundled_path, cache_dir, False
-                        filename = bundled_name
                 except ArchiveRomError as exc:
                     log_system_event(
                         f"ROM resolve failed for {game.name}: {exc.message}",
@@ -4806,7 +5552,18 @@ class LazyASGIApp:
                     raise
                 await self._stream_file(send, handle, filename)
             finally:
-                shutil.rmtree(cache_dir, ignore_errors=True)
+                if cache_dir:
+                    shutil.rmtree(cache_dir, ignore_errors=True)
+                try:
+                    if rom_expansion_lock is not None:
+                        from oneirodex.utils.rom_archive_lock import (
+                            release_rom_expansion_lock,
+                        )
+
+                        release_rom_expansion_lock(rom_expansion_lock)
+                finally:
+                    if needs_expansion:
+                        _ROM_EXTRACTION_LIMITER.release()
 
     async def _get_user_id(self, scope):
         """Resolve user id from Bearer token (API clients) or Flask session cookie (web)."""
@@ -4856,29 +5613,24 @@ class LazyASGIApp:
             from starlette.requests import Request
 
             from oneirodex.runtime_native.admin_pilot import _native_auth_backend
-            from oneirodex.runtime_native.auth_resolver import load_active_user_id
-            from oneirodex.runtime_native.request_auth import _lifetime_seconds
-            from oneirodex.runtime_native.session_compat import load_session_cookie
+            from oneirodex.runtime_native.request_auth import request_auth_context
 
             request_scope = {**scope, 'type': 'http'}
             request = Request(request_scope)
-            config = self._flask_app.config
-            session_data = load_session_cookie(
-                request.cookies.get(str(config.get('SESSION_COOKIE_NAME') or 'session')),
-                config.get('SECRET_KEY'),
-                max_age=_lifetime_seconds(config.get('PERMANENT_SESSION_LIFETIME', 31_536_000)),
-                fallback_secret_keys=config.get('SECRET_KEY_FALLBACKS') or (),
-            )
-            user_id = session_data.get('_user_id')
-            if user_id is None:
-                return None
-
-            find_user, _find_token, _commit_token_touch = _native_auth_backend(self._flask_app)
+            config = dict(self._flask_app.config)
+            find_user, find_token, commit_token_touch = _native_auth_backend(self._flask_app)
             with self._native_database_scope(self._flask_app):
-                user = load_active_user_id(
-                    str(user_id), find_user, allow_legacy_id=bool(config.get('TESTING')),
+                auth = request_auth_context(
+                    request, config,
+                    find_user=find_user,
+                    find_token=find_token,
+                    commit_token_touch=commit_token_touch,
+                    login_manager=getattr(self._flask_app, 'login_manager', None),
+                    allow_bearer=False,
+                    touch_bearer=False,
+                    allow_remember=False,
                 )
-                return user.id if user is not None else None
+                return auth.user.id if auth.user is not None else None
 
         except Exception as e:
             log_system_event(

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+
 import { useLocation } from 'react-router-dom'
 
 import { AdminPageActions } from './AdminPageActions'
 import { findSubSection } from './navConfig'
 import { RailIcon } from './railIcons'
+import { AdminLink } from './AdminLink'
 
 const SECTION_HUBS: Record<string, { href: string; label: string }> = {
   settings: { href: '/admin/settings', label: 'All settings' },
@@ -17,7 +19,7 @@ const SECTION_HUBS: Record<string, { href: string; label: string }> = {
  * sections — including Jinja-backed ones — gets the same bar.
  */
 export function SectionTopNav() {
-  const { pathname, hash } = useLocation()
+  const { pathname, search, hash } = useLocation()
   const [activeLink, setActiveLink] = useState<HTMLAnchorElement | null>(null)
   useEffect(() => {
     if (!activeLink) return
@@ -45,6 +47,53 @@ export function SectionTopNav() {
       observer?.disconnect()
     }
   }, [activeLink, pathname, hash])
+  const scanView =
+    pathname === '/admin/scan-controls'
+      ? 'auto'
+      : pathname === '/admin/scan-jobs'
+        ? 'jobs'
+        : pathname.startsWith('/scan_management')
+          ? (() => {
+              const tab = new URLSearchParams(search).get('active_tab') || 'auto'
+              if (tab === 'jobs') return 'jobs'
+              if (tab === 'unmatched') return 'unmatched'
+              if (tab === 'manual' || hash === '#manual-identify') return 'manual'
+              return 'auto'
+            })()
+          : ''
+  if (['auto', 'manual', 'jobs', 'unmatched'].includes(scanView)) {
+    const scanPages = [
+      {
+        id: 'auto',
+        href: '/scan_management?active_tab=auto#automatic-scan',
+        label: 'Scanning',
+      },
+      {
+        id: 'manual',
+        href: '/scan_management?active_tab=auto#manual-identify',
+        label: 'Manual identify',
+      },
+      { id: 'jobs', href: '/scan_management?active_tab=jobs', label: 'Scan jobs' },
+      { id: 'unmatched', href: '/scan_management?active_tab=unmatched', label: 'Unmatched' },
+    ]
+    return (
+      <AdminPageActions label="Scan pages">
+        {scanPages.map((item) => (
+          <AdminLink
+            key={item.id}
+            ref={item.id === scanView ? setActiveLink : undefined}
+            className={`od-cbtn od-cbtn--section${scanView === item.id ? ' is-active' : ''}`}
+            to={item.href}
+            aria-current={
+              scanView === item.id ? (item.id === 'manual' ? 'location' : 'page') : undefined
+            }
+          >
+            {item.label}
+          </AdminLink>
+        ))}
+      </AdminPageActions>
+    )
+  }
   // The Integrations overview already lists every destination as grouped rows.
   // Adding the same links to the top bar when a row's hash is active duplicates
   // the Metadata & art buttons on that page.
@@ -56,24 +105,24 @@ export function SectionTopNav() {
   return (
     <AdminPageActions label={`${here.sub.title} pages`}>
       {hub ? (
-        <a className="od-cbtn od-cbtn--section" href={hub.href}>
+        <AdminLink className="od-cbtn od-cbtn--section" to={hub.href}>
           {hub.label}
-        </a>
+        </AdminLink>
       ) : null}
       {here.sub.items.map((item) => {
         const active = item.to === here.item.to
         return (
-          <a
+          <AdminLink
             ref={active ? setActiveLink : undefined}
             key={item.to}
             className={`od-cbtn od-cbtn--section${active ? ' is-active' : ''}`}
-            href={item.to}
+            to={item.to}
             aria-current={active ? 'page' : undefined}
             title={item.blurb}
           >
             <RailIcon name={item.icon} size={16} />
             <span>{item.title}</span>
-          </a>
+          </AdminLink>
         )
       })}
     </AdminPageActions>

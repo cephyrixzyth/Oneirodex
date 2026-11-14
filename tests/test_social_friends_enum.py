@@ -78,3 +78,34 @@ def test_friend_request_real_user_still_sends(client, social_users):
     assert data['ok'] is True
     assert data.get('sent') is True
     assert data['friendship']['friend_user_id'] == bob.id
+
+
+def test_friend_request_persistence_failure_uses_safe_api_error_and_writes_nothing(
+    app, client, db_session, social_users, monkeypatch,
+):
+    from oneirodex import db
+
+    alice, bob = social_users
+    _login(client, alice)
+
+    def fail_commit():
+        raise RuntimeError('synthetic persistence failure')
+
+    monkeypatch.setattr(db.session, 'commit', fail_commit)
+
+    with client:
+        response = client.post('/api/social/friends', json={'username': bob.name})
+
+    assert response.status_code == 500
+    assert response.content_type.startswith('application/json')
+    assert response.get_json() == {
+        'ok': False,
+        'error': 'Something went wrong on our end. The error has been logged.',
+        'error_code': 'internal',
+        'message': 'Something went wrong on our end. The error has been logged.',
+        'success': False,
+    }
+    db_session.rollback()
+    assert db_session.query(UserFriendship).filter_by(
+        user_id=alice.id, friend_user_id=bob.id,
+    ).count() == 0

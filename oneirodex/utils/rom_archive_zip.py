@@ -10,8 +10,9 @@ import gzip
 import io
 import os
 import re
-import shutil
+import struct
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 from oneirodex.utils.rom_archive_select import _is_rom_name
 from oneirodex.utils.rom_archive_types import ArchiveRomError, RomExpansionBudget
@@ -25,9 +26,128 @@ from oneirodex.utils.security import is_plain_file_within, open_plain_file_withi
 from oneirodex.utils.zipstream import zip_date_time
 
 
+MAX_ROM_ZIP_MEMBERS = 100_000
+MAX_ROM_ZIP_CENTRAL_DIRECTORY_BYTES = 32 * 1024 * 1024
+_MAX_CUE_SHEET_BYTES = 8 * 1024 * 1024
+_ZIP_EOCD = b'PK\x05\x06'
+_ZIP64_EOCD = b'PK\x06\x06'
+_ZIP64_LOCATOR = b'PK\x06\x07'
+
+
+def _zip_directory_limits(handle) -> tuple[int, int, int] | None:
+    """Return end-of-directory, advertised count, and size without ZipInfo objects."""
+    handle.seek(0, os.SEEK_END)
+    file_size = handle.tell()
+    tail_size = min(file_size, 22 + 0xFFFF)
+    handle.seek(file_size - tail_size)
+    tail = handle.read(tail_size)
+
+    eocd_pos = tail.rfind(_ZIP_EOCD)
+    while eocd_pos >= 0:
+        if eocd_pos + 22 <= len(tail):
+            comment_size = struct.unpack_from('<H', tail, eocd_pos + 20)[0]
+            # Match zipfile's tolerant search behavior: trailing data is
+            # accepted by ZipFile, so it must not disable the preflight.
+            if eocd_pos + 22 + comment_size <= len(tail):
+                break
+        eocd_pos = tail.rfind(_ZIP_EOCD, 0, eocd_pos)
+    if eocd_pos < 0:
+        return None
+
+    eocd_absolute = file_size - tail_size + eocd_pos
+    entries = struct.unpack_from('<H', tail, eocd_pos + 10)[0]
+    directory_size = struct.unpack_from('<I', tail, eocd_pos + 12)[0]
+    directory_offset = struct.unpack_from('<I', tail, eocd_pos + 16)[0]
+    directory_end = eocd_absolute
+    zip64_sentinel = directory_size == 0xFFFFFFFF or directory_offset == 0xFFFFFFFF
+
+    if eocd_absolute >= 20:
+        handle.seek(eocd_absolute - 20)
+        locator = handle.read(20)
+    else:
+        locator = b''
+    if locator[:4] == _ZIP64_LOCATOR:
+        _, disk, zip64_offset, disk_count = struct.unpack('<4sIQI', locator)
+        if disk != 0 or disk_count != 1:
+            raise zipfile.BadZipFile('Multi-disk ZIP archives are not supported')
+        handle.seek(zip64_offset)
+        record = handle.read(56)
+        if record[:4] != _ZIP64_EOCD:
+            # Match ZipFile's prepended-data fallback for archives whose ZIP64
+            # locator offset is relative to the archive, not the containing file.
+            zip64_offset = eocd_absolute - 20 - 56
+            handle.seek(zip64_offset)
+            record = handle.read(56)
+        if len(record) != 56 or record[:4] != _ZIP64_EOCD:
+            raise zipfile.BadZipFile('Invalid ZIP64 end record')
+        (_, record_size, _made, _needed, disk_no, directory_disk,
+         _entries_on_disk, entries, directory_size, _directory_offset) = struct.unpack(
+            '<4sQ2H2I4Q', record,
+        )
+        if record_size < 44 or disk_no != 0 or directory_disk != 0:
+            raise zipfile.BadZipFile('Invalid ZIP64 end record')
+        directory_end = zip64_offset
+    elif zip64_sentinel:
+        raise zipfile.BadZipFile('ZIP64 end record is missing')
+
+    directory_start = directory_end - int(directory_size)
+    if directory_start < 0:
+        raise zipfile.BadZipFile('Invalid ZIP central-directory size')
+    return int(entries), int(directory_size), directory_start
+
+
+def _validate_zip_directory(handle, directory_size: int, directory_start: int) -> int:
+    """Count central-directory records with bounded reads before ZipFile opens."""
+    handle.seek(directory_start)
+    consumed = 0
+    count = 0
+    while consumed < directory_size:
+        if directory_size - consumed < 46:
+            raise zipfile.BadZipFile('Truncated ZIP central directory')
+        header = handle.read(46)
+        if len(header) != 46 or header[:4] != b'PK\x01\x02':
+            raise zipfile.BadZipFile('Invalid ZIP central-directory entry')
+        name_size, extra_size, comment_size = struct.unpack_from('<HHH', header, 28)
+        record_size = 46 + name_size + extra_size + comment_size
+        if record_size > directory_size - consumed:
+            raise zipfile.BadZipFile('Invalid ZIP central-directory entry size')
+        handle.seek(name_size + extra_size + comment_size, os.SEEK_CUR)
+        consumed += record_size
+        count += 1
+        if count > MAX_ROM_ZIP_MEMBERS:
+            raise ArchiveRomError(
+                'ROM ZIP contains too many members to process safely',
+                status_code=413,
+                code='archive_too_large',
+            )
+    return count
+
+
+@contextmanager
+def open_bounded_zip(zip_path: str | os.PathLike):
+    """Open a ROM ZIP after bounding central-directory memory before parsing."""
+    with open(zip_path, 'rb') as handle:
+        limits = _zip_directory_limits(handle)
+        if limits is not None:
+            entry_count, directory_size, directory_start = limits
+            if (entry_count > MAX_ROM_ZIP_MEMBERS
+                    or directory_size > MAX_ROM_ZIP_CENTRAL_DIRECTORY_BYTES):
+                raise ArchiveRomError(
+                    'ROM ZIP metadata exceeds the processing limit',
+                    status_code=413,
+                    code='archive_too_large',
+                )
+            actual_count = _validate_zip_directory(handle, directory_size, directory_start)
+            if entry_count != actual_count:
+                raise zipfile.BadZipFile('ZIP central-directory entry count does not match')
+        handle.seek(0)
+        with zipfile.ZipFile(handle, 'r') as archive:
+            yield archive
+
+
 def _list_roms_with_sizes_in_zip(zip_path: str) -> list[tuple[str, int]]:
     try:
-        with zipfile.ZipFile(zip_path, 'r') as archive:
+        with open_bounded_zip(zip_path) as archive:
             return [
                 (info.filename, int(info.file_size or 0))
                 for info in archive.infolist()
@@ -42,7 +162,7 @@ def _list_roms_with_sizes_in_zip(zip_path: str) -> list[tuple[str, int]]:
 
 
 def _list_nested_zip_members(zip_path: str) -> list[tuple[str, int]]:
-    with zipfile.ZipFile(zip_path, 'r') as archive:
+    with open_bounded_zip(zip_path) as archive:
         return [
             (info.filename, int(info.file_size or 0))
             for info in archive.infolist()
@@ -165,7 +285,7 @@ def extract_rom_from_zip(
         chosen = choose_rom_member(rom_members, platform=platform, preferred_member=member)
         safe_name = _safe_basename(chosen)
         dest = os.path.join(cache_dir, safe_name)
-        with zipfile.ZipFile(zip_path, 'r') as archive:
+        with open_bounded_zip(zip_path) as archive:
             all_names = {info.filename for info in archive.infolist() if not info.is_dir()}
             preexisting_outputs = {
                 os.path.join(cache_dir, Path(name).name)
@@ -220,7 +340,7 @@ def extract_rom_from_zip(
         nested_basename = _safe_basename(nested_name)
         nested_dest = os.path.join(cache_dir, f'_nested_{nest_depth}_{nested_basename}')
         try:
-            with zipfile.ZipFile(zip_path, 'r') as archive:
+            with open_bounded_zip(zip_path) as archive:
                 if not (os.path.isfile(nested_dest) and os.path.getsize(nested_dest) > 0):
                     _extract_zip_member(archive, nested_name, nested_dest, budget)
             return extract_rom_from_zip(
@@ -319,7 +439,12 @@ def _rewrite_cue_file_paths(cue_text: str) -> str:
     return _CUE_FILE_LINE_RE.sub(_replace, cue_text)
 
 
-def _write_vetted_member(archive: zipfile.ZipFile, real_root: str, companion: Path) -> None:
+def _write_vetted_member(
+    archive: zipfile.ZipFile,
+    real_root: str,
+    companion: Path,
+    budget: RomExpansionBudget,
+) -> None:
     """Add *companion* to *archive* from a vetted open handle, not from its path.
 
     ``archive.write(path)`` opens the path again, so a companion swapped for a
@@ -335,10 +460,16 @@ def _write_vetted_member(archive: zipfile.ZipFile, real_root: str, companion: Pa
         member.external_attr = (info.st_mode & 0xFFFF) << 16
         member.file_size = info.st_size
         with archive.open(member, 'w') as target:
-            shutil.copyfileobj(source, target, 1024 * 1024)
+            budget.copy_stream(source, target)
 
 
-def bundle_playable_rom_zip(rom_path: str, cache_dir: str, *, root: str | None = None) -> tuple[str, str]:
+def bundle_playable_rom_zip(
+    rom_path: str,
+    cache_dir: str,
+    *,
+    root: str | None = None,
+    budget: RomExpansionBudget | None = None,
+) -> tuple[str, str]:
     """
     Bundle a resolved `.cue` sheet with its sibling disc images (.bin/.img/.iso/
     .raw/.wav) into one stored (uncompressed) zip named `play.zip`, so a single
@@ -361,6 +492,7 @@ def bundle_playable_rom_zip(rom_path: str, cache_dir: str, *, root: str | None =
     path = Path(rom_path)
     if path.suffix.lower() != '.cue':
         return rom_path, path.name
+    budget = budget or RomExpansionBudget()
 
     source_dir = path.parent
     try:
@@ -410,26 +542,36 @@ def bundle_playable_rom_zip(rom_path: str, cache_dir: str, *, root: str | None =
             return zip_path, 'play.zip'
 
     try:
-        with io.TextIOWrapper(
-            open_plain_file_within(real_root, path, base_is_resolved=True),
-            encoding='utf-8',
-            errors='replace',
-        ) as cue_file:
-            cue_text = cue_file.read()
+        with open_plain_file_within(real_root, path, base_is_resolved=True) as cue_file:
+            cue_bytes = cue_file.read(_MAX_CUE_SHEET_BYTES + 1)
     except OSError as exc:
         raise ArchiveRomError(
             'Failed to read .cue sheet for ROM bundling',
             code='extract_failed',
         ) from exc
 
+    if len(cue_bytes) > _MAX_CUE_SHEET_BYTES:
+        raise ArchiveRomError(
+            'CUE sheet exceeds the maximum supported size.',
+            status_code=413,
+            code='archive_too_large',
+        )
+
+    cue_text = io.TextIOWrapper(
+        io.BytesIO(cue_bytes),
+        encoding='utf-8',
+        errors='replace',
+    ).read()
     rewritten_cue = _rewrite_cue_file_paths(cue_text)
+    cue_bytes = rewritten_cue.encode('utf-8')
 
     tmp_path = f'{zip_path}.tmp-{os.getpid()}'
     try:
         with zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_STORED) as zf:
-            zf.writestr(path.name, rewritten_cue)
+            budget.consume(len(cue_bytes))
+            zf.writestr(path.name, cue_bytes)
             for companion in companions:
-                _write_vetted_member(zf, real_root, companion)
+                _write_vetted_member(zf, real_root, companion, budget)
         os.replace(tmp_path, zip_path)
     except OSError as exc:
         raise ArchiveRomError(

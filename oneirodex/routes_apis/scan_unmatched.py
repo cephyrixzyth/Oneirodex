@@ -13,8 +13,9 @@ from oneirodex.utils.api_response import api_error, api_ok
 from flask import jsonify, request, Response
 from flask_login import login_required, current_user
 from oneirodex import db
+from oneirodex.utils.csv_safety import neutralize_spreadsheet_formulas
 from oneirodex.models import UnmatchedFolder, Library, Game, DuplicateFixLog
-from sqlalchemy import or_, select
+from sqlalchemy import String, cast, exists, or_, select
 from oneirodex.utils.auth import admin_required, librarian_required
 from oneirodex.utils.duplicate_check import (
     normalize_rom_region,
@@ -131,6 +132,15 @@ def _apply_unmatched_filters(query, filters: dict):
             UnmatchedFolder.search_name.ilike(pattern),
             UnmatchedFolder.display_name.ilike(pattern),
             Library.name.ilike(pattern),
+            cast(Library.platform, String).ilike(pattern),
+            cast(UnmatchedFolder.status, String).ilike(pattern),
+            UnmatchedFolder.suggested_kind.ilike(pattern),
+            UnmatchedFolder.match_reason.ilike(pattern),
+            UnmatchedFolder.suggested_candidate_name.ilike(pattern),
+            exists(select(1).where(
+                Game.uuid == UnmatchedFolder.matched_game_uuid,
+                or_(Game.name.ilike(pattern), Game.full_disk_path.ilike(pattern)),
+            )),
         ))
 
     why = filters.get('why') or ''
@@ -387,7 +397,7 @@ def export_unmatched_folders():
 
     writer = csv.DictWriter(buffer, fieldnames=fieldnames, extrasaction='ignore')
     writer.writeheader()
-    writer.writerows(flat_rows)
+    writer.writerows(neutralize_spreadsheet_formulas(row) for row in flat_rows)
 
     return Response(
         buffer.getvalue(),

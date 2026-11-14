@@ -179,8 +179,14 @@ class TestBatchEditLibraries:
 
 class TestBatchScanLibraries:
     def test_batch_scan_queues_and_skips_missing_folder(
-        self, client, admin_user, db_session
+        self, client, admin_user, db_session, app
     ):
+        app.config.update({
+            'DATA_FOLDER_GAMES': '/games',
+            'BASE_FOLDER_POSIX': '/games',
+            'BASE_FOLDER_WINDOWS': '/games',
+            'LIBRARY_ROOTS': [],
+        })
         with_folder = _make_library(
             db_session, name='HasFolder', folder='/games/pc'
         )
@@ -210,6 +216,41 @@ class TestBatchScanLibraries:
         by_uuid = {r['uuid']: r for r in body['results']}
         assert by_uuid[with_folder.uuid]['status'] == 'queued'
         assert by_uuid[no_folder.uuid]['error'] == 'no_scan_folder'
+
+    def test_batch_scan_rejects_out_of_root_path_without_queueing(
+        self, client, admin_user, db_session, app
+    ):
+        app.config.update({
+            'DATA_FOLDER_GAMES': '/games',
+            'BASE_FOLDER_POSIX': '/games',
+            'BASE_FOLDER_WINDOWS': '/games',
+            'LIBRARY_ROOTS': [],
+        })
+        allowed = _make_library(db_session, name='Allowed', folder='/games/pc')
+        denied = _make_library(db_session, name='Denied', folder='/outside/private')
+        _login(client, admin_user)
+
+        with patch(
+            'oneirodex.utils.scan_queue.start_or_queue_scan',
+            return_value={
+                'status': 'queued', 'job_id': 'safe-job', 'position': 1,
+                'message': 'Queued',
+            },
+        ) as mock_start:
+            response = client.post('/api/admin/libraries/batch/scan', json={
+                'library_uuids': [allowed.uuid, denied.uuid],
+            })
+
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body['queued'] == 1
+        assert body['failed'] == 1
+        by_uuid = {row['uuid']: row for row in body['results']}
+        assert by_uuid[denied.uuid]['status'] == 'rejected'
+        assert by_uuid[denied.uuid]['error'] == 'forbidden'
+        assert '/outside/private' not in response.get_data(as_text=True)
+        mock_start.assert_called_once()
+        assert mock_start.call_args.kwargs['folder_path'] == '/games/pc'
 
 
 class TestBatchDeleteLibraries:

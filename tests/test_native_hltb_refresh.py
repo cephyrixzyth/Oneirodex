@@ -1,14 +1,34 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.hltb_refresh import create_hltb_refresh_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+
+
+def test_hltb_utility_import_does_not_require_flask_runtime():
+    result = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            "import sys; sys.modules['flask'] = None; import oneirodex.utils.hltb",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def _client(*, role='admin', outcome=('updated', {
@@ -23,7 +43,7 @@ def _client(*, role='admin', outcome=('updated', {
     user = SimpleNamespace(
         id=71, user_id='hltb-user', role=role,
         is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     login_manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -48,7 +68,7 @@ def _client(*, role='admin', outcome=('updated', {
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    session_data = {'_user_id': '71:fingerprint', '_fresh': True}
+    session_data = {'_user_id': login_identity_for(71), '_fresh': True}
     client.csrf_token = generate_csrf_token(session_data, flask_app.config['SECRET_KEY'])
     client.cookies.set(
         'session', dump_session_cookie(session_data, flask_app.config['SECRET_KEY'])

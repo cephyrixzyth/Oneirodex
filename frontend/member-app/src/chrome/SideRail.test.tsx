@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, test, vi } from 'vitest'
 
@@ -7,6 +9,8 @@ import { SideRail } from './SideRail'
 import { railIconPaths } from './railIcons'
 import { getMoreGroups, getMoreLinks, getPrimaryLinks } from './navConfig'
 import { ShellHarness } from '../testShell'
+
+const sideRailCss = readFileSync(resolve(process.cwd(), 'src/chrome/SideRail.css'), 'utf8')
 
 /**
  * The rail's whole justification is that nothing is hidden (GT-B2).
@@ -59,6 +63,26 @@ test('every former More-menu destination is present, ungated by an overflow', ()
 test('no overflow control survives in the rail', () => {
   renderRail()
   expect(screen.queryByRole('button', { name: /^more$/i })).toBeNull()
+})
+
+test('drawer close control stays hidden on desktop and appears at the mobile breakpoint', () => {
+  expect(sideRailCss).toMatch(/\.od-shell\s+\.od-rail__close\s*\{\s*display:\s*none;/)
+  expect(sideRailCss).toMatch(
+    /@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*?\.od-shell\s+\.od-rail__close\s*\{\s*display:\s*inline-flex;/,
+  )
+  expect(sideRailCss).toMatch(
+    /\.od-shell\[data-rail='open'\]\s+\.od-rail\s*\{[^}]*transform:\s*translateX\(0\);[^}]*visibility:\s*visible;/s,
+  )
+})
+
+test('mobile drawer close control calls the shell close action', async () => {
+  const user = userEvent.setup()
+  const onCloseDrawer = vi.fn()
+  renderRail({ railState: 'open', isMobile: true, onCloseDrawer })
+
+  await user.click(screen.getByRole('button', { name: 'Close' }))
+
+  expect(onCloseDrawer).toHaveBeenCalledOnce()
 })
 
 test('every rail destination has a glyph', () => {

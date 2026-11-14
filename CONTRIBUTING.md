@@ -6,7 +6,7 @@ Public product name is **Oneirodex**. Defaults that are already decided live in 
 
 | Path                  | What                    |
 | --------------------- | ----------------------- |
-| `oneirodex/`          | Flask app               |
+| `oneirodex/`          | FastAPI/ASGI runtime, with Flask compatibility adapters |
 | `frontend/member-app` | Household SPA           |
 | `frontend/admin-app`  | Admin SPA               |
 | `frontend/ops-glance` | Ops widgets             |
@@ -26,17 +26,19 @@ npm test -- --run          # vitest, scoped to one file where you can
 npm run typecheck
 npm run lint && npm run format:check   # both — Prettier fails CI on its own
 
-# Python — the database name MUST contain `test` (conftest hard-fails otherwise)
+# Python — verify/upgrade the loopback test DB, then run a focused slice
+python scripts/upgrade_test_schema.py
 python -m pytest tests/test_whatever.py
 ```
 
-The test database is the container **`oneirodex-review-db`**. `docker start oneirodex-review-db` if it is stopped; if it does not exist at all, `docker compose -f docker-compose.review.yml up -d db` and create `oneirodextest` — [local-postgres-pytest.md](docs/runbooks/local-postgres-pytest.md). A pytest run that produces no output for minutes is a refused connection, not a slow suite.
+The test database is the container **`oneirodex-review-db`**. `docker start oneirodex-review-db` if it is stopped; if it does not exist at all, `docker compose -f docker-compose.review.yml up -d db` and create a test-named database. Apply current migrations before tests against a fresh or reused database — [local-postgres-pytest.md](docs/runbooks/local-postgres-pytest.md) has the target guard and commands. A pytest run that produces no output for minutes is a refused connection, not a slow suite.
 
-Full-tree pytest is **not** all-green today — **42 failed / 4,450 passed** on 2026-09-16, every one named in [test-suite-failures-2026-09-16.md](docs/dev/archive/test-suite-failures-2026-09-16.md). CI runs every test not marked `integration`, minus a named deselect list of known failures ([ci-gates.md](docs/dev/ci-gates.md)) — a new test file is gated by default. Passing CI is still not the full suite: the `integration` modules (live services, Unraid-shaped fixtures) run locally and at release.
+CI is a selected gate, not a full-tree result: it excludes `integration` and has a named deselect list of known failures ([ci-gates.md](docs/dev/ci-gates.md)). Historical full-suite snapshots in the archive describe those runs only; do not treat them as current test status. Passing CI does not establish that the whole suite passed.
 
 ## Ratchets — do not regress
 
 ```bash
+python scripts/check_undefined_names.py  # Pyflakes F821 across production modules
 python scripts/api_envelope_lint.py     # JSON sites off api_ok/api_error — 11 documented keeps
 python scripts/print_lint.py            # print() calls — 591
 python scripts/get_json_lint.py         # raw request.get_json() sites — 103, migrating to @validate_body

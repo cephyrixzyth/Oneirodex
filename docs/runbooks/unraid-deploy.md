@@ -53,7 +53,10 @@ Exact steps: [libraries-and-scans.md — After A0–A14](../admin/libraries-and-
 | `DATABASE_URL` | Yes (Compose builds it) | Host is always `db` — do not use `@localhost` |
 | `DATA_FOLDER_GAMES` | Yes | **Host** games path in `.env` (Compose mounts → `/storage:ro`). Container env hard-sets `/storage`. |
 | `LIBRARY_HOST_PATH` | Yes | **Host** appdata library path → `/app/oneirodex/static/library` RW |
-| `POSTGRES_PASSWORD` | If using bundled db | **Set a strong value** (`python -c "import secrets; print(secrets.token_hex(24))"`). Compose still falls back to `postgres` when it is unset so old stacks start, but that is a known superuser password. Read only when the `db_data` volume is first created — rotate an existing one per [docker-compose-deploy.md](docker-compose-deploy.md#rotating-the-password-on-an-existing-database). |
+| `PUID` / `PGID` | No | Non-root app and embedded-PostgreSQL identity; defaults `99:100` (`nobody:users`). The writable library/appdata paths and optional key-ring file must be accessible to this identity. |
+| `ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE` | Optional until credentials are saved | Container path to the separate read-only JSON key ring; default `/run/secrets/oneirodex-store-credential-keyring.json`. The former `ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE` remains a compatibility alias. Add its protected host file using the optional CA Path mapping. |
+| `ONEIRODEX_SAVE_KEYRING_FILE` | Required when save encryption is enabled | Separate read-only JSON key ring at `/run/secrets/oneirodex-save-keyring.json`; configure the optional CA Path mapping and protect a backup independently from database/library backups. |
+| `POSTGRES_PASSWORD` | If using bundled db | **Set a strong value** (`python -c "import secrets; print(secrets.token_hex(24))"`). Compose retains the legacy `postgres` fallback for interpolation, but startup rejects it by default. An existing volume that still uses it needs the temporary `ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true` opt-in; rotate the password and disable the flag immediately. New volumes reject the default. Read only when the `db_data` volume is first created — rotate an existing one per [docker-compose-deploy.md](docker-compose-deploy.md#rotating-the-password-on-an-existing-database). |
 | `POSTGRES_HOST_BIND` / `POSTGRES_HOST_PORT` | No | Host publish of Postgres. Defaults to `127.0.0.1:5432` (this Unraid box only). Set `POSTGRES_HOST_BIND=<Unraid LAN IP>` to reach it from another machine; see [Postgres exposure](docker-compose-deploy.md#postgres-exposure-and-password). |
 | other `POSTGRES_*` | If using bundled db | Match Compose `db` service |
 
@@ -70,6 +73,22 @@ Do **not** put covers, themes, or uploads on the games mount.
 | **Optional BIOS / firmware** | `EMULATOR_BIOS_HOST_PATH` (uncomment bind in compose) | `/app/oneirodex/static/library/bios` | **rw** | Private household firmware folder under **appdata** — not the games share. See [Local private BIOS mount](#local-private-bios-mount-vs-public-upload) |
 | Postgres | Compose volume `db_data` | `/var/lib/postgresql/data/pgdata` | rw | DB |
 | Optional WebRetro cores | `WEBRETRO_CORES_HOST_PATH` (uncomment in compose) | `/app/oneirodex/static/vendor/webretro/cores` | rw | Must include shipped cores — [webretro-cores.md](webretro-cores.md) |
+| Store credential key ring | CA template **Store credential key ring** path | `/run/secrets/oneirodex-store-credential-keyring.json` | **ro** | Dedicated provider-key JSON file; back it up separately from database/library data |
+
+Protect the host key-ring file with mode `0600` and keep its parent directory
+private. Set its owner to the configured `PUID:PGID` so the non-root app can read
+the file; the app refuses to load a key ring that is group- or world-readable on
+Linux. On Windows, use an NTFS ACL that grants read access only to the Oneirodex
+service account and administrators; the app cannot inspect Windows ACLs through
+its POSIX permission check. The file is mounted read-only in the CA container.
+
+The entrypoint starts PostgreSQL and performs the initial storage-owner migration
+as root, then drops all capabilities and runs startup initialization and ASGI as
+`PUID:PGID`. On first start after upgrade, or after changing those IDs, it
+recursively assigns the designated library path to that identity once per app
+identity and mounted library volume. Its marker is stored in the library mount,
+so replacement mounts are prepared as well. Keep the games mount separate and
+read-only; it is never included in that migration.
 
 Unraid path examples (edit to match your shares):
 
@@ -79,7 +98,61 @@ LIBRARY_HOST_PATH=/mnt/user/appdata/oneirodex/library
 # Optional — after creating the host dir and uncommenting the compose bios bind:
 # EMULATOR_BIOS_HOST_PATH=/mnt/user/appdata/oneirodex/bios
 # EMULATOR_BIOS_PATH=/app/oneirodex/static/library/bios
+# Store and admin integration credentials — use the CA template's read-only
+# key ring path and keep its protected backup outside database/library backups.
 ```
+
+### Existing credentials and key rotation
+
+After installing a new image and allowing its schema upgrade to finish, convert
+existing credentials before relying on store links or configured integrations. Stop every old app
+instance first so it cannot write plaintext credentials. Take a protected
+database backup before conversion; pre-conversion backups may contain plaintext
+provider credentials. Use the procedure for the deployment mode you run:
+
+**Two-service Compose deployment** — run from the Compose checkout with the app
+stopped:
+
+```bash
+docker compose stop app
+docker compose run --rm --no-deps --entrypoint python3 app /app/scripts/migrate_reusable_secrets.py
+docker compose run --rm --no-deps --entrypoint python3 app /app/scripts/migrate_store_credentials.py
+docker compose up -d app
+```
+
+Compose supplies process-level `DATABASE_URL` and the mounted
+`ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE`. The converters do not load `.env` or
+fall back to `TEST_DATABASE_URL`.
+
+**Community Apps single-container deployment with embedded PostgreSQL** — after
+the new container has started and completed its schema upgrade, run the command
+inside that same container while it and its embedded database are running:
+
+```bash
+docker exec <oneirodex-container> python3 /app/scripts/migrate_store_credentials.py
+docker exec <oneirodex-container> python3 /app/scripts/migrate_reusable_secrets.py
+```
+
+Replace the placeholder with the container name shown in Unraid's Docker page.
+The converter resolves the embedded database from the container's `/config`
+metadata; do not set `DATABASE_URL` for this mode. Confirm that the key-ring path
+is mounted and available inside the container before running it. Keep every old
+app writer stopped, but leave the new container running so it can serve its
+embedded database.
+
+In either mode, each converter verifies ciphertext before clearing each legacy
+value, commits row by row, is rerunnable, prints counts only, and makes no
+provider calls. Missing/invalid keys, conflicts or row failures exit nonzero;
+correct the cause and rerun. Historical backups made before conversion may
+contain plaintext provider credentials; protect them accordingly.
+
+For key rotation, retain the old IDs, add the new key, change `active_key_id`, and
+rerun the same command after changing `active_key_id`. In two-service Compose,
+stop the app and use `docker compose run` as above. In embedded mode, keep the
+new container and database running and use `docker exec` as above. The converter
+re-encrypts old envelopes and verifies each before commit. Remove a prior key
+only when `rotated=0`, there are no failures, and no retained backup needs that
+key.
 
 App libraries in Admin should point at paths under `/storage/...` (inside the container).
 
@@ -318,7 +391,7 @@ Scans and image downloads can pin a NAS CPU if parallelism is left high. **There
 | Turbo image downloads | Server Settings | Off during first large scan, or threads **≤4**, batch **≤100** | Stored defaults are **4 / 100**; runtime also hard-caps via `OD_IMAGE_*` |
 | ClamAV profile | Compose `--profile clamav` | **Off** until needed | Heuristics + `ENABLE_MALWARE_SCAN` still run without the daemon; defs + on-add scans add CPU/IO |
 | Challenge / TRAWL | `--profile challenge` | Off unless Acquire needs it | Browser pool is heavy; old NAS → `TRAWL_IMAGE=…:baseline` |
-| `ONEIRODEX_LIBRARY_WATCH` | `.env` | **0** (off) | Best-effort root-folder watch; enqueues scans only — see [§ Library root watch](#library-root-watch-gt_library_watch--unraid-honesty) |
+| `ONEIRODEX_LIBRARY_WATCH` | `.env` | **0** (off) | Best-effort root-folder watch; enqueues scans only — see [§ Library root watch](#library-root-watch-oneirodex_library_watch--unraid-honesty) |
 | Watcher burst enqueue | Scan conflict UI / API | **Queue** (not force parallel) | Many path events → FIFO queue; force-parallel stacks jobs and spikes CPU |
 
 After Backend lands harder code caps/defaults: rebuild + recreate **app**, then open Server Settings once and confirm values match the safe row above (existing DB rows may keep old highs until clamped or re-saved).

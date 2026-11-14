@@ -52,6 +52,8 @@ account.
 chosen avatar** rather than a generic person glyph, and opens the account menu (not a full-page
 takeover). Choosing **Profile**, **Change avatar**, **Change password**, **Invites** or **API tokens** opens the **account modal** over the page you were on, styled like the game preview popup, with a strip along the top to move between the five panels without closing. Nothing navigates away, so your scroll position and filters survive. The old `/settings_*` and `/user/invites` pages still work if you open them directly — they are the fallback for Big Picture and for a browser with JavaScript off.
 
+Avatar uploads accept JPG, JPEG, PNG, GIF and WebP images up to 5 MB. Images are limited to 16 megapixels; animated GIFs are limited to 200 frames and 32 megapixels across all frames.
+
 **Friends** in the rail opens the stay-open Friends dock in place — it does **not** navigate to `/social-companion` as the main SPA shell.
 
 **Loading looks the same everywhere.** Every page, panel and modal that is fetching something shows
@@ -61,7 +63,7 @@ bug worth reporting.
 
 ### Inviting someone
 
-Account menu → **Profile → Invites**. Enter an email address to have the server send the invite, or **leave it blank** to get a link you can pass on however you like — a chat message, a note, reading it out. The link is the invite either way; email is only one way of delivering it, so a household with no mail server can still add members. Links last 48 hours and count against your invite quota until used or revoked.
+Account menu → **Profile → Invites**. Enter an email address to send an invite bound to that recipient, or **leave it blank** to get a shareable link you can pass on however you like — a chat message, a note, reading it out. Links last 48 hours and count against your invite quota until used or revoked. Registration asks for a username, email, and password, then sends a confirmation link. Opening the link only checks it; the mailbox owner chooses the sign-in password on the confirmation page to activate the account. Link previews cannot activate the account, and the inviter cannot choose the recipient's working password.
 
 If you are an admin and the new member has no email at all — a child's console login, the living-room account — **Admin → Invites → Add member without email** creates the account directly with a username and password you choose.
 
@@ -73,13 +75,15 @@ Game Catalog **page size** options go up through **200–1000** (full allowlist 
 
 **Discover shelves** can be pinned or hidden per account (**Rows** in the top bar) — the buttons take effect immediately. News **See all** opens the News page. A shelf with nothing honest to show is hidden rather than padded. **Game Catalog** shows one tile per title, not per copy — Preview → Available on lists the other systems. A grey Play button still opens and explains why.
 
+**Keyboard on Discover:** Focus a tile, then use Left/Right to move across that shelf; Up/Down move between shelves; Home/End jump within a shelf, and Ctrl+Home/End jump to the first or last shelf tile. Enter opens the tile. The row arrows and horizontal touch swipes also wrap at the first and last tile.
+
 If Discover/Game Catalog look unstyled, the deploy is missing **`member-app.css`** — ask an admin to rebuild the image.
 
 On phones and narrow tablets (≤900px), the top nav becomes a **hamburger** menu, Game Catalog **filters** open as a left drawer/sheet (desktop collapse rail does not apply), Chat slide-out goes full-width with channels stacked above messages, library tiles clamp denser, and pagination wraps full-width (your saved tile preference still applies on desktop).
 
 ## First things to try
 
-1. Open **Game Catalog** and filter by platform or Signals (sticky Filters on desktop; drawer ≤900px). **Tile / Rows / Grid** in the top bar changes the layout (remembered in this browser). **Grid** is genre shelves like Discover. Tile size is the TopNav percent slider (Tile, Rows, Grid, and Discover). **Ctrl+K** searches titles from any page; an empty box shows recent and household-favourite titles.
+1. Open **Game Catalog** and filter by platform or Signals (sticky Filters on desktop; drawer ≤900px). **Tile / Rows / Grid** in the top bar changes the layout (remembered in this browser). **Grid** is genre shelves like Discover. Tile size is the TopNav percent slider (Tile, Rows, Grid, and Discover). **Ctrl+K** searches titles from any page; an empty box shows server-authorized recently played and household-favourite titles.
 2. Open **Systems** and pick a console family — or **More → Ways to Play** for Browser / Companion / Catalog across the catalog.
 3. Open a game → details (media stage when a trailer or screenshot exists — click a screenshot for the lightbox, About when a storyline is on file, store requirements/languages only if Steam filled them, Extras & DLC with on-server honesty, store marks) → **Download** (streaming zip).
 4. Open preferences (account menu) → sectioned Preferences (decade-room cards + icon pack + tile size; no heavy cards).

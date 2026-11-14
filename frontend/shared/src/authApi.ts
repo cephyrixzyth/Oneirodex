@@ -1,8 +1,20 @@
 import { csrfHeaders } from './csrf.js'
 import { errorFromResponse } from './envelopeError.js'
+import { notifyAuthBoundary } from './authBoundary.js'
 
 export interface LoginResult {
   next_url: string
+}
+
+/** End the current browser session using the server's CSRF-protected logout route. */
+export async function signOut(): Promise<void> {
+  const response = await fetch('/logout', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: csrfHeaders(),
+  })
+  if (!response.ok) throw await errorFromResponse(response, 'Sign out')
+  notifyAuthBoundary()
 }
 
 export interface RegistrationResult {
@@ -22,6 +34,11 @@ export interface PasswordResetResult {
   reset?: true
   message?: string
   next_url?: string
+}
+
+export interface EmailConfirmationResult {
+  confirmed: boolean
+  already_confirmed: boolean
 }
 
 export interface SetupState {
@@ -68,7 +85,9 @@ export async function signIn(
     body: JSON.stringify(credentials),
   })
   if (!response.ok) throw await errorFromResponse(response, 'Sign in')
-  return response.json() as Promise<LoginResult>
+  const result = (await response.json()) as LoginResult
+  notifyAuthBoundary()
+  return result
 }
 
 /** Register by a valid invite link or an allow-listed email address. */
@@ -113,4 +132,19 @@ export async function resetPassword(
   })
   if (!response.ok) throw await errorFromResponse(response, 'Reset password')
   return response.json() as Promise<PasswordResetResult>
+}
+
+/** Confirm mailbox ownership and set the password that becomes active for the account. */
+export async function confirmEmail(
+  token: string,
+  credentials: { password: string; confirm_password: string },
+): Promise<EmailConfirmationResult> {
+  const response = await fetch(`/api/auth/confirm/${encodeURIComponent(token)}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: csrfHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(credentials),
+  })
+  if (!response.ok) throw await errorFromResponse(response, 'Confirm email')
+  return response.json() as Promise<EmailConfirmationResult>
 }

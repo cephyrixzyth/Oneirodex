@@ -1,0 +1,129 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2041",
+  "finding": "UC-001 / P0-11",
+  "classification": "Confirmed repeated request-cancellation cleanup gap; bounded correction verified. Overall resource-budget candidate remains partially unknown.",
+  "source_base": "302e3e87b5bc3918b0fa2be545821210b9eaac9d",
+  "source_identity": "Current-source candidate fingerprints committed with this report; Git may normalize line endings. Synthetic controlled Windows Python3.12 workers, native ASGI adapters and files; no operator data.",
+  "candidate_sha256": {
+    "oneirodex/utils/image_upload_limits.py": "32e37c66416b9e71140896b4a0d92d6577d4ce00bbf4c590361b692a368cd1cc",
+    "tests/test_upload_work_budgets.py": "0909e7ce0f7789e1ccde263c956e60041add1728ad86c41e4db9cdee100e2af1",
+    "tests/test_native_account_avatar_upload.py": "1ccc3c398e27d3472b7dc0da8f1420d0de3c8542a7a0fb0c758fc3429f8241d2",
+    "tests/test_native_admin_image_mutations.py": "03cbf74446ff863ac05e0a1fd37ffff6a24a410d71465d1122de6b23aebe8ec9",
+    "oneirodex/runtime_native/account_avatar_upload.py": "4da51d6f12b0561fa1904a2237a10134d6fceae77aad3c3cfd63fcc1510acb11",
+    "oneirodex/runtime_native/chat_emoji_read.py": "13fb0505a5b17f33d473dc44e7959bd8d102b4d0c4c77eb9724401fd1a0cd268"
+  },
+  "root_cause": "The helper caught one direct Task.cancel but its second shielded await could be cancelled again, allowing request scope exit before synchronous work and skipping on_cancel cleanup.",
+  "red": {
+    "real_thread_probe": {
+      "failed": 1,
+      "runner_seconds": 2.21,
+      "after_first_cancel_task_pending": true,
+      "after_second_cancel_task_done_worker_pending": true,
+      "on_cancel_skipped": true
+    },
+    "tracked_helper_and_avatar": {
+      "failed": 3,
+      "controls_passed": 22,
+      "runner_seconds": 7.36
+    },
+    "native_game_art_request": {
+      "failed": 1,
+      "control_passed": 1,
+      "deselected": 17,
+      "runner_seconds": 5.84,
+      "controlled_authenticated_asgi_adapter": true
+    },
+    "real_avatar_files": {
+      "failed": 1,
+      "deselected": 16,
+      "runner_seconds": 6.7,
+      "uncommitted_replacement_and_thumbnail_remained": true,
+      "baseline_helper_loaded_from_exact_git_source": true,
+      "live_source_not_reverted": true
+    }
+  },
+  "correction": [
+    "Continue shielding through repeated direct request cancellations until the worker settles.",
+    "Preserve cancellation propagation and exactly-once callback cleanup; propagate an already-cancelled worker rather than retry-spinning.",
+    "Keep body/pixel/work-slot limits, route payloads, worker exceptions and existing AnyIO behavior."
+  ],
+  "focused": {
+    "passed": 48,
+    "pytest_seconds": 6.19,
+    "runner_seconds": 8.55,
+    "source_fixed": true,
+    "database_used": false,
+    "cases": [
+      "One/two/five direct cancellations and exactly-once callback",
+      "Native avatar one/three cancellations and rollback/finalization callback",
+      "Actual Pillow avatar/thumbnail removal with prior bytes retained and synthetic adapter pointer restored",
+      "Authenticated native game-art ASGI request: worker completion before scope exit",
+      "Normal and cancelled-request worker errors, gate release",
+      "Bounded subprocess worker CancelledError propagation without spin",
+      "Existing AnyIO cancellation and input/route controls"
+    ]
+  },
+  "adjacent": {
+    "passed": 133,
+    "warnings": 7,
+    "warning_scope": "Two Werkzeug temporary-file ResourceWarnings and five SQLAlchemy nested-transaction warnings; not suppressed or attributed to the helper correction.",
+    "pytest_seconds": 40.07,
+    "runner_seconds": 48.88,
+    "scope": "Native emoji/library/crop/Art Studio, avatar/game/library image hardening and custom emoji storage checks.",
+    "source_fixed": true,
+    "database_removed": true,
+    "database_absence_verified": true
+  },
+  "ratchets": {
+    "passed": true,
+    "results": [
+      {
+        "check": "api_envelope_lint.py",
+        "exit_code": 0
+      },
+      {
+        "check": "check_undefined_names.py",
+        "exit_code": 0
+      },
+      {
+        "check": "print_lint.py",
+        "exit_code": 0
+      },
+      {
+        "check": "get_json_lint.py",
+        "exit_code": 0
+      },
+      {
+        "check": "R1972-validator",
+        "exit_code": 0
+      },
+      {
+        "check": "diff-check",
+        "exit_code": 0
+      }
+    ],
+    "seconds": 28.28,
+    "dotenv_disabled": true
+  },
+  "harness_rework": [
+    "First scratch command collected zero tests; corrected pytest entry point reproduced the failure.",
+    "First baseline-plugin command failed import before collection; corrected runner adds its managed artifact directory while retaining the whitelist/socket blocker.",
+    "Intermediate strengthening probes overlap final cases; counts and durations are not additive."
+  ],
+  "private_archive": {
+    "filename": "image-worker-repeated-cancellation-r2041.zip",
+    "files": 43,
+    "bytes": 60480,
+    "sha256": "ca2ce84cc87837d3f9cccf96d4902362aab47e6884291ee7e6394f8cd8d41fa5"
+  },
+  "review": "Separate author caller/regression pass retained; weaker than the still-required fresh whole-original-program review.",
+  "capture": "Skipped: backend cancellation correction, no rendered UI change.",
+  "limits": [
+    "Request cancellation is injected through asyncio/AnyIO. No physical client-socket disconnect or database-connection loss is claimed.",
+    "The real-file avatar check uses an in-memory persistence adapter; it is not proof of a real PostgreSQL rollback. Adjacent storage checks separately use a disposable database.",
+    "Forced internal worker-task cancellation, event-loop/process shutdown, a nonterminating worker, physical kill and supported-NAS peak memory/load remain unqualified.",
+    "Overall UC-001, route parity, installed platforms, operator acceptance and final fresh independent review remain open. Prior full01d3 and exact302e3e87 CI outcomes must not be relabeled for this candidate.",
+    "No merge, release, deployment, combined unique coverage, inference-time or model-winner claim."
+  ]
+}

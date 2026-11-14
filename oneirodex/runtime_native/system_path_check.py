@@ -11,6 +11,7 @@ from starlette.responses import JSONResponse
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class PathAvailabilityData:
@@ -55,7 +56,7 @@ def create_system_path_check_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                path = (request.query_params.get('full_disk_path') or '').strip()
+                path = (first_query_value(request.query_params, 'full_disk_path') or '').strip()
                 if not path:
                     response = _error(400, 'bad_request', 'Path parameter required', available=False)
                 else:

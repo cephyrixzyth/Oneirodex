@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
+from oneirodex.utils.csv_safety import neutralize_spreadsheet_formulas
 
 from .request_auth import request_auth_context
 
@@ -61,8 +62,8 @@ class ScanUnmatchedReadsData:
 
     @staticmethod
     def _apply_filters(query, filters):
-        from sqlalchemy import or_
-        from oneirodex.models import Library, UnmatchedFolder
+        from sqlalchemy import String, cast, exists, or_, select
+        from oneirodex.models import Game, Library, UnmatchedFolder
 
         status = filters.get('status') or 'all'
         if status != 'all':
@@ -95,6 +96,15 @@ class ScanUnmatchedReadsData:
                 UnmatchedFolder.search_name.ilike(pattern),
                 UnmatchedFolder.display_name.ilike(pattern),
                 Library.name.ilike(pattern),
+                cast(Library.platform, String).ilike(pattern),
+                cast(UnmatchedFolder.status, String).ilike(pattern),
+                UnmatchedFolder.suggested_kind.ilike(pattern),
+                UnmatchedFolder.match_reason.ilike(pattern),
+                UnmatchedFolder.suggested_candidate_name.ilike(pattern),
+                exists(select(1).where(
+                    Game.uuid == UnmatchedFolder.matched_game_uuid,
+                    or_(Game.name.ilike(pattern), Game.full_disk_path.ilike(pattern)),
+                )),
             ))
         why = filters.get('why') or ''
         if why:
@@ -370,7 +380,7 @@ async def _export(request, flask_app, data):
         flat['matched_game_size_bytes'] = matched.get('size_bytes')
         flat['matched_game_date_identified'] = matched.get('date_identified')
         flat['matched_game_date_created'] = matched.get('date_created')
-        writer.writerow(flat)
+        writer.writerow(neutralize_spreadsheet_formulas(flat))
     return Response(
         buffer.getvalue(), media_type='text/csv',
         headers={'Content-Disposition': f'attachment; filename="unmatched_folders_{filename_status}.csv"'},

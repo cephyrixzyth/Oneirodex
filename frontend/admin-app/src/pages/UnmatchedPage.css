@@ -1,0 +1,6 @@
+.od-unmatched__success {
+  border-color: color-mix(in srgb, var(--od-success) 45%, transparent);
+  border-left: 3px solid var(--od-success);
+  background: color-mix(in srgb, var(--od-success) 8%, var(--od-surface));
+  color: var(--od-text);
+}

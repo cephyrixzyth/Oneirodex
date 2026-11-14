@@ -154,6 +154,39 @@ def test_list_nests_matched_game(client, app, db_session, admin, lib):
     assert rows[plain.id]['matched_game'] is None
 
 
+def test_list_search_matches_linked_game_name_and_path(client, app, db_session, admin, lib):
+    game = Game(
+        uuid=str(uuid4()),
+        name='Searchable Linked Title',
+        library_uuid=lib.uuid,
+        full_disk_path='/games/linked-title-search-path',
+        size=10,
+        igdb_id=424243,
+    )
+    db_session.add(game)
+    db_session.flush()
+    row = _folder(
+        db_session,
+        lib,
+        path='/games/Unmatched Copy',
+        status='Duplicate',
+        matched_game_uuid=game.uuid,
+        match_reason='title_vs_library_name',
+    )
+    _login(client, app, admin)
+
+    by_name = client.get('/api/unmatched_folders', query_string={'q': 'Searchable Linked Title'})
+    by_path = client.get('/api/unmatched_folders', query_string={'q': 'linked-title-search-path'})
+    by_platform = client.get('/api/unmatched_folders', query_string={'q': 'PCWIN'})
+
+    assert by_name.status_code == 200
+    assert by_path.status_code == 200
+    assert by_platform.status_code == 200
+    assert row.id in {item['id'] for item in by_name.get_json()}
+    assert row.id in {item['id'] for item in by_path.get_json()}
+    assert row.id in {item['id'] for item in by_platform.get_json()}
+
+
 def test_amend_name_soft_only(client, app, db_session, admin, lib):
     folder = _folder(db_session, lib, path='/games/Raw.Folder.Name-REPACK')
     original_path = folder.folder_path

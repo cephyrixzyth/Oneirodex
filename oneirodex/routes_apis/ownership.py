@@ -1,7 +1,7 @@
 """Register-only store ownership sync APIs (never downloads from stores)."""
 
 from oneirodex.utils.api_response import api_error, api_ok
-from flask import g, request
+from flask import request
 from flask_login import current_user, login_required
 
 from oneirodex.schemas.ownership import (
@@ -37,12 +37,23 @@ from oneirodex.utils.store_ownership import (
     import_steam_csv,
     is_ownership_sync_enabled,
 )
+from oneirodex.utils.store_ownership_limits import (
+    MAX_OWNERSHIP_CSV_REQUEST_BYTES,
+    MAX_OWNERSHIP_CSV_REQUEST_MIB,
+)
 
 from . import apis_bp
 from oneirodex.utils.store_capabilities import provider_capabilities
 from oneirodex.utils.store_connection_status import member_connections
 from oneirodex.utils.store_ownership_common import unofficial_store_opt_in
-from oneirodex.utils.store_sync_errors import REASONS, SyncOutcomeError, reason_payload
+from oneirodex.utils.store_credentials import StoreCredentialError
+from oneirodex.utils.store_sync_errors import (
+    REASONS,
+    StoreSyncError,
+    SyncOutcomeError,
+    classify_sync_exception,
+    reason_payload,
+)
 from oneirodex.utils.store_sync_all import sync_all_stores
 from oneirodex.utils.store_sync_jobs import (
     LIVE_SYNC_ADAPTERS,
@@ -52,7 +63,7 @@ from oneirodex.utils.store_sync_jobs import (
     request_cancel,
     run_store_sync,
 )
-from oneirodex.utils.api_tokens import user_has_scope
+from oneirodex.utils.api_tokens import require_api_token_scope, user_has_scope
 from oneirodex.utils.ownership_review import (
     REVIEW_FILTERS,
     ReviewError,
@@ -65,6 +76,7 @@ from oneirodex import db
 
 @apis_bp.route('/ownership/titles', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def ownership_review_titles():
     raw = request.args.get('after_id', '0')
     if not raw.isascii() or not raw.isdigit() or len(raw) > 10 or int(raw) > 2147483647:
@@ -77,6 +89,7 @@ def ownership_review_titles():
 
 @apis_bp.route('/ownership/titles/<int:title_id>/candidates', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def ownership_match_candidates(title_id):
     try:
         return api_ok(match_candidates(current_user, title_id))
@@ -97,7 +110,7 @@ def undo_ownership_match(title_id):
 
 
 def _match_decision(title_id, *, undo=False):
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -127,6 +140,7 @@ def ownership_providers():
 
 @apis_bp.route('/ownership/connections', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def ownership_connections():
     """The current member's status per provider (LIB-04). Stored facts only:
     no provider call, no credential. Poll while a sync runs to show progress."""
@@ -147,7 +161,7 @@ def _outcome_error(store, reason, job=None):
 
 def _sync_response(store):
     """Run one member-triggered live sync as a recorded job."""
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -169,7 +183,7 @@ def _sync_response(store):
 
 
 def _disconnect_response(store, disconnect):
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -189,7 +203,7 @@ def _disconnect_response(store, disconnect):
 def _connect_response(store, connect):
     """Save a link or reconnect while no sync for it runs; a sync finishing
     later would otherwise write back the old token over the new one."""
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -200,6 +214,8 @@ def _connect_response(store, connect):
         account = exclusive_link_change(current_user.id, store, 'connect', connect)
     except SyncOutcomeError as exc:
         return _outcome_error(store, exc.reason, exc.job)
+    except StoreCredentialError as exc:
+        return _outcome_error(store, classify_sync_exception(exc))
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
     return api_ok({
@@ -216,7 +232,7 @@ def sync_all_ownership():
     One store failing does not stop the others; each result carries its own
     status and redacted reason. Unlinked stores come back as ``skipped``.
     """
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -235,7 +251,7 @@ def sync_all_ownership():
 def cancel_ownership_sync(store):
     """Ask a running GOG / Epic / Amazon sync to stop at its next page. Steam,
     Xbox and PlayStation make one provider call and are refused, not faked."""
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
@@ -252,7 +268,10 @@ def cancel_ownership_sync(store):
 def _read_csv_payload() -> str:
     if request.is_json:
         data = request.get_json(silent=True) or {}
-        return data.get('csv') or ''
+        if not isinstance(data, dict):
+            return ''
+        value = data.get('csv') or ''
+        return value if isinstance(value, str) else ''
     upload = request.files.get('file')
     if upload:
         return upload.read().decode('utf-8', errors='replace')
@@ -260,20 +279,46 @@ def _read_csv_payload() -> str:
 
 
 def _csv_response(import_csv, **extra):
-    if getattr(g, 'api_token', None) is not None and not user_has_scope('write:library'):
+    if not user_has_scope('write:library'):
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
         )
     if not is_ownership_sync_enabled():
         return _feature_disabled_response()
-    csv_text = _read_csv_payload()
+    from werkzeug.exceptions import RequestEntityTooLarge
+
+    configured_limit = request.max_content_length
+    request.max_content_length = min(
+        configured_limit if configured_limit is not None else MAX_OWNERSHIP_CSV_REQUEST_BYTES,
+        MAX_OWNERSHIP_CSV_REQUEST_BYTES,
+    )
+    if request.content_length is not None and request.content_length > MAX_OWNERSHIP_CSV_REQUEST_BYTES:
+        return api_error(
+            f'CSV import request exceeds the {MAX_OWNERSHIP_CSV_REQUEST_MIB} MiB request limit.',
+            code='payload_too_large', status=413,
+        )
+    try:
+        csv_text = _read_csv_payload()
+    except RequestEntityTooLarge:
+        return api_error(
+            f'CSV import request exceeds the {MAX_OWNERSHIP_CSV_REQUEST_MIB} MiB request limit.',
+            code='payload_too_large', status=413,
+        )
     if not csv_text.strip():
         return api_error('csv content required', code='bad_request')
     try:
         result = import_csv(current_user.id, csv_text)
     except PermissionError as exc:
         return api_error(str(exc), code='forbidden')
+    except StoreSyncError as exc:
+        if exc.reason == 'ownership_limit':
+            return api_error(
+                REASONS[exc.reason].message,
+                code=REASONS[exc.reason].envelope_code,
+                status=REASONS[exc.reason].http_status,
+            )
+        return api_error(str(exc), code='bad_request')
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
     return api_ok({**result, 'summary': get_ownership_summary(current_user.id), **extra})
@@ -281,6 +326,7 @@ def _csv_response(import_csv, **extra):
 
 @apis_bp.route('/ownership', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def ownership_status():
     return api_ok(get_ownership_summary(current_user.id))
 

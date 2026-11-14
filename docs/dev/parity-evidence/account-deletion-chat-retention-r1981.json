@@ -1,0 +1,24 @@
+{
+  "review_id": "R1981",
+  "title": "Retain household chat messages with anonymized authors on account deletion",
+  "owner_decision": "Preserve messages sent in household chats, with the author anonymized.",
+  "classification": "Confirmed contract mismatch fixed: deleting a member previously cascaded through their shared chat messages, contrary to the selected shared-history policy.",
+  "change": {
+    "model": "ChatMessage.user_id is nullable and references users with ON DELETE SET NULL.",
+    "migration": "d6e7f8a9b0c1 changes existing PostgreSQL schemas. Downgrade refuses while anonymous messages exist, preserving retained content.",
+    "display": "ChatMessage serialization uses the existing generic member label when no author remains.",
+    "attachments": "Uploader-owned attachment rows and files are still removed after account deletion commits."
+  },
+  "verification": {
+    "pre_fix_reproduction": "On a fresh database at the prior Alembic head, test_native_admin_deletion_removes_rows_and_retries_owned_file_cleanup failed because the shared message had been cascade-deleted.",
+    "account_deletion_module": "python -m pytest tests/test_admin_user_delete_retention.py -q — passed: 5 tests",
+    "fk_inventory": "python -m pytest tests/test_user_deletion_inventory.py -q — passed: 1 test",
+    "schema": "scripts/upgrade_test_schema.py upgraded the fresh test database through the new migration; python -m alembic check reported no new upgrade operations.",
+    "rollback": "Clean downgrade and re-upgrade passed. With a retained NULL-author message present, downgrade refused and both that row and the Alembic head were preserved.",
+    "database": "Disposable oneirodexchatpre_test on the loopback PostgreSQL 17.6 review container; dropped after verification. Process-scoped DATABASE_URL/TEST_DATABASE_URL overrides left the root .env unchanged."
+  },
+  "limits": [
+    "Verification uses the current schema, not an operator's deployed schema.",
+    "Chat retention was implemented only for household ChatMessage rows; other retained user-authored free-text fields still need classification."
+  ]
+}

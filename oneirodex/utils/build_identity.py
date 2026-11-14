@@ -63,9 +63,18 @@ def _schema_revision() -> str | None:
     try:
         from alembic.runtime.migration import MigrationContext
 
-        from oneirodex import db
+        from oneirodex.runtime_native.db_session import current_native_engine
 
-        with db.engine.connect() as connection:
+        # FastAPI binds its engine for the request scope. Prefer it so the Ops
+        # build card remains useful in the Flask-free runtime. During legacy
+        # Flask calls there is no native engine, so preserve the old fallback.
+        engine = current_native_engine()
+        if engine is None:
+            from oneirodex import db
+
+            engine = db.engine
+
+        with engine.connect() as connection:
             return MigrationContext.configure(connection).get_current_revision()
     except Exception as exc:  # noqa: BLE001 -- an ops tile never takes the poll down
         logger.debug('build identity: schema revision unavailable (%s)', exc)

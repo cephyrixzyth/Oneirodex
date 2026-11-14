@@ -1,6 +1,7 @@
 """Native session reads for member and administrator download queues."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -8,7 +9,8 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+from .response_compat import flask_redirect_response
 
 
 class DownloadRequestReadData:
@@ -141,34 +143,34 @@ def create_download_request_read_router(
 
     @router.api_route('/api/my_downloads', methods=['GET', 'HEAD'])
     @router.api_route('/api/admin/download-requests', methods=['GET', 'HEAD'])
-    @router.delete('/api/delete_download/{request_id}')
+    @router.delete('/api/delete_download/{request_id:int}')
     def download_requests(request: Request):
         is_delete = request.method == 'DELETE'
         is_admin_route = is_delete or request.url.path.endswith('/admin/download-requests')
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             csrf_response = None
+            auth = request_auth_context(
+                request, flask_app.config, find_user=find_user, find_token=find_token,
+                commit_token_touch=commit_token_touch, load_user_id=load_user_id,
+                login_manager=login_manager,
+            )
             if is_delete:
                 from .csrf_compat import csrf_error_response
                 from .request_auth import _lifetime_seconds
                 from .session_compat import load_session_cookie
 
-                cookie_name = str(flask_app.config.get('SESSION_COOKIE_NAME') or 'session')
-                session = load_session_cookie(
-                    request.cookies.get(cookie_name), flask_app.config.get('SECRET_KEY'),
-                    max_age=_lifetime_seconds(flask_app.config.get('PERMANENT_SESSION_LIFETIME', 31_536_000)),
-                    fallback_secret_keys=flask_app.config.get('SECRET_KEY_FALLBACKS') or (),
-                )
-                csrf_response = csrf_error_response(request, session, flask_app.config)
+                if auth.source != 'bearer':
+                    cookie_name = str(flask_app.config.get('SESSION_COOKIE_NAME') or 'session')
+                    session = load_session_cookie(
+                        request.cookies.get(cookie_name), flask_app.config.get('SECRET_KEY'),
+                        max_age=_lifetime_seconds(flask_app.config.get('PERMANENT_SESSION_LIFETIME', 31_536_000)),
+                        fallback_secret_keys=flask_app.config.get('SECRET_KEY_FALLBACKS') or (),
+                    )
+                    csrf_response = csrf_error_response(request, session, flask_app.config)
             if csrf_response is not None:
                 response = csrf_response
                 auth = None
-            else:
-                auth = request_auth_context(
-                    request, flask_app.config, find_user=find_user, find_token=find_token,
-                    commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-                    login_manager=login_manager,
-                )
             from oneirodex.utils.role_catalog import normalize_role
             from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
 
@@ -197,6 +199,11 @@ def create_download_request_read_router(
                 try:
                     request_id = int(request.path_params['request_id'])
                     if request_id <= 0:
+                        from oneirodex.utils.event_logging import log_system_event
+                        log_system_event(
+                            f'Invalid request ID: {request_id}',
+                            event_type='download_api', event_level='warning',
+                        )
                         payload, status = api_error_payload('Invalid request ID', code='bad_request')
                         response = JSONResponse(payload, status_code=status)
                     elif not data.delete(request_id):
@@ -207,6 +214,11 @@ def create_download_request_read_router(
                 except Exception:
                     from oneirodex.runtime_native.db_session import native_db as db
                     db.session.rollback()
+                    from oneirodex.utils.event_logging import log_system_event
+                    log_system_event(
+                        f'Error deleting download request {request_id}: Could not delete the download request',
+                        event_type='download_api', event_level='error',
+                    )
                     import logging
                     logging.getLogger(__name__).warning('Delete download request failed')
                     payload, status = api_error_payload('Could not delete the download request', code='internal')
@@ -217,10 +229,12 @@ def create_download_request_read_router(
             elif csrf_response is None and is_admin_route:
                 response = JSONResponse(api_ok_payload({'requests': data.admin_requests()}))
             elif csrf_response is None:
-                response = JSONResponse(data.my_downloads(user))
-                if auth.should_set_session_cookie:
-                    from .oidc_status import _set_session_cookie
-                    _set_session_cookie(response, flask_app, auth)
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = JSONResponse(data.my_downloads(user))
+                    if auth.should_set_session_cookie:
+                        from .oidc_status import _set_session_cookie
+                        _set_session_cookie(response, flask_app, auth)
 
         from oneirodex.utils.security_headers import security_header_values
         response.headers.setdefault('Cache-Control', 'no-store')
@@ -244,14 +258,16 @@ def create_download_request_read_router(
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
                 login_manager=login_manager,
             )
-            if auth.user is None:
-                response = _login_redirect(
+            response = (
+                _login_redirect(
                     flask_app, request, login_manager, auth,
                     message=getattr(login_manager, 'login_message', None),
                     category=getattr(login_manager, 'login_message_category', 'message'),
                     include_next=True,
                 )
-            else:
+                if auth.user is None else require_bearer_scope(auth, 'read:library')
+            )
+            if response is None:
                 try:
                     request_id = int(download_id)
                 except (ValueError, TypeError):
@@ -300,7 +316,6 @@ def create_download_request_read_router(
         from .session_compat import load_session_cookie
         from .oidc_status import _set_session_cookie
         from oneirodex.utils.security_headers import security_header_values
-        from starlette.responses import RedirectResponse
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -313,7 +328,7 @@ def create_download_request_read_router(
             )
             csrf = csrf_error_response(
                 request, session_data, flask_app.config,
-                token=str(form.get('csrf_token') or ''),
+                token=str(first_form_value(form, 'csrf_token') or ''),
             )
             if csrf is not None:
                 response = csrf
@@ -337,7 +352,7 @@ def create_download_request_read_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append(('info', 'Download request removed.'))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/downloads', status_code=302)
+                    response = flask_redirect_response('/downloads', status_code=302)
             if auth is not None and auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
 
@@ -356,7 +371,6 @@ def create_download_request_read_router(
         from oneirodex.utils.api_contract import api_error_payload
         from oneirodex.utils.role_catalog import normalize_role
         from oneirodex.utils.security_headers import security_header_values
-        from starlette.responses import RedirectResponse
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -369,7 +383,7 @@ def create_download_request_read_router(
             )
             csrf = csrf_error_response(
                 request, session_data, flask_app.config,
-                token=str(form.get('csrf_token') or ''),
+                token=str(first_form_value(form, 'csrf_token') or ''),
             )
             if csrf is not None:
                 response = csrf
@@ -403,12 +417,12 @@ def create_download_request_read_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append(('error', 'Download request not found.'))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/admin/manage-downloads', status_code=302)
+                    response = flask_redirect_response('/admin/manage-downloads', status_code=302)
                 else:
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append(('success', 'Download request deleted.'))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/admin/manage-downloads', status_code=302)
+                    response = flask_redirect_response('/admin/manage-downloads', status_code=302)
             if auth is not None and auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
 

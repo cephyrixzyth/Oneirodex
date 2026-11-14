@@ -1,0 +1,506 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2065",
+  "finding": "DT-006 verified account-bound launch recovery; component acceptance only",
+  "source_base": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+  "observed_utc": "2026-11-13T18:00:15.419102+00:00",
+  "candidate_source_sha256": {
+    "clients/desktop/src-tauri/Cargo.lock": "c5f23b86f0a476a6e653aec9929dbeb42cf92671d964551f7abbfc3de0b21ace",
+    "clients/desktop/src-tauri/Cargo.toml": "f5dce6dd051074945e83c5e1b01332d770eaf6e6f2858a878f666b53530f5c8f",
+    "clients/desktop/src-tauri/capabilities/default.json": "1bc1790d98060ae2aa8cfdba3ddb550feb0d9bee68a20c8853013bc58bc8350f",
+    "clients/desktop/src-tauri/permissions/allow-launch-reporting.toml": "a42439e8fa471ef6b9ebc0c1ff642db5f250eede4950be03574741bbb2a20614",
+    "clients/desktop/src-tauri/src/launch_supervisor.rs": "68e4b23170c5021fecd84c1ca918cae137c45d03de8ab4fa195a24f8e11054e8",
+    "clients/desktop/src-tauri/src/launch_tracking.rs": "b76da02fc03fd1ff07ac416ad56c6b27728d5a44f2bc1084b7c6d7565f816ef2",
+    "clients/desktop/src-tauri/src/lib.rs": "cba6a03dfbdce37c4a30e3a4aca6749dbef02dedea202cdce4bdcb30bfdc3e97",
+    "clients/desktop/src/app-access-boundary.test.ts": "2f5bf97abd16fd599f2264aeb36c9838745d43af849a93497a3000f0f70bd928",
+    "clients/desktop/src/app.ts": "893b9e328d3a912d2aeec0e2e87859734a4de6894739f68599aa22d9ce846dd1",
+    "clients/desktop/src/launch-profile-integration.test.ts": "92c9ee92c10c6b1b320ab826b53aed59f05cfff31803de00ef669b9339935620",
+    "clients/desktop/src/launch-profile.test.ts": "e3165b8a07c430726ee889badac75a09516ea9d412f644722fe1bc1c056e6c66",
+    "clients/desktop/src/launch-profile.ts": "757317fcadbc6f00e85d2943dad12dcc6aec02be04ae10cc8a8873d4896b0d47",
+    "clients/desktop/src/launch-recovery.test.ts": "6a7d48d6d12c0d5e4ffc88d81960e70556b06695d218bc1b0b1a9d9fa6607951",
+    "clients/desktop/src/launch-recovery.ts": "ac1615b0b7e3c3dccf037fe855ee5821f6df2b7ac7c52bc2ad903604780fc1a2",
+    "clients/desktop/src/launch.ts": "55be3d04cb8c8356b0b3f8211eae1a6ae3366a2b683003a5e165e38ad5bc9564",
+    "clients/desktop/src/offline-shelf.ts": "599c4564fcba30fa1facce5ad13178da30b6949bcc5041d6d90d01dca0097da1",
+    "clients/desktop/src/playtime-session.ts": "ce80c191490c1a70ce074b872c64a5b008412b3bd883444e317ebf19da777cac"
+  },
+  "source_hash_note": "Observed Windows worktree bytes; staged preflight verifies normalized index equivalence because Git normalizes line endings.",
+  "behavior": [
+    "Windows/Linux recovery requires a live native family and exact server/account/device/credential binding. Binding files contain only a versioned digest; no credential or complete identity object is serialized.",
+    "Fresh server identity and library ACL refresh precede automatic recovery. Cached-only local Play remains available without requesting server playtime; reachable denial does not resume reporting.",
+    "Recovery starts a fresh existing-API interval and does not backfill a disconnect. Ambiguous start responses are not automatically retried during refresh.",
+    "Multiple live families for the same profile/game share one reporter. Native file leases exclude a second reporter process; UI generations and exact claim IDs fence delayed or stale responses.",
+    "Forget removes recovery bindings and releases reporting, preserving games/files. Lost native ownership or heartbeat failures show reporting uncertainty in the existing status region.",
+    "macOS retains current-session direct-child reporting; verified family/restart recovery remains unsupported there."
+  ],
+  "verification": {
+    "Windows_native": {
+      "passed": 114,
+      "ignored": 6,
+      "ignored_reason": "Five bounded child-role fixtures are executed through parent tests; one Linux-only real-volume opt-in is ignored locally.",
+      "seconds": 2.77,
+      "log_sha256": "3708aed11e65d3dcd46ae9c20c6b5865a5cfe1c84c1687b274fa5f225aa473cb"
+    },
+    "desktop": {
+      "passed": 367,
+      "files": 48,
+      "seconds": 8.38,
+      "log_sha256": "d0cf4eaef850ca448a74cea584a712fa0b4667997fb2c551fbc47c7a105ea3f3"
+    },
+    "actual_debug_helper": {
+      "cases": 2,
+      "seconds_including_fixture_compile": 1.19,
+      "binary_sha256": "3890076a4f8ec421fb2c6a33a3fcfe5c7dc66a074fe93c7173772bc879e6168d",
+      "scope": "Actual Windows debug companion supervisor-only mode; wrapper/family exit and guardian-crash preservation. No UI, IPC or account-resume integration claim from these two helper cases."
+    },
+    "fixed_source_batch_seconds": 53.73,
+    "checks": [
+      {
+        "name": "desktop",
+        "seconds": 8.38,
+        "log_sha256": "d0cf4eaef850ca448a74cea584a712fa0b4667997fb2c551fbc47c7a105ea3f3"
+      },
+      {
+        "name": "types",
+        "seconds": 2.61,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "prettier",
+        "seconds": 1.05,
+        "log_sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      {
+        "name": "rustfmt",
+        "seconds": 0.47,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "clippy",
+        "seconds": 4.19,
+        "log_sha256": "fdf53e631cbeb52ba00c4f389a33cae66e3bbf755a2ad68246e3341cf5c3a71b"
+      },
+      {
+        "name": "native",
+        "seconds": 10.34,
+        "log_sha256": "6f34ecefa7144abe9f6ab26567852e5e785921cfc4bf8639eb7301fc0d2d37a0"
+      },
+      {
+        "name": "full-assets",
+        "seconds": 4.84,
+        "log_sha256": "ef38f17504b9d3ca144d486ef90dee167b7b4908632a41802c4f2df898b74089"
+      },
+      {
+        "name": "thin-assets",
+        "seconds": 1.52,
+        "log_sha256": "b5b884618a36b1a9dcb0823c0bcf95f3bfdafe4c8066152e7170d227db21966f"
+      },
+      {
+        "name": "build",
+        "seconds": 16.06,
+        "log_sha256": "82a794527de28980f255580714a7ec98a4a6f83ba58a1f51117a8908fc4c89ce"
+      },
+      {
+        "name": "R1972",
+        "seconds": 1.34,
+        "log_sha256": "fdd37736b91c104c8d8e5fd19a35da0cae2996cdd36a8196acf9405787f7944d"
+      },
+      {
+        "name": "eslint",
+        "seconds": 4.09,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "controls": [
+      "Account/server/device/token mismatch and incomplete identity",
+      "Real native family matched by fresh reader without the old in-memory process registry; another binding never inspected",
+      "Live OS controller process excludes a second reporter and releases ownership after exit",
+      "Fast wrapper/middle/grandchild fixture; Windows explicit leaf breakaway, Linux setsid fixture awaiting its own CI",
+      "Stale UI generation and delayed native/API replies cannot install a replacement watcher",
+      "One reporter remains until all game instances end; stop is idempotent",
+      "Mounted UI denies cached-only reporting and catalog-denied recovery; Forget preserves local access",
+      "Unverified metadata, ambiguous API start, lost ownership and heartbeat failures are explicit",
+      "Profile hashing unavailable after cache hydration: mounted app still launches locally with a null binding and no server request; no fabricated recovery identity."
+    ],
+    "TDD": "Recorded profile stub5fails/4controls; native binding/claim4runtimefails; actual native live-family reader1fail; recovery/client integration/mounted-UI assertions fail before their implementation. Review caught and reproduced a mutable-claim capture error and a delayed-ownership reply race; both corrected before the final suite. Final review additionally reproduced unavailable profile hashing blocking cached local Play; the app now falls back to an unbound local launch and the mounted regression passes."
+  },
+  "dependency_delta": {
+    "existing_package": "sha2 0.10.9",
+    "root_edges_added": 1,
+    "packages_versions_checksums_unchanged": true,
+    "packages": 531,
+    "rework": "An incorrect offline generate-lockfile command refreshed cached dependencies. Its graph was rejected and retained privately; only the verified root edge remains. Its owned compile was intentionally stopped before tests, not treated as an observation timeout or a product failure."
+  },
+  "permissions": "Six recovery/reporting commands are restricted by the existing main-window capability; remote library/friends capabilities are unchanged.",
+  "parent_qualification": {
+    "observed_utc": "2026-11-13T17:41:18.997751+00:00",
+    "source_head": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+    "runs": [
+      {
+        "conclusion": "success",
+        "event": "pull_request",
+        "headSha": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43464242699"
+      },
+      {
+        "conclusion": "failure",
+        "event": "push",
+        "headSha": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43464233548"
+      },
+      {
+        "conclusion": "success",
+        "event": "pull_request",
+        "headSha": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43464242926"
+      }
+    ],
+    "core": {
+      "job_id": 132018958822,
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 2054.09,
+      "log_sha256": "53930c5a4e32614089f1c2da8be4103bf5449a2cbd93abcdd5f153138a3a0d88",
+      "reused_contracts": "tests/test_playtime_ttl_parity.py has three passing cases in the actual log; backend and API client trees unchanged."
+    },
+    "Linux_native": {
+      "job_id": 132018926360,
+      "passed": 112,
+      "ignored": 4,
+      "separate_real_ENOSPC": 1,
+      "log_sha256": "c5724e4ac7416f2c7b445053fd1bf5e7b6c55e06da72b894b3a3e5386d592683"
+    },
+    "cancelled_Mac_thin_jobs": [
+      {
+        "id": 132018927123,
+        "runner_id": 0,
+        "steps": [],
+        "conclusion": "cancelled"
+      },
+      {
+        "id": 132018959331,
+        "runner_id": 0,
+        "steps": [],
+        "conclusion": "cancelled"
+      }
+    ],
+    "retry": "Specific cancelled PR job132018959331 retry requested through the job tool. The new attempt exposes the full matrix; do not count these overlapping results twice. Specific cancellation cause is unproven; original cancelled jobs had no runner or steps."
+  },
+  "server_contract_reuse": {
+    "backend_tree": "d86a405145c11a604dfb169a364d009cceea9b56",
+    "api_client_tree": "72e5800b83f1045600e014d5e2907d77425a10c2",
+    "unchanged_since": "60e741ea42d481ea6f373de260fb9c4d3f5bb9be",
+    "TTL_ACL_tests": "Three actual passing cases in parent651 core; no extra database run or full Python replay for this native/client-only change."
+  },
+  "archive": {
+    "filename": "desktop-verified-launch-recovery-final-r2065.zip",
+    "sha256": "1385b1b25776bda38a30797bfff9ba10d2d56a332d34111c4e2041d7faf4a298",
+    "bytes": 566633,
+    "files": 141,
+    "storage": "Private canonical DT-006 final candidate; earlier candidate and failed evidence retained separately."
+  },
+  "cleanup": "All owned synthetic helper/root/leaf/controller processes terminated and family children reaped. No operator database, root environment file, keychain credential, user game, foreground app or deployment used. Sources and failed evidence retained; BIOS output untouched.",
+  "remaining": [
+    "Own-source native CI qualified for the recorded platform selections; actual packaged acceptance and macOS family supervision/recovery remain open.",
+    "Actual packaged account-bound cold/reopen/account-switch/denial, IPC, update and rollback journeys.",
+    "macOS verified family mechanism and restart recovery; actual kernel PID cycling and existing external-launcher handoff coverage.",
+    "Whole original review, route parity, operator/restore/resource/accessibility/platform gates, final fresh whole-program review and authorized release/deployment."
+  ],
+  "coverage": "No shared-route parity promotion or complete DT-006/program/release claim.",
+  "parent651_PR_retry_terminal": {
+    "observed_utc": "2026-11-13T17:50:57.032406+00:00",
+    "run": {
+      "conclusion": "success",
+      "event": "pull_request",
+      "headSha": "651bfdb9524d4b2c9d22aed32d599548dae13597",
+      "status": "completed",
+      "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43464242926"
+    },
+    "jobs": [
+      {
+        "id": 132046405496,
+        "name": "macos \u00b7 thin",
+        "conclusion": "success",
+        "runner_id": 1000011171
+      },
+      {
+        "id": 132046405529,
+        "name": "rust \u00b7 fmt + clippy + test",
+        "conclusion": "success",
+        "runner_id": 1000011148
+      },
+      {
+        "id": 132046406800,
+        "name": "windows \u00b7 full",
+        "conclusion": "success",
+        "runner_id": 1000011158
+      },
+      {
+        "id": 132046407659,
+        "name": "linux \u00b7 full",
+        "conclusion": "success",
+        "runner_id": 1000011160
+      },
+      {
+        "id": 132046466380,
+        "name": "macos \u00b7 full",
+        "conclusion": "success",
+        "runner_id": 1000011159
+      },
+      {
+        "id": 132046466975,
+        "name": "windows \u00b7 thin",
+        "conclusion": "success",
+        "runner_id": 1000011162
+      },
+      {
+        "id": 132046468773,
+        "name": "linux \u00b7 thin",
+        "conclusion": "success",
+        "runner_id": 1000011149
+      },
+      {
+        "id": 132053831651,
+        "name": "attach installers to the GitHub release",
+        "conclusion": "skipped",
+        "runner_id": null
+      }
+    ],
+    "scope": "Published parent651 PR retry qualifies all7 active selections; initial cancelled no-runner jobs and push failure remain historical. No new R2065-source or package/IPC inference."
+  },
+  "prior_candidate_archive": {
+    "filename": "desktop-verified-launch-recovery-r2065.zip",
+    "sha256": "5ec9ecbd017fe8e4aae71f656cf9c0834d2288f5c6ac1d957a0222529c966c35",
+    "bytes": 484221,
+    "files": 117,
+    "storage": "Private canonical DT-006 artifacts; raw logs/local paths withheld from public Git."
+  },
+  "evidence_selection": "The final archive retains earlier candidates and failing checks for history. The authoritative final staged preflight is saved separately after archive creation; the publication receipt selects that preflight, final archive and exact commit tree.",
+  "own_source_ci_closeout": {
+    "doc_status": "Reference",
+    "evidence_id": "R2065",
+    "kind": "weekly-closeout",
+    "observed_utc": "2026-11-13T18:40:21.402Z",
+    "source_head": "2101c7a87fc4b2c416c29d96ce3c9e2e63e2a295",
+    "workflow_runs": [
+      {
+        "run_id": 43479270539,
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43479270539",
+        "jobs": [
+          {
+            "id": 132071180115,
+            "name": "Ops-glance vitest",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180386,
+            "name": "Member-app vitest",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180541,
+            "name": "Pytest (core)",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180581,
+            "name": "Lint & format",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180589,
+            "name": "Alembic (upgrade + check)",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180616,
+            "name": "Desktop vitest",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180714,
+            "name": "Shared vitest",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180737,
+            "name": "API client vitest",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180804,
+            "name": "Admin-app vitest",
+            "status": "completed",
+            "conclusion": "success"
+          }
+        ]
+      },
+      {
+        "run_id": 43479260057,
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43479260057",
+        "jobs": [
+          {
+            "id": 132071142875,
+            "name": "rust \u00b7 fmt + clippy + test",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143389,
+            "name": "macos \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143432,
+            "name": "linux \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143452,
+            "name": "linux \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143550,
+            "name": "windows \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143622,
+            "name": "macos \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071143788,
+            "name": "windows \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132075096363,
+            "name": "attach installers to the GitHub release",
+            "status": "completed",
+            "conclusion": "skipped"
+          }
+        ]
+      },
+      {
+        "run_id": 43479270464,
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43479270464",
+        "jobs": [
+          {
+            "id": 132071179578,
+            "name": "rust \u00b7 fmt + clippy + test",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071179937,
+            "name": "macos \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071179945,
+            "name": "linux \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180015,
+            "name": "windows \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180147,
+            "name": "macos \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180241,
+            "name": "linux \u00b7 full",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132071180258,
+            "name": "windows \u00b7 thin",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "id": 132075048168,
+            "name": "attach installers to the GitHub release",
+            "status": "completed",
+            "conclusion": "skipped"
+          }
+        ]
+      }
+    ],
+    "native_logs": [
+      {
+        "platform": "Linux",
+        "job_id": 132071142875,
+        "passed": 118,
+        "ignored": 6,
+        "raw_log_sha256": "ff6359ef2336829de63b56d0ae3aac779e8b3b88d6b6d20b291966e2e76f336a",
+        "scope": "Native selection includes actual profile-bound family recovery and separate reporter-process ownership."
+      },
+      {
+        "platform": "macOS",
+        "job_id": 132071143389,
+        "passed": 112,
+        "ignored": 2,
+        "raw_log_sha256": "8eb1e6cd446eb08a3bb8b5e13270109805f97b72ee5f5f7f3aaff3e8d7775a0a",
+        "scope": "Native selections; macOS family/recovery unsupported."
+      },
+      {
+        "platform": "Windows",
+        "job_id": 132071143788,
+        "passed": 114,
+        "ignored": 6,
+        "raw_log_sha256": "935e771e907c9274c4de7d28d6ee66aedaadea224bad13c7eeff9c7c5e64149f",
+        "scope": "Native selection includes actual profile-bound family recovery and separate reporter-process ownership."
+      }
+    ],
+    "limits": [
+      "macOS native tests do not implement or qualify family tracking/restart recovery.",
+      "Actual packaged IPC/cold/reopen/account-switch/denial/offline/install/update/rollback remain open.",
+      "No route parity promotion, merge, release, deployment or full-program completion."
+    ],
+    "core_result": {
+      "job_id": 132071180541,
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1843.7,
+      "raw_log_sha256": "901ee25b707578608fe1c4466f4e9aa4b70613f6f63aa8060ba71201a6cc927d",
+      "scope": "CI core marker/exception selection; not unrestricted full-suite or packaged acceptance."
+    },
+    "Linux_separate_ENOSPC": {
+      "passed": 1,
+      "cleanup": "unmounted=true removed=true",
+      "overlap": "Separate opt-in test; fixture subprocess result lines are not additive suite totals."
+    }
+  }
+}

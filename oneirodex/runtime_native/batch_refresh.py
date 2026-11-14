@@ -4,6 +4,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any, Callable
+from urllib.parse import parse_qs
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
@@ -13,6 +14,7 @@ from .batch_favorite import _finish, _normalize_uuids
 from .request_auth import request_auth_context
 
 BATCH_FRESHNESS_MAX = 50
+BATCH_FRESHNESS_JSON_MAX_BYTES = 64 * 1024
 BATCH_REFRESH_IMAGES_MAX = 20
 FRESHNESS_STALE_SECONDS = 86400
 
@@ -65,7 +67,7 @@ class BatchRefreshData:
         from oneirodex.utils.scanning import refresh_images_in_background
 
         run_in_background(
-            flask_app, refresh_images_in_background, uuid,
+            flask_app, refresh_images_in_background, uuid, app=flask_app,
             name=f'oneirodex-refresh-images-{str(uuid)[:8]}',
         )
 
@@ -114,14 +116,21 @@ def create_batch_refresh_router(
                 response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None:
                 payload = await _json_object(request)
-                uuids, refusal = _normalize_uuids(
-                    payload.get('uuids'), max_size=BATCH_FRESHNESS_MAX,
-                )
-                if refusal is not None:
-                    body, status = refusal
-                    response = JSONResponse(body, status_code=status)
+                from .batch_favorite import JSON_BODY_TOO_LARGE
+
+                if payload is JSON_BODY_TOO_LARGE:
+                    response = _api_error(
+                        'Request body is too large.', 'payload_too_large',
+                    )
                 else:
-                    only_stale = bool(payload.get('only_stale', True))
+                    uuids, refusal = _normalize_uuids(
+                        payload.get('uuids'), max_size=BATCH_FRESHNESS_MAX,
+                    )
+                    if refusal is not None:
+                        body, status = refusal
+                        response = JSONResponse(body, status_code=status)
+                    else:
+                        only_stale = bool(payload.get('only_stale', True))
             if response is None and not uuids:
                 from oneirodex.utils.api_contract import api_ok_payload
 
@@ -157,10 +166,14 @@ def create_batch_refresh_router(
                                 'status': public.get('status'),
                                 'confidence': public.get('confidence'),
                             })
-                        except Exception as exc:  # noqa: BLE001 — legacy item-level result
+                        except Exception as exc:  # noqa: BLE001 — keep database details private
+                            flask_app.logger.warning(
+                                'batch freshness item check failed (%s)',
+                                type(exc).__name__,
+                            )
                             errors.append({
                                 'uuid': uuid, 'name': getattr(game, 'name', None),
-                                'error': str(exc),
+                                'error': 'Could not check this title',
                             })
                     try:
                         data.commit()
@@ -244,9 +257,14 @@ def create_batch_refresh_router(
                                 'uuid': game.uuid, 'name': game.name,
                                 'status': public.get('status'),
                             })
-                        except Exception as exc:  # noqa: BLE001 — preserve per-game outcomes
+                        except Exception as exc:  # noqa: BLE001 — keep database details private
+                            flask_app.logger.warning(
+                                'admin freshness item check failed (%s)',
+                                type(exc).__name__,
+                            )
                             errors.append({
-                                'uuid': game.uuid, 'name': game.name, 'error': str(exc),
+                                'uuid': game.uuid, 'name': game.name,
+                                'error': 'Could not check this title',
                             })
                     try:
                         data.commit()
@@ -322,10 +340,14 @@ def create_batch_refresh_router(
                         try:
                             data.enqueue_images(flask_app, uuid)
                             queued.append({'uuid': uuid, 'name': game.name, 'status': 'queued'})
-                        except Exception as exc:  # noqa: BLE001 — legacy item-level result
+                        except Exception as exc:  # noqa: BLE001 — keep database details private
+                            flask_app.logger.warning(
+                                'batch image refresh queue failed (%s)',
+                                type(exc).__name__,
+                            )
                             errors.append({
                                 'uuid': uuid, 'name': getattr(game, 'name', None),
-                                'error': str(exc),
+                                'error': 'Could not queue the image refresh',
                             })
                     response = JSONResponse({
                         'ok': len(errors) == 0, 'queued': queued,
@@ -341,10 +363,10 @@ def create_batch_refresh_router(
 
     @router.post('/refresh_game_images/{game_uuid}')
     async def legacy_refresh_game_images(game_uuid: str, request: Request):
-        from .csrf_compat import csrf_error_response
+        from .csrf_compat import csrf_error_response, csrf_html_error_response
         from .oidc_status import _login_redirect, _set_session_cookie
         from oneirodex.utils.role_catalog import normalize_role
-        from starlette.responses import RedirectResponse
+        from .response_compat import flask_redirect_response
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -355,7 +377,23 @@ def create_batch_refresh_router(
             )
             response = None
             if auth.token is None:
-                response = csrf_error_response(request, auth.session_data, flask_app.config)
+                csrf_token = (
+                    request.headers.get('X-CSRFToken')
+                    or request.headers.get('X-CSRF-Token')
+                )
+                if not csrf_token and flask_app.config.get('WTF_CSRF_ENABLED', True):
+                    csrf_token = await _legacy_urlencoded_csrf_token(request, flask_app.config)
+                response = csrf_error_response(
+                    request, auth.session_data, flask_app.config, token=csrf_token,
+                )
+                if response is not None:
+                    # Flask's shared HTTPException handler returns the API
+                    # envelope for XHR/JSON callers, even on this legacy path.
+                    # Keep normal form submissions on Werkzeug's HTML page.
+                    from oneirodex.utils.error_envelope import wants_json_error
+
+                    if not wants_json_error(request):
+                        response = csrf_html_error_response(response)
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None and normalize_role(getattr(auth.user, 'role', '') or '') != 'admin':
@@ -376,9 +414,10 @@ def create_batch_refresh_router(
                         }))
                     else:
                         flashes = list(auth.session_data.get('_flashes') or [])
-                        flashes.append(('info', message))
+                        flashes.append(('image-refresh', message))
                         auth.session_data['_flashes'] = flashes
-                        response = RedirectResponse('/libraries', status_code=302)
+                        auth.session_data['image_refresh_game_uuid'] = str(game_uuid)
+                        response = flask_redirect_response('/library', status_code=302)
                 except Exception:
                     flask_app.logger.warning('legacy image refresh queue failed', exc_info=True)
                     response = _api_error('Could not queue the image refresh', 'internal')
@@ -393,22 +432,54 @@ def create_batch_refresh_router(
     return router
 
 
+async def _legacy_urlencoded_csrf_token(request: Request, config) -> str | None:
+    """Read the bounded CSRF field from a classic browser form submission."""
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if content_type != 'application/x-www-form-urlencoded':
+        return None
+    try:
+        body_limit = min(max(int(config.get('MAX_CONTENT_LENGTH') or 1024 * 1024), 0), 1024 * 1024)
+    except (TypeError, ValueError):
+        body_limit = 1024 * 1024
+    raw_length = request.headers.get('content-length')
+    if raw_length:
+        try:
+            if int(raw_length) > body_limit:
+                return None
+        except ValueError:
+            return None
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > body_limit:
+            return None
+    field_name = str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')
+    try:
+        field_limit = min(max(int(config.get('MAX_FORM_PARTS') or 1000), 1), 1000)
+    except (TypeError, ValueError):
+        field_limit = 1000
+    try:
+        values = parse_qs(
+            bytes(body).decode('utf-8', 'replace'), keep_blank_values=True,
+            max_num_fields=field_limit,
+        )
+    except ValueError:
+        return None
+    token = values.get(field_name, [''])
+    return token[0] or None
+
+
 def mount_batch_refresh_routes(app: FastAPI, flask_app, **kwargs):
     app.include_router(create_batch_refresh_router(flask_app, **kwargs))
     return app
 
 
 async def _json_object(request):
-    try:
-        content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
-        if content_type != 'application/json' and not (
-            content_type.startswith('application/') and content_type.endswith('+json')
-        ):
-            return {}
-        payload = await request.json()
-        return payload if isinstance(payload, dict) else {}
-    except Exception:  # noqa: BLE001 — Flask's silent JSON parsing
-        return {}
+    from .batch_favorite import bounded_json_object
+
+    return await bounded_json_object(
+        request, max_bytes=BATCH_FRESHNESS_JSON_MAX_BYTES,
+    )
 
 
 def _api_error(message, code, **extra):

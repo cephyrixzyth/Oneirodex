@@ -4,6 +4,7 @@ import hashlib
 from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -14,6 +15,36 @@ from flask_wtf.csrf import validate_csrf
 from oneirodex.runtime_native.admin_pilot import create_admin_pilot
 from oneirodex.runtime_native import ADMIN_STATIC_ROUTES
 from oneirodex.utils.security_headers import apply_security_headers
+
+
+def test_admin_shell_uses_default_theme_scripts_but_selected_theme_styles(tmp_path, monkeypatch):
+    from oneirodex.runtime_native.admin_pilot import _native_legacy_chrome_fields
+    from oneirodex.utils import asset_urls, library_paths, preset_themes
+
+    library = tmp_path / 'library'
+    selected = library / 'themes' / 'uploaded-theme'
+    default = library / 'themes' / 'default'
+    (selected / 'css').mkdir(parents=True)
+    (selected / 'js').mkdir()
+    (default / 'css').mkdir(parents=True)
+    (default / 'js').mkdir()
+    (selected / 'css' / 'base.css').write_text('uploaded style', encoding='utf-8')
+    (selected / 'js' / 'preferences_modal.js').write_text('uploaded script', encoding='utf-8')
+    (default / 'js' / 'preferences_modal.js').write_text('shipped script', encoding='utf-8')
+    monkeypatch.setattr(library_paths, 'library_dir', lambda *_args: str(library))
+    monkeypatch.setattr(asset_urls, 'library_dir', lambda *_args: str(library))
+    monkeypatch.setattr(preset_themes, 'canonical_theme_slug', lambda _value: 'uploaded-theme')
+
+    fields = _native_legacy_chrome_fields(SimpleNamespace(
+        preferences=SimpleNamespace(theme='uploaded-theme', icon_pack='outline'),
+        avatarpath=None,
+    ))
+
+    scripts = fields['theme']['scripts']
+    stylesheets = fields['theme']['stylesheets']
+    assert any('/library/themes/default/js/preferences_modal.js' in url for url in scripts)
+    assert not any('/library/themes/uploaded-theme/js/' in url for url in scripts)
+    assert any('/library/themes/uploaded-theme/css/base.css' in url for url in stylesheets)
 
 
 class PilotUser(UserMixin):
@@ -41,6 +72,8 @@ def pilot(tmp_path, monkeypatch):
     flask_app.add_url_rule('/login', 'login.login', lambda: 'Sign in')
     users = {7: PilotUser('admin'), 8: PilotUser('member')}
     flask_app._native_users = users
+    entity_exists = {'value': True}
+    flask_app._pilot_shell_entity_exists = entity_exists
     manager.user_loader(
         lambda identity: next((user for user in users.values() if user.get_id() == identity), None)
     )
@@ -55,7 +88,8 @@ def pilot(tmp_path, monkeypatch):
     return flask_app, create_admin_pilot(flask_app, shell_path=shell_path, chrome_fields=lambda: {
         'avatar_url': '/static/avatar.svg', 'preferences_url': '/settings_panel',
         'theme': {'name': 'default', 'era': 'wood_den_80s', 'icon_pack': 'outline', 'stylesheets': []},
-    }, database_scope=lambda _app: nullcontext())
+    }, database_scope=lambda _app: nullcontext(),
+        shell_entity_exists=lambda _request: entity_exists['value'])
 
 
 def fetch(app, path, cookie=None, headers=None, method='GET', data=None):
@@ -110,6 +144,42 @@ def test_admin_shell_head_matches_get_without_body(pilot):
     assert head_response.headers['cache-control'] == 'no-store'
 
 
+def test_admin_shell_consumes_and_escapes_queued_flash_messages(pilot):
+    flask_app, app = pilot
+    user = flask_app._native_users[7]
+    serializer = flask_app.session_interface.get_signing_serializer(flask_app)
+    cookie = serializer.dumps({
+        '_user_id': user.get_id(), '_fresh': True,
+        '_flashes': [
+            ('success', 'Invite quota updated.'),
+            ('danger', '<script>alert(1)</script>'),
+        ],
+    })
+
+    response = fetch(app, '/admin/manage_invites', cookie)
+    assert response.status_code == 200
+    assert 'Invite quota updated.' in response.text
+    assert '&lt;script&gt;alert(1)&lt;/script&gt;' in response.text
+    assert '<script>alert(1)</script>' not in response.text
+    updated_cookie = response.cookies.get('session')
+    assert updated_cookie
+    assert '_flashes' not in serializer.loads(updated_cookie)
+
+    next_page = fetch(app, '/admin/manage_invites', updated_cookie)
+    assert 'Invite quota updated.' not in next_page.text
+
+
+@pytest.mark.parametrize('path', [
+    '/admin/help', '/admin/smtp_settings', '/admin/igdb_settings',
+    '/scan_manual_folder',
+])
+def test_admin_page_paths_render_the_shell_when_compatibility_posts_share_the_path(pilot, path):
+    flask_app, app = pilot
+    response = fetch(app, path, signed_cookie(flask_app, 'admin'))
+    assert response.status_code == 200
+    assert 'id="admin-app-root"' in response.text
+
+
 def test_native_admin_bootstrap_does_not_call_flask_login_user_loader(pilot):
     flask_app, app = pilot
     flask_app.login_manager._user_callback = lambda _identity: (_ for _ in ()).throw(
@@ -152,6 +222,23 @@ def test_shell_uses_login_redirect(pilot):
     response = fetch(app, '/admin/users')
     assert response.status_code == 302
     assert response.headers['location'].startswith('/login')
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text.startswith('<!doctype html>\n<html lang=en>\n<title>Redirecting...</title>')
+    assert len(response.headers.get_list('set-cookie')) == 1
+
+
+def test_member_admin_shell_uses_werkzeug_redirect(pilot):
+    from oneirodex.runtime_native.response_compat import flask_redirect_response
+
+    flask_app, app = pilot
+    response = fetch(app, '/admin/users', signed_cookie(flask_app, 'member'))
+    expected = flask_redirect_response('/login', status_code=302)
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+    assert response.headers['content-type'] == expected.headers['content-type']
+    assert response.content == expected.body
+    assert len(response.headers.get_list('set-cookie')) == 1
 
 
 def test_admin_shell_page_skips_flask_request_context(pilot, monkeypatch):
@@ -449,6 +536,66 @@ def test_library_edit_dynamic_shell_retains_session_boundary(pilot):
     assert fetch(app, path + '/', signed_cookie(flask_app, 'admin')).status_code == 404
 
 
+@pytest.mark.parametrize('path', [
+    '/admin/newsletter/999',
+    '/admin/library/edit/123e4567-e89b-12d3-a456-426614174000',
+    '/game_edit/123e4567-e89b-12d3-a456-426614174000',
+    '/edit_game_images/123e4567-e89b-12d3-a456-426614174000',
+])
+def test_missing_admin_dynamic_entities_keep_404_and_render_shell(pilot, path):
+    flask_app, app = pilot
+    flask_app._pilot_shell_entity_exists['value'] = False
+
+    get_response = fetch(app, path, signed_cookie(flask_app, 'admin'))
+    head_response = fetch(app, path, signed_cookie(flask_app, 'admin'), method='HEAD')
+
+    assert get_response.status_code == head_response.status_code == 404
+    assert 'admin-app-root' in get_response.text
+    assert head_response.content == b''
+    assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert fetch(app, path).status_code == 302
+    assert fetch(app, path, signed_cookie(flask_app, 'member')).status_code == 302
+
+
+def test_admin_shell_default_entity_lookup_checks_only_the_expected_records(monkeypatch):
+    from types import SimpleNamespace
+    from oneirodex.models import Game, Library, Newsletter
+    from oneirodex.runtime_native import admin_pilot
+    from oneirodex.runtime_native import db_session
+
+    calls = []
+
+    class MissingSession:
+        def get(self, model, identifier):
+            calls.append(('get', model, identifier))
+            return None
+
+        def execute(self, statement):
+            model = statement.column_descriptions[0]['entity']
+            calls.append(('select', model, statement.compile().params))
+            return SimpleNamespace(scalar_one_or_none=lambda: None)
+
+    paths = [
+        '/admin/newsletter/999',
+        '/admin/library/edit/123e4567-e89b-12d3-a456-426614174000',
+        '/game_edit/123e4567-e89b-12d3-a456-426614174000',
+        '/edit_game_images/123e4567-e89b-12d3-a456-426614174000',
+    ]
+
+    session_token = db_session._native_session.set(MissingSession())
+    try:
+        assert all(
+            not admin_pilot._admin_shell_entity_exists(
+                SimpleNamespace(url=SimpleNamespace(path=path)),
+            )
+            for path in paths
+        )
+        assert calls[0] == ('get', Newsletter, 999)
+        assert [call[1] for call in calls[1:]] == [Library, Game, Game]
+    finally:
+        db_session._native_session.reset(session_token)
+
+
 
 def test_legacy_manage_downloads_post_preserves_admin_shell_and_csrf(pilot):
     flask_app, app = pilot
@@ -466,5 +613,8 @@ def test_legacy_manage_downloads_post_preserves_admin_shell_and_csrf(pilot):
     )
 
     assert rejected.status_code == 400
+    assert rejected.headers['content-type'].startswith('text/html')
+    assert 'The CSRF token is missing.' in rejected.text
     assert accepted.status_code == 200
+    assert accepted.headers['content-type'].startswith('text/html')
     assert 'id="admin-app-root"' in accepted.text

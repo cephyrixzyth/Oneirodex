@@ -9,7 +9,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
-from oneirodex.runtime_native.account_summary import create_account_summary_router
+from oneirodex.runtime_native import account_summary
+from oneirodex.runtime_native.account_summary import (
+    AccountSummaryData,
+    AccountInvitesData,
+    create_account_summary_router,
+)
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie,
     generate_csrf_token,
@@ -37,6 +42,44 @@ class FakeAccountSummaryData:
     def summary(self, user):
         self.calls.append(user.id)
         return self.payload
+
+
+def test_native_account_summary_uses_member_theme_for_stock_avatar_urls(monkeypatch):
+    from types import SimpleNamespace
+
+    from oneirodex.utils import account_invites, avatar
+
+    monkeypatch.setattr(account_invites, 'unused_invite_count', lambda _user: 0)
+    monkeypatch.setattr(account_invites, 'invites_unlimited', lambda _user: False)
+    monkeypatch.setattr(account_invites, 'smtp_ready', lambda: False)
+    monkeypatch.setattr(
+        avatar,
+        'STOCK_AVATARS',
+        [{'id': 'controller', 'path': 'newstyle/avatars/controller.svg', 'label': 'Controller'}],
+    )
+    avatar_calls = []
+
+    def themed_avatar(path, *, theme=None, static_url=None, package_root=None):
+        avatar_calls.append((path, theme))
+        return f'/static/library/themes/{theme}/avatars/{path.rsplit("/", 1)[-1]}'
+
+    monkeypatch.setattr(avatar, 'avatar_url', themed_avatar)
+    user = SimpleNamespace(
+        name='member-one', email='member@example.test', role='user',
+        avatarpath='newstyle/avatars/default.svg', invite_quota=4,
+        preferences=SimpleNamespace(theme='afterglow'),
+    )
+
+    payload = AccountSummaryData().summary(user)
+
+    assert payload['avatar_url'] == '/static/library/themes/afterglow/avatars/default.svg'
+    assert payload['stock_avatars'][0]['url'] == (
+        '/static/library/themes/afterglow/avatars/controller.svg'
+    )
+    assert avatar_calls == [
+        ('newstyle/avatars/default.svg', 'afterglow'),
+        ('newstyle/avatars/controller.svg', 'afterglow'),
+    ]
 
 
 class FakeAccountInvitesData:
@@ -80,7 +123,7 @@ class FakeAccountInviteMutations:
         self.deleted = []
         self.origins = []
         self.create_result = {
-            'invite': {'token': 'new-invite', 'email': 'friend@example.test'},
+            'invite': {'token': 'new-invite', 'email': 'friend@example.com'},
             'emailed': False,
             'remaining': 2,
             'unlimited': False,
@@ -158,6 +201,34 @@ def csrf_session(secret='native-account-summary-secret'):
     state = {'_user_id': '167:fp', '_fresh': True}
     token = generate_csrf_token(state, secret)
     return dump_session_cookie(state, secret), token
+
+
+def test_admin_invite_delete_reports_no_numeric_remaining_quota(monkeypatch):
+    from oneirodex.runtime_native import db_session
+
+    invite = SimpleNamespace(token='admin-invite')
+
+    class FakeSession:
+        def execute(self, _statement):
+            return SimpleNamespace(scalar_one_or_none=lambda: invite)
+
+        def delete(self, deleted):
+            assert deleted is invite
+
+        def commit(self):
+            return None
+
+        def scalar(self, _statement):
+            return 0
+
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=FakeSession()))
+
+    result = AccountInvitesData().delete(
+        SimpleNamespace(user_id='admin-1', role='admin', invite_quota=0),
+        'admin-invite',
+    )
+
+    assert result == {'revoked': 'admin-invite', 'remaining': None}
 
 
 def test_invite_mail_adapter_uses_quiet_sender_with_preflight_and_audit_actor(monkeypatch):
@@ -348,7 +419,7 @@ def test_create_invite_requires_csrf_and_returns_created_payload():
 
     response = client.post(
         '/api/account/invites',
-        json={'email': ' friend@example.test '},
+        json={'email': ' friend@example.com '},
         headers={'X-CSRFToken': csrf},
     )
 
@@ -360,8 +431,27 @@ def test_create_invite_requires_csrf_and_returns_created_payload():
         'error_code': None,
         'success': True,
     }
-    assert mutations.created == [(167, 'friend@example.test')]
+    assert mutations.created == [(167, 'friend@example.com')]
     assert mutations.origins == ['http://testserver']
+
+
+def test_create_invite_rejects_invalid_email_values_without_mutating():
+    mutations = FakeAccountInviteMutations()
+    client = make_client(invites_data=mutations, mutations_data=mutations)
+    cookie, csrf = csrf_session()
+    client.cookies.set('session', cookie)
+
+    for email in ('not-an-email', 123):
+        response = client.post(
+            '/api/account/invites',
+            json={'email': email},
+            headers={'X-CSRFToken': csrf},
+        )
+        assert response.status_code == 400
+        assert response.json()['error'] == 'Invalid email.'
+        assert response.json()['error_code'] == 'bad_request'
+
+    assert mutations.created == []
 
 
 def test_create_invite_rejects_missing_csrf_before_mutating():
@@ -375,6 +465,24 @@ def test_create_invite_rejects_missing_csrf_before_mutating():
 
     assert response.status_code == 400
     assert response.json()['error'] == 'The CSRF token is missing.'
+    assert mutations.created == []
+
+
+def test_create_invite_caps_json_before_email_validation(monkeypatch):
+    monkeypatch.setattr(account_summary, '_MAX_INVITE_BODY_BYTES', 8)
+    mutations = FakeAccountInviteMutations()
+    client = make_client(invites_data=mutations, mutations_data=mutations)
+    cookie, csrf = csrf_session()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/invites',
+        content=b'{"email":"friend@example.test"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
     assert mutations.created == []
 
 

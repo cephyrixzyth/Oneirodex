@@ -1,0 +1,242 @@
+"""Response shapes shared with Flask/Werkzeug during the ASGI migration."""
+from __future__ import annotations
+
+from html import escape
+
+from starlette.responses import Response
+
+
+def add_vary_header(response, name: str) -> None:
+    """Merge a Vary dimension across Starlette and Werkzeug responses."""
+    headers = response.headers
+    getlist = getattr(headers, 'getlist', None)
+    existing = getlist('vary') if callable(getlist) else [headers.get('Vary', '')]
+    values = [part.strip() for value in existing for part in value.split(',') if part.strip()]
+    if any(value == '*' for value in values):
+        return
+    if name.casefold() not in {value.casefold() for value in values}:
+        values.append(name)
+    if values:
+        headers['Vary'] = ', '.join(values)
+
+
+def flask_redirect_response(location: str, *, status_code: int = 302) -> Response:
+    """Build the small HTML body Werkzeug emits for ``flask.redirect``."""
+    location = str(location)
+    safe_location = escape(location, quote=True)
+    body = (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        f'<a href="{safe_location}">{safe_location}</a>. If not, click the link.\n'
+    )
+    return Response(
+        content=body,
+        status_code=status_code,
+        headers={'Location': location},
+        media_type='text/html',
+    )
+
+
+def flask_http_error_response(status_code: int, description: str | None = None, *, head: bool = False) -> Response:
+    """Return the Werkzeug HTML error page used by legacy non-API routes."""
+    from werkzeug.exceptions import default_exceptions
+
+    error_type = default_exceptions.get(status_code)
+    if error_type is None:
+        raise ValueError(f'Unsupported HTTP error status: {status_code}')
+    error = error_type(description=description) if description is not None else error_type()
+    legacy_response = error.get_response()
+    body = b'' if head else legacy_response.get_data()
+    headers = dict(legacy_response.headers)
+    return Response(content=body, status_code=status_code, headers=headers)
+
+
+def flask_route_not_found_response(flask_app, request) -> Response:
+    """Match Flask's 404 when a route converter rejects a request path."""
+    return flask_http_exception_response(flask_app, request, 404)
+
+
+def flask_auto_options_response(flask_app, request, *, route_app=None, routing_app=None) -> Response | None:
+    """Return Flask's generated OPTIONS response for a native route.
+
+    Flask automatically answers OPTIONS for every route rule unless that method
+    is explicitly implemented. FastAPI instead raises 405 when a path exists
+    without an OPTIONS handler, so translate only that unmatched-method case.
+    """
+    if str(getattr(request, 'method', '')).upper() != 'OPTIONS':
+        return None
+
+    matched_route = getattr(request, 'scope', {}).get('route')
+    matched_methods = {str(method).upper() for method in (getattr(matched_route, 'methods', ()) or ())}
+    if 'OPTIONS' in matched_methods:
+        return None
+
+    allowed = _legacy_auto_options_methods(request, routing_app)
+    if not allowed:
+        allowed = _native_allowed_methods(request, route_app=route_app)
+    if not allowed or 'OPTIONS' not in allowed:
+        return None
+
+    response = Response(
+        content=b'',
+        status_code=200,
+        headers={'Allow': ', '.join(allowed)},
+        media_type='text/html',
+    )
+    from oneirodex.utils.security_headers import security_header_values
+
+    config = getattr(flask_app, 'config', flask_app)
+    for key, value in security_header_values(config).items():
+        response.headers.setdefault(key, value)
+    return response
+
+
+def flask_http_exception_response(
+    flask_app, request, status_code: int, *, route_app=None, routing_app=None,
+    extra_headers=None,
+) -> Response:
+    """Match Flask's configured HTTP exception response for a native path."""
+    from werkzeug.exceptions import default_exceptions
+
+    from oneirodex.utils.error_envelope import wants_json_error
+
+    error_type = default_exceptions.get(status_code)
+    if error_type is None:
+        raise ValueError(f'Unsupported HTTP error status: {status_code}')
+    error = error_type(
+        valid_methods=_legacy_allowed_methods(request, routing_app)
+        or _native_allowed_methods(request, route_app=route_app),
+    ) if status_code == 405 else error_type()
+    if wants_json_error(request):
+        from starlette.responses import JSONResponse
+
+        from oneirodex.utils.error_envelope import http_error_code
+        from oneirodex.utils.api_contract import api_error_payload
+
+        payload, status = api_error_payload(
+            error.description,
+            code=http_error_code(error.code),
+            status=error.code or status_code,
+        )
+        response = JSONResponse(payload, status_code=status)
+    else:
+        legacy_response = error.get_response()
+        body = (
+            b'' if getattr(request, 'method', '').upper() == 'HEAD'
+            else legacy_response.get_data()
+        )
+        response = Response(
+            content=body, status_code=status_code,
+            headers=dict(legacy_response.headers),
+        )
+
+    if not wants_json_error(request):
+        for key, value in (extra_headers or {}).items():
+            response.headers.setdefault(key, value)
+
+    if getattr(request, 'method', '').upper() == 'HEAD' and response.body:
+        response = Response(
+            content=b'', status_code=response.status_code,
+            headers=dict(response.headers),
+        )
+
+    from oneirodex.utils.security_headers import security_header_values
+
+    config = getattr(flask_app, 'config', flask_app)
+    for key, value in security_header_values(config).items():
+        response.headers.setdefault(key, value)
+    return response
+
+
+def _legacy_allowed_methods(request, routing_app) -> list[str]:
+    """Use Flask's route map to retain its exact 405 Allow header."""
+    if routing_app is None:
+        return []
+    from werkzeug.exceptions import MethodNotAllowed
+
+    url_map = getattr(routing_app, 'url_map', None)
+    if url_map is None:
+        return []
+    adapter = url_map.bind(
+        str(getattr(getattr(request, 'url', None), 'netloc', '') or 'localhost'),
+    )
+    try:
+        adapter.match(request.url.path, method=getattr(request, 'method', 'GET'))
+    except MethodNotAllowed as exc:
+        return list(exc.valid_methods or ())
+    except Exception:
+        return []
+    return []
+
+
+def _legacy_auto_options_methods(request, routing_app) -> list[str]:
+    """Use Werkzeug's method list in the same order as Flask's OPTIONS reply."""
+    if routing_app is None:
+        return []
+    url_map = getattr(routing_app, 'url_map', None)
+    if url_map is None:
+        return []
+    adapter = url_map.bind(
+        str(getattr(getattr(request, 'url', None), 'netloc', '') or 'localhost'),
+    )
+    try:
+        return list(adapter.allowed_methods(request.url.path))
+    except Exception:
+        return []
+
+
+def _native_allowed_methods(request, *, route_app=None) -> list[str]:
+    """Collect methods from every matching FastAPI path, then add defaults.
+
+    Werkzeug includes methods from static and dynamic rules that both match a
+    path. Starlette also falls through from a static route that only partially
+    matches the method to a matching dynamic route, so its Allow header must
+    include both sets.
+    """
+    from starlette.routing import Match
+
+    apps = route_app or getattr(request, 'app', None)
+    if not isinstance(apps, (list, tuple)):
+        apps = (apps,)
+    method_candidates = []
+    path_scope = dict(request.scope)
+    path_scope['method'] = 'GET'
+
+    def collect(routes, scope) -> None:
+        for route in routes:
+            match, child_scope = route.matches(scope)
+            if match is Match.NONE:
+                continue
+            # The member shell is mounted as a catch-all route, but its
+            # handler only serves a small allowlist of page paths. Do not let
+            # that fallback advertise GET/HEAD for unrelated API or unknown
+            # URLs when computing Flask's method list.
+            if getattr(route, 'path', None) == '/{member_path:path}':
+                from oneirodex.runtime_native.member_shell import member_shell_route
+
+                if not member_shell_route(str(scope.get('path', ''))):
+                    continue
+            route_methods = getattr(route, 'methods', ()) or ()
+            if route_methods:
+                method_candidates.append(route_methods)
+            child_router = (
+                getattr(route, 'original_router', None)
+                or getattr(getattr(route, 'app', None), 'router', None)
+            )
+            if child_router is not None:
+                collect(getattr(child_router, 'routes', ()), {**scope, **child_scope})
+
+    for app in apps:
+        router = getattr(app, 'router', None)
+        collect(getattr(router, 'routes', ()), path_scope)
+    methods = set()
+    for route_methods in method_candidates:
+        methods.update(route_methods)
+    if 'GET' in methods:
+        methods.add('HEAD')
+    if methods:
+        methods.add('OPTIONS')
+    return sorted(methods)

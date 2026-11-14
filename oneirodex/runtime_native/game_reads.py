@@ -16,7 +16,8 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+from .query_compat import first_query_value
 
 _UUID_RE = re.compile(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
@@ -344,7 +345,10 @@ def create_game_reads_router(
             return data.save_assists(game, body, config=flask_app.config, package_root=flask_app.root_path)
         return data.save_assists(game, body)
 
-    def read(request: Request, game_uuid: str, operation: str, *, required_scope=None, operation_args=None):
+    def read(
+        request: Request, game_uuid: str, operation: str, *,
+        required_scope='read:library', operation_args=None,
+    ):
         with request_scope():
             auth = request_auth_context(
                 request, flask_app.config, find_user=find_user, find_token=find_token,
@@ -409,6 +413,7 @@ def create_game_reads_router(
     @router.api_route('/game/{game_uuid}/local_image/{image_type}', methods=['GET', 'HEAD'])
     def local_game_image(game_uuid: str, image_type: str, request: Request):
         from .oidc_status import _set_session_cookie
+        from .response_compat import flask_http_error_response
 
         with request_scope():
             auth = request_auth_context(
@@ -417,22 +422,32 @@ def create_game_reads_router(
                 login_manager=login_manager,
             )
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             handle = None
             if response is None:
                 try:
                     uuid.UUID(game_uuid, version=4)
                 except (TypeError, ValueError, AttributeError):
-                    response = Response(status_code=400)
+                    response = flask_http_error_response(
+                        400, 'Invalid game UUID', head=request.method == 'HEAD',
+                    )
             if response is None:
                 game = data.game(game_uuid)
                 if game is None:
-                    response = Response(status_code=404)
+                    response = flask_http_error_response(
+                        404, 'Game not found', head=request.method == 'HEAD',
+                    )
                 elif not data.can_access(auth.user, game):
-                    response = Response(status_code=403)
+                    response = flask_http_error_response(
+                        403, head=request.method == 'HEAD',
+                    )
             if response is None:
                 allowed_bases = data.allowed_bases(flask_app)
                 if not allowed_bases:
-                    response = Response(status_code=500)
+                    response = flask_http_error_response(
+                        500, 'Server configuration error', head=request.method == 'HEAD',
+                    )
                 else:
                     try:
                         real_game = os.path.realpath(game.full_disk_path)
@@ -440,12 +455,16 @@ def create_game_reads_router(
                         real_game = game.full_disk_path
                     safe, _reason = data.safe_path(real_game, allowed_bases)
                     if not safe:
-                        response = Response(status_code=403)
+                        response = flask_http_error_response(
+                            403, 'Access denied', head=request.method == 'HEAD',
+                        )
                     elif image_type not in {'cover', 'screenshot'}:
-                        response = Response(status_code=400)
+                        response = flask_http_error_response(
+                            400, 'Invalid image type', head=request.method == 'HEAD',
+                        )
                     else:
                         try:
-                            index = int(request.query_params.get('index', '0'))
+                            index = int(first_query_value(request.query_params, 'index', '0'))
                         except (TypeError, ValueError):
                             index = 0
                         image_path = data.local_image_path(real_game, image_type, index)
@@ -455,7 +474,9 @@ def create_game_reads_router(
                             except (FileNotFoundError, OSError, ValueError):
                                 handle = None
                         if handle is None:
-                            response = Response(status_code=404)
+                            response = flask_http_error_response(
+                                404, 'Image not found', head=request.method == 'HEAD',
+                            )
                         else:
                             response = _local_image_response(request, handle, image_path)
             if auth.should_set_session_cookie:
@@ -515,7 +536,7 @@ def create_game_reads_router(
                 not role_at_least(getattr(auth.user, 'role', None), 'librarian')
                 or (auth.token is not None and not auth.has_scope('admin'))
             ):
-                response = _api_error('Librarian required', 'forbidden')
+                response = _api_error('Librarian or admin required', 'forbidden')
             if response is None:
                 payload = await _json_object(request)
                 game_uuid = payload.get('game_uuid')
@@ -554,6 +575,8 @@ def create_game_reads_router(
                 login_manager=login_manager,
             )
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             if response is None:
                 args = MultiDict(request.query_params.multi_items())
                 query = args.get('query', '').strip()
@@ -605,7 +628,7 @@ def create_game_reads_router(
                 not role_at_least(getattr(auth.user, 'role', None), 'librarian')
                 or (auth.token is not None and not auth.has_scope('admin'))
             ):
-                response = _api_error('Librarian required', 'forbidden')
+                response = _api_error('Librarian or admin required', 'forbidden')
             if response is None:
                 try:
                     from oneirodex.schemas.arcade import InputFamilyBody
@@ -746,6 +769,18 @@ def _api_error(message: str, code: str, *, detail=None):
     return JSONResponse(payload, status_code=status)
 
 
+def _range_not_satisfiable(size: int) -> Response:
+    """Use the same 416 body and headers Werkzeug's conditional sender returns."""
+    from werkzeug.exceptions import RequestedRangeNotSatisfiable
+
+    legacy_error = RequestedRangeNotSatisfiable(length=size).get_response()
+    return Response(
+        content=legacy_error.get_data(),
+        status_code=legacy_error.status_code,
+        headers=dict(legacy_error.headers),
+    )
+
+
 def _local_image_response(request, handle, path):
     """Serve the already-vetted descriptor with validators and byte ranges."""
     info = os.fstat(handle.fileno())
@@ -777,24 +812,39 @@ def _local_image_response(request, handle, path):
     start, end = 0, max(size - 1, 0)
     range_header = request.headers.get('range')
     if_range = request.headers.get('if-range')
-    if range_header and (not if_range or if_range == etag or if_range == modified):
+    honor_range = not if_range or if_range == etag or if_range == modified
+    if range_header and if_range and not honor_range:
+        try:
+            if_range_date = email.utils.parsedate_to_datetime(if_range).timestamp()
+            honor_range = int(info.st_mtime) <= int(if_range_date)
+        except (TypeError, ValueError, OverflowError):
+            pass
+    if range_header and honor_range:
         match = re.fullmatch(r'bytes=(\d*)-(\d*)', range_header.strip())
         if not match or size == 0:
             handle.close()
-            return Response(status_code=416, headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'})
+            return _range_not_satisfiable(size)
         first, last = match.groups()
         if not first:
-            suffix = int(last or '0')
+            try:
+                suffix = int(last or '0')
+            except (ValueError, OverflowError):
+                handle.close()
+                return _range_not_satisfiable(size)
             if suffix <= 0:
                 handle.close()
-                return Response(status_code=416, headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'})
+                return _range_not_satisfiable(size)
             start, end = max(size - suffix, 0), size - 1
         else:
-            start = int(first)
-            end = min(int(last), size - 1) if last else size - 1
+            try:
+                start = int(first)
+                end = min(int(last), size - 1) if last else size - 1
+            except (ValueError, OverflowError):
+                handle.close()
+                return _range_not_satisfiable(size)
             if start >= size or end < start:
                 handle.close()
-                return Response(status_code=416, headers={'Content-Range': f'bytes */{size}', 'Accept-Ranges': 'bytes'})
+                return _range_not_satisfiable(size)
         headers['Content-Range'] = f'bytes {start}-{end}/{size}'
         headers['Content-Length'] = str(end - start + 1)
         status = 206

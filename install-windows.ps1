@@ -29,7 +29,7 @@
     Also install requirements-dev.txt when present.
 
 .PARAMETER Force
-    Overwrite an existing .env / config.py instead of backing off.
+    Regenerate .env from installer settings after backing it up; retain SECRET_KEY.
 
 .EXAMPLE
     .\install-windows.ps1
@@ -55,6 +55,7 @@ $LogFile = Join-Path $ScriptDir 'install.log'
 $DbName = 'oneirodex'
 $TestDbName = 'oneirodextest'
 $script:InstallStage = 0
+$script:PreservedConfiguration = $false
 
 function Write-Log([string]$Message) {
     "{0}: {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message | Add-Content -Path $LogFile -Encoding utf8
@@ -115,6 +116,20 @@ function Test-Prerequisites {
 
     $version = (& python -c 'import sys; print("%d.%d" % sys.version_info[:2])').Trim()
     Write-Ok "Python $version at $python"
+
+    $node = Get-CommandPath 'node'
+    $npm = Get-CommandPath 'npm'
+    if ($null -eq $node -or $null -eq $npm) {
+        Write-Fail 'Node.js 22 and npm were not found on PATH.'
+        Write-Note 'Install Node.js 22 LTS, then re-run this script.'
+        throw 'Node.js 22 is required to build the Oneirodex SPAs'
+    }
+    $nodeVersion = (& node -p 'process.versions.node').Trim()
+    if ($nodeVersion -notmatch '^22\.') {
+        Write-Fail "Node.js 22 is required; found $nodeVersion at $node"
+        throw 'Unsupported Node.js version'
+    }
+    Write-Ok "Node.js $nodeVersion at $node"
 
     if ($SkipDb) {
         Write-Note 'Skipping PostgreSQL check (-SkipDb)'
@@ -210,6 +225,30 @@ function Install-PythonEnvironment {
     }
 }
 
+function Install-NativeSpas {
+    Write-Step 'Installing Node workspace dependencies and building the five SPAs...'
+    Push-Location $ScriptDir
+    try {
+        & npm.cmd ci --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) { throw 'npm ci failed for the root workspace' }
+        & npm.cmd run build:native-spas
+        if ($LASTEXITCODE -ne 0) { throw 'Native SPA build failed' }
+    }
+    finally {
+        Pop-Location
+    }
+    Write-Ok 'Member, member-auth, admin, admin-pilot and ops-glance bundles built'
+}
+
+function Test-NativeRuntime {
+    Write-Step 'Validating the native runtime and built frontend assets...'
+    $venvPython = Join-Path $ScriptDir 'venv\Scripts\python.exe'
+    $validator = Join-Path $ScriptDir 'scripts\validate-native-install.py'
+    & $venvPython $validator
+    if ($LASTEXITCODE -ne 0) { throw 'Native runtime or frontend asset validation failed' }
+    Write-Ok 'Native runtime and all five frontend assets validated'
+}
+
 function Test-ScanLocations([string]$Roots) {
     # Warn, never fail: a share can legitimately be offline at install time.
     if ([string]::IsNullOrWhiteSpace($Roots)) { return }
@@ -238,6 +277,13 @@ function Write-EnvFile([string]$DatabaseUrl) {
     Write-Step 'Writing configuration...'
 
     $envPath = Join-Path $ScriptDir '.env'
+    if ((Test-Path -LiteralPath $envPath) -and -not $Force) {
+        $script:PreservedConfiguration = $true
+        Write-Ok 'Existing .env preserved'
+        Write-Note 'Use -Force to regenerate configuration from installer options; custom settings must be reapplied from the backup.'
+        return
+    }
+    $script:PreservedConfiguration = $false
     $existingSecretKey = $null
     if (Test-Path $envPath) {
         $backup = "$envPath.backup.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
@@ -299,10 +345,15 @@ function Show-Summary {
     Write-Host '+--------------------------------------------------------------------+' -ForegroundColor Green
     Write-Host '  ONEI > Your worlds are waiting at the gate.' -ForegroundColor Cyan
     Write-Host ''
-    Write-Note "Launch gate:     http://localhost:$Port"
-    Write-Note "Game cache:      $GamesDir"
-    if (-not [string]::IsNullOrWhiteSpace($LibraryRoots)) {
-        Write-Note "Trail markers:   $LibraryRoots"
+    if ($script:PreservedConfiguration) {
+        Write-Note 'Existing .env preserved; its port, paths and other settings remain active.'
+    }
+    else {
+        Write-Note "Launch gate:     http://localhost:$Port"
+        Write-Note "Game cache:      $GamesDir"
+        if (-not [string]::IsNullOrWhiteSpace($LibraryRoots)) {
+            Write-Note "Trail markers:   $LibraryRoots"
+        }
     }
     Write-Note 'Start command:   .\startweb_windows.cmd'
     Write-Note 'Reset database:  .\startweb_windows.cmd --force-setup'
@@ -312,7 +363,12 @@ function Show-Summary {
 
     $answer = Read-Host 'Start Oneirodex now? [Y/n]'
     if ([string]::IsNullOrWhiteSpace($answer) -or $answer -match '^[Yy]') {
-        Write-Note "Opening the launch gate - http://localhost:$Port"
+        if ($script:PreservedConfiguration) {
+            Write-Note 'Starting with the preserved .env configuration'
+        }
+        else {
+            Write-Note "Opening the launch gate - http://localhost:$Port"
+        }
         & (Join-Path $ScriptDir 'startweb_windows.cmd')
     }
     else {
@@ -368,7 +424,9 @@ try {
 
     $databaseUrl = New-Databases
     Install-PythonEnvironment
+    Install-NativeSpas
     Write-EnvFile $databaseUrl
+    Test-NativeRuntime
     Show-Summary
 }
 catch {

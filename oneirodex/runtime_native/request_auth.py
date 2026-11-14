@@ -73,6 +73,27 @@ class RequestAuthContext:
         return token_has_scope(self.user, self.token, scope)
 
 
+def require_bearer_scope(auth: RequestAuthContext, scope: str):
+    """Return the standard forbidden response when a bearer lacks ``scope``.
+
+    Browser sessions retain their existing access. Callers should resolve the
+    normal unauthenticated response before invoking this helper.
+    """
+    if auth.token is None or auth.user is None or auth.has_scope(scope):
+        return None
+
+    from starlette.responses import JSONResponse
+
+    from oneirodex.utils.api_contract import api_error_payload
+
+    payload, status = api_error_payload(
+        f'Missing scope: {scope}',
+        code='forbidden',
+        detail={'required_scope': scope},
+    )
+    return JSONResponse(payload, status_code=status)
+
+
 def request_auth_context(
     request: Any,
     config: Mapping[str, Any],
@@ -84,6 +105,8 @@ def request_auth_context(
     login_manager: Any | None = None,
     now: datetime | None = None,
     allow_bearer: bool = True,
+    touch_bearer: bool = True,
+    allow_remember: bool = True,
 ) -> RequestAuthContext:
     """Resolve a request using Flask's session, remember, and Bearer rules.
 
@@ -138,6 +161,14 @@ def request_auth_context(
         remember_cookie_name=remember_cookie_name,
         authorization_header_name=str(config.get("AUTH_HEADER_NAME") or "Authorization"),
         allow_legacy_id=bool(config.get("TESTING")),
+        validate_session_identity=(
+            _validate_persistent_login
+            if config.get('PERSISTENT_SESSIONS_ENABLED', not config.get('TESTING'))
+            and not config.get('TESTING')
+            else None
+        ),
+        touch_bearer=touch_bearer,
+        allow_remember=allow_remember,
     )
     return RequestAuthContext(
         session_data=session_data,
@@ -147,6 +178,24 @@ def request_auth_context(
         remember_cookie_name=remember_cookie_name,
         session_refresh_each_request=bool(config.get("SESSION_REFRESH_EACH_REQUEST", True)),
     )
+
+
+def touch_resolved_bearer(
+    auth: RequestAuthContext,
+    commit_token_touch: Callable[[Any], None],
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Persist a resolved bearer token's usage after request preflight passes.
+
+    Routes that validate CSRF after authentication can defer the token's
+    last-used write until the CSRF gate succeeds, matching Flask's before-
+    request ordering. Other callers retain the eager default.
+    """
+    if auth.source != "bearer" or auth.token is None:
+        return
+    auth.token.last_used_at = now or datetime.now(timezone.utc)
+    commit_token_touch(auth.token)
 
 
 def _mapping_attr(obj: Any, name: str) -> Mapping[str, str]:
@@ -169,3 +218,9 @@ def _lifetime_seconds(value: Any) -> int:
         return max(0, int(value))
     except (TypeError, ValueError, OverflowError):
         return 31_536_000
+
+
+def _validate_persistent_login(identity: str, user: Any, now: datetime | None) -> bool:
+    from oneirodex.utils.persistent_sessions import validate_login_identity
+
+    return validate_login_identity(identity, user, now=now)

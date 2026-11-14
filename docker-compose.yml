@@ -66,10 +66,15 @@ services:
       - ONEIRODEX_LIBRARY_ROOTS=${ONEIRODEX_LIBRARY_ROOTS:-}
       - UPLOAD_FOLDER=/app/oneirodex/static/library
       - SECRET_KEY=${SECRET_KEY}
+      - ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE=${ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE:-${ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE:-/run/secrets/oneirodex-store-credential-keyring.json}}
+      - ONEIRODEX_SAVE_KEYRING_FILE=${ONEIRODEX_SAVE_KEYRING_FILE:-/run/secrets/oneirodex-save-keyring.json}
       - DEV_MODE=${DEV_MODE:-false}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-oneirodex}
+      - PUID=${PUID:-99}
+      - PGID=${PGID:-100}
+      - ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=${ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD:-false}
       - ENABLE_ARR_MODULE=${ENABLE_ARR_MODULE:-true}
       - ENABLE_ARR_HARDLINK_PIPELINE=${ENABLE_ARR_HARDLINK_PIPELINE:-true}
       - ALLOW_PRIVATE_LAN_URLS=${ALLOW_PRIVATE_LAN_URLS:-true}
@@ -175,6 +180,13 @@ services:
       # games share. Empty host dir is fine (Admin upload still works into it).
       # Never commit BIOS binaries; never bake them into the public image.
       # - "${EMULATOR_BIOS_HOST_PATH:-/mnt/user/appdata/oneirodex/bios}:/app/oneirodex/static/library/bios"
+      # Optional persistent provider-credential key ring. Create/protect the JSON
+      # file first, then uncomment and set ONEIRODEX_STORE_CREDENTIAL_KEYRING_HOST_PATH.
+      # Keep the host file and its protected backup outside DB/library backup payloads.
+      # - "${ONEIRODEX_STORE_CREDENTIAL_KEYRING_HOST_PATH}:/run/secrets/oneirodex-store-credential-keyring.json:ro"
+      # Optional, separate key ring for encrypted emulator saves. Back it up
+      # independently; do not place it inside the database/library backup.
+      # - "${ONEIRODEX_SAVE_KEYRING_HOST_PATH}:/run/secrets/oneirodex-save-keyring.json:ro"
     depends_on:
       db:
         condition: service_healthy
@@ -194,14 +206,14 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       # SET A STRONG PASSWORD in .env (.env.*.example say how to generate one).
-      # The `postgres` fallback only exists so a stack whose .env predates this
-      # variable keeps starting; it is a known password, so never rely on it on a
-      # host anyone else can reach. Postgres reads this only when it first creates
-      # the db_data volume: changing it later does NOT rotate an existing database
-      # (docs/runbooks/docker-compose-deploy.md § Postgres password).
+      # The `postgres` fallback is retained only for an explicitly opted-in
+      # existing volume. The guard rejects it for new volumes and by default.
+      # Postgres reads this only when it first creates db_data; changing it later
+      # does NOT rotate an existing database (see the deployment runbook).
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-oneirodex}
       - POSTGRES_HOST_BIND=${POSTGRES_HOST_BIND:-127.0.0.1}
+      - ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=${ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD:-false}
       - PGDATA=/var/lib/postgresql/data/pgdata
     # Force a Compose-friendly HBA so Docker-bridge IPs can connect without SSL.
     # (Stale volume pg_hba with only hostssl → "no encryption" / no pg_hba entry.)

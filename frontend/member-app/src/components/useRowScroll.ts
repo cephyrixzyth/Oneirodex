@@ -17,7 +17,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  *   is replaced so the non-passive wheel listener rebinds (refs alone do not
  *   re-run an effect).
  */
-export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0 }: LooseProps = {}) {
+export function useRowScroll({
+  step = 0.55,
+  edgeSpeed = 2.5,
+  bindKey = 0,
+  wrapAround = false,
+  onWrapToEnd,
+}: LooseProps = {}) {
   const ref = useRef<any>(null)
   /** Outer hover zone (viewport / scroller). Wheel binds here so the lane under
    *  the custom scrollbar and the arrow fades do not become accidental row scroll. */
@@ -121,14 +127,90 @@ export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0 }: Loos
       const reduced =
         typeof window !== 'undefined' &&
         window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      const max = Math.max(0, node.scrollWidth - node.clientWidth)
+      const atStart = node.scrollLeft <= 1
+      const atEnd = node.scrollLeft >= max - 1
+      if (wrapAround && max > 1 && ((direction < 0 && atStart) || (direction > 0 && atEnd))) {
+        if (direction < 0 && atStart && typeof onWrapToEnd === 'function') {
+          onWrapToEnd()
+          measure()
+          return
+        }
+        const target = direction < 0 ? max : 0
+        node.scrollBy({
+          left: target - node.scrollLeft,
+          behavior: reduced ? 'auto' : 'smooth',
+        })
+        measure()
+        return
+      }
       node.scrollBy({
         left: direction * node.clientWidth * step,
         behavior: reduced ? 'auto' : 'smooth',
       })
       measure()
     },
-    [measure, step, stopEdgeScroll],
+    [measure, onWrapToEnd, step, stopEdgeScroll, wrapAround],
   )
+
+  // Discover hides its overlay arrows on touch screens so they do not cover
+  // the first and last tile. Keep the same first/last wrap affordance for a
+  // deliberate horizontal swipe at either boundary. Native scrolling handles
+  // the middle of the row; only a horizontal overswipe at an end is wrapped.
+  useEffect(() => {
+    const node = ref.current
+    if (!node || !wrapAround) return undefined
+
+    let start: { x: number; y: number; atStart: boolean; atEnd: boolean } | null = null
+    const onTouchStart = (event: TouchEvent) => {
+      const touch = event.touches?.[0]
+      const max = Math.max(0, node.scrollWidth - node.clientWidth)
+      start = touch
+        ? {
+            x: touch.clientX,
+            y: touch.clientY,
+            atStart: node.scrollLeft <= 1,
+            atEnd: max > 1 && node.scrollLeft >= max - 1,
+          }
+        : null
+    }
+    const onTouchEnd = (event: TouchEvent) => {
+      const origin = start
+      start = null
+      const touch = event.changedTouches?.[0]
+      if (!origin || !touch) return
+
+      const dx = touch.clientX - origin.x
+      const dy = touch.clientY - origin.y
+      if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.25) return
+
+      const max = Math.max(0, node.scrollWidth - node.clientWidth)
+      if (max <= 1) return
+      // Capture the boundary on touch-start. An end swipe may move inward a
+      // little before touch-end, and load-ahead can enlarge max while it runs.
+      const target = dx > 0 && origin.atStart ? max : dx < 0 && origin.atEnd ? 0 : null
+      if (target == null) return
+
+      // Prevent a boundary swipe that could not natively scroll from also
+      // becoming a synthetic card click.
+      event.preventDefault()
+      if (dx > 0 && origin.atStart && typeof onWrapToEnd === 'function') {
+        onWrapToEnd()
+        measure()
+        return
+      }
+      const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      node.scrollBy({ left: target - node.scrollLeft, behavior: reduced ? 'auto' : 'smooth' })
+      measure()
+    }
+
+    node.addEventListener('touchstart', onTouchStart, { passive: true })
+    node.addEventListener('touchend', onTouchEnd, { passive: false })
+    return () => {
+      node.removeEventListener('touchstart', onTouchStart)
+      node.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [bindKey, measure, onWrapToEnd, wrapAround])
 
   const wheelDeltaPx = useCallback((event: any, fallbackPage: any) => {
     let delta =
@@ -270,7 +352,10 @@ export function useRowScroll({ step = 0.55, edgeSpeed = 2.5, bindKey = 0 }: Loos
       // Controls on the track (Pin / Hide / See all, the play button) keep
       // their own press; only art and empty track start a drag.
       const target = event.target as HTMLElement | null
-      if (target && target.closest('button, a[href], input, select, textarea')) return
+      // Tile art is usually itself a link. It remains a click when the pointer
+      // stays put; after the drag threshold the existing click guard swallows
+      // navigation, allowing a row to be dragged from its first cover.
+      if (target && target.closest('button, input, select, textarea')) return
       pointerId = event.pointerId
       startX = event.clientX
       startScroll = track.scrollLeft

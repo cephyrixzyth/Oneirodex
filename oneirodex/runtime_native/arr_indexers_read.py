@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class ArrIndexersData:
@@ -215,7 +216,7 @@ def create_arr_indexers_router(
                         'This token does not have the admin scope', code='forbidden'
                     )
                     response = JSONResponse(payload, status_code=status)
-                elif request.url.path not in ('/api/arr/module',) and not module_enabled(config=flask_app.config):
+                elif request.url.path != '/api/arr/module' and not module_enabled(config=flask_app.config):
                     payload, status = api_error_payload(
                         'Arr module is disabled', code='forbidden'
                     )
@@ -246,16 +247,16 @@ def create_arr_indexers_router(
                     else:
                         response = JSONResponse(data.module_status(config=flask_app.config))
                 elif request.url.path == '/api/arr/search':
-                    query = (request.query_params.get('q') or request.query_params.get('query') or '').strip()
+                    query = (first_query_value(request.query_params, 'q') or first_query_value(request.query_params, 'query') or '').strip()
                     if not query:
                         payload, status = api_error_payload('Query parameter q is required', code='bad_request')
                         response = JSONResponse(payload, status_code=status)
                     else:
                         try:
-                            limit = min(int(request.query_params.get('limit') or 25), 50)
+                            limit = min(int(first_query_value(request.query_params, 'limit') or 25), 50)
                         except (TypeError, ValueError):
                             limit = 25
-                        include_disallowed = (request.query_params.get('include_disallowed') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+                        include_disallowed = (first_query_value(request.query_params, 'include_disallowed') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
                         try:
                             response = JSONResponse(data.search(
                                 query, limit=limit, include_disallowed=include_disallowed,
@@ -283,16 +284,15 @@ def create_arr_indexers_router(
                             response = JSONResponse(payload, status_code=status)
                         else:
                             url = (model.download_url or model.url or '').strip()
-                            if url.lower().startswith(('http://', 'https://')):
-                                from oneirodex.utils.security import validate_user_outbound_http_url
+                            from oneirodex.utils.security import validate_download_client_url
 
-                                ok, result = validate_user_outbound_http_url(url)
-                                if not ok:
-                                    payload, status = api_error_payload(result, code='bad_request')
-                                    response = JSONResponse(payload, status_code=status)
-                                    url = ''
-                                else:
-                                    url = result
+                            ok, result = validate_download_client_url(url)
+                            if not ok:
+                                payload, status = api_error_payload(result, code='bad_request')
+                                response = JSONResponse(payload, status_code=status)
+                                url = ''
+                            else:
+                                url = result
                             if url:
                                 try:
                                     result = data.download(url)
@@ -358,43 +358,50 @@ def create_arr_indexers_router(
                                 else:
                                     response = JSONResponse(result)
                         else:
-                            payload_data = body if isinstance(body, dict) else {}
-                            proposals = payload_data.get('proposals')
-                            response = None
-                            if not isinstance(proposals, list) or not proposals:
-                                dest = str(payload_data.get('library_dest_dir') or payload_data.get('dest_dir') or '').strip()
-                                if not dest:
-                                    payload, status = api_error_payload('proposals or library_dest_dir required', code='bad_request')
-                                    response = JSONResponse(payload, status_code=status)
-                                    proposals = []
-                                else:
-                                    try:
-                                        limit = int(payload_data.get('limit') or 50)
-                                        preview = data.hardlink_preview(dest, limit=limit, app=flask_app)
-                                        proposals = preview.get('proposals') or []
-                                    except ValueError as exc:
-                                        payload, status = api_error_payload(str(exc), code='bad_request')
+                            if not pipeline_enabled(config=flask_app.config):
+                                payload, status = api_error_payload(
+                                    'Arr-hardlink pipeline is disabled. Set ENABLE_ARR_HARDLINK_PIPELINE=true.',
+                                    code='forbidden',
+                                )
+                                response = JSONResponse(payload, status_code=status)
+                            else:
+                                payload_data = body if isinstance(body, dict) else {}
+                                proposals = payload_data.get('proposals')
+                                response = None
+                                if not isinstance(proposals, list) or not proposals:
+                                    dest = str(payload_data.get('library_dest_dir') or payload_data.get('dest_dir') or '').strip()
+                                    if not dest:
+                                        payload, status = api_error_payload('proposals or library_dest_dir required', code='bad_request')
                                         response = JSONResponse(payload, status_code=status)
                                         proposals = []
+                                    else:
+                                        try:
+                                            limit = int(payload_data.get('limit') or 50)
+                                            preview = data.hardlink_preview(dest, limit=limit, app=flask_app)
+                                            proposals = preview.get('proposals') or []
+                                        except ValueError as exc:
+                                            payload, status = api_error_payload(str(exc), code='bad_request')
+                                            response = JSONResponse(payload, status_code=status)
+                                            proposals = []
+                                        except PermissionError as exc:
+                                            payload, status = api_error_payload(str(exc), code='forbidden')
+                                            response = JSONResponse(payload, status_code=status)
+                                            proposals = []
+                                        except RuntimeError as exc:
+                                            payload, status = api_error_payload(str(exc), code='bad_gateway')
+                                            response = JSONResponse(payload, status_code=status)
+                                            proposals = []
+                                if response is None:
+                                    try:
+                                        result = data.hardlink_apply(
+                                            proposals, only_ok=bool(payload_data.get('only_ok', True)),
+                                            app=flask_app,
+                                        )
                                     except PermissionError as exc:
                                         payload, status = api_error_payload(str(exc), code='forbidden')
                                         response = JSONResponse(payload, status_code=status)
-                                        proposals = []
-                                    except RuntimeError as exc:
-                                        payload, status = api_error_payload(str(exc), code='bad_gateway')
-                                        response = JSONResponse(payload, status_code=status)
-                                        proposals = []
-                            if response is None:
-                                try:
-                                    result = data.hardlink_apply(
-                                        proposals, only_ok=bool(payload_data.get('only_ok', True)),
-                                        app=flask_app,
-                                    )
-                                except PermissionError as exc:
-                                    payload, status = api_error_payload(str(exc), code='forbidden')
-                                    response = JSONResponse(payload, status_code=status)
-                                else:
-                                    response = JSONResponse(result, status_code=201)
+                                    else:
+                                        response = JSONResponse(result, status_code=201)
                     elif request.url.path == '/api/arr/indexers/bulk':
                         if body is None:
                             body = (await request.body()).decode('utf-8', errors='replace').strip()

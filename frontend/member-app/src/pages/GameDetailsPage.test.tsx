@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { GameDetailsPage } from './GameDetailsPage'
 import { stubFetch } from '../testJsonResponse'
 import { showToast } from '../utils/toast'
+import { ShellConfigProvider } from '@oneirodex/ui'
 
 vi.mock('../utils/toast', () => ({
   showToast: vi.fn(),
@@ -14,7 +15,12 @@ vi.mock('../api/downloads', () => ({
   initiateGameDownload: vi.fn(),
 }))
 
+vi.mock('../api/clientCommands', () => ({
+  queueClientCommand: vi.fn(),
+}))
+
 import { initiateGameDownload } from '../api/downloads'
+import { queueClientCommand } from '../api/clientCommands'
 
 const detailsPayload = {
   uuid: '11111111-1111-4111-8111-111111111111',
@@ -37,6 +43,7 @@ const detailsPayload = {
 beforeEach(() => {
   vi.mocked(showToast).mockReset()
   vi.mocked(initiateGameDownload).mockReset()
+  vi.mocked(queueClientCommand).mockReset()
   stubFetch((url: any) => {
     if (String(url).includes('/details')) {
       return Promise.resolve({
@@ -78,14 +85,16 @@ beforeEach(() => {
   })
 })
 
-function renderDetails(uuid = detailsPayload.uuid) {
+function renderDetails(uuid = detailsPayload.uuid, role = 'user') {
   return render(
-    <MemoryRouter initialEntries={[`/game_details/${uuid}`]}>
-      <Routes>
-        <Route path="/game_details/:gameUuid" element={<GameDetailsPage />} />
-        <Route path="/library" element={<div>Library</div>} />
-      </Routes>
-    </MemoryRouter>,
+    <ShellConfigProvider value={{ role }}>
+      <MemoryRouter initialEntries={[`/game_details/${uuid}`]}>
+        <Routes>
+          <Route path="/game_details/:gameUuid" element={<GameDetailsPage />} />
+          <Route path="/library" element={<div>Library</div>} />
+        </Routes>
+      </MemoryRouter>
+    </ShellConfigProvider>,
   )
 }
 
@@ -101,6 +110,88 @@ test('loads game details into SPA page with action bar', async () => {
   await waitFor(() => {
     expect(global.fetch).toHaveBeenCalled()
   })
+})
+
+test('child account details preserve download actions as disabled while the server denies them', async () => {
+  stubFetch((url: any) => {
+    if (String(url).includes('/details')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ...detailsPayload,
+            show_translations_block: true,
+            translation_patches: [{ uuid: 'patch-1', label: 'English patch' }],
+            rom_patch_apply_enabled: true,
+          }),
+      })
+    }
+    if (String(url).includes('/versions')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            versions: [
+              {
+                kind: 'base',
+                uuid: detailsPayload.uuid,
+                label: 'Base game',
+                download_url: '/base',
+              },
+              { kind: 'update', uuid: 'update-1', label: 'Update 1', download_url: '/update' },
+              { kind: 'extra', uuid: 'extra-1', label: 'Artbook', download_url: '/extra' },
+            ],
+          }),
+      })
+    }
+    if (String(url).includes('/cheats')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ cheats: [] }) })
+    }
+    return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) })
+  })
+  renderDetails(detailsPayload.uuid, 'child')
+
+  expect(await screen.findByRole('heading', { name: 'Celeste' })).toBeInTheDocument()
+  const downloadButtons = screen.getAllByRole('button', { name: /^Download$/i })
+  expect(downloadButtons).toHaveLength(3)
+  downloadButtons.forEach((button) => {
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-describedby')
+  })
+  expect(screen.getByRole('button', { name: /^Download patch$/i })).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^Download patch$/i })).toHaveAttribute(
+    'aria-describedby',
+  )
+  screen.getAllByRole('button', { name: /^Apply with companion$/i }).forEach((button) => {
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-describedby')
+  })
+  expect(screen.getByRole('button', { name: /^Install$/i })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+  expect(screen.getByRole('button', { name: /^Uninstall$/i })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+  expect(screen.getByRole('link', { name: /^Update$/i })).toHaveAttribute('aria-disabled', 'true')
+  expect(screen.getByRole('link', { name: /^Update$/i })).toHaveAttribute(
+    'title',
+    'Updates are unavailable for child accounts',
+  )
+  const restrictionCopy = screen.getAllByText(/unavailable for child accounts/i)
+  expect(restrictionCopy.length).toBeGreaterThan(0)
+  downloadButtons.forEach((button) => {
+    const description = document.getElementById(button.getAttribute('aria-describedby') || '')
+    expect(description).toHaveClass('visually-hidden')
+  })
+  expect(initiateGameDownload).not.toHaveBeenCalled()
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: /^Install$/i }))
+  await user.click(screen.getByRole('button', { name: /^Uninstall$/i }))
+  await user.click(screen.getByRole('link', { name: /^Update$/i }))
+  expect(queueClientCommand).not.toHaveBeenCalled()
+  expect(initiateGameDownload).not.toHaveBeenCalled()
 })
 
 test('shows Cheats panel only when cheat_surface is retroarch', async () => {
@@ -673,7 +764,7 @@ test('version download toasts Backend hint on 410 path_missing', async () => {
   expect(showToast).toHaveBeenCalledWith('Use game details → Remove missing versions', 'error')
 })
 
-test('admin can remove missing versions via cleanup_orphans', async () => {
+test('librarian capability can remove missing versions via cleanup_orphans', async () => {
   const user = userEvent.setup()
   stubFetch((url: any, options = {}) => {
     const href = String(url)
@@ -683,7 +774,8 @@ test('admin can remove missing versions via cleanup_orphans', async () => {
         json: () =>
           Promise.resolve({
             ...detailsPayload,
-            is_admin: true,
+            is_admin: false,
+            can_cleanup_versions: true,
           }),
       })
     }

@@ -65,6 +65,10 @@ def test_normalize_schedule_fields_presets_interval_cron():
     once = normalize_schedule_fields('')
     assert once['schedule_kind'] == 'once'
 
+    default_interval = normalize_schedule_fields('interval')
+    assert default_interval['schedule_kind'] == 'interval'
+    assert default_interval['schedule_interval_minutes'] == 360
+
 
 def test_apply_schedule_and_job_next_run_from_row():
     fields = normalize_schedule_fields(
@@ -107,6 +111,11 @@ def test_normalize_schedule_fields_rejects_bad_cron_and_interval():
     empty_cron = normalize_schedule_fields('cron', cron_expr='')
     assert empty_cron.get('error')
 
+    oversized_cron = normalize_schedule_fields(
+        'cron', cron_expr=(' ' * 56) + '* * * * *',
+    )
+    assert oversized_cron['error'] == 'Field cannot be longer than 64 characters.'
+
     # Parse-ok but no fire in the window (31 Feb) must fail closed.
     impossible = normalize_schedule_fields('cron', cron_expr='0 0 31 2 *')
     assert impossible.get('error')
@@ -114,8 +123,73 @@ def test_normalize_schedule_fields_rejects_bad_cron_and_interval():
     bad_interval = normalize_schedule_fields(
         'interval', interval_value=0, interval_unit='minutes',
     )
-    assert bad_interval.get('error')
+    assert bad_interval['error'] == 'Number must be between 1 and 10080.'
     assert bad_interval['schedule_kind'] == 'once'
+
+    negative_interval = normalize_schedule_fields(
+        'interval', interval_value=-1, interval_unit='minutes',
+    )
+    assert negative_interval['error'] == 'Number must be between 1 and 10080.'
+
+    malformed_interval = normalize_schedule_fields(
+        'interval', interval_value='abc', interval_unit='minutes',
+    )
+    assert malformed_interval['error'] == (
+        'Not a valid integer value. Number must be between 1 and 10080.'
+    )
+
+    for non_integer in (1.5, True):
+        invalid_numeric_type = normalize_schedule_fields(
+            'interval', interval_value=non_integer, interval_unit='minutes',
+        )
+        assert invalid_numeric_type['error'] == (
+            'Not a valid integer value. Number must be between 1 and 10080.'
+        )
+
+    empty_interval = normalize_schedule_fields(
+        'interval', interval_value='', interval_unit='minutes',
+    )
+    assert empty_interval['error'] == 'Interval must be at least 1 minute.'
+
+    invalid_unit = normalize_schedule_fields(
+        'interval', interval_value=15, interval_unit='days',
+    )
+    assert invalid_unit['error'] == 'Not a valid choice.'
+
+    unknown_schedule = normalize_schedule_fields('not-a-schedule')
+    assert unknown_schedule['error'] == 'Not a valid choice.'
+
+    padded_schedule = normalize_schedule_fields(' interval ')
+    assert padded_schedule['error'] == 'Not a valid choice.'
+    whitespace_schedule = normalize_schedule_fields('   ')
+    assert whitespace_schedule['error'] is None
+    assert whitespace_schedule['schedule_kind'] == 'once'
+
+    empty_unit = normalize_schedule_fields(
+        'interval', interval_value=15, interval_unit='',
+    )
+    assert empty_unit['error'] == 'Not a valid choice.'
+
+    # The v1.1.8 SelectField accepts only the exact declared choice values.
+    # Current JSON validation must not trim or case-fold malformed choices.
+    for malformed_unit in (' hours ', 'HOURS', 'Minutes', [], {}):
+        invalid_unit = normalize_schedule_fields(
+            'interval', interval_value=15, interval_unit=malformed_unit,
+        )
+        assert invalid_unit['error'] == 'Not a valid choice.'
+        assert invalid_unit['schedule_kind'] == 'once'
+
+    over_limit = normalize_schedule_fields(
+        'interval', interval_value=10081, interval_unit='minutes',
+    )
+    assert over_limit['error'] == 'Number must be between 1 and 10080.'
+    assert over_limit['schedule_kind'] == 'once'
+
+    boundary = normalize_schedule_fields(
+        'interval', interval_value=10080, interval_unit='minutes',
+    )
+    assert boundary['error'] is None
+    assert boundary['schedule_interval_minutes'] == 10080
 
 
 def test_validate_cron_expression_rejects_impossible_dom():
@@ -155,8 +229,7 @@ def test_unknown_schedule_choice_fails_closed():
     success for a schedule that would never repeat.
     """
     fields = normalize_schedule_fields('weekly')
-    assert fields['error']
-    assert 'weekly' in fields['error']
+    assert fields['error'] == 'Not a valid choice.'
     assert fields['next_run'] is None
 
 

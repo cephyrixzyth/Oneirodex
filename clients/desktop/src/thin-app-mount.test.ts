@@ -65,24 +65,24 @@ describe('thin client start-up', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
   })
 
-  it('tells the user when a saved server URL is refused now, instead of going quiet', async () => {
-    // Saved by an older build; plain http:// to a public host is refused today.
-    vi.mocked(loadStoredConfig).mockResolvedValue({
-      baseUrl: 'http://games.example.com',
-      token: null,
-    })
-    vi.mocked(keychainAdapter.load).mockResolvedValue('gt_abcd_secretsecretsecret')
-    const { root, el } = stubRoot()
+  it.each(['http://games.example.com', 'http://nas'])(
+    'tells the user when a saved server URL is refused now, instead of going quiet: %s',
+    async (baseUrl) => {
+      // Saved by an older build; public HTTP and search-domain-dependent bare names are refused.
+      vi.mocked(loadStoredConfig).mockResolvedValue({ baseUrl, token: null })
+      vi.mocked(keychainAdapter.load).mockResolvedValue('gt_abcd_secretsecretsecret')
+      const { root, el } = stubRoot()
 
-    await mountThinApp(root)
+      await mountThinApp(root)
 
-    // The URL stays in the box so it can be corrected, with the reason beside it.
-    expect(el('#baseUrl').value).toBe('http://games.example.com')
-    expect(el('#status').textContent).toMatch(/Refusing http:\/\/ for games\.example\.com/)
-    expect(el('#status').dataset.tone).toBe('error')
-    // And presence never started: nothing carried the token to that host.
-    expect(startClientHeartbeat).not.toHaveBeenCalled()
-  })
+      // The URL stays in the box so it can be corrected, with the reason beside it.
+      expect(el('#baseUrl').value).toBe(baseUrl)
+      expect(el('#status').textContent).toMatch(/Refusing http:\/\/ for/)
+      expect(el('#status').dataset.tone).toBe('error')
+      // And presence never started: nothing carried the token to that host.
+      expect(startClientHeartbeat).not.toHaveBeenCalled()
+    },
+  )
 
   it.each([
     'http://tower.lan:5006',

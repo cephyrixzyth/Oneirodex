@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { AdminTabs } from './components/AdminTabs'
 import { App } from './App'
+import { AppErrorBoundary, AuthSessionBoundary } from '@oneirodex/ui'
 import { ImportLeafLibraries } from './components/ImportLeafLibraries'
 import { ProposeLeafLibraries } from './components/ProposeLeafLibraries'
 import './styles.css'
@@ -9,9 +10,13 @@ import './styles.css'
 const root = document.getElementById('admin-app-root')
 if (root) {
   createRoot(root).render(
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>,
+    <AuthSessionBoundary>
+      <BrowserRouter>
+        <AppErrorBoundary>
+          <App />
+        </AppErrorBoundary>
+      </BrowserRouter>
+    </AuthSessionBoundary>,
   )
 }
 

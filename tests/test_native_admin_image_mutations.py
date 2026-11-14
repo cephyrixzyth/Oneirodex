@@ -1,14 +1,171 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from threading import Event, Thread
 from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+from starlette.requests import Request
 
 from oneirodex.runtime_native.admin_image_mutations import create_admin_image_mutation_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+
+
+def test_image_delete_rejects_path_outside_image_root(tmp_path, monkeypatch):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.runtime_native.admin_image_mutations import ImageMutationsData
+
+    image_root = tmp_path / 'images'
+    image_root.mkdir()
+    outside_file = tmp_path / 'sentinel.png'
+    outside_file.write_bytes(b'keep this file')
+    image = SimpleNamespace(is_downloaded=True, url='../sentinel.png')
+
+    class Session:
+        deleted = False
+        committed = False
+
+        def get(self, _model, image_id):
+            return image if image_id == 91 else None
+
+        def delete(self, _image):
+            self.deleted = True
+
+        def commit(self):
+            self.committed = True
+
+    session = Session()
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=session))
+
+    with pytest.raises(ValueError, match='Stored image path is invalid'):
+        ImageMutationsData().delete({'IMAGE_SAVE_PATH': str(image_root)}, 91)
+
+    assert outside_file.read_bytes() == b'keep this file'
+    assert session.deleted is False
+    assert session.committed is False
+
+
+def test_image_delete_restores_file_when_database_commit_fails(tmp_path, monkeypatch):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.runtime_native.admin_image_mutations import ImageMutationsData
+
+    image_root = tmp_path / 'images'
+    image_root.mkdir()
+    image_path = image_root / 'cover.png'
+    image_path.write_bytes(b'keep image if the row delete fails')
+    image = SimpleNamespace(is_downloaded=True, url='cover.png')
+
+    class Session:
+        delete_calls = 0
+        commit_calls = 0
+
+        def get(self, _model, image_id):
+            return image if image_id == 92 else None
+
+        def delete(self, _image):
+            self.delete_calls += 1
+
+        def commit(self):
+            self.commit_calls += 1
+            raise RuntimeError('synthetic database failure')
+
+    session = Session()
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=session))
+
+    with pytest.raises(RuntimeError, match='synthetic database failure'):
+        ImageMutationsData().delete({'IMAGE_SAVE_PATH': str(image_root)}, 92)
+
+    assert image_path.read_bytes() == b'keep image if the row delete fails'
+    assert list(image_root.glob('.cover.png.delete-*')) == []
+    assert session.delete_calls == 1
+    assert session.commit_calls == 1
+
+
+@pytest.mark.parametrize('commit_fails', [False, True])
+def test_single_image_replacement_flushes_old_row_and_recovers_files(
+    tmp_path, monkeypatch, commit_fails,
+):
+    import io
+
+    from PIL import Image as PILImage
+    from oneirodex.models import Game, Image
+    from oneirodex.runtime_native import db_session
+    from oneirodex.runtime_native.admin_image_mutations import ImageMutationsData
+
+    image_root = tmp_path / 'images'
+    image_root.mkdir()
+    old_path = image_root / 'old-cover.png'
+    old_path.write_bytes(b'previous cover')
+    game_uuid = '33333333-3333-4333-8333-333333333333'
+    old_row = Image(game_uuid=game_uuid, image_type='cover', url=old_path.name)
+    game = SimpleNamespace(uuid=game_uuid)
+    events = []
+
+    class Result:
+        def __init__(self, values):
+            self.values = values
+
+        def scalars(self):
+            return self
+
+        def first(self):
+            return self.values[0] if self.values else None
+
+        def all(self):
+            return self.values
+
+    class Session:
+        def execute(self, statement):
+            entity = statement.column_descriptions[0]['entity']
+            return Result([game] if entity is Game else [old_row])
+
+        def delete(self, row):
+            assert row is old_row
+            events.append('delete')
+
+        def flush(self):
+            events.append('flush')
+
+        def add(self, row):
+            assert row.image_type == 'cover'
+            events.append('add')
+
+        def commit(self):
+            events.append('commit')
+            if commit_fails:
+                raise RuntimeError('synthetic database failure')
+
+        def rollback(self):
+            events.append('rollback')
+
+    monkeypatch.setattr(db_session, 'native_db', SimpleNamespace(session=Session()))
+    png = io.BytesIO()
+    PILImage.new('RGB', (8, 8), (31, 125, 93)).save(png, format='PNG')
+    data = ImageMutationsData()
+
+    if commit_fails:
+        with pytest.raises(RuntimeError, match='synthetic database failure'):
+            data.upload_single(
+                SimpleNamespace(config={'IMAGE_SAVE_PATH': str(image_root)}),
+                game_uuid, 'replacement.jpeg', 'cover', png.getvalue(),
+            )
+        assert old_path.read_bytes() == b'previous cover'
+        assert list(image_root.iterdir()) == [old_path]
+        assert events == ['delete', 'flush', 'add', 'commit', 'rollback']
+    else:
+        result = data.upload_single(
+            SimpleNamespace(config={'IMAGE_SAVE_PATH': str(image_root)}),
+            game_uuid, 'replacement.jpeg', 'cover', png.getvalue(),
+        )
+        assert result['image_type'] == 'cover'
+        assert not old_path.exists()
+        assert len(list(image_root.iterdir())) == 1
+        assert next(image_root.iterdir()).suffix == '.png'
+        assert events[:3] == ['delete', 'flush', 'add']
+        assert events[-1] == 'commit'
 
 
 class FakeImageMutations:
@@ -36,6 +193,9 @@ class FakeImageMutations:
 
     def upload_single(self, app, game_uuid, filename, image_type, content):
         self.single_upload = (game_uuid, filename, image_type, content)
+        if hasattr(self, 'upload_started'):
+            self.upload_started.set()
+            self.upload_continue.wait(timeout=3)
         return {
             'message': 'File uploaded successfully',
             'url': '/static/library/images/fixture.jpg', 'flash': 'Image uploaded successfully!',
@@ -43,17 +203,18 @@ class FakeImageMutations:
         }
 
 
-def _client():
+def _client(database_scope=None):
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY='native-image-delete', CSP_ENABLED=False, WTF_CSRF_ENABLED=True,
+        TESTING=True,
     )
     user = SimpleNamespace(
         id=8, user_id='admin', role='admin', state=True, is_active=True,
         is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
     )
     manager = SimpleNamespace(
-        login_view='login.login', blueprint_login_views={},
+        login_view='/login', blueprint_login_views={},
         login_message='Please log in to access this page.',
         login_message_category='message', localize_callback=None,
         session_protection='basic',
@@ -62,17 +223,105 @@ def _client():
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     data = FakeImageMutations()
     app = FastAPI()
+    @app.get('/health')
+    async def health():
+        return {'status': 'ok'}
+
     app.include_router(create_admin_image_mutation_router(
         flask_app, find_user=lambda uid: user if uid == 8 else None,
         find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
         load_user_id=lambda value: user if value.split(':', 1)[0] == '8' else None,
-        login_manager=manager, database_scope=lambda _app: nullcontext(),
+        login_manager=manager, database_scope=database_scope or (lambda _app: nullcontext()),
         data_access=data,
     ))
     client = TestClient(app)
     client.cookies.set('session', dump_session_cookie(session, flask_app.config['SECRET_KEY']))
     client.headers['X-CSRFToken'] = csrf
     return client, data
+
+
+def test_native_game_image_work_does_not_block_health_route(monkeypatch):
+    monkeypatch.setattr('oneirodex.utils.scanning.is_scan_job_running', lambda: False)
+    client, data = _client()
+    data.upload_started = Event()
+    data.upload_continue = Event()
+    responses = []
+
+    upload = Thread(target=lambda: responses.append(client.post(
+        '/upload_image/game-1', files={'file': ('cover.png', b'image-bytes', 'image/png')},
+        data={'image_type': 'cover'},
+    )))
+    upload.start()
+    try:
+        assert data.upload_started.wait(timeout=2)
+        assert client.get('/health').json() == {'status': 'ok'}
+    finally:
+        data.upload_continue.set()
+        upload.join(timeout=3)
+
+    assert not upload.is_alive()
+    assert responses and responses[0].status_code == 200
+
+
+@pytest.mark.parametrize('cancel_count', [1, 3])
+def test_cancelled_native_game_image_route_waits_before_database_scope_exit(monkeypatch, cancel_count):
+    import asyncio
+
+    import httpx
+
+    monkeypatch.setattr('oneirodex.utils.scanning.is_scan_job_running', lambda: False)
+    events = []
+
+    class Scope:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            events.append('scope-exit')
+
+    client, data = _client(database_scope=lambda _app: Scope())
+    data.upload_started = Event()
+    data.upload_continue = Event()
+
+    def upload_single(app, game_uuid, filename, image_type, content):
+        data.single_upload = (game_uuid, filename, image_type, content)
+        data.upload_started.set()
+        assert data.upload_continue.wait(timeout=5)
+        events.append('worker-complete')
+        return {'message': 'uploaded'}
+
+    data.upload_single = upload_single
+
+    async def scenario():
+        transport = httpx.ASGITransport(app=client.app)
+        async with httpx.AsyncClient(transport=transport, base_url='http://test') as async_client:
+            async_client.cookies.set('session', client.cookies.get('session'))
+            request = asyncio.create_task(async_client.post(
+                '/upload_image/game-1',
+                files={'file': ('cover.png', b'image-bytes', 'image/png')},
+                data={'image_type': 'cover'},
+                headers={'X-CSRFToken': client.headers['X-CSRFToken']},
+            ))
+            try:
+                assert await asyncio.to_thread(data.upload_started.wait, 5)
+                for _ in range(cancel_count):
+                    request.cancel()
+                    for _turn in range(4):
+                        await asyncio.sleep(0)
+                    assert not request.done(), 'Request ended while its image worker was active'
+                    assert events == []
+            finally:
+                data.upload_continue.set()
+            with pytest.raises(asyncio.CancelledError):
+                await request
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        data.upload_continue.set()
+
+    assert data.single_upload == ('game-1', 'cover.png', 'cover', b'image-bytes')
+    assert events == ['worker-complete', 'scope-exit']
 
 
 def test_delete_image_returns_success_or_not_found_without_touching_real_files():
@@ -130,6 +379,38 @@ def test_download_and_batch_upload_use_authenticated_csrf_routes_and_fake_storag
     assert data.uploads == (['g1_cover.png'], 'cover', 'g1')
 
 
+def test_image_download_rejects_oversized_body_and_id_batches_before_data_work():
+    client, data = _client()
+    oversized = client.post(
+        '/admin/api/download_images', content=b' ' * (64 * 1024 + 1),
+        headers={'Content-Type': 'application/json'},
+    )
+    too_many = client.post(
+        '/admin/api/download_images', json={'image_ids': list(range(501))},
+    )
+
+    assert oversized.status_code == 413
+    assert oversized.json()['error_code'] == 'payload_too_large'
+    assert too_many.status_code == 413
+    assert too_many.json()['error_code'] == 'payload_too_large'
+    assert not hasattr(data, 'download_body')
+
+
+def test_batch_upload_ignores_text_fields_with_same_name_as_uploads():
+    client, data = _client()
+    response = client.post(
+        '/admin/api/images/batch_upload',
+        files=[
+            ('files', (None, 'not-an-upload')),
+            ('files', ('invalid.txt', b'not an image', 'text/plain')),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.json()['stored'] == 1
+    assert data.uploads == (['invalid.txt'], 'cover', '')
+
+
 def test_image_batch_upload_rejects_missing_csrf():
     client, data = _client()
     response = client.post(
@@ -154,7 +435,44 @@ def test_single_game_image_upload_preserves_csrf_and_payload(monkeypatch):
     )
 
     assert rejected.status_code == 400
+    assert rejected.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is missing.</p>' in rejected.content
     assert accepted.status_code == 200
     assert accepted.json()['image_id'] == 11
     assert accepted.json()['image_type'] == 'cover'
     assert data.single_upload == ('game-1', 'cover.jpg', 'cover', b'image-bytes')
+
+
+def test_unauthenticated_single_image_upload_is_denied_before_form_parsing(monkeypatch):
+    client, _data = _client()
+    client.cookies.clear()
+    client.headers.pop('X-CSRFToken', None)
+    parse_calls = 0
+    original_form = Request.form
+
+    async def observe_form(self, *args, **kwargs):
+        nonlocal parse_calls
+        parse_calls += 1
+        return await original_form(self, *args, **kwargs)
+
+    monkeypatch.setattr(Request, 'form', observe_form)
+    response = client.post(
+        '/upload_image/game-1',
+        files={'file': ('oversized.bin', b'x' * (2 * 1024 * 1024), 'application/octet-stream')},
+        follow_redirects=False,
+    )
+
+    assert response.status_code in {302, 303, 307, 308}
+    assert parse_calls == 0
+
+
+def test_single_image_upload_rejects_oversized_body():
+    client, data = _client()
+    response = client.post(
+        '/upload_image/game-1',
+        files={'file': ('cover.jpg', b'x' * (3 * 1024 * 1024 + 128 * 1024), 'image/jpeg')},
+        data={'image_type': 'cover'},
+    )
+
+    assert response.status_code == 413
+    assert not hasattr(data, 'single_upload')

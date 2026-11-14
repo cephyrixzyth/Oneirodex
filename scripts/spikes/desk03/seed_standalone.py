@@ -42,7 +42,9 @@ def main() -> int:
         raise SystemExit('refusing: database name must contain "test" or "standalone"')
     saves_root = Path(os.environ['SAVES_ROOT'])
     rng = random.Random(3)  # deterministic content, so reruns compare
-    engine = create_engine(url)
+    # The review image installs psycopg2-binary (the application's supported
+    # driver), while a bare PostgreSQL SQLAlchemy URL defaults to psycopg 3.
+    engine = create_engine(url.set(drivername='postgresql+psycopg2'))
     with Session(engine) as session:
         admin = User(name='StandaloneAdmin', email='admin@standalone.test', role='admin',
                      user_id=str(UUID(int=rng.getrandbits(128), version=4)))

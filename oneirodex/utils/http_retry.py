@@ -67,5 +67,11 @@ def request_with_backoff(url, *, host_key, params=None, timeout=5, max_retries=3
         return None
 
     if last_exc:
-        print(f"http_retry exhausted for {host_key}: {last_exc}")
+        # Request exceptions often include the fully prepared URL. Some public
+        # metadata providers accept API keys in query parameters, so logging
+        # the exception here can persist those credentials in container logs.
+        print(
+            f"http_retry exhausted for {host_key}: "
+            f"{type(last_exc).__name__}"
+        )
     return None

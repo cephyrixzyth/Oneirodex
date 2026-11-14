@@ -64,6 +64,14 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.catalog__eyebrow a {
+  color: var(--od-accent-2);
+  text-underline-offset: 0.2em;
+}
+.catalog a:focus-visible {
+  outline: 3px solid var(--od-focus-ring);
+  outline-offset: 3px;
+}
 .catalog__lede {
   max-width: 68ch;
   color: var(--od-text-muted);

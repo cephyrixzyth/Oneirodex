@@ -193,8 +193,8 @@ def test_ai_config_read_write_and_csrf_contract():
     head = client.head('/api/ai/config')
     assert read.status_code == 200
     assert read.json() == {'enabled': False, 'ollama_model': 'small-model'}
-    assert head.status_code == 200 and head.content == b''
-    assert head.headers['content-length'] == str(len(read.content))
+    assert head.status_code == 400 and head.content == b''
+    assert head.headers['content-length'] == '140'
 
     rejected = client.put('/api/ai/config', json={'enabled': True})
     assert rejected.status_code == 400
@@ -213,6 +213,74 @@ def test_ai_config_read_write_and_csrf_contract():
         'ok': True, 'error': None, 'error_code': None, 'success': True,
     }
     assert data.config_calls == [{'enabled': True}]
+
+
+def test_ai_config_bearer_requires_admin_role_and_admin_scope(monkeypatch):
+    contexts = {
+        'Bearer scoped-admin': SimpleNamespace(
+            user=SimpleNamespace(id=109, role='admin', is_authenticated=True),
+            token=object(), has_scope=lambda scope: scope == 'admin',
+            session_data={}, should_set_session_cookie=False,
+        ),
+        'Bearer unscoped-admin': SimpleNamespace(
+            user=SimpleNamespace(id=109, role='admin', is_authenticated=True),
+            token=object(), has_scope=lambda _scope: False,
+            session_data={}, should_set_session_cookie=False,
+        ),
+        'Bearer member-admin-scope': SimpleNamespace(
+            user=SimpleNamespace(id=110, role='user', is_authenticated=True),
+            token=object(), has_scope=lambda scope: scope == 'admin',
+            session_data={}, should_set_session_cookie=False,
+        ),
+    }
+    monkeypatch.setattr(
+        native_ai_status, 'request_auth_context',
+        lambda request, *_args, **_kwargs: contexts[request.headers['authorization']],
+    )
+    data = FakeAiStatusData()
+    client = make_client(data=data)
+
+    allowed = client.put(
+        '/api/ai/config', json={'enabled': True},
+        headers={'Authorization': 'Bearer scoped-admin'},
+    )
+    unscoped = client.put(
+        '/api/ai/config', json={'enabled': True},
+        headers={'Authorization': 'Bearer unscoped-admin'},
+    )
+    member = client.put(
+        '/api/ai/config', json={'enabled': True},
+        headers={'Authorization': 'Bearer member-admin-scope'}, follow_redirects=False,
+    )
+
+    assert allowed.status_code == 200
+    assert unscoped.status_code == 403
+    assert member.status_code == 302
+    assert data.config_calls == [{'enabled': True}]
+
+
+def test_ai_config_rejected_url_is_a_bad_request_not_an_internal_error():
+    data = FakeAiStatusData()
+
+    def reject_config(_payload, *, config=None):
+        raise ValueError('URL host is not allowed')
+
+    data.save_config = reject_config
+    client = make_client(data=data)
+    session = {'_user_id': '109:fp'}
+    csrf = generate_csrf_token(session, 'native-ai-status-secret')
+    client.cookies.clear()
+    client.cookies.set('session', dump_session_cookie(session, 'native-ai-status-secret'))
+
+    response = client.put(
+        '/api/ai/config',
+        json={'ollama_base_url': 'http://127.0.0.1:11434'},
+        headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error_code'] == 'bad_request'
+    assert response.json()['error'] == 'URL host is not allowed'
 
 
 def test_ai_triage_and_doctor_notes_actions_use_csrf_and_fake_adapter():
@@ -261,6 +329,12 @@ def test_ai_apply_triage_keeps_explicit_feature_gate_and_created_status():
     )
     assert disabled.status_code == 403
     assert disabled.json()['auto_apply_enabled'] is False
+    assert data.action_calls == []
+
+    invalid_while_disabled = client.post(
+        '/api/ai/apply-triage', json={'game_uuid': 'game-1'}, headers=headers,
+    )
+    assert invalid_while_disabled.status_code == 422
     assert data.action_calls == []
 
     data.apply_enabled = True

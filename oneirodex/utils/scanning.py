@@ -1,3 +1,4 @@
+import logging
 import os
 import json
 from datetime import datetime, timezone
@@ -23,7 +24,10 @@ from oneirodex.utils.pc_extras import (
     iter_pc_extra_roots,
 )
 from oneirodex.utils.rom_language import classify_patch_file
+from oneirodex.utils.image_paths import image_path_under_save_dir
 
+
+logger = logging.getLogger(__name__)
 
 def bump_scan_job_progress(
     scan_job_id,
@@ -276,8 +280,13 @@ def log_unmatched_folder(
             if stage_e_candidates:
                 print(f"[UNMATCHED] stage_e_candidates={len(stage_e_candidates)}")
         except IntegrityError:
-            log_system_event(f"Failed to log unmatched folder: {folder_path}", event_type='scan', event_level='warning')
             db.session.rollback()
+            from oneirodex.utils.event_logging import log_system_event
+
+            log_system_event(
+                f"Failed to log unmatched folder: {folder_path}",
+                event_type='scan', event_level='warning',
+            )
             print(f"[UNMATCHED ERROR] Failed to log unmatched folder due to a database error: {folder_path}")
     else:
         # Refresh match metadata when re-encountered as Duplicate
@@ -523,11 +532,28 @@ def process_pc_dlc_and_extra_roots(
             db.session.rollback()
 
 
-def refresh_images_in_background(game_uuid):
-    from flask import current_app, flash, has_request_context
+def refresh_images_in_background(game_uuid, *, app=None):
+    if app is None:
+        # Legacy WSGI callers rely on the active Flask application. Native
+        # FastAPI workers pass their runtime app explicitly so this path stays
+        # usable in the Flask-free image.
+        from flask import current_app
+
+        app = current_app._get_current_object()
+
+    def flash_if_request_context(message, category):
+        try:
+            from flask import flash, has_request_context
+        except ImportError:
+            return False
+        if not has_request_context():
+            return False
+        flash(message, category)
+        return True
+
     from oneirodex import cache
     from oneirodex.utils.igdb_api import make_igdb_api_request
-    with current_app.app_context():
+    with app.app_context():
         from oneirodex.utils.game_core import (
             process_and_save_image
         )
@@ -543,14 +569,14 @@ def refresh_images_in_background(game_uuid):
         try:
             cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'in_progress', 'progress': 20}, timeout=300)
 
-            response_json = make_igdb_api_request(current_app.config['IGDB_API_ENDPOINT'],
+            response_json = make_igdb_api_request(app.config['IGDB_API_ENDPOINT'],
                 f"""fields id, cover.url, screenshots.url;
                     where id = {game.igdb_id}; limit 1;""")
 
             if 'error' not in response_json and response_json:
                 cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'in_progress', 'progress': 40}, timeout=300)
 
-                delete_game_images(game_uuid)
+                delete_game_images(game_uuid, config=app.config)
 
                 cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'in_progress', 'progress': 60}, timeout=300)
 
@@ -558,7 +584,7 @@ def refresh_images_in_background(game_uuid):
                 if cover_data:
                     # Pass the full cover object (id+url) so process_and_save_image
                     # can reuse the URL without a second covers lookup.
-                    process_and_save_image(game.uuid, cover_data, image_type='cover')
+                    process_and_save_image(game.uuid, cover_data, image_type='cover', app=app)
 
                 screenshots_data = response_json[0].get('screenshots', [])
                 total_images = len(screenshots_data) + (1 if cover_data else 0)
@@ -566,7 +592,7 @@ def refresh_images_in_background(game_uuid):
 
                 if total_images > 0:
                     for screenshot in screenshots_data:
-                        process_and_save_image(game.uuid, screenshot, image_type='screenshot')
+                        process_and_save_image(game.uuid, screenshot, image_type='screenshot', app=app)
                         processed += 1
                         progress = 60 + int((processed / total_images) * 30)
                         cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'in_progress', 'progress': progress}, timeout=300)
@@ -577,23 +603,17 @@ def refresh_images_in_background(game_uuid):
                 db.session.commit()
                 cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'complete', 'progress': 100}, timeout=300)
 
-                if has_request_context():
-                    flash("Game images refreshed successfully.", "success")
-                else:
+                if not flash_if_request_context("Game images refreshed successfully.", "success"):
                     print("Game images refreshed successfully.")
             else:
                 cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'error', 'progress': 0}, timeout=300)
-                if has_request_context():
-                    flash("Failed to retrieve game images from IGDB API.", "error")
-                else:
+                if not flash_if_request_context("Failed to retrieve game images from IGDB API.", "error"):
                     print("Failed to retrieve game images from IGDB API.")
 
         except Exception as e:
             db.session.rollback()
             cache.set(f'image_refresh_progress_{game_uuid}', {'status': 'error', 'progress': 0}, timeout=300)
-            if has_request_context():
-                flash(f"Failed to refresh game images: {str(e)}", "error")
-            else:
+            if not flash_if_request_context(f"Failed to refresh game images: {str(e)}", "error"):
                 print(f"Failed to refresh game images: {str(e)}")
             
 def delete_game_images(game_uuid, *, config=None):
@@ -615,11 +635,12 @@ def delete_game_images(game_uuid, *, config=None):
 
         for image in images_to_delete:
             try:
-                relative_image_path = image.url.replace('/static/library/images/', '').strip("/")
-                image_file_path = os.path.join(config['IMAGE_SAVE_PATH'], relative_image_path)
-                image_file_path = os.path.normpath(image_file_path)
-
-                if os.path.exists(image_file_path):
+                image_file_path = image_path_under_save_dir(
+                    image.url, config['IMAGE_SAVE_PATH'],
+                )
+                if image_file_path is None:
+                    logger.warning("Skipping image outside IMAGE_SAVE_PATH for game %s.", game_uuid)
+                elif os.path.exists(image_file_path):
                     os.remove(image_file_path)
                     if not os.path.exists(image_file_path):
                         print(f"Deleted image file: {image_file_path}")

@@ -25,7 +25,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from oneirodex import db
+from sqlalchemy import select
+
+from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Developer, GameMode, Genre, PlayerPerspective, Publisher
 from oneirodex.utils.secondary_scrapers import (
     categories_indicate_vr,
@@ -79,7 +81,7 @@ def _get_or_create(model, name: str):
     if not label:
         return None
     existing = db.session.execute(
-        db.select(model).filter_by(name=label)
+        select(model).filter_by(name=label)
     ).scalars().first()
     if existing:
         return existing

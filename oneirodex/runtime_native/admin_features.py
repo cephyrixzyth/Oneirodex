@@ -1,16 +1,18 @@
 """Native admin feature and challenge-solver configuration APIs."""
 from __future__ import annotations
 
+from .form_compat import first_form_value, first_form_values
 from contextlib import nullcontext
 import logging
 import os
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
 
 _FEATURE_DB_FIELDS = (
     'enable_arr_module', 'enable_ai_assist', 'enable_malware_scan',
@@ -140,7 +142,7 @@ def create_admin_features_router(
                 )
                 response = csrf_error_response(
                     request, auth.session_data, flask_app.config,
-                    token=form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')),
+                    token=first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')),
                 )
             from oneirodex.utils.role_catalog import normalize_role
             if response is None and auth.user is None:
@@ -158,18 +160,18 @@ def create_admin_features_router(
             elif response is None:
                 from .account_avatar_upload import _flash
                 body = {
-                    key: form.get('db_' + key) == 'on'
+                    key: first_form_value(form, 'db_' + key) == 'on'
                     for key in _FEATURE_DB_FIELDS
                 }
                 try:
                     data.save_preferences(body)
                     _flash(auth.session_data, 'success', 'Feature preferences saved. Env flags (docker/.env) still override process defaults until restart.')
-                    response = RedirectResponse('/admin/features', status_code=302)
+                    response = flask_redirect_response('/admin/features', status_code=302)
                 except Exception:
                     from oneirodex.runtime_native.db_session import native_db as db
                     db.session.rollback()
                     _flash(auth.session_data, 'error', 'Could not save feature preferences.')
-                    response = RedirectResponse('/admin/features', status_code=302)
+                    response = flask_redirect_response('/admin/features', status_code=302)
             if auth is not None and (auth.should_set_session_cookie or auth.session_data.get('_flashes')):
                 _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values
@@ -197,7 +199,7 @@ async def _read_form(request: Request):
         fields = parse_qs(bytes(body).decode('utf-8'), keep_blank_values=True)
     except UnicodeDecodeError:
         return {}, Response(status_code=400)
-    return {name: values[-1] for name, values in fields.items() if values}, None
+    return first_form_values(fields), None
 
 
 async def _handle(request, *, flask_app, data, find_user, find_token,

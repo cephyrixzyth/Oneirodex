@@ -11,7 +11,9 @@ from starlette.responses import JSONResponse
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+
+_MAX_JSON_BODY_BYTES = 64 * 1024
 
 
 class WishlistData:
@@ -150,14 +152,16 @@ def create_wishlist_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                all_values = request.query_params.getlist('all')
-                include_all = (
-                    bool(all_values) and all_values[0] == '1'
-                    and _librarian(auth.user, auth.token)
-                )
-                response = JSONResponse({'requests': data.list(auth.user, include_all=include_all)})
-                if auth.should_set_session_cookie:
-                    _set_session_cookie(response, flask_app, auth)
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    all_values = request.query_params.getlist('all')
+                    include_all = (
+                        bool(all_values) and all_values[0] == '1'
+                        and _librarian(auth.user, auth.token)
+                    )
+                    response = JSONResponse({'requests': data.list(auth.user, include_all=include_all)})
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, flask_app, auth)
             _finalize(response, flask_app, request)
             return response
 
@@ -188,7 +192,7 @@ def create_wishlist_router(
             _finish(response, flask_app, request, auth)
             return response
 
-    @router.delete('/api/requests/{request_id}')
+    @router.delete('/api/requests/{request_id:int}')
     def cancel_request(request_id: int, request: Request):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -216,7 +220,7 @@ def create_wishlist_router(
             _finish(response, flask_app, request, auth)
             return response
 
-    @router.patch('/api/requests/{request_id}')
+    @router.patch('/api/requests/{request_id:int}')
     async def resolve_request(request_id: int, request: Request):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -272,8 +276,13 @@ async def _validated(request, operation):
     from oneirodex.utils.validation import format_validation_errors
 
     model = CreateWishlistRequestBody if operation == 'create' else ResolveWishlistRequestBody
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+    raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return None, _error(413, 'payload_too_large', 'Request body is too large.')
     try:
-        raw = json.loads(await request.body() or b'{}')
+        raw = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         raw = {}
     try:

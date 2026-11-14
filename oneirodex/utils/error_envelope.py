@@ -28,9 +28,18 @@ def wants_json_error(request) -> bool:
     here so every error path agrees on it: an ``/api/`` path, an explicit
     ``Accept: application/json``, or a legacy ``X-Requested-With`` XHR.
     """
+    accept_mimetypes = getattr(request, 'accept_mimetypes', None)
+    if accept_mimetypes is None:
+        from werkzeug.datastructures import MIMEAccept
+        from werkzeug.http import parse_accept_header
+
+        accept_mimetypes = parse_accept_header(
+            request.headers.get('Accept', ''), MIMEAccept,
+        )
+    path = getattr(request, 'path', None) or request.url.path
     return (
-        request.path.startswith('/api/')
-        or request.accept_mimetypes.best == 'application/json'
+        path.startswith('/api/')
+        or accept_mimetypes.best == 'application/json'
         or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     )
 

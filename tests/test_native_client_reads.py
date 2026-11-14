@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from oneirodex.runtime_native import client_reads
 from oneirodex.runtime_native.client_reads import create_client_reads_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -95,7 +96,9 @@ class FakeData:
 
 
 def make_client(*, scopes=('read:library', 'write:download')):
-    user = SimpleNamespace(id=27, role='user', state=True, is_active=True)
+    user = SimpleNamespace(
+        id=27, user_id='account-uuid-27', role='user', state=True, is_active=True
+    )
     token = FakeToken(scopes)
     data = FakeData()
     flask_app = Flask(__name__)
@@ -175,6 +178,23 @@ def test_lifecycle_read_preserves_read_library_scope():
     assert client.data.lifecycle_calls == [('read', 27)]
 
 
+def test_companion_identity_is_scope_gated_and_returns_only_stable_account_id():
+    client = make_client(scopes=('write:download',))
+    response = client.get(
+        '/api/client/identity', headers={'Authorization': f'Bearer {RAW_TOKEN}'}
+    )
+    assert response.status_code == 403
+    assert response.json()['error'] == 'Missing scope: read:library'
+
+    client = make_client(scopes=('read:library',))
+    response = client.get(
+        '/api/client/identity', headers={'Authorization': f'Bearer {RAW_TOKEN}'}
+    )
+    assert response.status_code == 200
+    assert response.json()['account_id'] == 'account-uuid-27'
+    assert 'email' not in response.json() and 'username' not in response.json()
+
+
 def test_lifecycle_write_is_bearer_only_and_preserves_scope_gate():
     session_client = make_client()
     session_client.cookies.set('session', browser_cookie())
@@ -211,6 +231,50 @@ def test_lifecycle_validation_runs_before_bearer_only_denial():
     response = client.post('/api/client/lifecycle', json={})
     assert response.status_code == 422
     assert response.json()['error'] == 'Invalid request.'
+
+
+def test_lifecycle_scalar_body_preserves_root_validation_error():
+    client = make_client()
+    response = client.post(
+        '/api/client/lifecycle',
+        headers={'Authorization': f'Bearer {RAW_TOKEN}'},
+        json=['bad'],
+    )
+    assert response.status_code == 422
+    assert response.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of ClientLifecycleBody'
+    }
+    assert client.data.lifecycle_calls == []
+
+
+def test_lifecycle_write_caps_json_before_schema_validation(monkeypatch):
+    monkeypatch.setattr(client_reads, '_MAX_LIFECYCLE_BODY_BYTES', 8)
+    client = make_client(scopes=('read:library',))
+
+    response = client.post(
+        '/api/client/lifecycle',
+        headers={'Authorization': f'Bearer {RAW_TOKEN}', 'Content-Type': 'application/json'},
+        content=b'{"records":[]}',
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert client.data.lifecycle_calls == []
+
+
+def test_heartbeat_caps_json_body_before_presence_write(monkeypatch):
+    monkeypatch.setattr(client_reads, '_MAX_HEARTBEAT_BODY_BYTES', 8)
+    client = make_client(scopes=('write:presence',))
+
+    response = client.post(
+        '/api/client/heartbeat',
+        headers={'Authorization': f'Bearer {RAW_TOKEN}', 'Content-Type': 'application/json'},
+        content=b'{"device_id":"too-long"}',
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert client.data.heartbeat_calls == []
 
 
 def test_head_lifecycle_has_empty_body_and_security_headers():
@@ -252,7 +316,7 @@ def test_heartbeat_requires_csrf_for_session_and_accepts_valid_browser_write():
 
 
 def test_heartbeat_requires_presence_scope_and_bearer_bypasses_csrf():
-    reader = make_client(scopes=('read:library',))
+    reader = make_client(scopes=('read:library', 'write:download'))
     denied = reader.post(
         '/api/client/heartbeat', headers={'Authorization': f'Bearer {RAW_TOKEN}'},
         json={'device_id': 'desktop'},
@@ -270,6 +334,64 @@ def test_heartbeat_requires_presence_scope_and_bearer_bypasses_csrf():
     assert response.json()['device_id'] == 'desktop'
     assert writer.data.heartbeat_calls[0][0:3] == (27, 'desktop', None)
     assert writer.data.heartbeat_calls[0][-1] is writer.token
+
+
+def test_desktop_companion_preset_can_send_native_heartbeat():
+    from oneirodex.utils.api_tokens import TOKEN_SCOPE_PRESETS
+
+    client = make_client(scopes=TOKEN_SCOPE_PRESETS['companion']['scopes'])
+    response = client.post(
+        '/api/client/heartbeat', headers={'Authorization': f'Bearer {RAW_TOKEN}'},
+        json={'device_id': 'desktop', 'device_kind': 'companion'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['device_id'] == 'desktop'
+    assert client.data.heartbeat_calls[0][0:3] == (27, 'desktop', 'companion')
+
+
+def test_heartbeat_only_parses_json_media_types():
+    client = make_client(scopes=('write:presence',))
+    headers = {'Authorization': f'Bearer {RAW_TOKEN}'}
+    ignored = client.post(
+        '/api/client/heartbeat',
+        content='{"device_id":"ignored-text-body","device_kind":"thin"}',
+        headers={**headers, 'Content-Type': 'text/plain'},
+    )
+    form = client.post(
+        '/api/client/heartbeat',
+        content='{"device_id":"ignored-form-body","device_kind":"thin"}',
+        headers={**headers, 'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+    accepted = client.post(
+        '/api/client/heartbeat',
+        content='{"device_id":"vendor-json-device","device_kind":"thin"}',
+        headers={**headers, 'Content-Type': 'application/vnd.oneirodex+json'},
+    )
+
+    assert ignored.status_code == form.status_code == accepted.status_code == 200
+    assert client.data.heartbeat_calls[0][1] != 'ignored-text-body'
+    assert client.data.heartbeat_calls[1][1] != 'ignored-form-body'
+    assert client.data.heartbeat_calls[0][2] is None
+    assert client.data.heartbeat_calls[1][2] is None
+    assert accepted.json()['device_id'] == 'vendor-json-device'
+    assert client.data.heartbeat_calls[2][2] == 'thin'
+
+
+def test_heartbeat_keeps_resilient_malformed_and_non_object_json_handling():
+    client = make_client(scopes=('write:presence',))
+    headers = {
+        'Authorization': f'Bearer {RAW_TOKEN}',
+        'Content-Type': 'application/json',
+    }
+    malformed = client.post('/api/client/heartbeat', content='{', headers=headers)
+    non_object = client.post('/api/client/heartbeat', content='[]', headers=headers)
+
+    assert malformed.status_code == non_object.status_code == 200
+    assert malformed.json()['device_id']
+    assert non_object.json()['device_id']
+    assert client.data.heartbeat_calls[0][2] is None
+    assert client.data.heartbeat_calls[1][2] is None
 
 
 def bearer_headers(client, *, scopes=None):
@@ -371,6 +493,21 @@ def test_command_queue_checks_game_and_translation_patch_version():
     assert client.data.command_calls[-1] == (
         27, 'game-1', 'apply_patch', {'kind': 'extra', 'version_uuid': 'patch-1'},
     )
+
+
+def test_command_and_ack_body_caps_prevent_mutations(monkeypatch):
+    monkeypatch.setattr(client_reads, '_MAX_COMMAND_BODY_BYTES', 8)
+    client = make_client(scopes=('write:download', 'write:library'))
+    headers = {
+        **bearer_headers(client), 'Content-Type': 'application/json',
+    }
+
+    command = client.post('/api/client/commands', headers=headers, content=b'{"action":"download"}')
+    ack = client.post('/api/client/commands/ack', headers=headers, content=b'{"ids":["x"]}')
+
+    assert command.status_code == ack.status_code == 413
+    assert command.json()['error_code'] == ack.json()['error_code'] == 'payload_too_large'
+    assert client.data.command_calls == []
 
 
 def test_ack_and_nack_require_lifecycle_scope_and_return_legacy_counts():

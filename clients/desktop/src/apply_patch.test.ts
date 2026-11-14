@@ -13,6 +13,8 @@ import {
   buildFlipsApplyArgs,
   isPatchFilename,
   patchedOutputName,
+  MAX_PATCH_DOWNLOAD_BYTES,
+  readBoundedPatchResponse,
   resolvePatchStageDir,
   safePatchFilename,
   stagePatchFile,
@@ -68,12 +70,9 @@ describe('apply_patch helpers', () => {
         url: 'https://gt.example/api/downloads/games/game-42',
         json: async () => ({ ok: true, stream_url: '/download_zip/80' }),
       })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        url: 'https://gt.example/download_zip/80',
-        arrayBuffer: async () => new TextEncoder().encode('BPS1').buffer,
-      }) as unknown as typeof fetch
+      .mockResolvedValueOnce(
+        new Response(new TextEncoder().encode('BPS1'), { status: 200 }),
+      ) as unknown as typeof fetch
 
     const result = await stagePatchFile({
       gameUuid: 'game-42',
@@ -97,11 +96,78 @@ describe('apply_patch helpers', () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
       'https://gt.example/download_zip/80',
-      expect.objectContaining({ credentials: 'omit' }),
+      expect.objectContaining({ credentials: 'omit', redirect: 'error' }),
     )
     expect(invoke).toHaveBeenCalledWith('write_file_bytes', {
       path: '/appdata/patches/game-42/en.bps',
       bytes: expect.any(Array),
     })
+  })
+
+  it('rejects an oversized declared patch response before reading or writing it', async () => {
+    vi.mocked(invoke).mockImplementation(async () => undefined)
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        url: 'https://gt.example/api/downloads/games/game-42',
+        json: async () => ({ ok: true, stream_url: '/download_zip/80' }),
+      })
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1]), {
+          status: 200,
+          headers: { 'content-length': String(MAX_PATCH_DOWNLOAD_BYTES + 1) },
+        }),
+      ) as unknown as typeof fetch
+
+    const result = await stagePatchFile({
+      gameUuid: 'game-42',
+      patchUuid: 'patch-9',
+      apiBase: 'https://gt.example',
+      fetchImpl,
+    })
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'Patch download exceeds the 256 MiB limit',
+    })
+    expect(invoke).not.toHaveBeenCalledWith('write_file_bytes', expect.anything())
+  })
+
+  it('does not let a non-finite helper limit disable the production ceiling', async () => {
+    const response = new Response(new Uint8Array([1]), {
+      status: 200,
+      headers: { 'content-length': String(MAX_PATCH_DOWNLOAD_BYTES + 1) },
+    })
+
+    await expect(
+      readBoundedPatchResponse(response, Number.POSITIVE_INFINITY),
+    ).rejects.toThrow('Patch download exceeds the 256 MiB limit')
+  })
+
+  it('enforces the same byte ceiling when the stream exceeds its declared size', async () => {
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]))
+          controller.enqueue(new Uint8Array([4, 5, 6]))
+          controller.close()
+        },
+      }),
+      { status: 200, headers: { 'content-length': '3' } },
+    )
+
+    await expect(readBoundedPatchResponse(response, 5)).rejects.toThrow(
+      'Patch download exceeds',
+    )
+  })
+
+  it('preserves a normal patch response under the byte ceiling', async () => {
+    const response = new Response(new TextEncoder().encode('BPS1'), { status: 200 })
+
+    await expect(readBoundedPatchResponse(response, 4)).resolves.toEqual(
+      new Uint8Array([66, 80, 83, 49]),
+    )
   })
 })

@@ -1,0 +1,21 @@
+/* The shared shell stylesheet is served from the mounted theme library and can
+   be stale during an in-place upgrade. Keep the drawer close action hidden on
+   desktop and available inside the mobile navigation drawer. */
+.od-shell .od-rail__close {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  /* The shared theme stylesheet can be older than the SPA bundle on an
+     in-place upgrade. Keep the React open state authoritative even when that
+     mounted stylesheet's drawer selector has stale specificity. */
+  .od-shell[data-rail='open'] .od-rail {
+    transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
+  }
+
+  .od-shell .od-rail__close {
+    display: inline-flex;
+  }
+}

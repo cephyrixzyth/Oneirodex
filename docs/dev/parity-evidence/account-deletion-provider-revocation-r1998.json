@@ -1,0 +1,31 @@
+{
+  "review_id": "R1998",
+  "title": "Assess provider-token revocation before account deletion",
+  "classification": "Owner policy confirmed; no exact documented revocation flow matched the current member-store credentials. Absence of a matching public endpoint is not proof that a provider has no private or account-settings revocation mechanism.",
+  "owner_policy": "Attempt remote revocation only for an exactly documented endpoint and the matching stored credential type. Continue local account deletion if the provider is unavailable or does not support that operation. Never send household operator credentials when deleting a member account.",
+  "source_review": {
+    "oneirodex/utils/store_ownership.py": "Steam links store a Steam ID; the server API key is operator-owned and is not a member credential.",
+    "oneirodex/utils/store_ownership_gog.py": "Member access/refresh tokens are exchanged through the Galaxy client flow, which the adapter describes as unofficial; no matching documented revocation call is implemented.",
+    "oneirodex/utils/store_ownership_epic.py": "Member device-auth JSON is exchanged through Epic Launcher's public account service using the Launcher client. Epic's official EOS Web API documents RFC 7009 revocation for its separate api.epicgames.dev OAuth v2 token flow. No evidence shows that endpoint accepts this Launcher device-auth credential/token contract, so it is not called.",
+    "oneirodex/utils/store_ownership_amazon.py": "Member token blobs are consumed through the unofficial Nile/Heroic Amazon Games flow; no matching documented revocation call is implemented.",
+    "oneirodex/utils/store_ownership_xbox.py": "Member OAuth JSON is consumed through xbox-webapi; no exact app-scoped revocation operation is implemented. User-wide refresh-token revocation would exceed this deletion scope.",
+    "oneirodex/utils/store_ownership_psn.py": "Member NPSSO session credentials are consumed through the unofficial psnawp flow; no matching documented revocation call is implemented.",
+    "oneirodex/utils/store_ownership_common.py": "Disconnect currently removes the local StoreAccount and its synchronized ownership rows. Household Meta Quest/provider settings remain operator-owned and are outside per-user deletion."
+  },
+  "disposition": {
+    "application_change": "None. Keep exact-flow revocation as a future adapter capability only after provider documentation establishes the matching endpoint, token type, client authentication, and side effects.",
+    "local_delete": "Proceed with local credential and ownership deletion under the selected account-deletion policy regardless of remote support or availability.",
+    "network": "No provider request was made."
+  },
+  "references": [
+    {
+      "title": "Epic Online Services Auth Web APIs",
+      "url": "https://dev.epicgames.com/docs/web-api-ref/authentication?lang=en-US",
+      "relevance": "Documents RFC 7009 revocation at the EOS OAuth v2 endpoint; does not document compatibility with Oneirodex's separate Epic Launcher device-auth flow."
+    }
+  ],
+  "limits": [
+    "GOG, Amazon Games, Xbox and PSN adapter flows are unofficial or lack a matching public revocation contract in the reviewed sources; this assessment does not prove those providers have no private or account-settings revocation path.",
+    "Reassess when an adapter adopts a documented provider-supported authentication flow or the provider publishes a matching revocation contract."
+  ]
+}

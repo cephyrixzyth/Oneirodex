@@ -8,7 +8,7 @@ from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class GameServersData:
@@ -48,6 +48,11 @@ class GameServersData:
         server = GameServer(**values)
         db.session.add(server)
         db.session.commit()
+        # Match Flask-SQLAlchemy's post-commit behavior: the legacy session
+        # expires the instance and reloads database values before serialization.
+        # Native sessions deliberately keep instances alive across commit, so
+        # refresh here to avoid returning an aware timestamp only on create.
+        db.session.refresh(server)
         return server
 
     def save_server(self, server):
@@ -161,6 +166,11 @@ async def _dispatch(
                 response = _error(403, 'forbidden', 'Admin required')
             else:
                 response = await _write_request(request, flask_app, data, method, server_uuid)
+        elif (
+            response is None and method in ('GET', 'HEAD')
+            and auth.token is not None and not auth.has_scope('read:social')
+        ):
+            response = require_bearer_scope(auth, 'read:social')
         elif response is None and acl:
             response = JSONResponse(_acl_payload(auth.user, auth))
         elif response is None:
@@ -264,7 +274,10 @@ async def _write_request(request, flask_app, data, method, server_uuid):
 
 
 async def _json_body(request):
-    if not request.headers.get('content-type', '').lower().startswith('application/json'):
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if content_type != 'application/json' and not (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    ):
         return {}, False
     try:
         value = await request.json()

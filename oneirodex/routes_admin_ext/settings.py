@@ -470,13 +470,15 @@ def integrations_igdb_save():
         # Validate input
         client_id = data.get('igdb_client_id', '').strip()
         # The page never shows the saved secret; blank keeps it.
-        client_secret = data.get('igdb_client_secret', '').strip() or (settings.igdb_client_secret or '')
+        from oneirodex.utils.secret_store import read_global_secret
+        client_secret = data.get('igdb_client_secret', '').strip() or (read_global_secret(settings, 'igdb_client_secret') or '')
 
         if len(client_id) < 20 or len(client_secret) < 20:
             return api_error('Client ID and Secret must be at least 20 characters long', code='bad_request')
 
         settings.igdb_client_id = client_id
-        settings.igdb_client_secret = client_secret
+        from oneirodex.utils.secret_store import write_global_secret
+        write_global_secret(settings, 'igdb_client_secret', client_secret)
 
         db.session.commit()
         log_system_event("IGDB settings updated via integrations page")
@@ -498,7 +500,8 @@ def integrations_igdb_test():
         logging.info("Testing IGDB connection from integrations page...")
         settings = global_settings_row()
 
-        if not settings or not settings.igdb_client_id or not settings.igdb_client_secret:
+        from oneirodex.utils.secret_store import has_global_secret
+        if not settings or not settings.igdb_client_id or not has_global_secret(settings, 'igdb_client_secret'):
             return api_error('IGDB settings not configured. Please save your settings first.', code='bad_request')
 
         # Test the IGDB API with a simple query
@@ -546,7 +549,8 @@ def integrations_oidc_save():
         # The page never shows the saved secret; blank keeps it.
         new_secret = (data.get('oidc_client_secret') or '').strip()[:512]
         if new_secret:
-            settings.oidc_client_secret = new_secret
+            from oneirodex.utils.secret_store import write_global_secret
+            write_global_secret(settings, 'oidc_client_secret', new_secret)
         settings.oidc_redirect_uri = (data.get('oidc_redirect_uri') or '').strip()[:512] or None
         settings.oidc_scopes = (data.get('oidc_scopes') or 'openid email profile').strip()[:255]
         settings.oidc_role_claim = (data.get('oidc_role_claim') or 'groups').strip()[:64]

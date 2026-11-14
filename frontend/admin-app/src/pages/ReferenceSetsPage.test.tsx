@@ -36,6 +36,14 @@ async function selectFile() {
   return input
 }
 
+test('empty upload keeps the action available and relies on the required file control', async () => {
+  vi.mocked(getJson).mockResolvedValue(state)
+  render(<ReferenceSetsPage />)
+  const input = await screen.findByLabelText('DAT file')
+  expect(input).toBeRequired()
+  expect(screen.getByRole('button', { name: 'Upload / replace' })).toBeEnabled()
+})
+
 test('upload sends multipart with shared CSRF and installs row', async () => {
   vi.mocked(getJson).mockResolvedValue(state)
   const fetcher = vi
@@ -45,13 +53,30 @@ test('upload sends multipart with shared CSRF and installs row', async () => {
   render(<ReferenceSetsPage />)
   const input = await selectFile()
   fireEvent.submit(input.closest('form')!)
-  expect(await screen.findByText(/Uploaded Synthetic Review/)).toBeInTheDocument()
+  expect(
+    await screen.findByText('Uploaded Synthetic Review: 1 entries for NES/USA'),
+  ).toBeInTheDocument()
   const init = fetcher.mock.calls[0][1]
   expect(init.headers).toEqual({ 'X-CSRFToken': 'review-csrf' })
   expect(init.body.get('library_platform')).toBe('NES')
   expect(init.body.get('replace')).toBeNull()
   expect(screen.getByRole('region', { name: 'Installed reference sets table' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Upload / replace' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Upload / replace' })).toBeEnabled()
+})
+
+test('over-limit DAT uses the legacy message and is rejected before upload', async () => {
+  vi.mocked(getJson).mockResolvedValue(state)
+  const fetcher = vi.fn()
+  vi.stubGlobal('fetch', fetcher)
+  render(<ReferenceSetsPage />)
+  const input = await screen.findByLabelText('DAT file')
+  const oversized = new File(['x'], 'too-large.dat', { type: 'application/xml' })
+  Object.defineProperty(oversized, 'size', { value: state.max_dat_bytes + 1 })
+  fireEvent.change(input, { target: { files: [oversized] } })
+  fireEvent.submit(input.closest('form')!)
+  expect(await screen.findByRole('alert')).toHaveTextContent('DAT too large (max 32 MiB)')
+  expect(fetcher).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: 'Upload / replace' })).toBeEnabled()
 })
 
 test('replacement and deletion require separate confirmations, cancellation preserves drafts', async () => {
@@ -74,7 +99,9 @@ test('replacement and deletion require separate confirmations, cancellation pres
   )
   expect(fetcher).not.toHaveBeenCalled()
   fireEvent.submit(input.closest('form')!)
-  expect(await screen.findByText(/Uploaded Synthetic Review/)).toBeInTheDocument()
+  expect(
+    await screen.findByText('Uploaded Synthetic Review: 1 entries for NES/USA'),
+  ).toBeInTheDocument()
   expect(fetcher.mock.calls[0][1].body.get('replace')).toBe('true')
   const remove = screen.getByRole('button', { name: 'Delete Synthetic Review (NES/USA)' })
   fireEvent.click(remove)
@@ -117,7 +144,7 @@ test('rehash/catalog actions retain platform payloads and count feedback without
   await screen.findByLabelText('DAT file')
   expect(postJson).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Rehash platform' }))
-  expect(await screen.findByText('Hashed 2 / 3 (skipped 1).')).toBeInTheDocument()
+  expect(await screen.findByText('Hashed 2 / 3 (skipped 1)')).toBeInTheDocument()
   expect(postJson).toHaveBeenNthCalledWith(1, '/api/reference-sets/rehash', {
     library_platform: 'NES',
   })
@@ -126,6 +153,34 @@ test('rehash/catalog actions retain platform payloads and count feedback without
   expect(postJson).toHaveBeenNthCalledWith(2, '/api/licensed-catalog/refresh', {
     library_platform: 'NES',
   })
+})
+
+test('rehash keeps progress and errors beside its action', async () => {
+  vi.mocked(getJson).mockResolvedValue(state)
+  let finish!: (value: any) => void
+  vi.mocked(postJson).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
+  render(<ReferenceSetsPage />)
+  await screen.findByLabelText('DAT file')
+
+  const rehash = screen.getByRole('button', { name: 'Rehash platform' })
+  fireEvent.click(rehash)
+  expect(screen.getByRole('status')).toHaveTextContent('Hashing…')
+  expect(rehash).toBeDisabled()
+  finish({ hashed: 2, considered: 3, skipped: 1 })
+  expect(await screen.findByRole('status')).toHaveTextContent('Hashed 2 / 3 (skipped 1)')
+
+  vi.mocked(postJson).mockRejectedValueOnce(new Error('Disk read denied'))
+  fireEvent.click(rehash)
+  expect(await screen.findByRole('status')).toHaveTextContent('Disk read denied')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+  vi.mocked(postJson).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+  fireEvent.click(rehash)
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Failed to fetch'))
 })
 
 test('repair dry run renders all four buckets and totals/truncation; pending work locks controls', async () => {

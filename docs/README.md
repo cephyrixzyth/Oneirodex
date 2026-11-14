@@ -1,5 +1,7 @@
 # Oneirodex documentation
 
+> **Doc status:** Active
+
 **Product version:** 1.1.9 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
 
 Hub for product, ops, and developer docs. Public name **Oneirodex**. Runtime env is `ONEIRODEX_*` only ([ADR 0003](adr/0003-product-name-oneirodex.md)). Package `oneirodex/`, Compose defaults `oneirodex-*`, preferred Hub image `cephyrixzyth/oneirodex` once published.
@@ -12,7 +14,8 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 |---|---|
 | End users | [user/getting-started.md](user/getting-started.md) · [faq.md](user/faq.md) · [troubleshooting.md](user/troubleshooting.md) · [browser-play.md](user/browser-play.md) · [desktop-companion.md](user/desktop-companion.md) · [controllers-and-vr.md](user/controllers-and-vr.md) · [translation-patches.md](user/translation-patches.md) · [free-games.md](user/free-games.md) · [social-and-voice.md](user/social-and-voice.md) · [library-and-systems.md](user/library-and-systems.md) · [preferences-themes.md](user/preferences-themes.md) · [downloads.md](user/downloads.md) |
 | Operators / native install | [runbooks/install-native.md](runbooks/install-native.md) — Linux · macOS · Windows installers, service units, upgrade; standalone preview with a bundled PostgreSQL ([ADR 0011](adr/0011-standalone-bundled-postgres.md)) |
-| Operators / standalone to server | [runbooks/standalone-move.md](runbooks/standalone-move.md) — move a standalone install onto a Docker/Unraid server: export, import into an empty database, verified row for row, saves re-encrypted |
+| Operators / standalone to server | [runbooks/standalone-move.md](runbooks/standalone-move.md) — move a standalone install onto a Docker/Unraid server: export, import into an empty database, verified row for row, protected save key IDs |
+| Operators / standalone backups | [runbooks/backup-restore.md](runbooks/backup-restore.md) — offline standalone backup bundle, protected keyring recovery and verified restore |
 | Operators / scan locations | [runbooks/remote-scan-locations.md](runbooks/remote-scan-locations.md) — `ONEIRODEX_LIBRARY_ROOTS`: NAS shares and extra disks, not just the server's own disk |
 | Operators / single container, Unraid Community Apps, Docker Hub | [runbooks/unraid-community-apps.md](runbooks/unraid-community-apps.md) — one image with an embedded database, the CA template, release workflow, sidecar boundaries and submission checklist; [challenge-solver-unraid.md](runbooks/challenge-solver-unraid.md) — private TRAWL sidecar setup |
 | Docker Hub listing | [dockerhub-overview.md](dockerhub-overview.md) — release-stamped public overview synchronized after image publication |
@@ -24,6 +27,7 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Operators / achievements | [runbooks/retroachievements.md](runbooks/retroachievements.md) — match ROMs to community achievement sets (opt-in key); nothing played in the browser unlocks |
 | Maintainers / theme art | [dev/theme-art-direction.md](dev/theme-art-direction.md) — what a theme is beyond a hue: room art, the accent sentinel, and how a generated backdrop lands |
 | Maintainers / UI foundations | [dev/ui-style-guide.md](dev/ui-style-guide.md) — working rules for shared web UI, icons, filters, forms, tables, actions, and responsive review |
+| Maintainers / parity and security evidence | [dev/behavior-parity-review.md](dev/behavior-parity-review.md) — route coverage, verified remediation, and open acceptance gates |
 | Operators / WebRetro cores | [runbooks/webretro-cores.md](runbooks/webretro-cores.md) · [admin/webretro-core-clauses.md](admin/webretro-core-clauses.md) (non-commercial clauses — not counsel) |
 | Operators / emulator BIOS | [runbooks/emulator-bios.md](runbooks/emulator-bios.md) — operator-supplied firmware; Admin scan/install, filenames only |
 | Operators / ROM reference sets | [runbooks/reference-sets.md](runbooks/reference-sets.md) |
@@ -34,11 +38,11 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 | Maintainers / disk hygiene | [runbooks/workspace-disk-hygiene.md](runbooks/workspace-disk-hygiene.md) — safe cache deletes vs WebRetro / `.git` |
 | Maintainers / desktop installers | [runbooks/local-installers.md](runbooks/local-installers.md) — build Windows · macOS · Linux bundles without GitHub Actions; a `.dmg` still needs a Mac |
 | Admins | [admin/libraries-and-scans.md](admin/libraries-and-scans.md) · [members-and-invites.md](admin/members-and-invites.md) (invites without email · local accounts) · [privacy-data-handling.md](admin/privacy-data-handling.md) (what the host stores · child ACL · optional outbound) · [webretro-core-clauses.md](admin/webretro-core-clauses.md) (snes9x / genesis_plus_gx quotes — **not counsel**) · [navigation.md](admin/navigation.md) (rail · top bar · Settings and Integrations sub-sections) · [settings-modules.md](admin/settings-modules.md) · [discover-sections.md](admin/discover-sections.md) (storefront shelves · layouts · timed events) · [theme-fonts-and-images.md](admin/theme-fonts-and-images.md) (fonts · batch artwork) · [ops-summary.md](admin/ops-summary.md) · [support-inbox.md](admin/support-inbox.md) · [troubleshooting.md](admin/troubleshooting.md) · [themes-reset.md](admin/themes-reset.md) |
-| Maintainers / architecture | [dev/architecture.md](dev/architecture.md) · [adr/README.md](adr/README.md) — nine accepted decisions, two superseded, and one proposal · [CONTRIBUTING.md](../CONTRIBUTING.md) |
+| Maintainers / architecture | [dev/architecture.md](dev/architecture.md) · [adr/README.md](adr/README.md) — ten accepted decisions, two superseded, and one proposal · [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Maintainers / database evaluation | [adr/0012-evaluate-mariadb-before-engine-change.md](adr/0012-evaluate-mariadb-before-engine-change.md) — cost and compatibility gates; proposal only |
 | CI gates (maintainers) | [dev/ci-gates.md](dev/ci-gates.md) — current marker selection, explicit exclusions and coverage gate. Replaces `ci-wishlist.md` |
 | Support triage (maintainers) | [dev/ui-debt-log.md](dev/ui-debt-log.md) · [dev/api-envelope-keeps.md](dev/api-envelope-keeps.md) |
-| UI system (maintainers) | [dev/ui-style-guide.md](dev/ui-style-guide.md) — tokens, controls, icons, theme layers, contribution workflow, and private shared-package contract; the local catalog is `frontend/ui-catalog` (commands and limits in the guide) |
+| UI system (maintainers) | [dev/ui-style-guide.md](dev/ui-style-guide.md) — tokens, controls, icons, theme layers, contribution workflow, and private shared-package contract; the local catalog is `frontend/ui-catalog` and is served inside the loopback Project hub after build |
 | Test harness (maintainers) | [dev/test-harness-2026-09-10.md](dev/test-harness-2026-09-10.md) — per-test SAVEPOINT isolation · savepoint-restart listener · `database` / `slow` markers. Older harness notes and the 2026-09-16 failure list are in [dev/archive/](dev/archive/README.md) |
 | Template retirement and runtime migration (maintainers) | [dev/admin-jinja-inventory.md](dev/admin-jinja-inventory.md) — template/render census and runtime dependency boundary |
 | Writing an API route (maintainers) | [dev/pydantic-adoption.md](dev/pydantic-adoption.md) — `@validate_body` request models · which routes are migrated · adoption backlog |
@@ -51,6 +55,14 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 ## Documentation boundaries and status
 
 User/admin guides describe implemented behavior; proposals and dated reports are not release verification. Local staging evidence is separate from production acceptance. Household PostgreSQL remains the supported server configuration; a serverless desktop migration is still a design/proof phase.
+
+The November 6, 2026 independent assessment describes its pinned source snapshot.
+Use the [current review dispositions](dev/behavior-parity-review.md#claims-checked-against-the-current-checkout)
+and the linked user/admin/runbook pages for subsequent corrections and remaining
+qualification limits. Its feature catalog and phase plans retain their original
+evaluation and proposed-work status; importing documentation does not complete
+their acceptance cases. The complete assessment, research and reconciliation
+index remain in the local private documentation collection.
 
 Operator host details, credentials, research exports, human responses and internal execution records belong in ignored local storage. Public docs use example addresses and paths. Never paste full database connection URLs into logs or support reports. Historical Git commits are not scrubbed by a working-tree documentation update.
 

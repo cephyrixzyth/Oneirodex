@@ -97,6 +97,9 @@ def test_flask_static_view_serves_the_moved_library(tmp_path, moved):
     static = _shipped(tmp_path)
     (moved / 'images').mkdir(parents=True)
     (moved / 'images' / 'cover.jpg').write_bytes(b'jpg')
+    (moved / 'themes' / 'rogue').mkdir(parents=True)
+    (moved / 'themes' / 'rogue' / 'preview.svg').write_text('<svg/>')
+    (moved / 'themes' / 'rogue' / 'preview.svgz').write_bytes(b'<svg/>')
     app = Flask(__name__, static_folder=str(static))
     serve_relocated_static(app)
     client = app.test_client()
@@ -109,6 +112,15 @@ def test_flask_static_view_serves_the_moved_library(tmp_path, moved):
             response.close()
 
     assert get('/static/library/images/cover.jpg') == (200, b'jpg')
+    theme_document = client.get('/static/library/themes/rogue/preview.svg')
+    assert theme_document.status_code == 200
+    assert 'sandbox' in theme_document.headers['Content-Security-Policy']
+    assert "default-src 'none'" in theme_document.headers['Content-Security-Policy']
+    theme_document.close()
+    compressed_svg = client.get('/static/library/themes/rogue/preview.svgz')
+    assert compressed_svg.status_code == 200
+    assert 'sandbox' in compressed_svg.headers['Content-Security-Policy']
+    compressed_svg.close()
     assert get('/static/newstyle/default_cover.jpg') == (200, b'shipped')
     assert get('/static/library/themes/stale.css')[0] == 404
     assert get('/static/library/../newstyle/default_cover.jpg')[0] == 404

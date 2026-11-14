@@ -9,7 +9,12 @@ from fastapi import APIRouter, FastAPI, Request
 
 from .acquire_status import _login_redirect
 from .batch_favorite import _finish
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+
+_UNSUPPORTED_JSON_CONTENT_TYPE = object()
+_INVALID_JSON_PAYLOAD = object()
+_TOO_LARGE_JSON_PAYLOAD = object()
+_MAX_JSON_BODY_BYTES = 64 * 1024
 
 
 class MemberGameStateData:
@@ -116,6 +121,8 @@ def create_member_game_state_router(
         response = None
         if write and auth.token is not None and not auth.has_scope('write:library'):
             response = _api_error('Forbidden', 'forbidden')
+        if response is None and not write:
+            response = require_bearer_scope(auth, 'read:library')
         if write and auth.token is None:
             from .csrf_compat import csrf_error_response
 
@@ -134,7 +141,7 @@ def create_member_game_state_router(
                 if game is None:
                     response = _api_error('Game not found', 'not_found')
                 elif not data.can_access(auth.user, game):
-                    response = _api_error('Forbidden', 'forbidden')
+                    response = _api_error('Game not found', 'not_found')
                 else:
                     from starlette.responses import JSONResponse
 
@@ -153,7 +160,7 @@ def create_member_game_state_router(
                 if game is None:
                     response = _api_error('Game not found', 'not_found')
                 elif not data.can_access(auth.user, game):
-                    response = _api_error('Forbidden', 'forbidden')
+                    response = _api_error('Game not found', 'not_found')
                 else:
                     from starlette.responses import JSONResponse
 
@@ -198,32 +205,48 @@ def create_member_game_state_router(
                 if game is None or not data.can_access(auth.user, game):
                     response = _api_error('Game not found', 'not_found')
                 else:
-                    payload = await _json_object(request)
-                    raw_status = payload.get('status', '')
-                    if not isinstance(raw_status, str):
+                    payload = await _json_payload(request)
+                    if payload is _TOO_LARGE_JSON_PAYLOAD:
+                        response = _api_error(
+                            'Request body is too large.', 'payload_too_large', status=413,
+                        )
+                    elif payload is _UNSUPPORTED_JSON_CONTENT_TYPE:
+                        response = _api_error(
+                            "Did not attempt to load JSON data because the request Content-Type was not 'application/json'.",
+                            'bad_request', status=415,
+                        )
+                    elif payload is _INVALID_JSON_PAYLOAD:
+                        response = _api_error('Invalid JSON payload', 'bad_request')
+                    elif not isinstance(payload, dict):
                         response = _api_error('Invalid status value', 'bad_request')
                     else:
-                        status = raw_status.strip()
-                        from oneirodex.models import get_status_info
-                        from oneirodex.utils.api_contract import api_ok_payload
-                        from starlette.responses import JSONResponse
-                        from oneirodex.utils.play_status import PLAY_STATUS_VALUES
-
-                        if status not in sorted(PLAY_STATUS_VALUES):
+                        # The v1.1.8 contract treats an omitted status as an
+                        # empty value, which clears the saved status.
+                        raw_status = payload.get('status', '')
+                        if not isinstance(raw_status, str):
                             response = _api_error('Invalid status value', 'bad_request')
                         else:
-                            data.write_status(auth.user.id, game_uuid, status)
-                            data.commit()
-                            status_out = status or None
-                            info = get_status_info(status_out)
-                            message = (
-                                'Status cleared' if not status
-                                else f'Status updated to {info["label"]}'
-                            )
-                            response = JSONResponse(api_ok_payload({
-                                'status': status_out, 'status_info': info,
-                                'message': message,
-                            }))
+                            status = raw_status.strip()
+                            from oneirodex.models import get_status_info
+                            from oneirodex.utils.api_contract import api_ok_payload
+                            from starlette.responses import JSONResponse
+                            from oneirodex.utils.play_status import PLAY_STATUS_VALUES
+
+                            if status not in sorted(PLAY_STATUS_VALUES):
+                                response = _api_error('Invalid status value', 'bad_request')
+                            else:
+                                data.write_status(auth.user.id, game_uuid, status)
+                                data.commit()
+                                status_out = status or None
+                                info = get_status_info(status_out)
+                                message = (
+                                    'Status cleared' if not status
+                                    else f'Status updated to {info["label"]}'
+                                )
+                                response = JSONResponse(api_ok_payload({
+                                    'status': status_out, 'status_info': info,
+                                    'message': message,
+                                }))
             _finish(response, flask_app, auth)
             return response
 
@@ -235,23 +258,28 @@ def mount_member_game_state_routes(app: FastAPI, flask_app, **kwargs):
     return app
 
 
-async def _json_object(request):
+async def _json_payload(request):
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
     try:
         content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
         if content_type != 'application/json' and not (
             content_type.startswith('application/') and content_type.endswith('+json')
         ):
-            return {}
-        payload = await request.json()
-        return payload if isinstance(payload, dict) else {}
-    except Exception:  # noqa: BLE001 — match Flask silent JSON handling
-        return {}
+            return _UNSUPPORTED_JSON_CONTENT_TYPE
+        raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            return _TOO_LARGE_JSON_PAYLOAD
+        import json
+
+        return json.loads(raw_body or b'{}')
+    except Exception:  # noqa: BLE001 — malformed JSON must not clear saved state
+        return _INVALID_JSON_PAYLOAD
 
 
-def _api_error(message, code):
+def _api_error(message, code, *, status=None):
     from oneirodex.utils.api_contract import api_error_payload
     from starlette.responses import JSONResponse
 
-    payload, status = api_error_payload(message, code=code)
-    return JSONResponse(payload, status_code=status)
-
+    payload, resolved_status = api_error_payload(message, code=code, status=status)
+    return JSONResponse(payload, status_code=resolved_status)

@@ -14,6 +14,7 @@ import { useLibraryScanToasts } from './hooks/useLibraryScanToasts'
 import { DiscoverApp } from './DiscoverApp'
 import { FavoritesApp } from './FavoritesApp'
 import { LibraryApp } from './LibraryApp'
+import './chrome/SideRail.css'
 import { SystemsPage } from './pages/SystemsPage'
 import { GameDetailsPage } from './pages/GameDetailsPage'
 import './pages/MorePage.css'
@@ -91,6 +92,9 @@ const WishlistPage = lazy(() =>
   import('./pages/WishlistPage').then((m) => ({ default: m.WishlistPage })),
 )
 const TokensPage = lazy(() => import('./pages/TokensPage').then((m) => ({ default: m.TokensPage })))
+const InvitesPage = lazy(() =>
+  import('./pages/InvitesPage').then((m) => ({ default: m.InvitesPage })),
+)
 const LicensedCatalogPage = lazy(() =>
   import('./pages/LicensedCatalogPage').then((m) => ({ default: m.LicensedCatalogPage })),
 )
@@ -289,6 +293,10 @@ export function App() {
       />
       <Route element={<Layout tileSize={tileSize} onTileSizeChange={setTileSize} />}>
         <Route path="/discover" element={<DiscoverApp />} />
+        {/* v1.1.8 served the member shell at this retired playback test URL.
+            Keep its navigation and compatibility notice while reusing the
+            current Discover surface. */}
+        <Route path="/playromtest" element={<DiscoverApp />} />
         <Route
           path="/discover/hub/genre/:genre"
           element={
@@ -485,6 +493,14 @@ export function App() {
           element={
             <LazyPage>
               <TokensPage />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/user/invites"
+          element={
+            <LazyPage>
+              <InvitesPage />
             </LazyPage>
           }
         />

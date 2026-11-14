@@ -106,6 +106,8 @@ WebRetro. Continue expanding platform support only after real ROM verification.
 | **BP-3** | Expand matrix; koin.js optional React chrome |
 | **BP-4** | webЯcade feed export + sidecar runbook |
 
+The settings write preserves the legacy Flask `get_json(silent=True) or {}` contract: malformed JSON, falsey JSON and non-JSON media types act as an empty update; truthy non-object JSON is rejected. Keep this behavior covered in the FastAPI parity tests.
+
 ---
 
 ## References

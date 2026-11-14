@@ -31,7 +31,9 @@ jobs:
   pytest-core:
     name: Pytest (core)
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # The expanded suite reached 70% at the former 35-minute job limit.
+    # Keep the selection/coverage gate intact and allow it time to finish.
+    timeout-minutes: 90
 
     services:
       postgres:
@@ -73,6 +75,9 @@ jobs:
           # branch red with no repo change behind it.
           pip install -r requirements-dev.txt
 
+      - name: Check production Python for undefined names
+        run: python scripts/check_undefined_names.py
+
       - name: Set up Node.js 22
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -95,6 +100,23 @@ jobs:
         # suite so transaction regressions fail quickly and with a focused log.
         run: python -m pytest tests/test_store_connections.py -q
 
+      # UID-018 ratchet. The envelope helper landed with two files migrated and
+      # the problem then grew from ~699 call sites to 1194 — new routes reached
+      # for the old shapes faster than old ones were converted. Same model as
+      # css-token-lint, which took CSS violations from 2365 to 1305.
+      - name: Run API envelope lint
+        run: python scripts/api_envelope_lint.py
+
+      # Per-file print() baseline (A0.4). No DB; fails only when a file's
+      # print() count climbs above its recorded baseline in scripts/print_lint.py.
+      - name: Run print() ratchet
+        run: python scripts/print_lint.py
+
+      # Per-file request.get_json() baseline. Fails only when a file's count
+      # climbs above scripts/get_json_lint.baseline.json.
+      - name: Run get_json() ratchet
+        run: python scripts/get_json_lint.py
+
       - name: Run pytest (marker set, deselect by exception)
         # Gate = every test not marked `integration`, minus a named exception
         # list. Flipped from a hand-enumerated file list on 2026-09-17 after
@@ -114,12 +136,9 @@ jobs:
           python -m pytest tests/ -q -m "not integration"
           --cov=oneirodex --cov-report=term-missing
           --cov-fail-under=65
-          --deselect tests/test_checkout_paths.py::test_operator_docs_checkout_is_oneirodex
           --deselect tests/test_collections_api_wiring.py::test_newsletter_ckeditor_targets_content_field
           --deselect tests/test_collections_api_wiring.py::test_spa_collections_client_covers_new_actions
           --deselect tests/test_library_roots.py::TestParseLibraryRoots::test_windows_drive_letter_is_not_mistaken_for_a_label
-          --deselect tests/test_member_chrome_css.py::test_tile_hover_has_no_accent_glow_and_grows_from_center
-          --deselect tests/test_member_chrome_css.py::test_topbar_cluster_is_not_a_shared_outline
           --deselect tests/test_routes_admin_ext_settings_shell.py::TestSettingsShellSections::test_every_section_deep_link_is_reachable_from_the_react_hub
           --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_invalid_request_id_zero
           --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_database_error
@@ -128,31 +147,8 @@ jobs:
           --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_zip_deletion_error
           --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_zip_outside_save_path
           --deselect tests/test_theme_fonts.py::TestCatalogue::test_reports_installed_honestly
-          --deselect tests/test_utils_secondary_scrapers.py::test_enrich_game_with_steam_logs_vr_no_when_skipped
-          --deselect tests/test_utils_secondary_scrapers.py::test_enrich_game_with_steam_logs_vr_yes
-          --deselect tests/test_utils_secondary_scrapers.py::test_enrich_game_with_steam_reports_rollback
-          --deselect tests/test_utils_secondary_scrapers.py::test_enrich_game_with_steam_still_enriches_an_already_vr_game
-          --deselect tests/test_utils_unmatched.py::TestHandleDeleteUnmatched::test_handle_delete_unmatched_all_true
-          --deselect tests/test_utils_unmatched.py::TestHandleDeleteUnmatchedOnly::test_handle_delete_unmatched_only_success
           --deselect tests/test_wave2c_module_ux.py::test_settings_shell_renders_module_status_badges
           --deselect tests/test_wave2c_module_ux.py::test_storage_page_surfaces_env_gates
-
-      # UID-018 ratchet. The envelope helper landed with two files migrated and
-      # the problem then grew from ~699 call sites to 1194 — new routes reached
-      # for the old shapes faster than old ones were converted. Same model as
-      # css-token-lint, which took CSS violations from 2365 to 1305.
-      - name: Run API envelope lint
-        run: python scripts/api_envelope_lint.py
-
-      # Per-file print() baseline (A0.4). No DB; fails only when a file's
-      # print() count climbs above its recorded baseline in scripts/print_lint.py.
-      - name: Run print() ratchet
-        run: python scripts/print_lint.py
-
-      # Per-file request.get_json() baseline. Fails only when a file's count
-      # climbs above scripts/get_json_lint.baseline.json.
-      - name: Run get_json() ratchet
-        run: python scripts/get_json_lint.py
 
   alembic-check:
     name: Alembic (upgrade + check)

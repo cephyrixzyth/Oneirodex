@@ -1,9 +1,39 @@
 # Capture (README / docs media)
 
+> **Doc status:** Active
+
+**R2040 type correction:** All 65 member production output files match the
+inspected R2038 build byte-for-byte. No UI behavior or layout changed; existing
+populated captures remain applicable. A new screenshot/browser run is skipped
+for this type-only correction. See [R2040](../../dev/parity-evidence/bootstrap-full-types-r2040.json).
+
+**Focused first-load identity QA:** R2038 uses populated isolated native staging with fingerprinted current Python and all five rebuilt SPA overlays. Actual adult HTML entry is delayed across UI logout and verified child login, then rejected by the live-account check with focused sign-in recovery. Fresh full navigation renders the child account correctly. Both recovery and populated fresh-child captures were inspected; private hashes are in [R2038](../../dev/parity-evidence/browser-bootstrap-identity-r2038.json). Owned resources were removed and absence verified. This recovery/bootstrap-only change leaves the Library, Systems and Chat README slots current. Other engines, classic pages and whole journey acceptance remain open.
+
+**Focused session-boundary QA:** R2037 uses rebuilt five-SPA assets in populated isolated native staging and headless Chromium. The delayed adult response stays absent after actual UI logout/visible child login; the old member view and populated native admin/Ops views show focused sign-in recovery. Member recovery, populated admin and Ops recovery captures were inspected. Private hashes are in [R2037](../../dev/parity-evidence/browser-session-boundary-r2037.json); the aggregate first runner's later incorrect-admin-URL failure is retained separately. This recovery-only change leaves the Library, Systems and Chat README slots current; screenshots remain private. Other engines, classic pages and full journey acceptance remain open.
+
+**Focused palette-privacy QA:** R2035 uses populated native staging and headless Chromium with two synthetic accounts in one shared browser context. Captures qualify the checked adult/child palette, outage and reopened post-revocation states; private hashes are in [R2035](../../dev/parity-evidence/palette-browser-boundary-r2035.json). Production UI did not change, so the existing README slots remain current for this scope. In-flight/already-open cross-tab and offline acceptance remain open.
+
+**Focused support-recovery QA:** R2034 uses current-source populated native staging and headless Chromium to check an existing issue without sending, preview a definite-rejection retry, drop its committed reply and recover the same ticket/attempt. Desktop and settled375px mobile captures, including the retry body, were inspected. Private screenshot hashes are in [R2034](../../dev/parity-evidence/support-retry-reconciliation-r2034.json). All provider transport was intercepted and owned staging resources removed. This Report-page change leaves the Library, Systems and Chat README slots unchanged; full route/platform/independent acceptance remains open.
+
+**Focused support-receipt QA:** R2033 uses current-source populated native staging and headless Chromium to drop a committed response, retry the same UUID, show uncertain delivery, and retain local-only reporting when unconfigured. Desktop and settled375px mobile captures were inspected; private screenshot hashes are in [R2033](../../dev/parity-evidence/support-delivery-receipts-r2033.json). No real external issue was sent. This focused change does not replace the Library, Systems or Chat README slots; explicit rejection retry/reconciliation remains open.
+
+**Focused support-preview QA:** R2032 uses populated isolated native staging and fingerprinted candidate assets in headless Chromium, with mandatory preview and configured/unconfigured local-only flows. Desktop and375px mobile captures were inspected after the rail settled off-canvas. Screenshots remain private; hashes and bounds are in [R2032](../../dev/parity-evidence/support-preview-r2032.json). This focused Report-page change does not replace the Library, Systems or Chat README slots. No external issue was sent; all owned staging resources were removed. Delivery/retry acceptance remains open.
+
 Every screenshot, poster, banner and how-to clip under `docs/assets/readme/`
 and `docs/media/` is produced by four scripts against a **throwaway local
 instance**. Nothing here is a mock-up: if a surface cannot be photographed
 honestly it is skipped and the run says so.
+
+For a focused parity fix, a screenshot may also come from an isolated local
+staging image when the dedicated capture database is unavailable. Record the
+backend image and frontend bundle identity in the private evidence; verify the
+settings are empty or synthetic and mask any non-empty credential controls
+before copying a screenshot into `docs/media/`. This exception does not refresh
+the README product slots unless a matching slot is intentionally replaced.
+
+Listing available stills with `python scripts/capture_docs_media.py --list` does
+not require Playwright or a running capture server. Actual screenshot capture
+still requires Playwright Chromium and the isolated populated instance below.
 
 | Script | Produces |
 |---|---|
@@ -13,6 +43,38 @@ honestly it is skipped and the run says so.
 | [`scripts/render_readme_art.py`](../../../scripts/render_readme_art.py) | `hero-banner.png` (Discover framed on the theme background), `h-*.svg` section headers, `card-*.svg` feature cards, `poster-*.png` video tiles — all from the theme tokens and the shared rail icons |
 
 ## Recipe
+
+**2026-11-07 focused account-session capture:** the populated local capture
+instance was rebuilt from the current member bundle with background workers
+and external integrations disabled. Authenticated Playwright capture of
+`/tokens` shows browser-session dates and current/other/all-device controls;
+the image is `docs/media/screenshots/api-tokens.png`. The same isolated account
+exercised missing-CSRF rejection, single-session revocation and all-device
+revocation. No README slot depicts this page, so README images were not replaced.
+The capture database remained a disposable local database and was not used as
+Alembic-head evidence after startup reported its pre-existing baseline warning.
+
+**2026-10-30 scan workspace source-overlay capture:** rebuilt admin-app and admin-pilot bundles from the corrected source, then installed them before startup in an isolated current R1594 image clone. Paired read-only screenshots against official v1.1.8 and current at 1440x1000 and 390x844 confirm Automatic scan and Manual identify together, with Scan jobs separate and no horizontal overflow, page errors, failed local requests or external requests. No scan actions ran; cloned databases, containers, proxies and the internal network were removed. Evidence: `.artifacts/parity-v1.1.8/scan-workspace-unification-r1596.json` and `.artifacts/parity-v1.1.8/scan-workspace-visual-r1596.json`. No README product slot depicts this route, so README images were not replaced.
+
+**2026-11-05 admin scan navigation review:** rebuilt admin-app and admin-pilot from the local source and installed their bundle contents into isolated `oneirodex:parity-r1776-focus-fixed-v2` staging before restart. Authenticated replay covers Auto, Manual, Scan Jobs and Unmatched at seven widths (28 checks), including keyboard focus reveal and separate horizontal action/nav rows; no scan action ran. Fixtures were synthetic. Evidence and captures: `.artifacts/parity-v1.1.8/scan-ux-review-20261104/r1778/`. No README product slot depicts this route, so README images were not replaced.
+
+**2026-10-30 IGDB surface fix:** `admin-igdb-settings.png` was refreshed from the isolated current staging image after IGDB adopted the shared admin panel surface. The capture records the exact backend and frontend bundle in private evidence `.artifacts/parity-v1.1.8/igdb-panel-r1437/evidence.json`; both viewports had no credential values, so the screenshot shows the empty fields without masks. The temporary bundle was restored and `/awake` returned 200. The dedicated capture DB was not available on this host. No README slot was changed.
+
+**Targeted admin refresh:** 2026-10-26 — `admin-smtp-settings.png` and `admin-igdb-settings.png` were refreshed from exact-image current captures after settings action-label, order, sizing, field-label casing, and accessibility-name parity changes. The scan workspace was separately replayed against v1.1.8/current R1210 at desktop and mobile; its paired screenshots and route evidence are in `.artifacts/parity-v1.1.8/scan-workspace-r1213-exact.json`. Admin Discovery Sections was also recaptured with synthetic shelves at desktop and mobile against the same pinned images; those paired QA screenshots are in `.artifacts/parity-v1.1.8/discovery-admin-r1217-exact.json`. The Admin help direct-entry/refresh path was rechecked on those images, with its paired screenshots in `.artifacts/parity-v1.1.8/admin-help-r1218-exact.json`. The admin navigation/settings transition replay is recorded in `.artifacts/parity-v1.1.8/admin-navigation-r1219-exact.json`; QA screenshots there also did not replace README media. The Discover first/last edge-wrap replay against the exact image pair is recorded at `.artifacts/parity-v1.1.8/discover-wrap-parity-r1220-b7b6e101.json`, also outside the README media slots. Member dropdown hover contrast was refreshed on the exact image pair, with QA captures in `.artifacts/parity-v1.1.8/member-dropdown-hover-r1221-exact.json`; it did not replace README media. Discover mobile touch wrap was checked at 390px on the exact image pair; current wrap and the legacy rail-overlay limit are recorded with QA screenshots in `.artifacts/parity-v1.1.8/discover-wrap-parity-r1222-7ed31f16.json`. These were focused captures, not a rerun of all 55 surfaces.
+
+**Focused compatibility-route QA:** 2026-10-31 — the retired `/playromtest` route was captured against exact local v1.1.8 and current R1675 images at desktop and mobile widths for R1711–R1714. The current source overlay mounted the rebuilt member bundle read-only. The empty synthetic Discover state was not copied into README product slots; no slot depicts this compatibility URL. Paired screenshots and image/network/cleanup evidence: `.artifacts/parity-v1.1.8/playromtest-shell-toast-paired-r1714.json` and its adjacent R1711–R1713 artifacts.
+
+**Latest full still capture:** 2026-10-17 — all 55 member/admin surfaces passed
+the health gate against the throwaway `oneirodexcapture` instance. README
+screenshot slots were refreshed, then the hero, section art, feature cards,
+and how-to poster tiles were regenerated. How-to clips and narration were not
+changed; clips were last generated 2026-10-14. Screenshots and README slot
+copies use atomic replacement with retries so a transient file-write error
+preserves the last good image.
+
+The Discover screenshot selects **New & updated**, which uses the seeded local
+game artwork and avoids provider-dependent store images that are unavailable
+in the offline capture environment.
 
 ```bash
 # 0. Build what will be photographed — a stale dist silently captures old UI.
@@ -57,6 +119,7 @@ hits a store, an AI endpoint or the core CDN.
 | `screenshot-big-picture.png` | `/big-picture` | |
 | `screenshot-preferences.png` | account menu → Preferences (modal) | `/settings_panel` is a fragment, not a page |
 | `screenshot-admin-ops.png` · `screenshot-admin-libraries.png` · `screenshot-art-studio.png` | admin surfaces | Ops waits for the LiveKit tile; every other admin page is in `docs/media/screenshots/` |
+| `admin-smtp-settings.png` · `admin-smtp-setup-help.png` · `admin-igdb-settings.png` | SMTP and IGDB settings forms, with SMTP setup help expanded | Credentials are synthetic in the capture fixture; provider calls are disabled |
 | `command-palette.png` | Ctrl-K on `/library` | |
 | `poster-*.png` | the clip's poster frame + play badge + title strip | one per how-to |
 

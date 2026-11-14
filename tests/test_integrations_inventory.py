@@ -3,6 +3,11 @@ from uuid import uuid4
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _keyring(reusable_secret_keyring):
+    return reusable_secret_keyring
+
 from oneirodex.models import User
 from oneirodex.utils.integrations_inventory import build_integrations_inventory
 
@@ -86,4 +91,5 @@ def test_inventory_api_requires_admin(client, app, admin_user, regular_user):
     payload = resp.get_json()
     assert payload['count'] >= 8
     assert payload['hub_href'] == '/admin/integrations'
+    assert payload['credential_storage'] == {'available': True, 'message': None}
     assert any(i['id'] == 'igdb' for i in payload['integrations'])

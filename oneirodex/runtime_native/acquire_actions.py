@@ -41,9 +41,9 @@ class AcquireActionData:
         return {'q': query, 'results': ranked, 'warnings': list(indexer_status_summary().get('warnings') or [])}
 
     def validate_url(self, url: str):
-        from oneirodex.utils.security import validate_user_outbound_http_url
+        from oneirodex.utils.security import validate_download_client_url
 
-        return validate_user_outbound_http_url(url)
+        return validate_download_client_url(url)
 
     def send(self, url: str, provider: str):
         from oneirodex.utils.arr_connectors import send_to_download_client
@@ -98,6 +98,11 @@ def create_acquire_actions_router(
                 role = normalize_role(getattr(auth.user, 'role', None))
                 if role == 'child':
                     response = _error('Acquire search is not available on child accounts', 'forbidden')
+                elif not auth.has_scope('read:library'):
+                    response = _error(
+                        'Missing scope: read:library', 'forbidden',
+                        detail={'required_scope': 'read:library'},
+                    )
                 elif not data.arr_enabled(config=flask_app.config):
                     response = _error('Arr module disabled', 'forbidden')
                 else:
@@ -132,12 +137,11 @@ def create_acquire_actions_router(
                     if response is None:
                         url = (body.url or body.magnet or '').strip()
                         provider = (body.provider or 'qbittorrent').strip().lower()
-                        if url.lower().startswith(('http://', 'https://')):
-                            ok, checked = data.validate_url(url)
-                            if not ok:
-                                response = _error(checked, 'bad_request')
-                            else:
-                                url = checked
+                        ok, checked = data.validate_url(url)
+                        if not ok:
+                            response = _error(checked, 'bad_request')
+                        else:
+                            url = checked
                         if response is None:
                             if provider in ('qbittorrent', 'transmission', 'sabnzbd', 'nzbget', 'deluge'):
                                 enabled = data.arr_enabled(config=flask_app.config)
@@ -213,10 +217,10 @@ def _first(request, key):
     return values[0] if values else None
 
 
-def _error(message, code):
+def _error(message, code, *, detail=None):
     from oneirodex.utils.api_contract import api_error_payload
 
-    payload, status = api_error_payload(message, code=code)
+    payload, status = api_error_payload(message, code=code, detail=detail)
     return JSONResponse(payload, status_code=status)
 
 

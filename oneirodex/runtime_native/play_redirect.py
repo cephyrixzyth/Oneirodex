@@ -5,8 +5,8 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, Request
-from starlette.responses import RedirectResponse
 
+from .response_compat import flask_redirect_response
 from .request_auth import request_auth_context
 
 
@@ -70,7 +70,7 @@ def create_play_redirect_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append((category, message))
                     auth.session_data['_flashes'] = flashes
-                response = RedirectResponse(target, status_code=302)
+                response = flask_redirect_response(target, status_code=302)
 
             if auth.should_set_session_cookie or auth.session_data.get('_flashes'):
                 _set_session_cookie(response, runtime_app, auth)

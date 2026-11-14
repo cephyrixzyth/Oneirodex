@@ -4,14 +4,13 @@
 Why this exists
 ---------------
 The font registry in ``oneirodex/utils/theme_fonts.py`` names five open-licence
-faces, but the **binaries are not vendored** in this repo — same stance as
-WebRetro cores and reference DATs. Without them every built-in except
-``system-ui`` silently falls through to a CSS fallback, so the picker appears to
-do nothing. This script fetches them.
+faces. Their binaries ship in ``oneirodex/setup/fonts`` and are copied into the
+runtime font directory on boot. This script remains available for an
+operator-selected output directory or to refresh those files from upstream.
 
 All five are **SIL Open Font License 1.1** from the official `google/fonts`
 repository. The OFL permits redistribution, so an operator may also mirror these
-internally; we fetch rather than vendor to keep binaries out of git history.
+internally.
 
 Files land in ``oneirodex/static/library/fonts/`` (gitignored) under exactly the
 names the registry expects — a mismatch means the face still won't load.
@@ -26,16 +25,21 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import ssl
+import hashlib
+import os
 import sys
-import urllib.error
-import urllib.request
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = ROOT / "oneirodex" / "static" / "library" / "fonts"
+sys.path.insert(0, str(ROOT))
 
-USER_AGENT = "Oneirodex-fetch-fonts/1.0 (+https://github.com/cephyrixzyth/oneirodex)"
+from oneirodex.utils.font_install import (  # noqa: E402
+    FONT_SHA256,
+    download_builtin_font,
+)
+
+DEFAULT_OUT = ROOT / "oneirodex" / "static" / "library" / "fonts"
 
 # Leading bytes for each accepted container — mirrors theme_fonts._FONT_MAGIC.
 # A 404 HTML page saved as .ttf would otherwise sit there looking installed.
@@ -96,39 +100,51 @@ FONTS: list[tuple[str, str, str, str, str]] = [
 LICENSE_URLS = {
     "OFL.txt": f"{RAW}/pressstart2p/OFL.txt",
 }
-
-
-def _opener() -> urllib.request.OpenerDirector:
-    ctx = ssl.create_default_context()
-    handler = urllib.request.HTTPSHandler(context=ctx)
-    opener = urllib.request.build_opener(handler)
-    opener.addheaders = [("User-Agent", USER_AGENT)]
-    return opener
+LICENSE_SHA256 = {
+    "OFL.txt": "004fc993a3bdaaf0fd443cb58d7e5c2fd09fc3a93b23309d0005421f7b8b7123",
+}
 
 
 def _looks_like_font(head: bytes) -> bool:
     return any(head.startswith(sig) for sig in FONT_MAGIC)
 
 
-def fetch(opener, url: str, dest: Path, *, expect_font: bool = True) -> tuple[bool, str]:
+def fetch(
+    url: str,
+    dest: Path,
+    *,
+    expected_sha256: str,
+    expect_font: bool = True,
+) -> tuple[bool, str]:
     try:
-        with opener.open(url, timeout=60) as response:
-            payload = response.read()
-    except urllib.error.HTTPError as exc:
-        return False, f"HTTP {exc.code}"
-    except urllib.error.URLError as exc:
-        return False, f"unreachable ({exc.reason})"
+        payload = download_builtin_font(url)
     except Exception as exc:  # noqa: BLE001
-        return False, f"{type(exc).__name__}"
+        status = getattr(getattr(exc, 'response', None), 'status_code', None)
+        if status is not None:
+            return False, f"HTTP {status}"
+        return False, f"unreachable ({type(exc).__name__})"
 
     if not payload:
         return False, "empty response"
+    if hashlib.sha256(payload).hexdigest() != expected_sha256:
+        return False, "SHA-256 mismatch"
     if expect_font and not _looks_like_font(payload[:4]):
         # Almost always an HTML error page with a .ttf name.
         return False, "not a font file (upstream path may have moved)"
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(payload)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=dest.parent, prefix=f".{dest.name}.", suffix=".tmp", delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(payload)
+        os.replace(temporary, dest)
+    except OSError as exc:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        return False, f"write failed ({type(exc).__name__})"
     return True, f"{len(payload) / 1024:.0f} KB"
 
 
@@ -151,7 +167,6 @@ def main() -> int:
             print(f"  {'':16} {url}\n")
         return 0
 
-    opener = _opener()
     got, skipped, failed = 0, 0, []
 
     for font_id, filename, url, _licence, use in FONTS:
@@ -160,7 +175,7 @@ def main() -> int:
             print(f"  = {filename:28} already present")
             skipped += 1
             continue
-        ok, detail = fetch(opener, url, dest)
+        ok, detail = fetch(url, dest, expected_sha256=FONT_SHA256[filename])
         if ok:
             print(f"  + {filename:28} {detail}  ({use})")
             got += 1
@@ -171,7 +186,9 @@ def main() -> int:
     for name, url in LICENSE_URLS.items():
         dest = out / name
         if not dest.exists() or args.force:
-            ok, detail = fetch(opener, url, dest, expect_font=False)
+            ok, detail = fetch(
+                url, dest, expected_sha256=LICENSE_SHA256[name], expect_font=False
+            )
             print(f"  {'+' if ok else '!'} {name:28} {detail}")
 
     print(f"\n{got} downloaded, {skipped} already present, {len(failed)} failed")

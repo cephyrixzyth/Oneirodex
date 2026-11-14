@@ -77,12 +77,12 @@ def test_provider_disabled_without_key(db_session, monkeypatch):
         provider.search_covers('Celeste')
 
 
-@patch('oneirodex.utils.providers.steamgriddb.requests.get')
+@patch('oneirodex.utils.providers.steamgriddb.safe_request')
 def test_search_covers_mocked(mock_get, monkeypatch):
     monkeypatch.setenv('STEAMGRIDDB_API_KEY', 'test-key')
     provider = SteamGridDBProvider()
 
-    def fake_get(url, *args, **kwargs):
+    def fake_get(method, url, *args, **kwargs):
         class FakeResponse:
             status_code = 200
 
@@ -214,12 +214,12 @@ def test_providers_api_disabled(client, app, db_session, admin_user, monkeypatch
     assert 'STEAMGRIDDB_API_KEY' in search_resp.get_json()['error']
 
 
-@patch('oneirodex.utils.providers.steamgriddb.requests.get')
+@patch('oneirodex.utils.providers.steamgriddb.safe_request')
 def test_providers_api_search_enabled(mock_get, client, app, db_session, admin_user, monkeypatch):
     monkeypatch.setenv('STEAMGRIDDB_API_KEY', 'test-key')
     _login_admin(client, app, admin_user)
 
-    def fake_get(url, *args, **kwargs):
+    def fake_get(method, url, *args, **kwargs):
         class FakeResponse:
             status_code = 200
 
@@ -249,12 +249,12 @@ def test_apply_artwork_missing_game_returns_404(client, app, db_session, admin_u
     assert 'not found' in resp.get_json()['error'].lower()
 
 
-@patch('oneirodex.utils.providers.steamgriddb.requests.get')
+@patch('oneirodex.utils.providers.steamgriddb.safe_request')
 def test_search_logos_mocked(mock_get, monkeypatch):
     monkeypatch.setenv('STEAMGRIDDB_API_KEY', 'test-key')
     provider = SteamGridDBProvider()
 
-    def fake_get(url, *args, **kwargs):
+    def fake_get(method, url, *args, **kwargs):
         class FakeResponse:
             status_code = 200
 

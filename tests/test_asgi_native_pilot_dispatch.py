@@ -1,11 +1,16 @@
 """DB-free coverage for native ASGI dispatch and session compatibility."""
 import asyncio
 from contextlib import nullcontext
+import json
 import httpx
 from flask import Flask
+from fastapi import APIRouter, FastAPI
 from starlette.responses import PlainTextResponse
 import asgi
 from oneirodex import app_version
+from oneirodex.utils.persistent_sessions import issue_login_identity
+# Import registers the shared autouse storage fixture in this module.
+from tests.fixtures.native_auth import persistent_login_store
 from oneirodex.runtime_native import (
     admin_pilot,
     is_email_confirmation_page_route,
@@ -63,6 +68,9 @@ def test_admin_shell_uses_packaged_pilot_by_default(monkeypatch, tmp_path):
     assert fetch(runtime, '/admin/users', method='HEAD').status_code == 200
     assert fetch(runtime, '/admin/features').text == 'native'
     assert fetch(runtime, '/admin/features', method='HEAD').status_code == 200
+    assert fetch(runtime, '/admin/help').text == 'native'
+    assert fetch(runtime, '/admin/smtp_settings').text == 'native'
+    assert fetch(runtime, '/admin/igdb_settings').text == 'native'
     assert captured == [shell_path]
 
 
@@ -86,18 +94,104 @@ def test_legacy_admin_paths_dispatch_to_native_router(monkeypatch):
     runtime._app = legacy
     runtime._ensure_flask = ready
 
-    assert fetch(runtime, '/admin/help').text == 'native redirect route'
     assert fetch(runtime, '/admin/scan_management?active_tab=tools', method='HEAD').status_code == 200
     assert fetch(runtime, '/admin/statistics/data').text == 'native redirect route'
     assert fetch(runtime, '/api/get_company_role?game_igdb_id=1&company_id=2').text == 'native redirect route'
     assert fetch(runtime, '/api/search_igdb_by_id?igdb_id=1').text == 'native redirect route'
     assert seen == [
-        ('/admin/help', 'GET'),
         ('/admin/scan_management', 'HEAD'),
         ('/admin/statistics/data', 'GET'),
         ('/api/get_company_role', 'GET'),
         ('/api/search_igdb_by_id', 'GET'),
     ]
+
+
+def test_unsupported_admin_shell_method_returns_405_with_combined_allow():
+    runtime = asgi.LazyASGIApp()
+    admin_app = FastAPI()
+    admin_app.add_api_route(
+        '/admin/support', lambda: None, methods=['GET', 'HEAD'],
+    )
+    admin_app.add_api_route(
+        '/admin/settings', lambda: None, methods=['GET', 'HEAD'],
+    )
+    api_app = FastAPI()
+    api_router = APIRouter()
+    api_router.add_api_route('/settings', lambda: None, methods=['POST'])
+    api_app.include_router(api_router, prefix='/admin')
+    runtime._native_admin_pilot = admin_app
+    runtime._native_read_api_app = api_app
+
+    async def run(path):
+        messages = []
+
+        async def send(message):
+            messages.append(message)
+
+        raw_path = path.encode('ascii')
+        scope = {
+            'type': 'http',
+            'asgi': {'version': '3.0'},
+            'http_version': '1.1',
+            'method': 'PATCH',
+            'scheme': 'http',
+            'path': path,
+            'raw_path': raw_path,
+            'root_path': '',
+            'query_string': b'',
+            'headers': [],
+            'client': ('test', 123),
+            'server': ('test', 80),
+        }
+        handled = await runtime._handle_native_admin_method_not_allowed(
+            scope, send,
+        )
+        start = next(message for message in messages if message['type'] == 'http.response.start')
+        body = next(message['body'] for message in messages if message['type'] == 'http.response.body')
+        headers = {key.decode().lower(): value.decode() for key, value in start['headers']}
+        return handled, start['status'], headers, body
+
+    handled, status, headers, body = asyncio.run(run('/admin/support'))
+    assert handled is True
+    assert status == 405
+    assert set(headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS'}
+    assert headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<title>405 Method Not Allowed</title>' in body
+
+    handled, status, headers, _body = asyncio.run(run('/admin/settings'))
+    assert handled is True
+    assert status == 405
+    assert set(headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS', 'POST'}
+
+
+def test_native_dispatch_preserves_405_for_unsupported_admin_shell_method(monkeypatch, tmp_path):
+    flask_app = Flask(__name__, static_folder=str(tmp_path))
+    write_admin_shell(tmp_path)
+    flask_app.add_url_rule(
+        '/admin/support', view_func=lambda: 'legacy support shell',
+    )
+    monkeypatch.setattr(asgi, 'create_app', lambda: flask_app)
+
+    response = fetch(asgi.LazyASGIApp(), '/admin/support', method='PATCH')
+
+    assert response.status_code == 405
+    assert set(response.headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS'}
+    assert '<title>405 Method Not Allowed</title>' in response.text
+
+
+def test_admin_whitelist_dispatch_respects_combined_page_and_action_methods():
+    cases = (
+        ('/admin/whitelist', 'GET', False),
+        ('/admin/whitelist', 'POST', True),
+        ('/admin/whitelist', 'DELETE', False),
+        ('/admin/whitelist/42', 'DELETE', True),
+        ('/admin/api/whitelist', 'GET', True),
+        ('/admin/api/whitelist', 'HEAD', True),
+        ('/admin/api/whitelist', 'POST', True),
+        ('/admin/api/whitelist', 'DELETE', False),
+    )
+    for path, method, expected in cases:
+        assert asgi._is_native_admin_whitelist_operation(path, method) is expected
 
 
 def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
@@ -113,19 +207,40 @@ def test_liveness_is_native_and_does_not_construct_flask(monkeypatch):
         ) as client:
             get_response = await client.get('/pulse')
             head_response = await client.head('/pulse')
-        return get_response, head_response
+            options_response = await client.options('/pulse')
+            unsupported = [
+                await client.request(method, '/pulse')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
+        return get_response, head_response, options_response, unsupported
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response, unsupported = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.json() == {
         'status': 'ok', 'probe': 'liveness', 'version': app_version,
     }
+    assert get_response.content == (
+        json.dumps(
+            {'status': 'ok', 'probe': 'liveness', 'version': app_version},
+            separators=(',', ':'), ensure_ascii=False, sort_keys=True,
+        ).encode('utf-8') + b'\n'
+    )
     assert get_response.headers['content-type'] == 'application/json'
     assert get_response.headers['x-content-type-options'] == 'nosniff'
     assert get_response.headers['content-security-policy']
     assert head_response.status_code == 200
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert options_response.status_code == 200
+    assert options_response.headers['allow'] == 'OPTIONS, GET, HEAD'
+    assert options_response.content == b''
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(response.headers['allow'] == 'OPTIONS, GET, HEAD' for response in unsupported)
+    assert all(
+        response.headers['content-type'] == 'text/html; charset=utf-8'
+        for response in unsupported
+    )
+    assert all(response.content == unsupported[0].content for response in unsupported)
 
 
 def test_readiness_uses_request_local_db_scope_without_flask_context(monkeypatch, tmp_path):
@@ -161,16 +276,54 @@ def test_readiness_uses_request_local_db_scope_without_flask_context(monkeypatch
         ) as client:
             get_response = await client.get('/awake')
             head_response = await client.head('/awake')
-        return get_response, head_response
+            options_response = await client.options('/awake')
+            unsupported = [
+                await client.request(method, '/awake')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
+        return get_response, head_response, options_response, unsupported
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response, unsupported = asyncio.run(run())
     assert get_response.status_code == 503
     assert get_response.json()['checks']['database']['error'] == 'OperationalError'
+    expected_body = {
+        'status': 'not_ready',
+        'probe': 'readiness',
+        'version': 'test',
+        'checks': {
+            'database': {'ok': False, 'error': 'OperationalError'},
+            'initialization': {'ok': True, 'complete': True, 'testing_bypass': False},
+        },
+    }
+    assert get_response.content == (
+        json.dumps(
+            expected_body,
+            separators=(',', ':'),
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode('utf-8') + b'\n'
+    )
     assert get_response.headers['content-type'] == 'application/json'
     assert get_response.headers['content-security-policy']
     assert head_response.status_code == 503
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert options_response.status_code == 200
+    assert options_response.headers['allow'] == 'OPTIONS, GET, HEAD'
+    assert options_response.content == b''
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(response.headers['allow'] == 'OPTIONS, GET, HEAD' for response in unsupported)
+    assert all(
+        response.headers['content-type'] == 'text/html; charset=utf-8'
+        for response in unsupported
+    )
+    assert all(response.content == unsupported[0].content for response in unsupported)
+    assert unsupported[0].content == (
+        b'<!doctype html>\n<html lang=en>\n'
+        b'<title>405 Method Not Allowed</title>\n'
+        b'<h1>Method Not Allowed</h1>\n'
+        b'<p>The method is not allowed for the requested URL.</p>\n'
+    )
 
 
 def test_readiness_builder_accepts_framework_free_dependencies():
@@ -190,6 +343,54 @@ def test_readiness_builder_accepts_framework_free_dependencies():
     assert status == 200
     assert body['checks']['database'] == {'ok': True, 'error': None}
     assert body['checks']['initialization']['complete'] is True
+
+
+def test_readiness_initialization_incomplete_and_testing_bypass_states():
+    from types import SimpleNamespace
+    from oneirodex.utils.health_probes import build_readiness
+
+    class HealthySession:
+        @staticmethod
+        def execute(_statement):
+            return 1
+
+    class FailedSession:
+        @staticmethod
+        def execute(_statement):
+            raise RuntimeError('details remain private')
+
+    healthy_db = SimpleNamespace(session=HealthySession())
+    failed_db = SimpleNamespace(session=FailedSession())
+    production_not_initialized, production_status = build_readiness(
+        config={'TESTING': False},
+        database=healthy_db,
+        initialization_check=lambda: False,
+    )
+    assert production_status == 503
+    assert production_not_initialized['checks']['initialization'] == {
+        'ok': False, 'complete': False, 'testing_bypass': False,
+    }
+
+    testing_bypass, testing_status = build_readiness(
+        config={'TESTING': True},
+        database=healthy_db,
+        initialization_check=lambda: False,
+    )
+    assert testing_status == 200
+    assert testing_bypass['checks']['initialization'] == {
+        'ok': True, 'complete': False, 'testing_bypass': True,
+    }
+
+    failed_testing_bypass, failed_status = build_readiness(
+        config={'TESTING': True},
+        database=failed_db,
+        initialization_check=lambda: False,
+    )
+    assert failed_status == 503
+    assert failed_testing_bypass['checks']['database'] == {
+        'ok': False, 'error': 'RuntimeError',
+    }
+    assert failed_testing_bypass['checks']['initialization']['testing_bypass'] is True
 
 
 def test_site_entry_redirects_bypass_wsgi_after_native_setup(monkeypatch):
@@ -263,9 +464,14 @@ def test_installed_cores_allowlist_is_native_for_get_and_head(monkeypatch):
         ) as client:
             get_response = await client.get('/api/emulator/installed-cores.js')
             head_response = await client.head('/api/emulator/installed-cores.js')
-        return get_response, head_response
+            options_response = await client.options('/api/emulator/installed-cores.js')
+            unsupported = [
+                await client.request(method, '/api/emulator/installed-cores.js')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
+        return get_response, head_response, options_response, unsupported
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response, unsupported = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.text == 'var OD_INSTALLED_CORES = ["nestopia", "snes9x"];\n'
     assert get_response.headers['content-type'] == 'application/javascript; charset=utf-8'
@@ -274,10 +480,24 @@ def test_installed_cores_allowlist_is_native_for_get_and_head(monkeypatch):
     assert head_response.status_code == 200
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert options_response.status_code == 200
+    assert options_response.headers['allow'] == 'OPTIONS, GET, HEAD'
+    assert options_response.content == b''
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(response.json() == unsupported[0].json() for response in unsupported)
+    assert unsupported[0].content.endswith(b'\n')
+    assert unsupported[0].json() == {
+        'error': 'The method is not allowed for the requested URL.',
+        'error_code': 'bad_request',
+        'message': 'The method is not allowed for the requested URL.',
+        'ok': False,
+        'success': False,
+    }
 
 
 def test_install_manifest_uses_request_local_db_scope_without_flask_context(monkeypatch, tmp_path):
     from oneirodex.utils import processors
+    from oneirodex.utils import setup as setup_state
     runtime = asgi.LazyASGIApp()
     monkeypatch.setattr(
         asgi, 'create_app',
@@ -291,6 +511,7 @@ def test_install_manifest_uses_request_local_db_scope_without_flask_context(monk
         'Content-Security-Policy': "default-src 'self'",
     }
     monkeypatch.setattr(processors, 'get_global_settings', lambda: {'site_name': 'Household Shelf'})
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: False)
 
     async def run():
         async with httpx.AsyncClient(
@@ -299,12 +520,18 @@ def test_install_manifest_uses_request_local_db_scope_without_flask_context(monk
         ) as client:
             get_response = await client.get('/manifest.webmanifest')
             head_response = await client.head('/manifest.webmanifest')
-        return get_response, head_response
+            options_response = await client.options('/manifest.webmanifest')
+        return get_response, head_response, options_response
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.json()['name'] == 'Household Shelf'
     assert get_response.json()['short_name'] == 'Household Sh'
+    assert get_response.content == (
+        json.dumps(
+            get_response.json(), separators=(',', ':'), sort_keys=True,
+        ).encode('utf-8') + b'\n'
+    )
     assert get_response.headers['content-type'] == 'application/manifest+json'
     assert get_response.headers['cache-control'] == 'public, max-age=3600'
     assert get_response.headers['content-security-policy']
@@ -312,6 +539,108 @@ def test_install_manifest_uses_request_local_db_scope_without_flask_context(monk
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
     assert runtime._flask_app is None
+
+
+def test_install_manifest_follows_legacy_setup_redirect_when_setup_is_incomplete(monkeypatch, tmp_path):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.utils import setup as setup_state
+
+    app = Flask(__name__, static_folder=str(tmp_path))
+    app.config.update(CSP_ENABLED=True, CSP_ENFORCE=True, HSTS_SECONDS=0)
+    runtime = asgi.LazyASGIApp()
+    monkeypatch.setattr(asgi, 'create_app', lambda: app)
+    monkeypatch.setattr(db_session, 'native_session_scope', lambda *_args: nullcontext())
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: True)
+    monkeypatch.setattr(setup_state, 'get_setup_redirect_url', lambda: '/setup/integrations')
+
+    async def native_database_ready():
+        return None
+
+    runtime._ensure_native_database = native_database_ready
+    runtime._native_database_scope = lambda *_args: nullcontext()
+    runtime._configured_security_headers = lambda: {
+        'Content-Security-Policy': "default-src 'self'",
+    }
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime),
+            base_url='http://localhost',
+            follow_redirects=False,
+        ) as client:
+            get_response = await client.get('/manifest.webmanifest')
+            head_response = await client.head('/manifest.webmanifest')
+            options_response = await client.options('/manifest.webmanifest')
+        return get_response, head_response, options_response
+
+    get_response, head_response, options_response = asyncio.run(run())
+    assert get_response.status_code == 302
+    assert get_response.headers['location'] == '/setup/integrations'
+    assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'Content-Security-Policy' in get_response.headers
+    assert b'/setup/integrations' in get_response.content
+    assert head_response.status_code == 302
+    assert head_response.headers['location'] == '/setup/integrations'
+    assert head_response.content == b''
+    assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert options_response.status_code == 302
+    assert options_response.headers['location'] == '/setup/integrations'
+    assert options_response.headers['content-type'] == 'text/html; charset=utf-8'
+
+
+def test_pwa_assets_follow_legacy_setup_redirect_when_setup_is_incomplete(monkeypatch, tmp_path):
+    from oneirodex.runtime_native import db_session
+    from oneirodex.utils import setup as setup_state
+
+    app = Flask(__name__, static_folder=str(tmp_path))
+    app.config.update(CSP_ENABLED=True, CSP_ENFORCE=True, HSTS_SECONDS=0)
+    runtime = asgi.LazyASGIApp()
+    monkeypatch.setattr(asgi, 'create_app', lambda: app)
+    monkeypatch.setattr(db_session, 'native_session_scope', lambda *_args: nullcontext())
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: True)
+    monkeypatch.setattr(setup_state, 'get_setup_redirect_url', lambda: '/setup/integrations')
+
+    async def native_database_ready():
+        return None
+
+    runtime._ensure_native_database = native_database_ready
+    runtime._native_database_scope = lambda *_args: nullcontext()
+    runtime._configured_security_headers = lambda: {
+        'Content-Security-Policy': "default-src 'self'",
+    }
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime),
+            base_url='http://localhost',
+            follow_redirects=False,
+        ) as client:
+            responses = {}
+            for path in (
+                '/manifest.webmanifest', '/offline', '/sw.js', '/vr/sw.js',
+            ):
+                responses[path] = (
+                    await client.get(path),
+                    await client.head(path),
+                    await client.options(path),
+                )
+        return responses
+
+    responses = asyncio.run(run())
+    for get_response, head_response, options_response in responses.values():
+        assert get_response.status_code == 302
+        assert get_response.headers['location'] == '/setup/integrations'
+        assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
+        assert 'Content-Security-Policy' in get_response.headers
+        assert b'/setup/integrations' in get_response.content
+        assert head_response.status_code == 302
+        assert head_response.headers['location'] == '/setup/integrations'
+        assert head_response.content == b''
+        assert head_response.headers['content-length'] == str(len(get_response.content))
+        assert options_response.status_code == 302
+        assert options_response.headers['location'] == '/setup/integrations'
+        assert options_response.headers['content-type'] == 'text/html; charset=utf-8'
+        assert options_response.content == get_response.content
 
 
 def test_loading_icon_bootstrap_uses_request_local_scope_without_flask_dispatch(monkeypatch, tmp_path):
@@ -411,7 +740,7 @@ def test_setup_state_keeps_in_progress_settings_on_signed_admin_session(monkeypa
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
     actor = SimpleNamespace(
         id=7, user_id='admin-guid', role='admin', state=True, is_active=True,
-        session_fingerprint=lambda: 'fresh',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     monkeypatch.setattr(admin_pilot, '_native_auth_backend', lambda _app: (
         lambda user_id: actor if user_id == 7 else None,
@@ -424,7 +753,7 @@ def test_setup_state_keeps_in_progress_settings_on_signed_admin_session(monkeypa
         'smtp_password_configured': True,
     })
     cookie = dump_session_cookie(
-        {'_user_id': '7:fresh', '_fresh': True}, app.config['SECRET_KEY'],
+        {'_user_id': issue_login_identity(actor), '_fresh': True}, app.config['SECRET_KEY'],
     )
 
     async def run():
@@ -489,7 +818,7 @@ def test_native_admin_and_member_read_family_dispatch(monkeypatch, tmp_path):
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
     actor = SimpleNamespace(
         id=9, user_id='admin-9', role='admin', state=True, is_active=True,
-        session_fingerprint=lambda: 'fresh',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     monkeypatch.setattr(admin_pilot, '_native_auth_backend', lambda _app: (
         lambda user_id: actor if user_id == 9 else None,
@@ -579,12 +908,25 @@ def test_native_admin_and_member_read_family_dispatch(monkeypatch, tmp_path):
             'secret_present': bool(payload['igdb_client_secret']),
         }},
     )
+    legacy_igdb_saves = []
+    monkeypatch.setattr(
+        igdb_settings_read.IgdbSettingsData,
+        'save_legacy',
+        lambda _self, payload: legacy_igdb_saves.append(payload),
+    )
     monkeypatch.setattr(
         igdb_settings_read.IgdbSettingsData,
         'test_connection',
         lambda _self: {'settings': {
             'igdb_client_id': 'client-id', 'secret_present': True,
         }},
+    )
+    monkeypatch.setattr(
+        igdb_settings_read.IgdbSettingsData,
+        'test_connection_legacy',
+        lambda _self: {
+            'status': 'success', 'message': 'IGDB API test successful',
+        },
     )
     monkeypatch.setattr(
         arr_indexers_read.ArrIndexersData,
@@ -853,7 +1195,7 @@ def test_native_admin_and_member_read_family_dispatch(monkeypatch, tmp_path):
         'create',
         lambda _self, body, actor_id: ({'section': {'name': body.name, 'actor': actor_id}}, None),
     )
-    session_data = {'_user_id': '9:fresh', '_fresh': True}
+    session_data = {'_user_id': issue_login_identity(actor), '_fresh': True}
     csrf = generate_csrf_token(session_data, app.config['SECRET_KEY'])
     cookie = dump_session_cookie(session_data, app.config['SECRET_KEY'])
 
@@ -941,6 +1283,14 @@ def test_native_admin_and_member_read_family_dispatch(monkeypatch, tmp_path):
             )
             igdb_test = await client.post(
                 '/api/admin/igdb/test', headers={'X-CSRFToken': csrf}
+            )
+            igdb_legacy_save = await client.post(
+                '/admin/igdb_settings',
+                json={'igdb_client_id': 'legacy-client', 'igdb_client_secret': 'legacy-secret'},
+                headers={'X-CSRFToken': csrf},
+            )
+            igdb_legacy_test = await client.post(
+                '/admin/test_igdb', headers={'X-CSRFToken': csrf},
             )
             reference_sets = await client.get('/api/admin/reference-sets')
             reference_sets_head = await client.head('/api/admin/reference-sets')
@@ -1035,6 +1385,15 @@ def test_native_admin_and_member_read_family_dispatch(monkeypatch, tmp_path):
             assert user_create.status_code == 200
             assert user_update.status_code == 200
             assert user_delete.status_code == 200
+            assert igdb_legacy_save.status_code == 200
+            assert igdb_legacy_save.json()['status'] == 'success'
+            assert 'legacy-secret' not in igdb_legacy_save.text
+            assert legacy_igdb_saves == [{
+                'igdb_client_id': 'legacy-client',
+                'igdb_client_secret': 'legacy-secret',
+            }]
+            assert igdb_legacy_test.status_code == 200
+            assert 'igdb_client_secret' not in igdb_legacy_test.text
             assert emulator_core_health.status_code == 200
             assert emulator_core_health.json()['installed_cores'] == ['snes9x']
             assert art_studio_stock.status_code == 200
@@ -1184,7 +1543,7 @@ def test_attract_mode_settings_use_native_path_for_anonymous_and_signed_users(mo
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
     user = SimpleNamespace(
         id=7, user_id='user-guid', role='user', state=True, is_active=True,
-        session_fingerprint=lambda: 'fresh',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     monkeypatch.setattr(admin_pilot, '_native_auth_backend', lambda _app: (
         lambda user_id: user if user_id == 7 else None,
@@ -1206,7 +1565,7 @@ def test_attract_mode_settings_use_native_path_for_anonymous_and_signed_users(mo
             self.saved.append((authenticated_user.id, payload))
     data = Data()
     monkeypatch.setattr(attract_mode_reads, 'AttractModeData', lambda: data)
-    session_data = {'_user_id': '7:fresh', '_fresh': True}
+    session_data = {'_user_id': issue_login_identity(user), '_fresh': True}
     csrf_token = generate_csrf_token(session_data, app.config['SECRET_KEY'])
     signed_cookie = dump_session_cookie(session_data, app.config['SECRET_KEY'])
 
@@ -1250,21 +1609,36 @@ def test_attract_mode_settings_use_native_path_for_anonymous_and_signed_users(mo
 
 
 def test_offline_document_is_native_cache_revalidated_and_member_free(monkeypatch):
+    from oneirodex.utils import setup as setup_state
+
     def forbidden_create_app():
         raise AssertionError('the offline document must not construct Flask')
 
     monkeypatch.setattr(asgi, 'create_app', forbidden_create_app)
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: False)
+    runtime = asgi.LazyASGIApp()
+
+    async def native_database_ready():
+        return None
+
+    runtime._ensure_native_database = native_database_ready
+    runtime._native_database_scope = lambda *_args: nullcontext()
 
     async def run():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=asgi.LazyASGIApp()),
+            transport=httpx.ASGITransport(app=runtime),
             base_url='http://localhost',
         ) as client:
             get_response = await client.get('/offline')
             head_response = await client.head('/offline')
-        return get_response, head_response
+            options_response = await client.options('/offline')
+            unsupported = [
+                await client.request(method, '/offline')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
+        return get_response, head_response, options_response, unsupported
 
-    get_response, head_response = asyncio.run(run())
+    get_response, head_response, options_response, unsupported = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.headers['cache-control'] == 'no-cache'
     assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
@@ -1274,25 +1648,69 @@ def test_offline_document_is_native_cache_revalidated_and_member_free(monkeypatc
     assert head_response.status_code == 200
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
+    assert options_response.status_code == 200
+    assert options_response.headers['allow'] == 'OPTIONS, GET, HEAD'
+    assert options_response.content == b''
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(response.headers['allow'] == 'OPTIONS, GET, HEAD' for response in unsupported)
+    assert all(
+        response.headers['content-type'] == 'text/html; charset=utf-8'
+        and response.content == unsupported[0].content
+        for response in unsupported
+    )
 
 
 def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
+    from oneirodex.utils import setup as setup_state
+
     def forbidden_create_app():
         raise AssertionError('service-worker routes must not construct Flask')
 
     monkeypatch.setattr(asgi, 'create_app', forbidden_create_app)
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: False)
+    runtime = asgi.LazyASGIApp()
+
+    async def native_database_ready():
+        return None
+
+    runtime._ensure_native_database = native_database_ready
+    runtime._native_database_scope = lambda *_args: nullcontext()
 
     async def run():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=asgi.LazyASGIApp()),
+            transport=httpx.ASGITransport(app=runtime),
             base_url='http://localhost',
         ) as client:
             root_worker = await client.get('/sw.js')
             vr_worker = await client.get('/vr/sw.js')
             root_head = await client.head('/sw.js')
-        return root_worker, vr_worker, root_head
+            root_not_modified = await client.get('/sw.js', headers={
+                'If-None-Match': root_worker.headers['etag'],
+            })
+            root_range = await client.get('/sw.js', headers={'Range': 'bytes=0-9'})
+            root_if_range = await client.get('/sw.js', headers={
+                'Range': 'bytes=0-9', 'If-Range': root_worker.headers['etag'],
+            })
+            root_stale_if_range = await client.get('/sw.js', headers={
+                'Range': 'bytes=0-9', 'If-Range': '"stale"',
+            })
+            root_unsatisfiable = await client.get('/sw.js', headers={
+                'Range': f'bytes={len(root_worker.content)}-',
+            })
+            unsupported = [
+                await client.request(method, path)
+                for path in ('/sw.js', '/vr/sw.js')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
+        return (
+            root_worker, vr_worker, root_head, root_not_modified, root_range,
+            root_if_range, root_stale_if_range, root_unsatisfiable, unsupported,
+        )
 
-    root_worker, vr_worker, root_head = asyncio.run(run())
+    (
+        root_worker, vr_worker, root_head, root_not_modified, root_range,
+        root_if_range, root_stale_if_range, root_unsatisfiable, unsupported,
+    ) = asyncio.run(run())
     assert root_worker.status_code == vr_worker.status_code == 200
     assert root_worker.headers['service-worker-allowed'] == '/'
     assert vr_worker.headers['service-worker-allowed'] == '/vr'
@@ -1301,9 +1719,32 @@ def test_service_workers_are_native_scoped_and_never_cached(monkeypatch):
     assert root_worker.headers['content-security-policy']
     assert root_head.content == b''
     assert root_head.headers['content-length'] == str(len(root_worker.content))
+    assert root_not_modified.status_code == 304
+    assert root_not_modified.content == b''
+    assert root_range.status_code == 206
+    assert root_range.headers['content-range'] == f'bytes 0-9/{len(root_worker.content)}'
+    assert root_range.content == root_worker.content[:10]
+    assert root_if_range.status_code == 206
+    assert root_if_range.content == root_worker.content[:10]
+    assert root_stale_if_range.status_code == 200
+    assert root_stale_if_range.content == root_worker.content
+    assert root_unsatisfiable.status_code == 416
+    assert root_unsatisfiable.headers['content-range'] == (
+        f'bytes */{len(root_worker.content)}'
+    )
+    assert 'service-worker-allowed' not in root_unsatisfiable.headers
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(response.headers['allow'] == 'OPTIONS, GET, HEAD' for response in unsupported)
+    assert all(
+        response.headers['content-type'] == 'text/html; charset=utf-8'
+        and response.content == unsupported[0].content
+        for response in unsupported
+    )
 
 
 def test_service_worker_ignores_library_static_overrides(monkeypatch, tmp_path):
+    from oneirodex.utils import setup as setup_state
+
     static_root = tmp_path / 'static'
     static_root.mkdir()
     shipped_worker = static_root / 'app-sw.js'
@@ -1316,6 +1757,14 @@ def test_service_worker_ignores_library_static_overrides(monkeypatch, tmp_path):
 
     runtime = asgi.LazyASGIApp()
     runtime._static_root = static_root
+    monkeypatch.setattr(setup_state, 'should_redirect_to_setup', lambda: False)
+
+    async def native_database_ready():
+        return None
+
+    runtime._ensure_native_database = native_database_ready
+    runtime._native_database_scope = lambda *_args: nullcontext()
+
     async def run():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=runtime),
@@ -1328,24 +1777,85 @@ def test_service_worker_ignores_library_static_overrides(monkeypatch, tmp_path):
     assert response.text == '/* shipped worker */'
 
 
-def test_favicon_is_native_and_keeps_short_cache_policy(monkeypatch):
+def test_favicon_is_native_and_keeps_short_cache_policy(monkeypatch, tmp_path):
     def forbidden_create_app():
         raise AssertionError('favicon must not construct Flask')
 
     monkeypatch.setattr(asgi, 'create_app', forbidden_create_app)
+    static_root = tmp_path / 'static'
+    icon_path = static_root / 'icons' / 'favicon.ico'
+    icon_path.parent.mkdir(parents=True)
+    icon_payload = bytes(range(256)) * 8
+    icon_path.write_bytes(icon_payload)
+    runtime = asgi.LazyASGIApp()
+    runtime._static_root = static_root
 
     async def run():
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=asgi.LazyASGIApp()),
+            transport=httpx.ASGITransport(app=runtime),
             base_url='http://localhost',
         ) as client:
-            return await client.get('/favicon.ico')
+            full = await client.get('/favicon.ico')
+            head = await client.head('/favicon.ico')
+            not_modified_etag = await client.get('/favicon.ico', headers={
+                'If-None-Match': full.headers['etag'],
+            })
+            not_modified_date = await client.get('/favicon.ico', headers={
+                'If-Modified-Since': full.headers['last-modified'],
+            })
+            ranged = await client.get('/favicon.ico', headers={'Range': 'bytes=10-109'})
+            if_range = await client.get('/favicon.ico', headers={
+                'Range': 'bytes=10-109', 'If-Range': full.headers['etag'],
+            })
+            stale_if_range = await client.get('/favicon.ico', headers={
+                'Range': 'bytes=10-109', 'If-Range': '"stale"',
+            })
+            unsatisfiable = await client.get('/favicon.ico', headers={
+                'Range': f'bytes={len(icon_payload)}-',
+            })
+            unsupported = [
+                await client.request(method, '/favicon.ico')
+                for method in ('POST', 'PUT', 'DELETE', 'PATCH')
+            ]
+        return (
+            full, head, not_modified_etag, not_modified_date, ranged,
+            if_range, stale_if_range, unsatisfiable, unsupported,
+        )
 
-    response = asyncio.run(run())
-    assert response.status_code == 200
-    assert response.headers['content-type'] == 'image/vnd.microsoft.icon'
-    assert response.headers['cache-control'] == 'public, max-age=3600'
-    assert response.content
+    (
+        full, head, not_modified_etag, not_modified_date, ranged,
+        if_range, stale_if_range, unsatisfiable, unsupported,
+    ) = asyncio.run(run())
+    assert full.status_code == 200
+    assert full.headers['content-type'] == 'image/vnd.microsoft.icon'
+    assert full.headers['cache-control'] == 'public, max-age=3600'
+    assert 'expires' not in full.headers
+    assert full.content == icon_payload
+    assert full.headers['etag']
+    assert full.headers['last-modified']
+    assert full.headers['accept-ranges'] == 'bytes'
+    assert head.status_code == 200
+    assert head.content == b''
+    assert head.headers['content-length'] == str(len(icon_payload))
+    assert not_modified_etag.status_code == not_modified_date.status_code == 304
+    assert not_modified_etag.content == not_modified_date.content == b''
+    assert ranged.status_code == 206
+    assert ranged.headers['content-range'] == f'bytes 10-109/{len(icon_payload)}'
+    assert ranged.content == icon_payload[10:110]
+    assert if_range.status_code == 206
+    assert if_range.content == icon_payload[10:110]
+    assert stale_if_range.status_code == 200
+    assert stale_if_range.content == icon_payload
+    assert unsatisfiable.status_code == 416
+    assert unsatisfiable.headers['content-range'] == f'bytes */{len(icon_payload)}'
+    assert 'cache-control' not in unsatisfiable.headers
+    assert all(response.status_code == 405 for response in unsupported)
+    assert all(response.headers['allow'] == 'OPTIONS, GET, HEAD' for response in unsupported)
+    assert all(
+        response.headers['content-type'] == 'text/html; charset=utf-8'
+        and response.content == unsupported[0].content
+        for response in unsupported
+    )
 
 
 def test_theme_font_stylesheet_is_native_and_preserves_css_contract(monkeypatch, tmp_path):
@@ -1374,7 +1884,8 @@ def test_theme_font_stylesheet_is_native_and_preserves_css_contract(monkeypatch,
     get_response, head_response = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.headers['content-type'] == 'text/css; charset=utf-8'
-    assert get_response.headers['cache-control'] == 'public, max-age=60'
+    assert get_response.headers['cache-control'] == 'private, max-age=60'
+    assert get_response.headers['vary'] == 'Cookie'
     assert "font-family: 'Cabinet-Test'" in get_response.text
     assert '/static/library/fonts/Cabinet-Test.woff2' in get_response.text
     assert '--od-font-family: "Cabinet-Test", sans-serif' in get_response.text
@@ -1413,8 +1924,12 @@ def test_credentialed_theme_font_request_uses_native_user_preference(monkeypatch
 
     response, override = asyncio.run(run())
     assert response.status_code == 200
+    assert response.headers['cache-control'] == 'private, max-age=60'
+    assert response.headers['vary'] == 'Cookie'
     assert '"VT323", "Courier New", monospace' in response.text
     assert '"Orbitron", "Arial Black", sans-serif' in override.text
+    assert override.headers['cache-control'] == 'private, max-age=60'
+    assert override.headers['vary'] == 'Cookie'
 
 
 def test_member_auth_runtime_bootstrap_is_native_with_flask_session_compat(monkeypatch, tmp_path):
@@ -1455,6 +1970,7 @@ def test_member_auth_runtime_bootstrap_is_native_with_flask_session_compat(monke
     assert head.status_code == 200 and head.content == b''
     cookie = response.cookies.get('session')
     assert cookie
+    assert 'SameSite=Lax' in response.headers['set-cookie']
     with app.test_request_context(headers={'Cookie': f'session={cookie}'}):
         validate_csrf(response.json()['csrf_token'])
 
@@ -1588,7 +2104,7 @@ def test_login_with_existing_session_uses_native_auth_page(monkeypatch, tmp_path
     shell.write_text('<html><body><div id="member-auth-root"></div></body></html>')
     actor = SimpleNamespace(
         id=42, role='user', state=True, is_active=True,
-        session_fingerprint=lambda: 'fresh',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     monkeypatch.setattr(asgi, 'create_app', lambda: app)
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
@@ -1598,7 +2114,7 @@ def test_login_with_existing_session_uses_native_auth_page(monkeypatch, tmp_path
         lambda _token: None,
     ))
     cookie = dump_session_cookie(
-        {'_user_id': '42:fresh', '_fresh': True}, app.config['SECRET_KEY'],
+        {'_user_id': issue_login_identity(actor), '_fresh': True}, app.config['SECRET_KEY'],
     )
 
     async def run():
@@ -1626,7 +2142,7 @@ def test_confirmation_page_with_session_keeps_queued_flash(monkeypatch, tmp_path
     shell.write_text('<html><body><div id="member-auth-root"></div></body></html>')
     actor = SimpleNamespace(
         id=43, role='user', state=True, is_active=True,
-        session_fingerprint=lambda: 'fresh',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     monkeypatch.setattr(asgi, 'create_app', lambda: app)
     monkeypatch.setattr(db_session, 'native_session_scope', lambda _app, _db: nullcontext())
@@ -1637,7 +2153,7 @@ def test_confirmation_page_with_session_keeps_queued_flash(monkeypatch, tmp_path
     ))
     cookie = dump_session_cookie(
         {
-            '_user_id': '43:fresh', '_fresh': True,
+            '_user_id': issue_login_identity(actor), '_fresh': True,
             '_flashes': [('success', 'Email address confirmed.')],
         },
         app.config['SECRET_KEY'],
@@ -1679,6 +2195,7 @@ def test_admin_routes_are_bounded_and_retired_switch_cannot_restore_wsgi(monkeyp
 def test_native_shell_switch_preserves_invite_form_post_dispatch(monkeypatch):
     runtime = asgi.LazyASGIApp()
     runtime._flask_app = Flask(__name__)
+    runtime._flask_app.config['WTF_CSRF_ENABLED'] = False
     seen = []
 
     async def native(scope, receive, send):

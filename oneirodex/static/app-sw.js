@@ -23,7 +23,7 @@
  * — without pretending to be an offline library it cannot honestly be.
  */
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const ASSET_CACHE = `oneirodex-assets-${VERSION}`;
 const SHELL_CACHE = `oneirodex-shell-${VERSION}`;
 const OFFLINE_URL = '/offline';
@@ -128,6 +128,14 @@ self.addEventListener('fetch', (event) => {
 
 /** A sign-out tells the worker to drop everything it holds. */
 self.addEventListener('message', (event) => {
+  if (event.data?.type === 'od-privacy-claim') {
+    event.waitUntil(
+      self.clients.claim().then(() => caches.delete('oneirodex-vr-v1')).then(() => {
+        event.ports[0]?.postMessage('od-privacy-claim');
+      }),
+    );
+    return;
+  }
   if (!event.data || event.data.type !== 'od-clear-caches') return;
   event.waitUntil(
     caches.keys().then((names) =>

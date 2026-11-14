@@ -31,6 +31,11 @@ already follows it. Unresolved page findings remain in the
 
 Use the shared field and button primitives for file uploads, settings and other forms. Multipart uploads go through the shared browser requester without setting `Content-Type` manually, so the browser supplies the form boundary; retain server-side type, size and content validation. Destructive actions use the shared named confirmation dialog, explain what changes, and keep Cancel as a no-op. Pages preserve a visible loading, failure/Retry, empty and success state.
 
+Related admin settings forms should use the same `.od-admin-panel` surface,
+padding and action hierarchy. A different grouping or container needs a clear
+workflow or accessibility reason recorded with the page review; avoid leaving a
+peer settings form as an unframed exception.
+
 ## Source of truth and package boundary
 
 `frontend/shared` is the private npm workspace package `@oneirodex/ui` (currently
@@ -77,7 +82,10 @@ npm run test --workspace ui-catalog
 
 Use `npm run typecheck --workspace ui-catalog` for a standalone TypeScript
 check. The catalog is local developer tooling; it is not installed by external
-applications or served as a public component library. Its dark green theme is
+applications or served as a public component library. After building it, the
+loopback Project hub also serves it at `/ui-catalog/` alongside its decision,
+phase and research boards. Run `npm run build --workspace ui-catalog` after
+source changes so the hub serves the current bundle. Its dark green theme is
 the initial palette. The light theme is a catalog-only preview derived from
 current tokens; it does not establish that an end-user light preset ships.
 
@@ -153,14 +161,16 @@ that a reusable component is exported.
 
 | Pattern | Contract | Current shared implementation |
 |---|---|---|
-| Buttons | A link navigates; a button performs an action. Use primary for the main commit/start action, secondary for ordinary actions, danger for destructive actions, and ghost/quiet for low-emphasis controls. Show disabled and pending states; prevent duplicate submission. Labels wrap or controls grow without clipping. | `Button` (`default`, `primary`, `secondary`, `danger`, `ghost`, `quiet`; `sm`, `md`, `lg`; optional pill) maps to `.od-btn` classes. Each caller owns pending semantics and text. |
+| Authentication backdrop | Keep sign-in/setup on the semantic page background with the subtle accent radial used by the legacy setup shell; take its colors from the active theme. | `AuthApp` applies this backdrop to `.auth-pilot` with `--od-accent` and `--od-bg`. |
+| Buttons | A link navigates; a button performs an action. Use primary for the main commit/start action, secondary for ordinary actions, danger for destructive actions, and ghost/quiet for low-emphasis controls. Show disabled and pending states; prevent duplicate submission. Labels wrap or controls grow without clipping. Authentication primary submit actions use 16px text at semibold weight. | `Button` (`default`, `primary`, `secondary`, `danger`, `ghost`, `quiet`; `sm`, `md`, `lg`; optional pill) maps to `.od-btn` classes. Each caller owns pending semantics and text. |
 | Links | Use a real anchor for navigation, with a clear destination label. Do not style an action as a link while implementing it as an anchor without navigation. A fragment that names content inside a hidden tab or disclosure must reveal its container, preserve the requested fragment, and move the target into view after layout settles. | Native anchors plus shared theme classes; React routes and panels own deep links. |
-| Fields and forms | Keep labels visible and programmatically associated. Associate help, validation and errors. Retain entered values when an unrelated action fails. Do not rely on placeholder text as the label. | Shared theme primitives; each app owns field schemas and form logic. |
+| Fields and forms | Keep labels visible and programmatically associated. Associate help, validation and errors. Retain entered values when an unrelated action fails. Do not rely on placeholder text as the label. Authentication labels use 14px medium-weight text and controls use 16px regular text to match legacy sign-in, registration, password-reset, and email-confirmation forms. | Shared theme primitives; each app owns field schemas and form logic. |
 | Dialogs | Give the dialog an accessible name. Move focus in, keep Tab/Shift+Tab inside, return focus to the opener, and make Escape/backdrop behavior explicit. Long content scrolls inside the dialog. | `Modal` provides portal, focus management, Escape/backdrop options and focus restoration; callers provide dialog content and styling. |
 | Status | Distinguish loading, empty, success, warning, error and unavailable. Show a visible text label for semantic status; color and shape reinforce the text but never carry meaning alone. Missing or unavailable source data stays neutral and must not be inferred as healthy or failed. Use polite status announcements for routine changes; for polling, announce the initial state and meaningful state transitions without including changing timestamps or unchanged refreshes. Reserve assertive alerts for actionable errors. Preserve last-known data after refresh failure when the feature contract permits it. | `PageStatus` provides loading/error/empty presentation and announcement semantics. Success/warning content remains feature-owned. |
 | Tables | Use table headers and caption/context. Sort controls expose state. Row actions name the subject. Bound wide content in a named, keyboard-focusable scroll region with visible focus. Provide an honest empty/no-match state. | `DataTable` supports sorting, a global text filter, optional column typeahead filters, count, density and `scrollLabel`; React pages use the shared component. |
 | Charts | Give each visualization a clear heading. Pair visual proportions with labels and exact values; provide a useful empty state. Keep labels readable at phone widths and make the data available as text. | Statistics uses token-colored proportional bars with visible series labels and values; this is a page pattern, not a shared chart component. |
 | Filters | Make applied values visible. Distinguish draft from immediately applied state; keep counts/chips synchronized with the query actually applied. Provide a reachable clear/reset action and touch-friendly selection. | `FilterChipGroup` in `@oneirodex/ui` renders controlled multi-select chips, a named group, optional applied-result status, and an optional clear action. The feature owns option meaning, query serialization, and whether `onChange` applies immediately or changes draft state. Pass only the count for applied results. This primitive is not a full filter toolbar or a replacement for `DataTable` search/column filters. |
+| Horizontal shelves | Keep rows scrollable in both directions. For circular discovery, boundary arrows wrap to the opposite end. Let pointer drag start on linked cover art; a stationary click still navigates, while a drag past its threshold suppresses link activation. | `useRowScroll` provides drag, wheel, hover-arrow and keyboard scrolling; `DiscoverShelf` enables wrap-around arrows. |
 
 The shared layer owns reusable presentation, keyboard/focus mechanics and
 common state behavior. The feature owns option data, query meaning, permissions,
@@ -191,6 +201,9 @@ fit.
   disclosure. Reposition it on resize and scroll, keep it within the viewport,
   and make Tab from the disclosure enter the first action; Escape returns focus
   to the disclosure and outside-click dismissal preserves the clicked target.
+- Dropdown hover and keyboard-focus states keep an opaque semantic surface
+  behind readable text; avoid transparent highlights that let page content show
+  through the control.
 - Keep page titles, context controls, view selectors and primary actions in
   their shell's reserved areas. Avoid duplicate titles or nested panels with
   the same information role. Keep a page heading in the accessibility tree;
@@ -242,17 +255,17 @@ Catalog and alias requirements:
 
 Most rail drawings remain in React icon maps, with shared geometry defined by
 the framework-neutral catalog in `frontend/shared/icons/manifest.json`. It
-defines `ownership`, `discover`, `integrations`, `report`, `menu`, `more`, `user`,
-`download`, `downloads`, `play`, and `settings`, including category,
+defines `ownership`, `discover`, `integrations`, `report`, `menu`, `grip`, `more`,
+`user`, `download`, `downloads`, `play`, and `settings`, including category,
 aliases (`plug`, `report-issue`, `cogs`, and `gear`), accessibility use, SVG shapes and theme
 inheritance. `scripts/generate_icon_adapters.py` validates
 the SVG whitelist and generates the React adapter. Run it after manifest edits;
 `--check` detects stale output. Do not hand-edit `generatedIconPaths.tsx`.
 The catalog now
-shows all 61 canonical React glyph keys and, for the eight era overrides, the shared,
+shows all 62 canonical React glyph keys and, for the eight era overrides, the shared,
 pixel, rounded, and angular drawings together. Its room-to-hand mapping is
 visible beside the specimens. This makes renderer coverage inspectable; it does
-not establish theme-pack parity beyond those eleven migrated keys. The former
+not establish theme-pack parity beyond those twelve migrated keys. The former
 `compass` drawing remains only as a React-era fallback. The catalog also shows all
 six theme-pack manifests and their 17 declared keys. It renders the 85 shipped
 non-outline SVG assets and the shared outline drawings; all 17 Outline keys now have shared drawings. These

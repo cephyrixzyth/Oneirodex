@@ -1,0 +1,128 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2067",
+  "observed_utc": "2026-11-13T19:55:19.879489+00:00",
+  "source_base": "039ba881a85309f3c0c0eff14b55a897e870903c",
+  "scope": "Bootstrap diagnostics and default-off targeted manual CI; no production tracker/domain/privilege change.",
+  "local_verification": {
+    "observed_utc": "2026-11-13T19:55:19.682508+00:00",
+    "passed": true,
+    "platform": "Windows",
+    "results": [
+      {
+        "name": "controller-safety",
+        "exit_code": 0,
+        "expected": 0,
+        "log_sha256": "54388aa101d87e4744c27dbbf60454253f45736c14593f16c6a54f320dba43af"
+      },
+      {
+        "name": "syntax",
+        "exit_code": 0,
+        "expected": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "nonmac-refusal",
+        "exit_code": 2,
+        "expected": 2,
+        "log_sha256": "400162065c1cf72b358959ac3340f2d3c173485c33264a17683c68c1c13ba6e4"
+      },
+      {
+        "name": "ordinary-job-guards",
+        "exit_code": 0,
+        "expected": 0,
+        "log_sha256": "36cb47305672c7b70f88cbec4e4986bc684df74675e7e1c5859640a3321046af"
+      },
+      {
+        "name": "targeted-manual-guards",
+        "exit_code": 0,
+        "expected": 0,
+        "log_sha256": "2687bbdfbaf81067850f9e4cd073e358461a9dab6142aaa77cd8af5a04b4a460"
+      }
+    ],
+    "source_sha256": {
+      ".github/workflows/desktop-build.yml": "143bf7651cabafa28360070edaa6dc385b0299c7fe22f6a7a02466b6100621b2",
+      "scripts/ci/probe-macos-launch-coalition.py": "7a0490f494c598a1ed08ad9078c6046f29f61b791a714aa2e3c51c58fcb94040",
+      "scripts/ci/test_macos_launch_coalition_probe.py": "060972cac685665817eed67ae9704123f6583d0824a2f4aa65059c6b2ee77593",
+      "scripts/ci/README-macos-coalition-probe.md": "9204ca4d696915800453bd4443e05657434e109b4d94cd0c33252b2ab4a03b7a"
+    },
+    "scope": "Seven mocked controller checks, compile/refusal and parsed workflow guards only; actual targeted-manual selection and new native diagnosis remain pending."
+  },
+  "native_prior_source": {
+    "observed_utc": "2026-11-13T19:37:52.574Z",
+    "source_head": "039ba881a85309f3c0c0eff14b55a897e870903c",
+    "run_id": 43492989735,
+    "job_id": 132118723620,
+    "raw_log_sha256": "6d34049ac15e2f6bf2d16e7211b469dd4fd850a455b549f90f985ae98a06f2c6",
+    "report": {
+      "phase": "ordinary-user-api-and-job-isolation",
+      "platform": "Darwin",
+      "release": "25.6.0",
+      "architecture": "arm64",
+      "source_sha256": "6f852552828978fab95cc796497ef8fdf043679813c0f2dca134f7b940bef8ed",
+      "api_and_job_isolation_passed": false,
+      "family_recovery_acceptance": false,
+      "remaining": [
+        "detached descendants",
+        "exec/crash/API-denial controls",
+        "guardian-loss game survival",
+        "successive-launch isolation",
+        "production integration and account/package acceptance"
+      ],
+      "controller": {
+        "coalition_id": 818,
+        "started": 361,
+        "exited": 353,
+        "active": 8
+      },
+      "outside": {
+        "nonce": "0b09c09c8cee451c9e6b5970d3a92263",
+        "coalition_id": 818,
+        "started": 364,
+        "exited": 355,
+        "active": 9
+      },
+      "cleanup": {
+        "attempted_jobs": 1,
+        "errors": []
+      },
+      "status": "unsupported",
+      "reason": "user-domain bootstrap failed (5)"
+    },
+    "interpretation": "Ordinary-user own-coalition APIs succeeded; user-domain bootstrap failed5. No per-game isolation, descendant/recovery or production acceptance. Cause of bootstrap failure remains unknown; no elevation or blind rerun."
+  },
+  "new_native_diagnosis": {
+    "observed_utc": "2026-11-13T20:03:43.633Z",
+    "source_head": "bba3a4d5fa2d5ca25d9f1316a80b1f5d03f2dd39",
+    "run_id": 43497438422,
+    "job_id": 132134157150,
+    "status": "unsupported",
+    "bootstrap_exit_code": 5,
+    "stderr": "Generic Input/output error; privileged diagnostic suggestion was not followed. Underlying cause remains unknown.",
+    "cleanup_errors": 0,
+    "raw_log_sha256": "922ae297ae5c158aa40696c36a8edf7abd9ea3b6dde1f98944fa401ab94641b7",
+    "scope": "Ordinary-user query APIs succeeded; per-game isolation not established."
+  },
+  "targeted_manual_job_selection": {
+    "status": "observed",
+    "run_id": 43497438422,
+    "source_head": "bba3a4d5fa2d5ca25d9f1316a80b1f5d03f2dd39",
+    "executed_probe_jobs": 1,
+    "skipped_rust_build_release_jobs": 3,
+    "release_performed": false,
+    "limits": "Manual selection works; selected native capability remains unsupported, not passing."
+  },
+  "publication_ruling": "Fixture-only skip-CI commit plus one probe-only manual dispatch preserves the live039 main run. New-head required normal full CI remains unsatisfied until later normal CI before merge/release. No waiver or cancellation.",
+  "archive": {
+    "filename": "macos-coalition-diagnostics-r2067.zip",
+    "sha256": "7b0fa3af42b9d1c889c06daf0c47d4ff2ee660d95a08453f89bad2be51e491bc",
+    "files": 15,
+    "bytes": 73236,
+    "storage": "Private canonical DT-006 artifacts; raw local paths withheld from public Git."
+  },
+  "evidence_selection": "Archive freezes source/local checks and prior-source observed failure; red logs and final staged preflight are retained separately. No new-source native pass is inferred.",
+  "remaining": [
+    "Bootstrap root cause and unprivileged per-game isolation.",
+    "All detached-descendant, guardian-loss survival, account/restart, actual packaged/platform and original whole-program gates."
+  ]
+}

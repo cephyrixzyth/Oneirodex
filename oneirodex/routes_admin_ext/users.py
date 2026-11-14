@@ -1,15 +1,20 @@
 # /oneirodex/routes_admin_ext/users.py
 from oneirodex.utils.api_response import api_error, api_ok
 from flask import request, jsonify
-from flask_login import login_required, current_user, login_user
-from oneirodex.models import Library, User, Genre, Theme
+from flask_login import login_required, current_user
+from oneirodex.models import (
+    Library,
+    User,
+    Genre,
+    Theme,
+)
 from oneirodex import db
 from sqlalchemy import select, func
 from . import admin2_bp
 from uuid import uuid4
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.accounts import display_email, is_placeholder_email, placeholder_email
-from oneirodex.utils.auth import admin_required
+from oneirodex.utils.auth import admin_required, login_user
 from oneirodex.utils.admin_spa import render_admin_spa
 from oneirodex.utils.admin_invariant import lock_admin_mutation
 from oneirodex.utils.admin_user_validation import (
@@ -35,6 +40,20 @@ def _lock_admin_user_mutation():
     if actor is None:
         return False
     return actor.role == 'admin' and actor.state is not False
+
+
+def _anonymize_user_audit_events(user):
+    """Retain audit rows while removing direct account identifiers."""
+    from oneirodex.utils.user_deletion import anonymize_user_audit_events
+
+    anonymize_user_audit_events(db.session, user)
+
+
+def _delete_user_owned_rows(user):
+    """Handle user references without database ON DELETE actions explicitly."""
+    from oneirodex.utils.user_deletion import delete_user_owned_rows
+
+    delete_user_owned_rows(db.session, user)
 
 def check_email_unique(email, exclude_user_id=None):
     """Check if email is unique in the system"""
@@ -415,15 +434,26 @@ def manage_user_api(user_id):
         if not valid:
             return api_error(error, code='forbidden')
 
-        # Store user info for logging before deletion
-        user_info = f"{user.name} (email: {user.email}, role: {user.role})"
+        deleting_self = current_user.id == user.id
+        audit_actor_id = 'system' if deleting_self else current_user.id
 
         try:
-            db.session.delete(user)
-            db.session.commit()
-            log_system_event(f"Admin {current_user.name} deleted user: {user_info}", event_type='audit', event_level='warning')
-            return api_ok()
-        except Exception as e:
+            from oneirodex.utils.user_deletion import delete_user_account
+
+            cleanup_pending = delete_user_account(db.session, user)
+            log_system_event(
+                f"Admin account {'deleted' if deleting_self else current_user.name} deleted user account",
+                event_type='audit',
+                event_level='warning',
+                audit_user=audit_actor_id,
+            )
+            return api_ok({'cleanup_pending': cleanup_pending > 0})
+        except Exception:
             db.session.rollback()
-            log_system_event(f"Admin {current_user.name} failed to delete user {user_info}: {str(e)}", event_type='audit', event_level='error')
+            log_system_event(
+                'Admin account deletion failed',
+                event_type='audit',
+                event_level='error',
+                audit_user=audit_actor_id,
+            )
             return api_error('Failed to delete user', code='internal')

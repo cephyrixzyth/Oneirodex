@@ -16,7 +16,7 @@ Open **More → Big Picture** for a gamepad-first library rail.
 | Exit / blur | — | — | `Esc` |
 | First / last | — | — | `Home` / `End` |
 
-Kid mode uses the same browse controls; parental ACL already filters the list. Download may be unavailable for child accounts.
+Kid mode uses the same browse and open controls; parental ACL filters the list. Download and install controls remain visible but disabled for child accounts.
 
 **Steam Deck / Steam Input:** If you launch the browser from Steam, Steam can remap controls. Oneirodex uses the browser Gamepad API — it does not ship a separate Steam Input profile yet.
 
@@ -37,6 +37,8 @@ Kid mode uses the same browse controls; parental ACL already filters the list. D
 A PSVR2 is a SteamVR headset once the PlayStation VR2 PC adapter and the *PlayStation VR2 App* from Steam are installed — nothing Oneirodex ships or configures. Then: 1) on the gaming PC, connect the headset and start SteamVR; 2) in a desktop browser on that same PC, open Oneirodex → Library (or `/vr` for the large-tap view) and use **Big Picture** with the controller; 3) pick a title whose row says **Plays in VR** and launch it with the desktop companion — SteamVR takes over; 4) for a **Plays flat** title, launch it flat and watch it on the SteamVR desktop, or stream it with Moonlight to another seat. A **VR via community profile** title tells you a profile exists and links to its page; installing an injector is your own decision on your own PC, and Oneirodex never does it for you.
 
 Android APK is a spike only.
+
+The VR PWA does not keep signed-in pages or catalogue responses for offline use. Reopen `/vr` online after an update so the shared installer can retire the older private-data worker. Catalogue and details requests wait for that privacy update. If it cannot finish, reconnect and reload before browsing. A failed optional app installation does not prevent browsing once browser control is safe. Already-offline clients cannot receive the update until they reconnect.
 
 ### How a title plays in VR (`vr_compat`)
 

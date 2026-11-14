@@ -6,6 +6,8 @@ import {
   PreferencesModalHost,
   openPreferencesModal,
   useShellConfig,
+  showToast,
+  signOut,
 } from '@oneirodex/ui'
 
 import { TOPBAR_LEAD_ID, TOPBAR_SLOT_ID, TOPBAR_TITLE_ID, TOPBAR_TRAIL_ID } from './ContextBar'
@@ -295,6 +297,24 @@ export function TopBar({
                   Search everything <kbd>{paletteHint}</kbd>
                 </button>
                 {ACCOUNT_LINKS.map((link) => {
+                  if (link.id === 'logout') {
+                    return (
+                      <button
+                        key={link.id}
+                        type="button"
+                        className="od-topnav__logout"
+                        data-action="logout"
+                        onClick={() => {
+                          setAccountOpen(false)
+                          void signOut()
+                            .then(() => window.location.assign('/login'))
+                            .catch(() => showToast('Could not log out. Please try again.', 'error'))
+                        }}
+                      >
+                        {link.label}
+                      </button>
+                    )
+                  }
                   if (link.modal) {
                     // Still an <a href>: middle-click and "open in new tab"
                     // land on the server-rendered page, which is the fallback.

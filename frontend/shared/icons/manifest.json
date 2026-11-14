@@ -122,6 +122,68 @@
         }
       ]
     },
+    "grip": {
+      "category": "control",
+      "aliases": [],
+      "accessible_use": "decorative by default; the surrounding button provides its accessible name",
+      "theme": { "mode": "inherit" },
+      "shapes": [
+        {
+          "tag": "circle",
+          "attributes": { "cx": "9", "cy": "6", "r": "1", "fill": "currentColor", "stroke": "none" }
+        },
+        {
+          "tag": "circle",
+          "attributes": {
+            "cx": "9",
+            "cy": "12",
+            "r": "1",
+            "fill": "currentColor",
+            "stroke": "none"
+          }
+        },
+        {
+          "tag": "circle",
+          "attributes": {
+            "cx": "9",
+            "cy": "18",
+            "r": "1",
+            "fill": "currentColor",
+            "stroke": "none"
+          }
+        },
+        {
+          "tag": "circle",
+          "attributes": {
+            "cx": "15",
+            "cy": "6",
+            "r": "1",
+            "fill": "currentColor",
+            "stroke": "none"
+          }
+        },
+        {
+          "tag": "circle",
+          "attributes": {
+            "cx": "15",
+            "cy": "12",
+            "r": "1",
+            "fill": "currentColor",
+            "stroke": "none"
+          }
+        },
+        {
+          "tag": "circle",
+          "attributes": {
+            "cx": "15",
+            "cy": "18",
+            "r": "1",
+            "fill": "currentColor",
+            "stroke": "none"
+          }
+        }
+      ]
+    },
     "more": {
       "category": "control",
       "aliases": [],

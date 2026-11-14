@@ -39,3 +39,18 @@ test('shared box and focus rules use theme tokens without replacing native appea
   expect(visible).toContain('outline-offset: 2px')
   expect(`${box}${focus}${visible}`).not.toMatch(/appearance\s*:/)
 })
+
+test('admin visually-hidden helper text stays available to assistive technology', () => {
+  const visuallyHidden = css.match(/\.visually-hidden\s*\{[^}]*\}/)?.[0] || ''
+  expect(visuallyHidden).toContain('position: absolute !important')
+  expect(visuallyHidden).toContain('width: 1px !important')
+  expect(visuallyHidden).toContain('height: 1px !important')
+  expect(visuallyHidden).toContain('clip: rect(0, 0, 0, 0) !important')
+  expect(visuallyHidden).toContain('white-space: nowrap !important')
+})
+
+test('IGDB instructions toggle spans the legacy page width', () => {
+  const summary = css.match(/\.od-igdb-instructions > summary\s*\{[^}]*\}/)?.[0] || ''
+  expect(summary).toContain('width: 100%')
+  expect(summary).toContain('text-align: left')
+})

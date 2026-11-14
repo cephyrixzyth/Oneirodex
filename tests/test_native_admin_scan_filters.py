@@ -4,9 +4,12 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 
 from oneirodex.runtime_native.admin_scan_filters import create_admin_scan_filters_router
+from oneirodex.runtime_native.response_compat import flask_redirect_response
 from oneirodex.runtime_native.session_compat import dump_session_cookie, load_session_cookie
 
 
@@ -37,7 +40,7 @@ def make_client(data=None):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-scan-filters-secret', WTF_CSRF_ENABLED=False)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
-    user = SimpleNamespace(id=15, role='admin', is_active=True, state=True, is_authenticated=True, session_fingerprint=lambda: 'fp')
+    user = SimpleNamespace(id=15, role='admin', is_active=True, state=True, is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef')
     manager = SimpleNamespace(login_view='login.login', blueprint_login_views={}, login_message='Please log in.', login_message_category='message', localize_callback=None, session_protection='basic')
     app = FastAPI()
     app.include_router(create_admin_scan_filters_router(
@@ -47,8 +50,18 @@ def make_client(data=None):
         login_manager=manager, data_access=data or FakeFilters(),
     ))
     client = TestClient(app)
-    client.cookies.set('session', dump_session_cookie({'_user_id': '15:fp', '_fresh': True}, 'native-scan-filters-secret'))
+    client.cookies.set('session', dump_session_cookie({'_user_id': login_identity_for(15), '_fresh': True}, 'native-scan-filters-secret'))
     return client
+
+
+def test_scan_filter_form_redirect_matches_werkzeug_response_exactly():
+    legacy = flask_redirect('/admin/edit_filters', code=302)
+    current = flask_redirect_response('/admin/edit_filters', status_code=302)
+
+    assert current.status_code == legacy.status_code
+    assert current.headers['location'] == legacy.headers['Location']
+    assert current.headers['content-type'] == legacy.headers['Content-Type']
+    assert current.body == legacy.get_data()
 
 
 def test_scan_filter_read_create_and_regex_validation():
@@ -62,6 +75,18 @@ def test_scan_filter_read_create_and_regex_validation():
     assert created.status_code == 201 and created.json()['filter']['filter_pattern'] == 'dir:Nintendo'
     assert invalid.status_code == 400
     assert len(data.rows) == 2
+
+
+def test_scan_filter_create_rejects_non_string_patterns_without_writes():
+    data = FakeFilters()
+    client = make_client(data)
+    for pattern in (['Nintendo'], {'name': 'Nintendo'}, 7, True):
+        response = client.post(
+            '/api/admin/scan-filters', json={'kind': 'name', 'pattern': pattern},
+        )
+        assert response.status_code == 400
+        assert response.json()['ok'] is False
+    assert len(data.rows) == 1
 
 
 def test_scan_filter_delete_reports_missing_rows():
@@ -88,6 +113,8 @@ def test_legacy_scan_filter_post_redirects_and_flashes_after_deletion(monkeypatc
 
     assert response.status_code == 302, response.text
     assert response.headers['location'] == '/admin/edit_filters'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<a href="/admin/edit_filters">/admin/edit_filters</a>' in response.text
     assert data.deleted == [1]
     assert tokens == ['form-token']
     session = load_session_cookie(
@@ -110,9 +137,68 @@ def test_legacy_scan_filter_add_redirects_and_flashes(monkeypatch):
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/edit_filters'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<a href="/admin/edit_filters">/admin/edit_filters</a>' in response.text
     assert data.rows[-1].filter_pattern == 'Scene Release'
     assert data.rows[-1].case_sensitive == 'yes'
     session = load_session_cookie(
         response.cookies.get('session'), 'native-scan-filters-secret', max_age=3600,
     )
     assert session['_flashes'] == [('message', 'New scanning filter added.')]
+
+
+def test_legacy_scan_filter_blank_validation_matches_wtforms(monkeypatch):
+    from oneirodex.runtime_native import csrf_compat
+
+    monkeypatch.setattr(csrf_compat, 'csrf_error_response', lambda *_args, **_kwargs: None)
+    data = FakeFilters()
+    client = make_client(data)
+    response = client.post(
+        '/admin/edit_filters',
+        data={'csrf_token': 'form-token', 'filter_pattern': '   ', 'case_sensitive': 'no'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    session = load_session_cookie(
+        response.cookies.get('session'), 'native-scan-filters-secret', max_age=3600,
+    )
+    assert session['_flashes'] == [('danger', 'This field is required.')]
+    assert len(data.rows) == 1
+
+
+def test_legacy_scan_filter_invalid_choice_matches_wtforms(monkeypatch):
+    from oneirodex.runtime_native import csrf_compat
+
+    monkeypatch.setattr(csrf_compat, 'csrf_error_response', lambda *_args, **_kwargs: None)
+    data = FakeFilters()
+    client = make_client(data)
+    response = client.post(
+        '/admin/edit_filters',
+        data={'csrf_token': 'form-token', 'filter_pattern': 'Scene', 'case_sensitive': ''},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    session = load_session_cookie(
+        response.cookies.get('session'), 'native-scan-filters-secret', max_age=3600,
+    )
+    assert session['_flashes'] == [('danger', 'Not a valid choice.')]
+    assert len(data.rows) == 1
+
+
+def test_legacy_scan_filter_preserves_whitespace_accepted_by_wtforms(monkeypatch):
+    from oneirodex.runtime_native import csrf_compat
+
+    monkeypatch.setattr(csrf_compat, 'csrf_error_response', lambda *_args, **_kwargs: None)
+    data = FakeFilters()
+    client = make_client(data)
+    response = client.post(
+        '/admin/edit_filters',
+        data={'csrf_token': 'form-token', 'filter_pattern': ' Scene Release ', 'case_sensitive': 'yes'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/admin/edit_filters'
+    assert data.rows[-1].filter_pattern == ' Scene Release '

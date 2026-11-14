@@ -73,6 +73,23 @@ def test_link_existing_game_updates_path_and_clears_matching_unmatched_row(monke
     session.commit.assert_called_once()
 
 
+def test_link_existing_game_accepts_a_regular_file_within_storage_root(monkeypatch, tmp_path):
+    client, headers, game, _, session, folder = _harness(monkeypatch, tmp_path)
+    game_file = folder.parent / 'Standalone Game.rom'
+    game_file.write_bytes(b'fixture-rom')
+
+    response = client.post('/api/library_tools/link_existing_game', json={
+        'game_uuid': game.uuid,
+        'full_disk_path': str(game_file),
+        'library_uuid': 'library-1',
+    }, headers=headers)
+
+    assert response.status_code == 200
+    assert response.json['full_disk_path'] == str(game_file)
+    assert game.full_disk_path == str(game_file)
+    session.commit.assert_called_once()
+
+
 def test_link_existing_game_rejects_outside_folder_and_requires_admin_csrf(monkeypatch, tmp_path):
     client, headers, game, _, session, _ = _harness(monkeypatch, tmp_path)
     outside = tmp_path / 'outside'

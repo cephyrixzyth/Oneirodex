@@ -112,6 +112,20 @@ test('youtubeDemoLink prefers youtube_demo_url then demo_url then urls', () => {
   expect(youtubeDemoLink({})).toBeNull()
 })
 
+test('youtubeDemoLink rejects unsafe schemes and deceptive YouTube hostnames', () => {
+  expect(
+    youtubeDemoLink({ youtube_demo_url: 'javascript:alert(document.domain)//youtube.com' }),
+  ).toBeNull()
+  expect(
+    youtubeDemoLink({ demo_url: 'https://youtube.com.evil.example/watch?v=abc123DEF' }),
+  ).toBeNull()
+  expect(
+    youtubeDemoLink({
+      urls: [{ type: 'youtube', url: 'https://user@example.com/?next=youtube.com' }],
+    }),
+  ).toBeNull()
+})
+
 test('showsRetroarchCheats requires cheat_surface retroarch', () => {
   expect(showsRetroarchCheats({ cheat_surface: 'retroarch' })).toBe(true)
   expect(showsRetroarchCheats({ cheat_surface: 'RETROARCH' })).toBe(true)

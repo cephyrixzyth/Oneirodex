@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { safeExternalUrl } from '@oneirodex/ui'
 import {
   buildDupeCompare,
   formatByteSize,
@@ -199,16 +200,17 @@ export function StageECandidates({ row }: { row: UnmatchedFolderRow | null | und
               const source = stageESourceLabel(hit.source)
               const mode = stageEMatchModeLabel(hit.match_mode)
               const label = hit.name || hit.id || 'Candidate'
+              const hitUrl = safeExternalUrl(hit.url)
               return (
                 <li
                   key={`${hit.source}-${hit.id || hit.name}-${index}`}
                   className="od-dupe-glance__stage-e-hit"
                 >
                   <span className="od-dupe-glance__stage-e-source">{source}</span>
-                  {hit.url ? (
+                  {hitUrl ? (
                     <a
                       className="od-dupe-glance__stage-e-name"
-                      href={hit.url}
+                      href={hitUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                     >

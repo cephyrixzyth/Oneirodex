@@ -69,7 +69,7 @@ class TestMakeIgdbApiRequest:
     """Tests for make_igdb_api_request function."""
     
     @patch('oneirodex.utils.igdb_api.get_access_token')
-    @patch('requests.post')
+    @patch('oneirodex.utils.igdb_api.safe_request_limited')
     def test_successful_api_request(self, mock_requests_post, mock_get_token, 
                                   db_session, sample_global_settings):
         """Test successful IGDB API request."""
@@ -86,13 +86,15 @@ class TestMakeIgdbApiRequest:
         # asserted as "present" so tuning it does not fail this, while removing
         # it does. An un-timed-out IGDB call blocks a scan worker indefinitely.
         args, kwargs = mock_requests_post.call_args
-        assert args == ('https://api.igdb.com/v4/games',)
+        assert args == ('POST', 'https://api.igdb.com/v4/games')
         assert kwargs['headers'] == {
             'Client-ID': 'test_client_id',
             'Authorization': 'Bearer test_token',
         }
         assert kwargs['data'] == 'fields name;'
         assert kwargs.get('timeout')
+        assert kwargs['max_response_bytes'] == 16 * 1024 * 1024
+        assert kwargs['session'] is not None
 
     def test_missing_igdb_settings(self, db_session):
         """Test API request with missing IGDB settings."""
@@ -122,7 +124,7 @@ class TestMakeIgdbApiRequest:
         assert result == {"error": "Failed to retrieve access token"}
 
     @patch('oneirodex.utils.igdb_api.get_access_token')
-    @patch('requests.post')
+    @patch('oneirodex.utils.igdb_api.safe_request_limited')
     def test_request_exception(self, mock_requests_post, mock_get_token,
                              db_session, sample_global_settings):
         """Test API request with RequestException."""
@@ -135,7 +137,7 @@ class TestMakeIgdbApiRequest:
         assert "An unexpected error occurred" in result["error"]
 
     @patch('oneirodex.utils.igdb_api.get_access_token')
-    @patch('requests.post')
+    @patch('oneirodex.utils.igdb_api.safe_request_limited')
     def test_invalid_json_response(self, mock_requests_post, mock_get_token,
                                  db_session, sample_global_settings):
         """Test API request with invalid JSON response."""
@@ -155,7 +157,7 @@ class TestGetAccessToken:
     def setup_method(self):
         clear_access_token_cache()
     
-    @patch('requests.post')
+    @patch('oneirodex.utils.igdb_api.safe_request_limited')
     def test_successful_token_retrieval(self, mock_requests_post):
         """Test successful access token retrieval."""
         mock_response = MagicMock()
@@ -170,15 +172,34 @@ class TestGetAccessToken:
         
         assert token == 'test_token_12345'
         args, kwargs = mock_requests_post.call_args
-        assert args == ('https://id.twitch.tv/oauth2/token',)
-        assert kwargs['params'] == {
+        assert args == ('POST', 'https://id.twitch.tv/oauth2/token')
+        assert kwargs['data'] == {
             'client_id': 'client_id',
             'client_secret': 'client_secret',
             'grant_type': 'client_credentials',
         }
         assert kwargs.get('timeout')
+        assert kwargs['max_response_bytes'] == 64 * 1024
+        assert kwargs['session'] is not None
 
-    @patch('requests.post')
+    def test_provider_url_validators_reject_other_hosts(self):
+        from oneirodex.utils.igdb_api import _validate_igdb_url, _validate_twitch_url
+
+        assert _validate_igdb_url('https://attacker.example/v4/games')[0] is False
+        assert _validate_twitch_url('https://attacker.example/oauth2/token')[0] is False
+
+    @patch('oneirodex.utils.igdb_api.safe_request_limited')
+    def test_token_transport_failure_does_not_escape(self, mock_safe_request, caplog):
+        import requests
+
+        mock_safe_request.side_effect = requests.ConnectionError(
+            'https://id.twitch.tv/oauth2/token?client_secret=should-not-escape'
+        )
+        assert get_access_token('client-id', 'should-not-escape') is None
+        assert 'Failed to obtain access token' in caplog.text
+        assert 'should-not-escape' not in caplog.text
+
+    @patch('oneirodex.utils.igdb_api.safe_request_limited')
     def test_token_cache_avoids_second_request(self, mock_requests_post):
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -192,7 +213,7 @@ class TestGetAccessToken:
         assert get_access_token('cid', 'sec') == 'cached_token'
         mock_requests_post.assert_called_once()
 
-    @patch('requests.post')
+    @patch('oneirodex.utils.igdb_api.safe_request_limited')
     @patch('builtins.print')
     def test_failed_token_retrieval(self, mock_print, mock_requests_post):
         """Test failed access token retrieval."""

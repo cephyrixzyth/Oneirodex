@@ -11,6 +11,7 @@ test('shared page retains its title as an actual visible level-one heading', () 
     </Page>,
   )
   expect(screen.getByRole('heading', { name: 'Chat emoji', level: 1 })).toBeVisible()
+  expect(document.title).toBe('Chat emoji · Oneirodex Admin')
   const theme = readFileSync(
     resolve(process.cwd(), '../../oneirodex/setup/default_theme/css/od-appbar.css'),
     'utf8',

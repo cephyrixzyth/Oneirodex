@@ -4,10 +4,10 @@
 import time
 import threading
 from datetime import datetime, timezone
-from oneirodex import db
 from oneirodex.models import GlobalSettings, Game
 from oneirodex.utils.global_settings import global_settings_row
-from sqlalchemy import select, create_engine
+from oneirodex.runtime_native.db_session import native_db as db
+from sqlalchemy import select, create_engine, func
 from sqlalchemy.orm import sessionmaker
 from config import Config
 
@@ -288,8 +288,8 @@ def get_hltb_stats():
     """
     # Try to use Flask app context first (for API calls)
     try:
-        total_games = db.session.execute(select(db.func.count(Game.id))).scalar()
-        games_with_hltb = db.session.execute(select(db.func.count(Game.id)).where(Game.hltb_id.isnot(None))).scalar()
+        total_games = db.session.execute(select(func.count(Game.id))).scalar()
+        games_with_hltb = db.session.execute(select(func.count(Game.id)).where(Game.hltb_id.isnot(None))).scalar()
         coverage_percentage = (games_with_hltb / total_games * 100) if total_games > 0 else 0
 
         return {
@@ -305,8 +305,8 @@ def get_hltb_stats():
         session = SessionLocal()
 
         try:
-            total_games = session.execute(select(db.func.count(Game.id))).scalar()
-            games_with_hltb = session.execute(select(db.func.count(Game.id)).where(Game.hltb_id.isnot(None))).scalar()
+            total_games = session.execute(select(func.count(Game.id))).scalar()
+            games_with_hltb = session.execute(select(func.count(Game.id)).where(Game.hltb_id.isnot(None))).scalar()
             coverage_percentage = (games_with_hltb / total_games * 100) if total_games > 0 else 0
 
             return {

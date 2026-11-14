@@ -12,6 +12,7 @@ covers the walk itself. Nothing here touches the network or the database.
 from __future__ import annotations
 
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import pytest
 
@@ -52,7 +53,7 @@ def no_db(monkeypatch):
         def begin_nested(self):
             return contextlib.nullcontext()
 
-    monkeypatch.setattr(game_core.db, 'session', FakeSession())
+    monkeypatch.setattr(game_enrich, 'db', SimpleNamespace(session=FakeSession()))
 
 
 class TestConsolePlatformsSkipSteam:

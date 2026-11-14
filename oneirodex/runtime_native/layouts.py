@@ -11,6 +11,33 @@ from starlette.responses import JSONResponse
 from .csrf_compat import csrf_error_response
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .response_compat import flask_route_not_found_response
+
+_LAYOUT_JSON_MAX_BYTES = 64 * 1024
+
+
+class _LayoutBodyTooLarge(ValueError):
+    pass
+
+
+async def _read_layout_json(request: Request) -> Any:
+    """Read a small layout request without buffering an unbounded ASGI body."""
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            declared_size = int(content_length)
+        except ValueError:
+            # A malformed Content-Length is handled like invalid JSON below.
+            raise
+        if declared_size > _LAYOUT_JSON_MAX_BYTES:
+            raise _LayoutBodyTooLarge
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > _LAYOUT_JSON_MAX_BYTES:
+            raise _LayoutBodyTooLarge
+        body.extend(chunk)
+    return json.loads(bytes(body) or b'{}')
 
 
 class LayoutData:
@@ -177,17 +204,21 @@ def create_layout_router(
                 response = auth_error(request, auth, write=False, admin=True)
             if response is None:
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_layout_json(request)
+                except _LayoutBodyTooLarge:
+                    response = error('Request body is too large.', 'payload_too_large')
+                    payload = {}
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
                     payload = {}
-                try:
-                    response = JSONResponse(data.save_admin(payload))
-                except ValueError as exc:
-                    response = error(str(exc), 'bad_request')
-                except Exception:  # noqa: BLE001 — keep persistence detail private
-                    response = error('Could not save detail layout', 'internal')
+                if response is None:
+                    try:
+                        response = JSONResponse(data.save_admin(payload))
+                    except ValueError as exc:
+                        response = error(str(exc), 'bad_request')
+                    except Exception:  # noqa: BLE001 — keep persistence detail private
+                        response = error('Could not save detail layout', 'internal')
             return finish(response, request, auth)
 
     @router.api_route('/api/layouts/detail/mine', methods=['GET', 'HEAD'])
@@ -213,17 +244,21 @@ def create_layout_router(
                 response = auth_error(request, auth, write=False, admin=False)
             if response is None:
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_layout_json(request)
+                except _LayoutBodyTooLarge:
+                    response = error('Request body is too large.', 'payload_too_large')
+                    payload = {}
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
                     payload = {}
-                try:
-                    response = JSONResponse(data.save_mine(auth.user.id, payload))
-                except ValueError as exc:
-                    response = error(str(exc), 'bad_request')
-                except Exception:  # noqa: BLE001 — keep persistence detail private
-                    response = error('Could not save detail layout', 'internal')
+                if response is None:
+                    try:
+                        response = JSONResponse(data.save_mine(auth.user.id, payload))
+                    except ValueError as exc:
+                        response = error(str(exc), 'bad_request')
+                    except Exception:  # noqa: BLE001 — keep persistence detail private
+                        response = error('Could not save detail layout', 'internal')
             return finish(response, request, auth)
 
     @router.delete('/api/layouts/detail/mine')
@@ -270,11 +305,16 @@ def create_layout_router(
                 response = auth_error(request, auth, write=False, admin=False)
             if response is None:
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_layout_json(request)
+                except _LayoutBodyTooLarge:
+                    response = error('Request body is too large.', 'payload_too_large')
+                    payload = {}
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
                     payload = {}
+                if response is not None:
+                    return finish(response, request, auth)
                 try:
                     body = CreateLayoutPresetBody.model_validate(payload)
                 except ValidationError as exc:
@@ -298,7 +338,10 @@ def create_layout_router(
             return finish(response, request, auth)
 
     @router.delete('/api/layouts/detail/presets/{preset_id}')
-    def delete_layout_preset(request: Request, preset_id: int):
+    def delete_layout_preset(request: Request, preset_id: str):
+        if not preset_id.isdecimal():
+            return flask_route_not_found_response(flask_app, request)
+        preset_id = int(preset_id)
         with auth_scope(request):
             auth = make_auth(request)
             response = write_scope_error(auth)

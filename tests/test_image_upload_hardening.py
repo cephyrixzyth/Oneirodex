@@ -21,12 +21,13 @@ from __future__ import annotations
 import io
 import os
 from uuid import uuid4
+from urllib.parse import quote
 
 import pytest
 from PIL import Image as PILImage
-from sqlalchemy import text
+from sqlalchemy import select, text
 
-from oneirodex.models import Game, Library, LibraryPlatform, User
+from oneirodex.models import Game, Image, Library, LibraryPlatform, User
 from oneirodex.routes_admin_ext.game_images import MAX_IMAGE_PIXELS, MAX_IMAGE_UPLOAD_BYTES
 
 
@@ -82,17 +83,34 @@ def _png(width: int, height: int, *, colour=(20, 140, 90)) -> bytes:
     return buf.getvalue()
 
 
-def _upload(client, admin_user, game, payload: bytes, *, kind='cover', name='art.png'):
+def _upload(
+    client, admin_user, game, payload: bytes, *, kind='cover', name='art.png',
+    game_uuid=None,
+):
     with client.session_transaction() as sess:
         sess['_user_id'] = str(admin_user.id)
     return client.post(
-        f'/upload_image/{game.uuid}',
+        f"/upload_image/{game_uuid or game.uuid}",
         data={'file': (io.BytesIO(payload), name), 'image_type': kind},
         content_type='multipart/form-data',
     )
 
 
 class TestUploadCeiling:
+    def test_encoded_windows_traversal_is_rejected_before_writing(
+        self, client, admin_user, sample_game, image_dir, tmp_path,
+    ):
+        malicious_uuid = quote(r'..\..\outside', safe='')
+        response = _upload(
+            client, admin_user, sample_game, _png(64, 64),
+            game_uuid=malicious_uuid,
+        )
+
+        assert response.status_code == 404
+        assert response.get_json()['error_code'] == 'not_found'
+        assert list(image_dir.iterdir()) == []
+        assert list(tmp_path.parent.glob('outside_cover_*.png')) == []
+
     def test_oversize_upload_is_rejected(self, client, admin_user, sample_game, image_dir):
         payload = b'\x89PNG\r\n\x1a\n' + os.urandom(MAX_IMAGE_UPLOAD_BYTES + 1024)
         response = _upload(client, admin_user, sample_game, payload)
@@ -113,8 +131,136 @@ class TestUploadCeiling:
         assert response.status_code == 200
         written = list(image_dir.iterdir())
         assert len(written) == 1
+        assert sample_game.uuid not in written[0].name
         with PILImage.open(written[0]) as saved:
             assert saved.size == (600, 800)
+
+    def test_failed_singular_replacement_preserves_previous_record_and_bytes(
+        self, client, admin_user, sample_game, image_dir, db_session, monkeypatch,
+    ):
+        first = _upload(client, admin_user, sample_game, _png(600, 800))
+        assert first.status_code == 200
+        old = db_session.execute(
+            select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
+        ).scalar_one()
+        old_id, old_filename = old.id, old.url
+        old_path = image_dir / old_filename
+        old_bytes = old_path.read_bytes()
+
+        def fail_fsync(*_args):
+            raise OSError('injected image publication failure')
+
+        monkeypatch.setattr('oneirodex.routes_admin_ext.game_images.os.fsync', fail_fsync)
+        with pytest.raises(OSError, match='injected image publication failure'):
+            _upload(client, admin_user, sample_game, _png(640, 900))
+
+        db_session.expire_all()
+        retained = db_session.get(Image, old_id)
+        assert retained is not None
+        assert retained.url == old_filename
+        assert old_path.read_bytes() == old_bytes
+        assert len(list(image_dir.iterdir())) == 1
+
+    def test_failed_db_commit_keeps_old_image_and_new_recovery_bytes(
+        self, client, admin_user, sample_game, image_dir, db_session, monkeypatch,
+    ):
+        first = _upload(client, admin_user, sample_game, _png(600, 800))
+        assert first.status_code == 200
+        old = db_session.execute(
+            select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
+        ).scalar_one()
+        old_id, old_filename = old.id, old.url
+        old_path = image_dir / old_filename
+        old_bytes = old_path.read_bytes()
+
+        def fail_commit():
+            raise RuntimeError('injected commit failure')
+
+        monkeypatch.setattr('oneirodex.routes_admin_ext.game_images.db.session.commit', fail_commit)
+        with pytest.raises(RuntimeError, match='injected commit failure'):
+            _upload(client, admin_user, sample_game, _png(640, 900))
+
+        db_session.rollback()
+        db_session.expire_all()
+        retained = db_session.get(Image, old_id)
+        assert retained is not None and retained.url == old_filename
+        assert old_path.read_bytes() == old_bytes
+        # The new path is deliberately left as an unreferenced recovery
+        # candidate because a real commit exception can have an ambiguous
+        # outcome. Never delete the prior committed bytes to hide that state.
+        assert len(list(image_dir.iterdir())) == 2
+
+    def test_successful_singular_replacement_commits_new_row_before_old_unlink(
+        self, client, admin_user, sample_game, image_dir, db_session,
+    ):
+        assert _upload(client, admin_user, sample_game, _png(600, 800)).status_code == 200
+        old = db_session.execute(
+            select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
+        ).scalar_one()
+        old_path = image_dir / old.url
+
+        response = _upload(client, admin_user, sample_game, _png(640, 900))
+
+        assert response.status_code == 200
+        db_session.expire_all()
+        rows = db_session.execute(
+            select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
+        ).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].url != old.url
+        assert not old_path.exists()
+        assert (image_dir / rows[0].url).is_file()
+
+    def test_replacing_one_reference_does_not_unlink_another_games_image(
+        self, client, admin_user, sample_game, image_dir, db_session,
+    ):
+        assert _upload(client, admin_user, sample_game, _png(600, 800)).status_code == 200
+        old = db_session.execute(
+            select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
+        ).scalar_one()
+        old_path = image_dir / old.url
+        other_game = Game(
+            library_uuid=sample_game.library_uuid,
+            name=f'Shared image reference {uuid4().hex[:8]}',
+            igdb_id=515152,
+        )
+        db_session.add(other_game)
+        db_session.flush()
+        db_session.add(Image(game_uuid=other_game.uuid, image_type='screenshot', url=old.url))
+        db_session.commit()
+
+        response = _upload(client, admin_user, sample_game, _png(640, 900))
+
+        assert response.status_code == 200
+        db_session.expire_all()
+        assert old_path.is_file()
+        assert db_session.execute(
+            select(Image.id).where(Image.game_uuid == other_game.uuid, Image.url == old.url)
+        ).first() is not None
+
+    def test_decoded_format_sets_saved_suffix_not_client_filename(
+        self, client, admin_user, sample_game, image_dir,
+    ):
+        response = _upload(
+            client, admin_user, sample_game, _png(32, 48), name='art.jpg',
+        )
+        assert response.status_code == 200
+        written = list(image_dir.iterdir())
+        assert len(written) == 1
+        assert written[0].suffix == '.png'
+        with PILImage.open(written[0]) as saved:
+            assert saved.format == 'PNG'
+
+    def test_unsupported_decoded_format_is_rejected_even_with_allowed_suffix(
+        self, client, admin_user, sample_game, image_dir,
+    ):
+        payload = io.BytesIO()
+        PILImage.new('RGB', (8, 8), (80, 40, 20)).save(payload, format='TIFF')
+        response = _upload(
+            client, admin_user, sample_game, payload.getvalue(), name='art.png',
+        )
+        assert response.status_code == 400
+        assert list(image_dir.iterdir()) == []
 
     def test_non_image_bytes_are_rejected(self, client, admin_user, sample_game, image_dir):
         response = _upload(client, admin_user, sample_game, b'not an image at all')
@@ -171,6 +317,12 @@ class TestDecompressionBomb:
             height = 20000
             format = 'PNG'
 
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
             def verify(self):
                 return None
 
@@ -185,7 +337,7 @@ class TestDecompressionBomb:
                 return _Huge()
             return real_open(fp, *args, **kwargs)
 
-        monkeypatch.setattr('oneirodex.routes_admin_ext.game_images.PILImage.open', fake_open)
+        monkeypatch.setattr('PIL.Image.open', fake_open)
         response = _upload(client, admin_user, sample_game, _png(10, 10))
 
         assert response.status_code == 400

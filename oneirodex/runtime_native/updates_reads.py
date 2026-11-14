@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class UpdateReadData:
@@ -165,16 +165,18 @@ def create_update_reads_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                limit_value = _first(request, 'limit')
-                try:
-                    limit = min(int(limit_value or 50), 200)
-                except (TypeError, ValueError):
-                    limit = 50
-                limit = max(1, limit)
-                library_uuid = (_first(request, 'library_uuid') or '').strip() or None
-                response = JSONResponse(data.inbox(
-                    auth.user, limit=limit, library_uuid=library_uuid,
-                ))
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    limit_value = _first(request, 'limit')
+                    try:
+                        limit = min(int(limit_value or 50), 200)
+                    except (TypeError, ValueError):
+                        limit = 50
+                    limit = max(1, limit)
+                    library_uuid = (_first(request, 'library_uuid') or '').strip() or None
+                    response = JSONResponse(data.inbox(
+                        auth.user, limit=limit, library_uuid=library_uuid,
+                    ))
             _finish(response, flask_app, request, auth)
             return response
 
@@ -187,6 +189,8 @@ def create_update_reads_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
+                response = require_bearer_scope(auth, 'read:library')
+            if auth.user is not None and response is None:
                 name = (_first(request, 'q') or _first(request, 'name') or '').strip()
                 source = (_first(request, 'source') or 'all').strip().lower()
                 limit_value = _first(request, 'limit')

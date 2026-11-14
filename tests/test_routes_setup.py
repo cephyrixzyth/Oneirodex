@@ -1,5 +1,12 @@
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _keyring(reusable_secret_keyring):
+    return reusable_secret_keyring
 import json
+import re
+from html import unescape
 from unittest.mock import patch, Mock, MagicMock
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -678,7 +685,8 @@ class TestSetupWorkflow:
         settings = db.session.execute(select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()
         assert settings is not None
         assert settings.igdb_client_id == 'test_client_id_12345'
-        assert settings.igdb_client_secret == 'test_client_secret_12345'
+        from oneirodex.utils.secret_store import read_global_secret
+        assert read_global_secret(settings, 'igdb_client_secret') == 'test_client_secret_12345'
 
         response = client.post('/setup/integrations', data={'skip_integrations': '1'})
         assert response.status_code == 302
@@ -737,7 +745,13 @@ class TestSetupFirstLibrary:
         assert library.last_scan_folder == str(folder)
         start_scan.assert_called_once()
         assert start_scan.call_args.kwargs['library_uuid'] == library.uuid
+        assert start_scan.call_args.kwargs['queue_policy'] == 'queue'
+        assert 'force_parallel' not in start_scan.call_args.kwargs
         assert get_current_setup_step() is None
+        with client.session_transaction() as session:
+            assert session['_flashes'][-1] == (
+                'success', 'Your first library is ready and its initial scan has started or queued.',
+            )
 
     def test_first_library_rejects_paths_outside_declared_roots(
         self, client, db_session, admin_user, tmp_path,
@@ -756,6 +770,66 @@ class TestSetupFirstLibrary:
         assert db_session.execute(
             select(Library).filter_by(name='Unsafe library')
         ).scalars().first() is None
+
+    def test_first_library_reports_missing_directory_inside_allowed_root(
+        self, client, db_session, admin_user, tmp_path, monkeypatch,
+    ):
+        from oneirodex.utils.setup import set_setup_step
+
+        monkeypatch.setattr(
+            'oneirodex.utils.security.get_allowed_base_directories',
+            lambda _app: [str(tmp_path)],
+        )
+        set_setup_step(6)
+        missing = tmp_path / 'not-created'
+        response = client.post('/setup/library', data={
+            'name': 'Missing path library', 'platform': 'NES',
+            'folder_path': str(missing), 'scan_mode': 'folders', 'scan_depth': '1',
+        })
+
+        assert response.status_code == 200
+        assert b'That folder is not available as a directory on the server.' in response.data
+        assert db_session.execute(
+            select(Library).filter_by(name='Missing path library')
+        ).scalars().first() is None
+
+    def test_first_library_scan_queue_failure_finishes_with_warning(self, client, db_session, admin_user, tmp_path, monkeypatch):
+        from oneirodex.utils.setup import get_current_setup_step, set_setup_step
+
+        folder = tmp_path / 'roms'
+        folder.mkdir()
+        monkeypatch.setattr(
+            'oneirodex.utils.security.get_allowed_base_directories',
+            lambda _app: [str(tmp_path)],
+        )
+        set_setup_step(6)
+        for name in (
+            'initialize_library_folders', 'initialize_discovery_sections',
+            'insert_default_scanning_filters', 'initialize_default_settings',
+            'initialize_allowed_file_types',
+        ):
+            monkeypatch.setattr(f'oneirodex.init_data.{name}', lambda *a, **k: None)
+
+        def fail_scan(**_kwargs):
+            raise OSError('synthetic queue failure')
+
+        monkeypatch.setattr('oneirodex.utils.scan_queue.start_or_queue_scan', fail_scan)
+        response = client.post('/setup/library', data={
+            'name': 'Queue failure library', 'platform': 'NES',
+            'folder_path': str(folder), 'scan_mode': 'folders', 'scan_depth': '1',
+        })
+
+        assert response.status_code == 302
+        assert response.location.endswith('/libraries')
+        assert get_current_setup_step() is None
+        library = db_session.execute(
+            select(Library).filter_by(name='Queue failure library')
+        ).scalars().first()
+        assert library is not None
+        with client.session_transaction() as session:
+            assert session['_flashes'][-1] == (
+                'warning', 'Your first library is ready. Start its first scan from Libraries & scans.',
+            )
 
 
 class TestSetupApiConnections:
@@ -777,6 +851,7 @@ class TestSetupApiConnections:
         response = client.post('/setup/integrations', data={
             'configure_steam_web_api_key': 'on',
             'steam_web_api_key': 'new-steam-api-key',
+            'steamgriddb_api_key': 'typed-but-unchecked',
             'configure_oidc': 'on',
             'oidc_issuer_url': 'https://sso.example.test',
             'oidc_client_id': 'oneirodex-stage',
@@ -788,12 +863,13 @@ class TestSetupApiConnections:
         saved = db_session.execute(
             select(GlobalSettings).filter_by(id=settings.id)
         ).scalars().first()
-        assert saved.steam_web_api_key == 'new-steam-api-key'
-        assert saved.steamgriddb_api_key == 'existing-secret-value'
+        from oneirodex.utils.secret_store import read_global_secret
+        assert read_global_secret(saved, 'steam_web_api_key') == 'new-steam-api-key'
+        assert read_global_secret(saved, 'steamgriddb_api_key') == 'existing-secret-value'
         assert saved.enable_hltb_integration is False
         assert saved.oidc_issuer_url == 'https://sso.example.test'
         assert saved.oidc_client_id == 'oneirodex-stage'
-        assert saved.oidc_client_secret == 'oidc-stage-secret'
+        assert read_global_secret(saved, 'oidc_client_secret') == 'oidc-stage-secret'
         assert saved.oidc_enabled is False
         assert get_current_setup_step() == 6
 
@@ -802,11 +878,17 @@ class TestSetupApiConnections:
 
         settings = _park_wizard_at(db_session, 5)
         settings.enable_hltb_integration = True
+        settings.steam_web_api_key = 'existing-provider-key'
         db_session.commit()
-        response = client.post('/setup/integrations', data={'skip_integrations': '1'})
+        response = client.post('/setup/integrations', data={
+            'skip_integrations': '1',
+            'configure_steam_web_api_key': 'on',
+            'steam_web_api_key': 'typed-but-skipped',
+        })
         assert response.location.endswith('/setup/library')
         db_session.refresh(settings)
         assert settings.enable_hltb_integration is True
+        assert settings.steam_web_api_key == 'existing-provider-key'
         assert get_current_setup_step() == 6
 
     def test_oidc_setup_rejects_non_http_urls_without_completing_step(
@@ -961,7 +1043,12 @@ class TestSetupFormIntegration:
         # feedback as an escaped alert for the React setup wizard.
         assert response.status_code == 200
         assert b'id="member-auth-root"' in response.data
-        assert b'role="alert"' in response.data
+        notices = self._server_notices(response)
+        assert all(notice['role'] == 'alert' for notice in notices)
+        messages = ' '.join(notice['message'] for notice in notices)
+        assert 'Invalid email address' in messages
+        assert 'Password must be at least 8 characters long' in messages
+        assert 'Passwords must match' in messages
     
     def test_igdb_form_validation_error_handling(self, client, db_session, admin_user):
         """Test how IGDB setup handles real form validation errors."""
@@ -980,4 +1067,15 @@ class TestSetupFormIntegration:
         # Validation feedback is inserted into the shared auth shell.
         assert response.status_code == 200
         assert b'id="member-auth-root"' in response.data
-        assert b'role="alert"' in response.data
+        notices = self._server_notices(response)
+        assert {'role': 'alert', 'message': 'Client ID: Client ID must be between 20 and 50 characters'} in notices
+        assert {'role': 'alert', 'message': 'Client Secret: Client Secret must be between 20 and 50 characters'} in notices
+
+    @staticmethod
+    def _server_notices(response):
+        # React creates the alert elements from the escaped shell payload.
+        match = re.search(r' data-auth-notices="([^"]+)"', response.get_data(as_text=True))
+        assert match is not None
+        notices = json.loads(unescape(match.group(1)))
+        assert notices
+        return notices

@@ -10,7 +10,6 @@ from contextvars import ContextVar
 from typing import Any
 from uuid import uuid4
 
-from flask import current_app
 from oneirodex.utils.library_paths import library_dir
 
 _SAFE_UUID = re.compile(
@@ -35,6 +34,10 @@ def _setting(name: str, default=None):
     config = _mod_config.get()
     if config is not None:
         return config.get(name, default)
+    # Flask is only needed by legacy callers that rely on the implicit app
+    # context. Native ASGI routes always bind their explicit config scope.
+    from flask import current_app
+
     return current_app.config.get(name, default)
 
 

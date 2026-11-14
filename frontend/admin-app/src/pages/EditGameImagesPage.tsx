@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react'
+
 import { useParams } from 'react-router-dom'
 import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
 import { deleteJson, getJson, postForm, postJson } from '../api/adminApi'
@@ -6,6 +7,7 @@ import { ArtworkPicker } from '../components/ArtworkPicker'
 import { Page } from '../components/Page'
 import { errorText } from '../utils/errorText'
 import './EditGameImagesPage.css'
+import { AdminLink } from '../components/AdminLink'
 
 type GameImage = { id: number; image_type: string; url: string | null; is_downloaded: boolean }
 
@@ -20,6 +22,7 @@ export function EditGameImagesPage() {
   const [scanRunning, setScanRunning] = useState(false)
   const [uploadKind, setUploadKind] = useState('screenshot')
   const [refreshStatus, setRefreshStatus] = useState('')
+  const [screenshotDragActive, setScreenshotDragActive] = useState(false)
 
   const load = useCallback(async () => {
     setError('')
@@ -65,12 +68,24 @@ export function EditGameImagesPage() {
     }
   }
 
+  async function uploadScreenshots(files: File[]) {
+    for (const file of files) await upload(file, 'screenshot')
+  }
+
+  function handleScreenshotDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setScreenshotDragActive(false)
+    if (scanRunning || busy) return
+    void uploadScreenshots(Array.from(event.dataTransfer.files))
+  }
+
   async function deleteImage(image: GameImage) {
     if (
+      image.image_type === 'cover' &&
       !(await confirmAction({
-        title: `Delete ${image.image_type} image?`,
-        body: 'This removes the image file and its library record.',
-        confirmLabel: 'Delete image',
+        title: 'Delete cover image?',
+        body: 'Are you sure you want to delete the cover image?',
+        confirmLabel: 'Delete cover image',
         tone: 'danger',
       }))
     )
@@ -118,31 +133,39 @@ export function EditGameImagesPage() {
 
   const title = gameName || 'Edit game images'
   return (
-    <Page title="Edit game images">
-      <p className="od-edit-game-images__game-name">
-        Editing <strong>{title}</strong>
-      </p>
-      <div className="od-edit-game-images__actions" aria-label="Image editor navigation">
-        <a className="od-cbtn" href={`/game/${encodeURIComponent(gameUuid)}`}>
-          Back to details
-        </a>
-        <a className="od-cbtn" href={`/game_edit/${encodeURIComponent(gameUuid)}`}>
-          Edit details
-        </a>
-        <a
-          className="od-cbtn"
-          href={`/admin/images?game=${encodeURIComponent(gameUuid)}&name=${encodeURIComponent(title)}`}
-        >
-          Art &amp; images
-        </a>
-        <Button
-          className="od-btn--secondary"
-          onClick={() => void refreshFromProvider()}
-          disabled={Boolean(busy) || scanRunning}
-        >
-          Refresh from IGDB
-        </Button>
-      </div>
+    <Page
+      title={
+        <>
+          <span className="od-edit-game-images__eyebrow">Library · Artwork</span>
+          <span className="od-edit-game-images__title">Edit Images</span>
+        </>
+      }
+      documentTitle="Edit Images"
+      lede={
+        <>
+          <strong>{title}</strong>
+          <br />
+          Cover, screenshots, and artwork search. Changes apply to the library item immediately.
+        </>
+      }
+      actions={
+        <div className="od-edit-game-images__actions" aria-label="Image editor navigation">
+          <a className="od-cbtn" href={`/game/${encodeURIComponent(gameUuid)}`}>
+            Back to details
+          </a>
+          <AdminLink className="od-cbtn" to={`/game_edit/${encodeURIComponent(gameUuid)}`}>
+            Edit details
+          </AdminLink>
+          <AdminLink
+            className="od-cbtn"
+            to={`/admin/images?game=${encodeURIComponent(gameUuid)}&name=${encodeURIComponent(title)}`}
+          >
+            Art &amp; images
+          </AdminLink>
+        </div>
+      }
+      className="od-edit-game-images"
+    >
       {scanRunning ? (
         <PageStatus announcement="status" className="od-admin-lede">
           A scan is running. Artwork changes are paused until it finishes.
@@ -163,7 +186,7 @@ export function EditGameImagesPage() {
             aria-labelledby="od-game-cover-title"
           >
             <h2 id="od-game-cover-title" className="od-admin-panel-title">
-              Cover image
+              Cover Image
             </h2>
             <div className="od-edit-game-images__cover-layout">
               <div className="od-edit-game-images__cover">
@@ -201,16 +224,33 @@ export function EditGameImagesPage() {
                     Delete cover image
                   </Button>
                 ))}
-                {scanRunning ? null : (
-                  <ArtworkPicker
-                    gameUuid={gameUuid}
-                    gameName={title}
-                    onApplied={() => void load()}
-                    compact
-                  />
-                )}
               </div>
             </div>
+          </section>
+          <section
+            className="od-admin-panel od-edit-game-images__panel"
+            aria-labelledby="od-artwork-search-title"
+          >
+            <div className="od-edit-game-images__section-heading">
+              <h2 id="od-artwork-search-title" className="od-admin-panel-title">
+                Artwork Search
+              </h2>
+              <Button
+                className="od-btn--secondary"
+                onClick={() => void refreshFromProvider()}
+                disabled={Boolean(busy) || scanRunning || images === null}
+              >
+                Refresh from IGDB
+              </Button>
+            </div>
+            {scanRunning ? null : (
+              <ArtworkPicker
+                gameUuid={gameUuid}
+                gameName={title}
+                onApplied={() => void load()}
+                compact
+              />
+            )}
           </section>
           <section
             className="od-admin-panel od-edit-game-images__panel"
@@ -241,21 +281,41 @@ export function EditGameImagesPage() {
             )}
             <label className="od-admin-field">
               Upload screenshots
-              <input
-                className="od-admin-input"
-                type="file"
-                accept="image/jpeg,image/png,image/gif"
-                multiple
-                disabled={Boolean(busy) || scanRunning}
-                onChange={(event) => {
-                  const files = Array.from(event.currentTarget.files || [])
-                  event.currentTarget.value = ''
-                  void files.reduce(
-                    (task, file) => task.then(() => upload(file, 'screenshot')),
-                    Promise.resolve(),
-                  )
+              <div
+                className={`od-edit-game-images__dropzone${screenshotDragActive ? ' is-active' : ''}`}
+                role="group"
+                aria-label="Screenshot upload area"
+                onDragEnter={(event) => {
+                  event.preventDefault()
+                  setScreenshotDragActive(true)
                 }}
-              />
+                onDragOver={(event) => event.preventDefault()}
+                onDragLeave={(event) => {
+                  const target = event.relatedTarget
+                  if (!(target instanceof Node) || !event.currentTarget.contains(target))
+                    setScreenshotDragActive(false)
+                }}
+                onDrop={handleScreenshotDrop}
+              >
+                <span aria-live="polite">
+                  {screenshotDragActive
+                    ? 'Drop images to upload.'
+                    : 'Drag and drop images here, or choose files below.'}
+                </span>
+                <input
+                  className="od-admin-input"
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif"
+                  multiple
+                  aria-label="Upload screenshots"
+                  disabled={Boolean(busy) || scanRunning}
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files || [])
+                    event.currentTarget.value = ''
+                    void uploadScreenshots(files)
+                  }}
+                />
+              </div>
             </label>
           </section>
           <section

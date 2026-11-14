@@ -96,6 +96,11 @@ def check_and_store_freshness(game, *, commit=False, db_session=None, app=None) 
 def freshness_public_view(game) -> dict:
     """Safe JSON for APIs / browse badges."""
     payload = getattr(game, 'freshness_payload', None) or {}
+    local = payload.get('local')
+    if isinstance(local, dict):
+        # Older cached freshness payloads included the absolute install path.
+        # Keep this projection safe even before each record is recalculated.
+        local = {key: value for key, value in local.items() if key != 'path'}
     return {
         'status': getattr(game, 'freshness_status', None),
         'confidence': getattr(game, 'freshness_confidence', None),
@@ -110,7 +115,7 @@ def freshness_public_view(game) -> dict:
         'dlc': payload.get('dlc'),
         'reasons': payload.get('reasons'),
         'remotes': payload.get('remotes'),
-        'local': payload.get('local'),
+        'local': local,
     }
 
 

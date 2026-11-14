@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from flask import current_app, request
-from flask_login import current_user, login_required, login_user
+from flask_login import current_user, login_required
 from sqlalchemy import select
 
 from oneirodex import db
@@ -15,6 +15,7 @@ from oneirodex.models import Library, LibraryPlatform, User
 from oneirodex.schemas.setup import SetupTransitionBody
 from oneirodex.utils.admin_invariant import lock_admin_mutation
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.auth import login_user
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.global_settings import global_settings_row, global_settings_row_or_create
 from oneirodex.utils.oidc import is_secure_oidc_issuer
@@ -147,7 +148,8 @@ def submit_setup_step(body: SetupTransitionBody):
             settings.smtp_port = body.smtp_port
             settings.smtp_username = body.smtp_username or None
             if body.smtp_password:
-                settings.smtp_password = body.smtp_password
+                from oneirodex.utils.secret_store import write_global_secret
+                write_global_secret(settings, 'smtp_password', body.smtp_password)
             settings.smtp_use_tls = body.smtp_use_tls
             settings.smtp_default_sender = body.smtp_default_sender or None
             settings.smtp_enabled = body.smtp_enabled
@@ -190,7 +192,8 @@ def submit_setup_step(body: SetupTransitionBody):
             settings = global_settings_row_or_create()
             settings.igdb_client_id = form.igdb_client_id.data
             if form.igdb_client_secret.data:
-                settings.igdb_client_secret = form.igdb_client_secret.data
+                from oneirodex.utils.secret_store import write_global_secret
+                write_global_secret(settings, 'igdb_client_secret', form.igdb_client_secret.data)
             try:
                 db.session.commit()
             except Exception as exc:
@@ -209,8 +212,9 @@ def submit_setup_step(body: SetupTransitionBody):
                 'mobygames_api_key', 'thegamesdb_api_key',
             ):
                 value = getattr(body, key).strip()
-                if value:
-                    setattr(settings, key, value)
+                if getattr(body, 'configure_' + key) and value:
+                    from oneirodex.utils.secret_store import write_global_secret
+                    write_global_secret(settings, key, value)
             if body.configure_oidc:
                 for field, max_length in (
                     ('oidc_issuer_url', 512), ('oidc_client_id', 255),
@@ -227,7 +231,8 @@ def submit_setup_step(body: SetupTransitionBody):
                             return api_error('OIDC issuer URL must use HTTPS.', code='unprocessable')
                         setattr(settings, field, value[:max_length])
                 if body.oidc_client_secret:
-                    settings.oidc_client_secret = body.oidc_client_secret
+                    from oneirodex.utils.secret_store import write_global_secret
+                    write_global_secret(settings, 'oidc_client_secret', body.oidc_client_secret)
             settings.enable_hltb_integration = body.enable_hltb_integration
             settings.oidc_enabled = False
             try:
@@ -279,7 +284,7 @@ def submit_setup_step(body: SetupTransitionBody):
             from oneirodex.utils.scan_queue import start_or_queue_scan
             result = start_or_queue_scan(
                 folder_path=folder, library_uuid=library.uuid, scan_mode=body.scan_mode,
-                queue_policy='queue', force_parallel=False, allow_force=False,
+                queue_policy='queue', allow_force=False,
                 app=current_app._get_current_object(),
             )
             scan_status = result.get('status')

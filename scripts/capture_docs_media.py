@@ -17,13 +17,14 @@ Treat non-zero as "pixels are stale", never as "done".
 """
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
+import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
-
-from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from capture_common import (  # noqa: E402
@@ -49,6 +50,7 @@ class Shot:
     full_page: bool = False
     readme: tuple[str, ...] = field(default_factory=tuple)  # README slot filenames
     settle_ms: int = 1_200
+    viewport: dict[str, int] | None = None
 
 
 # --------------------------------------------------------------------------
@@ -106,6 +108,12 @@ def prep_preferences(page) -> None:
         _click(page, 'a[href="/settings_panel"]', after_ms=1_800)
 
 
+def prep_discover(page) -> None:
+    # Use the populated local-library shelf rather than provider-dependent
+    # store artwork, which is intentionally unavailable in capture mode.
+    _role(page, "button", "New & updated", after_ms=1_500)
+
+
 def prep_tile_menu(page) -> None:
     _click(page, 'button[aria-label^="Open actions for"]', after_ms=900)
 
@@ -116,6 +124,14 @@ def prep_ops(page) -> None:
         page.wait_for_timeout(600)
     except Exception as exc:  # noqa: BLE001
         print("    ops wait:", type(exc).__name__)
+
+
+def prep_smtp_help(page) -> None:
+    try:
+        page.locator("summary").filter(has_text="SMTP setup help").click(timeout=8_000)
+        page.wait_for_timeout(500)
+    except Exception as exc:  # noqa: BLE001
+        print("    SMTP help:", type(exc).__name__)
 
 
 def prep_art(page) -> None:
@@ -138,6 +154,31 @@ def prep_integrations_artwork(page) -> None:
         print("    integrations artwork:", type(exc).__name__)
 
 
+def _write_screenshot_atomically(path: Path, image: bytes) -> None:
+    """Replace a capture only after its PNG has been written successfully."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for attempt in range(3):
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", prefix=f".{path.stem}.", suffix=".tmp",
+                dir=path.parent, delete=False,
+            ) as stream:
+                temporary = Path(stream.name)
+                stream.write(image)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            return
+        except OSError:
+            if attempt == 2:
+                raise
+            time.sleep(0.05 * (attempt + 1))
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+
 # --------------------------------------------------------------------------
 # the surfaces
 # --------------------------------------------------------------------------
@@ -149,7 +190,7 @@ SHOTS: list[Shot] = [
     Shot("library-tile-menu", "/library", prep_tile_menu),
     Shot("game-details", "/library", prep_game, readme=("screenshot-game.png",), settle_ms=1_500),
     Shot("game-details-full", "/library", prep_game, full_page=True, settle_ms=1_500),
-    Shot("discover", "/discover", readme=("screenshot-discover.png",), settle_ms=5_000),
+    Shot("discover", "/discover", prep_discover, readme=("screenshot-discover.png",), settle_ms=5_000),
     Shot("systems-platforms", "/systems", readme=("screenshot-systems.png",), settle_ms=1_800),
     Shot("systems-completion", "/systems/completion", settle_ms=1_800),
     Shot("chat-channels", "/library", prep_chat, readme=("screenshot-chat.png",)),
@@ -185,6 +226,16 @@ SHOTS: list[Shot] = [
     Shot("admin-discovery-sections", "/admin/discovery_sections", settle_ms=2_000),
     Shot("admin-discovery-add-shelf", "/admin/discovery_sections", prep_add_shelf, settle_ms=2_000),
     Shot("admin-settings", "/admin/settings", full_page=True, settle_ms=1_800),
+    Shot("admin-smtp-settings", "/admin/smtp_settings", full_page=True, settle_ms=1_800),
+    Shot(
+        "admin-smtp-setup-help",
+        "/admin/smtp_settings",
+        prep_smtp_help,
+        full_page=True,
+        settle_ms=1_800,
+        viewport={"width": 1600, "height": 1800},
+    ),
+    Shot("admin-igdb-settings", "/admin/igdb_settings", full_page=True, settle_ms=1_800),
     Shot("admin-scan-match", "/admin/scan_match", full_page=True, settle_ms=1_800),
     Shot("admin-features", "/admin/features", full_page=True, settle_ms=1_800),
     Shot(
@@ -209,7 +260,7 @@ SHOTS: list[Shot] = [
 def _sync_readme(src: Path, dest_name: str) -> None:
     README_ASSETS.mkdir(parents=True, exist_ok=True)
     dest = README_ASSETS / dest_name
-    dest.write_bytes(src.read_bytes())
+    _write_screenshot_atomically(dest, src.read_bytes())
     print("    readme:", dest.relative_to(ROOT))
 
 
@@ -217,9 +268,14 @@ def capture(page, shots: list[Shot]) -> list[str]:
     failures: list[str] = []
     for shot in shots:
         print(f"[{shot.name}] {shot.path}")
+        original_viewport = page.viewport_size
+        if shot.viewport is not None:
+            page.set_viewport_size(shot.viewport)
         close_overlays(page)
         if not goto(page, shot.path, settle_ms=shot.settle_ms):
             failures.append(f"{shot.name} (navigation)")
+            if original_viewport is not None and shot.viewport is not None:
+                page.set_viewport_size(original_viewport)
             continue
         # Global panels survive navigation; a page must not be photographed
         # under one that an earlier shot opened.
@@ -233,12 +289,14 @@ def capture(page, shots: list[Shot]) -> list[str]:
         if not healthy:
             print(f"    SKIP: {why} — existing {shot.name}.png left untouched")
             failures.append(f"{shot.name} ({why})")
+            if original_viewport is not None and shot.viewport is not None:
+                page.set_viewport_size(original_viewport)
             continue
         try:
             SHOT_DIR.mkdir(parents=True, exist_ok=True)
             out = SHOT_DIR / f"{shot.name}.png"
             image = page.screenshot(full_page=shot.full_page, timeout=20_000)
-            out.write_bytes(image)
+            _write_screenshot_atomically(out, image)
             print("    shot:", out.relative_to(ROOT))
             for slot in shot.readme:
                 _sync_readme(out, slot)
@@ -248,6 +306,8 @@ def capture(page, shots: list[Shot]) -> list[str]:
         # Leave modals and menus closed for the next surface.
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
+        if original_viewport is not None and shot.viewport is not None:
+            page.set_viewport_size(original_viewport)
     return failures
 
 
@@ -262,6 +322,8 @@ def main() -> int:
     if not todo:
         print("no matching shots; known:", ", ".join(s.name for s in SHOTS))
         return 2
+
+    from playwright.sync_api import sync_playwright
 
     print("base:", BASE)
     with sync_playwright() as p:

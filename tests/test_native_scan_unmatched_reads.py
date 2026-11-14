@@ -8,10 +8,33 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 
-from oneirodex.runtime_native.scan_unmatched_reads import create_scan_unmatched_reads_router
+from oneirodex.runtime_native.scan_unmatched_reads import (
+    ScanUnmatchedReadsData,
+    create_scan_unmatched_reads_router,
+)
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+
+
+def test_search_filter_includes_linked_game_title_and_disk_path():
+    from sqlalchemy import select
+    from sqlalchemy.dialects import postgresql
+    from oneirodex.models import Library, UnmatchedFolder
+
+    query = select(UnmatchedFolder, Library.name).join(Library)
+    filtered = ScanUnmatchedReadsData._apply_filters(query, {'q': 'Linked Match'})
+    sql = str(filtered.compile(dialect=postgresql.dialect())).lower()
+
+    assert 'exists (select 1' in sql
+    assert 'from games' in sql
+    assert 'games.name ilike' in sql
+    assert 'games.full_disk_path ilike' in sql
+    assert 'cast(libraries.platform as varchar)' in sql
+    assert 'cast(unmatched_folders.status as varchar)' in sql
+    assert UnmatchedFolder.matched_game_uuid.key in sql
 
 
 class FakeUnmatchedData:
@@ -60,14 +83,14 @@ def runtime():
     )
     users = {
         'admin': SimpleNamespace(id=1, role='admin', state=True, is_active=True,
-                                 is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                 is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'member': SimpleNamespace(id=2, role='user', state=True, is_active=True,
-                                  is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                  is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
     }
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda identity: next(
-        (user for user in users.values() if identity == f'{user.id}:fp'), None,
+        (user for user in users.values() if identity.split(':', 1)[0] == str(user.id)), None,
     ))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     data = FakeUnmatchedData()
@@ -81,7 +104,7 @@ def runtime():
         login_manager=manager, data_access=data,
     ))
     cookies = {
-        name: dump_session_cookie({'_user_id': f'{user.id}:fp', '_fresh': True},
+        name: dump_session_cookie({'_user_id': login_identity_for(user.id), '_fresh': True},
                                   'unmatched-reads-secret')
         for name, user in users.items()
     }
@@ -170,6 +193,7 @@ def test_duplicates_projection_fix_log_limit_and_head(runtime):
 
 def test_json_and_csv_exports_keep_headers_shapes_region_and_no_pagination(runtime):
     app, _flask_app, data, _users, _tokens, cookies = runtime
+    data.rows[0][0]['folder_name'] = '=HYPERLINK("https://example.invalid")'
     json_export = _request(
         app, '/api/unmatched_folders/export?format=json&region=USA&paginate=true&limit=1&offset=1',
         cookie=cookies['admin'],
@@ -189,6 +213,7 @@ def test_json_and_csv_exports_keep_headers_shapes_region_and_no_pagination(runti
     assert csv_export.headers['content-type'].startswith('text/csv')
     assert 'matched_game_name' in csv_export.text.splitlines()[0]
     assert 'Existing' in csv_export.text
+    assert "'=HYPERLINK" in csv_export.text
     assert invalid.status_code == 400 and invalid.json()['error_code'] == 'bad_request'
 
 

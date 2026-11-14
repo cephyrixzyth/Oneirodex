@@ -1,0 +1,210 @@
+{
+  "record_id": "encryption-and-library-fixture-qualification-20261109",
+  "recorded_utc": "2026-11-09T23:25:57.173181+00:00",
+  "task_ids": [
+    "independent-review:P0-01",
+    "independent-review:P0-02"
+  ],
+  "source_head_at_record": "e26eb687d4606307c5bb2f5e8a46179ef19a2e8e",
+  "uncommitted_working_tree": true,
+  "qualified_file_sha256": {
+    "conftest.py": "54ebcab0216dc2f967d2742702f1809cd9552a9d585e959cef37c52f667ae6e6",
+    "tests/test_close_gaps.py": "1de2aa7a5122bb943b65ac25845f9bfd5dc13f94a7e71dbd5a3da2f136bb3d5e",
+    "tests/test_indexer_registry.py": "7f1b80f052fa132bc2d17ca28a0a4c80421924ea12a9e14a5c0f06670ec9fdfe",
+    "tests/test_smtp_settings_api.py": "a3084b64ae24168ce276d1d4f30a157dc51af0fb810837e33277132b2227c313",
+    "tests/test_native_library_admin_mutations.py": "27a9cc4de67f22d5bb7e66c006e424799ed6dfba88d0d560278d5eeebe65bff9"
+  },
+  "scope": "Keyring prerequisites and persistent native-library-admin test identities; production policies unchanged.",
+  "environment": {
+    "host": "Windows",
+    "python": "3.12.16",
+    "postgresql": "17.6",
+    "dotenv_disabled": true,
+    "runner_blocks_external_python_connections": true
+  },
+  "checks": [
+    {
+      "id": "red",
+      "exit_code": 1,
+      "seconds": 26.04,
+      "passed": 13,
+      "failed": 7,
+      "skipped": 0,
+      "failed_case_ids": [
+        "tests.test_close_gaps::test_encrypted_save_roundtrip",
+        "tests.test_indexer_registry::test_stub_torznab_search_returns_hit",
+        "tests.test_indexer_registry::test_bulk_import_json_and_csv",
+        "tests.test_indexer_registry::test_merge_prowlarr_and_native",
+        "tests.test_indexer_registry::test_arr_indexers_api_add_and_list",
+        "tests.test_indexer_registry::test_arr_config_response_reports_secret_presence_without_returning_secrets",
+        "tests.test_indexer_registry::test_acquire_status_readiness_and_search_warnings"
+      ],
+      "skipped_case_ids": [],
+      "log_sha256": "c66fa7acf3fc50ab2e78645ff91dee2a2b862328bde570cbd2d1f887bfad22b2",
+      "disposable_database_removed": true
+    },
+    {
+      "id": "green",
+      "exit_code": 0,
+      "seconds": 20.62,
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0,
+      "failed_case_ids": [],
+      "skipped_case_ids": [],
+      "log_sha256": "4f0ce7cf0a160dfc18518f7398f9ada113d4d1fb436c4c6fa6fb050009e3b00d",
+      "disposable_database_removed": true
+    },
+    {
+      "id": "qualified",
+      "exit_code": 0,
+      "seconds": 21.76,
+      "passed": 38,
+      "failed": 0,
+      "skipped": 2,
+      "failed_case_ids": [],
+      "skipped_case_ids": [
+        "tests.test_store_credential_encryption::test_keyring_rejects_group_or_world_readable_file",
+        "tests.test_store_credential_encryption::test_embedded_resolution_requires_private_password_file"
+      ],
+      "log_sha256": "5330eb42815a393df82c598c0d1559c17a204012b1e42731f5449cb357a96eda",
+      "disposable_database_removed": true
+    },
+    {
+      "id": "expanded",
+      "exit_code": 0,
+      "seconds": 34.99,
+      "passed": 83,
+      "failed": 0,
+      "skipped": 2,
+      "failed_case_ids": [],
+      "skipped_case_ids": [
+        "tests.test_store_credential_encryption::test_keyring_rejects_group_or_world_readable_file",
+        "tests.test_store_credential_encryption::test_embedded_resolution_requires_private_password_file"
+      ],
+      "log_sha256": "8eb23e0c97679760b1020aac3ad2c181b236319fc375437747dd8de085b13def",
+      "disposable_database_removed": true
+    },
+    {
+      "id": "dispatch-red",
+      "exit_code": 1,
+      "seconds": 8.56,
+      "passed": 7,
+      "failed": 44,
+      "skipped": 0,
+      "failed_case_ids": [
+        "tests.test_native_library_admin_mutations::test_csrf_precedes_auth_and_create_validates_then_uses_fake",
+        "tests.test_native_library_admin_mutations::test_library_create_api_rejects_invalid_fields_without_adapter_calls[payload0-Library name is required]",
+        "tests.test_native_library_admin_mutations::test_library_create_api_rejects_invalid_fields_without_adapter_calls[payload1-Library name is required]",
+        "tests.test_native_library_admin_mutations::test_library_create_api_rejects_invalid_fields_without_adapter_calls[payload2-supported platform]",
+        "tests.test_native_library_admin_mutations::test_library_create_api_rejects_invalid_fields_without_adapter_calls[payload3-Scan depth must be 1 or 2]",
+        "tests.test_native_library_admin_mutations::test_library_create_api_rejects_invalid_fields_without_adapter_calls[payload4-watch setting]",
+        "tests.test_native_library_admin_mutations::test_library_create_api_rejects_corrupt_image_without_adapter_call",
+        "tests.test_native_library_admin_mutations::test_library_create_rejects_oversized_image_before_decode_or_adapter_call",
+        "tests.test_native_library_admin_mutations::test_library_update_rejects_oversized_image_before_decode_or_adapter_call",
+        "tests.test_native_library_admin_mutations::test_library_create_uses_decoded_format_instead_of_filename_suffix",
+        "tests.test_native_library_admin_mutations::test_library_create_rejects_unsupported_decoded_format_before_adapter_call",
+        "tests.test_native_library_admin_mutations::test_library_preview_rejects_oversized_body_before_processing",
+        "tests.test_native_library_admin_mutations::test_library_create_form_and_api_keep_transport_specific_admin_denial",
+        "tests.test_native_library_admin_mutations::test_legacy_library_create_form_uses_hidden_csrf_and_redirects",
+        "tests.test_native_library_admin_mutations::test_legacy_library_invalid_create_form_renders_matching_error_page[form0-Please correct the errors below.]",
+        "tests.test_native_library_admin_mutations::test_legacy_library_invalid_create_form_renders_matching_error_page[form1-Please correct the errors below.]",
+        "tests.test_native_library_admin_mutations::test_legacy_library_invalid_create_form_renders_matching_error_page[form2-Please correct the errors below.]",
+        "tests.test_native_library_admin_mutations::test_legacy_library_invalid_create_form_renders_matching_error_page[form3-Please correct the errors below.]",
+        "tests.test_native_library_admin_mutations::test_legacy_library_invalid_create_form_renders_matching_error_page[form4-Please correct the errors below.]",
+        "tests.test_native_library_admin_mutations::test_legacy_library_edit_missing_record_matches_not_found",
+        "tests.test_native_library_admin_mutations::test_legacy_library_create_matches_legacy_server_error_for_corrupt_image",
+        "tests.test_native_library_admin_mutations::test_legacy_library_edit_form_preserves_hidden_csrf_and_updates_adapter",
+        "tests.test_native_library_admin_mutations::test_batch_scan_keeps_aliases_queue_result_and_partial_rows",
+        "tests.test_native_library_admin_mutations::test_batch_scan_resolves_shared_and_per_library_folders[body0-/safe/root/shared]",
+        "tests.test_native_library_admin_mutations::test_batch_scan_resolves_shared_and_per_library_folders[body1-/safe/root/mapped]",
+        "tests.test_native_library_admin_mutations::test_batch_scan_rejects_out_of_root_path_without_queueing",
+        "tests.test_native_library_admin_mutations::test_single_scan_resolves_location_and_preserves_scan_options",
+        "tests.test_native_library_admin_mutations::test_single_scan_json_media_types_match_legacy_parser",
+        "tests.test_native_library_admin_mutations::test_single_scan_stringifies_legacy_scalar_folder_without_weakening_root_allowlist",
+        "tests.test_native_library_admin_mutations::test_single_scan_unknown_mode_preserves_legacy_accepted_then_failed_contract",
+        "tests.test_native_library_admin_mutations::test_single_scan_rejects_non_choice_interval_unit[ hours ]",
+        "tests.test_native_library_admin_mutations::test_single_scan_rejects_non_choice_interval_unit[HOURS]",
+        "tests.test_native_library_admin_mutations::test_single_scan_rejects_non_choice_interval_unit[Minutes]",
+        "tests.test_native_library_admin_mutations::test_single_scan_rejects_padded_schedule_choice",
+        "tests.test_native_library_admin_mutations::test_single_scan_uses_legacy_six_hour_default_when_interval_is_omitted",
+        "tests.test_native_library_admin_mutations::test_single_scan_missing_folder_matches_legacy_rejection",
+        "tests.test_native_library_admin_mutations::test_refresh_all_enqueues_and_promotes_fifo_job",
+        "tests.test_native_library_admin_mutations::test_force_refresh_passes_native_database_scope_to_worker",
+        "tests.test_native_library_admin_mutations::test_single_library_update_preserves_json_and_bounded_image_form",
+        "tests.test_native_library_admin_mutations::test_batch_delete_requires_exact_confirmation_and_schedules_only_fake",
+        "tests.test_native_library_admin_mutations::test_single_library_delete_preserves_legacy_confirmation_and_form_csrf",
+        "tests.test_native_library_admin_mutations::test_single_library_delete_form_member_denial_redirects_to_login",
+        "tests.test_native_library_admin_mutations::test_single_library_delete_validates_explicit_confirmation",
+        "tests.test_native_library_admin_mutations::test_non_admin_rejected_and_no_adapter_calls"
+      ],
+      "skipped_case_ids": [],
+      "log_sha256": "2b503560da802ab11d2c4fa6c2bc3a741c9a7c68b853c0c6bce8422a0fc51491",
+      "disposable_database_removed": "DB-free SQLite fixture"
+    },
+    {
+      "id": "dispatch-green",
+      "exit_code": 0,
+      "seconds": 8.48,
+      "passed": 52,
+      "failed": 0,
+      "skipped": 0,
+      "failed_case_ids": [],
+      "skipped_case_ids": [],
+      "log_sha256": "ba22323e5830d7440430e705f16d7d2fada8d7a2342ea04c3b094d03dcfc8065",
+      "disposable_database_removed": "DB-free SQLite fixture"
+    }
+  ],
+  "final_checks": {
+    "keyring_setup_smtp_and_adjacent_crypto": {
+      "passed": 83,
+      "skipped": 2,
+      "warnings": 1
+    },
+    "native_library_admin": {
+      "passed": 52,
+      "failed": 0
+    }
+  },
+  "repairs": [
+    "Request the existing disposable reusable-secret keyring for indexer-registry tests.",
+    "Create the encrypted-save fixture keyring with the production initializer; assert GTENC3 bytes and exact decrypted download.",
+    "Verify an indexer stores an odrc:v1 envelope and supplies its original synthetic key only to mocked provider transport.",
+    "Make shared and standalone SMTP fixture keyrings mode 0600 on POSIX.",
+    "Use the existing SQLite persistent-login fixture and actual identity issuer for library-admin tests, retaining member denial and explicit retired-identity rejection."
+  ],
+  "historical_ci": {
+    "run_id": 42558440753,
+    "job_id": 128969372017,
+    "source_head": "e26eb687d4606307c5bb2f5e8a46179ef19a2e8e",
+    "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/42558440753/job/128969372017",
+    "result": {
+      "failed": 428,
+      "passed": 7274,
+      "skipped": 14,
+      "deselected": 544,
+      "warnings": 155,
+      "seconds": 2112.38
+    },
+    "classification": "Completed with failures, not a timeout. This slice does not establish current CI success."
+  },
+  "rework": [
+    "Initial test service was stopped and then starting; both setup attempts are retained privately before the successful RED run.",
+    "An initial raw-storage assertion attempted to refresh an ORM instance detached by nested app context; replaced by a fresh database query.",
+    "First library-admin fixture pass missed its independently mounted member-denial harness; that harness was migrated before the final 52-case pass."
+  ],
+  "limits": [
+    "Two POSIX-only permission cases skipped on Windows; no Linux CI pass claimed.",
+    "The expanded run reports one preexisting SQLAlchemy reflection warning for an expression-based singleton index.",
+    "SQLite native-login fixtures do not qualify PostgreSQL foreign keys, concurrent transactions or packaged/browser behavior.",
+    "Browser-worker files are being changed by another active chat; this record does not claim their qualification.",
+    "Full unrestricted Python baseline and broader original program acceptance remain incomplete."
+  ],
+  "review": "Author self-review, without delegation; original production key requirements and persistent-session policy retained.",
+  "doc_status": "Reference",
+  "handoff_review": {
+    "review_head": "f83d4eb19ba7d543de2f1010990c3e56d05fef0b",
+    "result": "Source diff, all five source hashes, expanded/dispatch log hashes and zero-error JUnit counts independently inspected; all owned keyring test databases confirmed absent. Earlier test source identity and limits retained.",
+    "capture": "Not applicable: tests and runbook only."
+  }
+}

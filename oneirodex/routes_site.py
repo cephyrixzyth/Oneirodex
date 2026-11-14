@@ -7,8 +7,10 @@ from flask import (
     send_from_directory,
     request,
     make_response,
+    session,
 )
-from flask_login import login_required, logout_user, current_user
+from flask_login import login_required, current_user
+from oneirodex.utils.auth import logout_user
 
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.member_spa import render_member_spa
@@ -60,9 +62,10 @@ def helpfaq():
     print("Route: /help")
     return render_member_spa(title='Help')
 
-@site_bp.route('/logout')
+@site_bp.route('/logout', methods=['POST'])
 def logout():
     logout_user()
+    session.pop(str(current_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'), None)
     return redirect(url_for('login.login'))
 
 

@@ -1,7 +1,7 @@
 # /oneirodex/routes_apis/library.py
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.validation import read_json_body
-from flask import current_app, jsonify, request, url_for
+from flask import current_app, g, jsonify, request, url_for
 from flask_login import login_required, current_user
 from oneirodex import db
 from oneirodex.models import Game, IgdbPlatformRelease, Library, ReferenceSet, UnmatchedFolder
@@ -22,6 +22,12 @@ from oneirodex.utils.library_watch import (
     is_library_watch_enabled,
     library_watch_effective,
 )
+from oneirodex.utils.api_tokens import require_api_token_scope, user_has_scope
+from oneirodex.utils.image_upload_limits import (
+    LIBRARY_IMAGE_MAX_BYTES,
+    ImageWorkBusy,
+    normalize_library_image,
+)
 from oneirodex.utils.rbac import is_librarian
 from sqlalchemy import func, select
 from uuid import uuid4
@@ -30,8 +36,6 @@ from PIL import Image as PILImage, UnidentifiedImageError
 from . import apis_bp
 
 _DEFAULT_LIBRARY_IMAGE = 'newstyle/default_library.jpg'
-_LIBRARY_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
-_LIBRARY_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 
 
 @apis_bp.route('/admin/libraries', methods=['POST'])
@@ -60,27 +64,22 @@ def create_library():
     saved_image_path = None
     image = request.files.get('image')
     if image and image.filename:
-        extension = image.filename.rsplit('.', 1)[-1].lower() if '.' in image.filename else ''
-        if extension not in _LIBRARY_IMAGE_EXTENSIONS:
-            return api_error('Choose a JPG, PNG, GIF, or WebP library image.', code='bad_request')
         image.stream.seek(0, os.SEEK_END)
         image_size = image.stream.tell()
         image.stream.seek(0)
-        if image_size > _LIBRARY_IMAGE_MAX_BYTES:
+        if image_size > LIBRARY_IMAGE_MAX_BYTES:
             return api_error('Library image must be 10 MB or smaller.', code='bad_request')
         try:
-            with PILImage.open(image.stream) as opened:
-                if opened.width * opened.height > 80_000_000:
-                    return api_error('Library image dimensions are too large.', code='bad_request')
-                converted = opened.convert('RGBA')
-                if converted.width > 1024 or converted.height > 1024:
-                    converted.thumbnail((1024, 1024), PILImage.LANCZOS)
-                image_name = f'{uuid4()}.png'
-                image_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'images')
-                os.makedirs(image_dir, exist_ok=True)
-                saved_image_path = os.path.join(image_dir, image_name)
-                converted.save(saved_image_path, 'PNG')
-                image_url = url_for('static', filename=f'library/images/{image_name}')
+            normalized = normalize_library_image(image.stream.read(LIBRARY_IMAGE_MAX_BYTES + 1))
+            image_name = f'{uuid4()}.png'
+            image_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'images')
+            os.makedirs(image_dir, exist_ok=True)
+            saved_image_path = os.path.join(image_dir, image_name)
+            with open(saved_image_path, 'xb') as output:
+                output.write(normalized)
+            image_url = url_for('static', filename=f'library/images/{image_name}')
+        except ImageWorkBusy:
+            return api_error('Image processing is busy. Try again shortly.', code='unavailable')
         except (UnidentifiedImageError, OSError, ValueError):
             if saved_image_path and os.path.exists(saved_image_path):
                 os.remove(saved_image_path)
@@ -213,27 +212,22 @@ def admin_library_detail(library_uuid):
     image = request.files.get('image')
     saved_image_path = None
     if image and image.filename:
-        extension = image.filename.rsplit('.', 1)[-1].lower() if '.' in image.filename else ''
-        if extension not in _LIBRARY_IMAGE_EXTENSIONS:
-            return api_error('Choose a JPG, PNG, GIF, or WebP library image.', code='bad_request')
         image.stream.seek(0, os.SEEK_END)
         image_size = image.stream.tell()
         image.stream.seek(0)
-        if image_size > _LIBRARY_IMAGE_MAX_BYTES:
+        if image_size > LIBRARY_IMAGE_MAX_BYTES:
             return api_error('Library image must be 10 MB or smaller.', code='bad_request')
         try:
-            with PILImage.open(image.stream) as opened:
-                if opened.width * opened.height > 80_000_000:
-                    return api_error('Library image dimensions are too large.', code='bad_request')
-                converted = opened.convert('RGBA')
-                if converted.width > 1024 or converted.height > 1024:
-                    converted.thumbnail((1024, 1024), PILImage.LANCZOS)
-                image_name = f'{uuid4()}.png'
-                image_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'images')
-                os.makedirs(image_dir, exist_ok=True)
-                saved_image_path = os.path.join(image_dir, image_name)
-                converted.save(saved_image_path, 'PNG')
-                image_url = url_for('static', filename=f'library/images/{image_name}')
+            normalized = normalize_library_image(image.stream.read(LIBRARY_IMAGE_MAX_BYTES + 1))
+            image_name = f'{uuid4()}.png'
+            image_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'images')
+            os.makedirs(image_dir, exist_ok=True)
+            saved_image_path = os.path.join(image_dir, image_name)
+            with open(saved_image_path, 'xb') as output:
+                output.write(normalized)
+            image_url = url_for('static', filename=f'library/images/{image_name}')
+        except ImageWorkBusy:
+            return api_error('Image processing is busy. Try again shortly.', code='unavailable')
         except (UnidentifiedImageError, OSError, ValueError):
             if saved_image_path and os.path.exists(saved_image_path):
                 os.remove(saved_image_path)
@@ -312,6 +306,7 @@ def _start_library_delete_job(library: Library) -> str:
 
 @apis_bp.route('/get_libraries')
 @login_required
+@require_api_token_scope('read:library')
 def get_libraries():
     # Direct query to the Library model, ordered alphabetically by name
     libraries_query = filter_libraries(
@@ -375,6 +370,7 @@ def reorder_libraries():
 
 @apis_bp.route('/library/<string:library_uuid>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def get_library(library_uuid):
     """Return information about a specific library"""
     if not user_can_access_library(current_user, library_uuid):
@@ -398,6 +394,13 @@ def library_watch(library_uuid):
 
     Librarian or admin required for PUT.
     """
+    if request.method == 'GET':
+        if getattr(g, 'api_token', None) is not None and not user_has_scope('read:library'):
+            return api_error(
+                'Missing scope: read:library', code='forbidden',
+                detail={'required_scope': 'read:library'},
+            )
+
     if not user_can_access_library(current_user, library_uuid):
         return api_error('Forbidden', code='forbidden')
     library = db.session.execute(select(Library).filter_by(uuid=library_uuid)).scalars().first()
@@ -449,6 +452,8 @@ def batch_scan_libraries():
         parse_queue_policy,
         start_or_queue_scan,
     )
+    from oneirodex.utils.library_roots import resolve_scan_path
+    from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
 
     data = request.get_json(silent=True) or {}
     uuids, err = parse_library_uuids(data)
@@ -505,9 +510,61 @@ def batch_scan_libraries():
             })
             skipped += 1
             continue
+        if not isinstance(folder, str):
+            folder = str(folder)
+        folder = folder.strip()
+        if not folder:
+            results.append({
+                'uuid': library_uuid,
+                'name': library.name,
+                'ok': False,
+                'error': 'no_scan_folder',
+                'status': 'skipped',
+                'message': 'No scan folder was provided.',
+            })
+            skipped += 1
+            continue
         try:
+            resolved, root_error = resolve_scan_path(
+                folder, None, current_app._get_current_object(),
+            )
+            if root_error:
+                results.append({
+                    'uuid': library_uuid,
+                    'name': library.name,
+                    'ok': False,
+                    'error': 'bad_request',
+                    'status': 'rejected',
+                    'message': 'Unknown scan location.',
+                })
+                failed += 1
+                continue
+            allowed_bases = get_allowed_base_directories(current_app._get_current_object())
+            if not allowed_bases:
+                results.append({
+                    'uuid': library_uuid,
+                    'name': library.name,
+                    'ok': False,
+                    'error': 'unavailable',
+                    'status': 'rejected',
+                    'message': 'Scan locations are not configured.',
+                })
+                failed += 1
+                continue
+            safe, _path_error = is_safe_path(resolved, allowed_bases)
+            if not safe:
+                results.append({
+                    'uuid': library_uuid,
+                    'name': library.name,
+                    'ok': False,
+                    'error': 'forbidden',
+                    'status': 'rejected',
+                    'message': 'Access denied for this scan location.',
+                })
+                failed += 1
+                continue
             result = start_or_queue_scan(
-                folder_path=folder,
+                folder_path=resolved,
                 library_uuid=library_uuid,
                 scan_mode=scan_mode,
                 remove_missing=_bool('remove_missing'),
@@ -538,13 +595,14 @@ def batch_scan_libraries():
                 row['ok'] = False
                 row['error'] = result.get('message') or result.get('status') or 'rejected'
             results.append(row)
-        except Exception as exc:
+        except Exception:
             results.append({
                 'uuid': library_uuid,
                 'name': library.name,
                 'ok': False,
-                'error': str(exc),
+                'error': 'internal',
                 'status': 'error',
+                'message': 'Could not queue this scan.',
             })
             failed += 1
 

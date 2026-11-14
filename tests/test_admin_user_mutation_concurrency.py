@@ -100,3 +100,67 @@ def test_concurrent_admin_deactivation_keeps_one_active(app, db_session, monkeyp
             independent.commit()
         independent.remove()
         db.session = original_session
+
+
+def test_concurrent_native_admin_deletion_keeps_one_active(app, db_session):
+    from oneirodex.runtime_native.admin_user_mutations import AdminUserMutationData
+
+    # The native data adapter uses separate transaction scopes in production.
+    # Replace Flask's app-context session with a thread-scoped registry so both
+    # calls contend on PostgreSQL's real advisory lock and commit independently.
+    original_session = db.session
+    independent = scoped_session(
+        sessionmaker(bind=db.engine, expire_on_commit=False), scopefunc=get_ident,
+    )
+    db.session = independent
+    ids = []
+    try:
+        admins = []
+        for _ in range(2):
+            suffix = uuid4().hex[:10]
+            admin = User(
+                name=f'native_delete_admin_{suffix}',
+                email=f'native_delete_admin_{suffix}@example.com',
+                role='admin', state=True, is_email_verified=True,
+                user_id=str(uuid4()),
+            )
+            admin.set_password('a long test password')
+            independent.add(admin)
+            admins.append(admin)
+        independent.commit()
+        ids = [admin.id for admin in admins]
+        barrier = Barrier(2)
+
+        def delete_other(admin_id, target_id):
+            barrier.wait(timeout=15)
+            with app.app_context():
+                return AdminUserMutationData().delete(target_id, admin_id)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(delete_other, ids[0], ids[1])
+            second = pool.submit(delete_other, ids[1], ids[0])
+            results = [first.result(timeout=30), second.result(timeout=30)]
+
+        successes = [result for result in results if result[1] is None]
+        denied = [result for result in results if result[1] is not None]
+        assert len(successes) == 1
+        assert successes[0][0] == {'cleanup_pending': False}
+        assert len(denied) == 1
+        assert denied[0][0] is None
+        assert denied[0][1][:2] == ('Admin account is no longer active', 'forbidden')
+
+        independent.expire_all()
+        remaining = independent.scalars(
+            select(User).where(User.id.in_(ids), User.role == 'admin', User.state.is_(True))
+        ).all()
+        assert len(remaining) == 1
+    finally:
+        independent.remove()
+        if ids:
+            independent.query(SystemEvents).filter(
+                SystemEvents.audit_user.in_(ids)
+            ).delete(synchronize_session=False)
+            independent.query(User).filter(User.id.in_(ids)).delete(synchronize_session=False)
+            independent.commit()
+        independent.remove()
+        db.session = original_session

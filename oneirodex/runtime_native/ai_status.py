@@ -195,7 +195,16 @@ def create_ai_status_router(
                         'This token does not have the admin scope', code='forbidden',
                     )
                     response = JSONResponse(payload, status_code=status)
-                elif request.method in ('GET', 'HEAD'):
+                elif request.method == 'HEAD':
+                    from .runtime_context import native_json_response
+
+                    payload, status = api_error_payload(
+                        'No recognized fields to update', code='bad_request',
+                    )
+                    response = native_json_response(
+                        payload, config=flask_app.config, status=status,
+                    )
+                elif request.method == 'GET':
                     response = JSONResponse(data.read_config(config=flask_app.config))
                 else:
                     try:
@@ -212,8 +221,13 @@ def create_ai_status_router(
                         )
                         response = JSONResponse(payload, status_code=status)
                     else:
-                        saved = data.save_config(payload, config=flask_app.config)
-                        response = JSONResponse(api_ok_payload({'status': 'saved', **saved}))
+                        try:
+                            saved = data.save_config(payload, config=flask_app.config)
+                        except ValueError as exc:
+                            payload, status = api_error_payload(str(exc), code='bad_request')
+                            response = JSONResponse(payload, status_code=status)
+                        else:
+                            response = JSONResponse(api_ok_payload({'status': 'saved', **saved}))
 
             if auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
@@ -330,25 +344,25 @@ def create_ai_status_router(
                 request, auth, flask_app, login_manager,
             )
             if response is None:
-                if not data.auto_apply_enabled(config=flask_app.config):
-                    response = _api_error(
-                        'AI auto-apply is disabled. Set ENABLE_AI_AUTO_APPLY=true.',
-                        'forbidden', auto_apply_enabled=False,
-                    )
-                else:
-                    from pydantic import ValidationError
-                    from oneirodex.schemas.ai_assist import ApplyTriageBody
-                    from oneirodex.utils.validation import format_validation_errors
+                from pydantic import ValidationError
+                from oneirodex.schemas.ai_assist import ApplyTriageBody
+                from oneirodex.utils.validation import format_validation_errors
 
-                    payload = await _json_object(request)
-                    try:
-                        body = ApplyTriageBody.model_validate(payload)
-                    except ValidationError as exc:
-                        error_payload, status = _api_error_payload(
-                            'Invalid request.', 'unprocessable',
-                            detail=format_validation_errors(exc),
+                payload = await _json_object(request)
+                try:
+                    body = ApplyTriageBody.model_validate(payload)
+                except ValidationError as exc:
+                    error_payload, status = _api_error_payload(
+                        'Invalid request.', 'unprocessable',
+                        detail=format_validation_errors(exc),
+                    )
+                    response = JSONResponse(error_payload, status_code=status)
+                else:
+                    if not data.auto_apply_enabled(config=flask_app.config):
+                        response = _api_error(
+                            'AI auto-apply is disabled. Set ENABLE_AI_AUTO_APPLY=true.',
+                            'forbidden', auto_apply_enabled=False,
                         )
-                        response = JSONResponse(error_payload, status_code=status)
                     else:
                         try:
                             result = data.apply(

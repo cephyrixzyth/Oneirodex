@@ -110,13 +110,21 @@ def create_admin_server_settings_router(
             if response is None:
                 if request.method in ('PUT', 'POST'):
                     payload = await _json_object(request)
-                    result, message, code = data.save(payload)
-                    if message:
-                        response = _error(message, code, 500 if code == 'internal' else 400)
+                    from .bounded_request_body import BODY_TOO_LARGE
+                    if payload is BODY_TOO_LARGE:
+                        response = _error('Request body is too large.', 'payload_too_large', 413)
+                    elif request.method == 'POST' and request.url.path in (
+                        '/admin/settings', '/admin/new_server_settings',
+                    ) and payload == {}:
+                        response = _error('No settings data provided', 'bad_request', 400)
                     else:
-                        response = _ok({'settings': result['settings'],
-                                        'bounds': result['bounds'],
-                                        'text_limits': result['text_limits']})
+                        result, message, code = data.save(payload)
+                        if message:
+                            response = _error(message, code, 500 if code == 'internal' else 400)
+                        else:
+                            response = _ok({'settings': result['settings'],
+                                            'bounds': result['bounds'],
+                                            'text_limits': result['text_limits']})
                 else:
                     try:
                         response = _ok(data.state())
@@ -147,10 +155,14 @@ def mount_admin_server_settings_routes(app: FastAPI, flask_app, **kwargs):
 
 async def _json_object(request):
     import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
     try:
-        value = json.loads(await request.body() or b'{}')
-    except (TypeError, ValueError, UnicodeDecodeError):
+        raw_body = await read_bounded_body(request, 64 * 1024)
+        if raw_body is BODY_TOO_LARGE:
+            return BODY_TOO_LARGE
+        value = json.loads(raw_body or b'{}')
+    except (TypeError, ValueError, UnicodeDecodeError, RecursionError):
         return None
     return value if isinstance(value, dict) else None
 

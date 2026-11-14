@@ -24,10 +24,19 @@ should need to change.
 from __future__ import annotations
 
 import base64
+import json
+import logging
 import os
 from typing import Protocol
 
 import requests
+from oneirodex.utils.http_safe import (
+    MAX_OUTBOUND_IMAGE_BYTES,
+    ResponseTooLarge,
+    read_response_limited,
+)
+
+_logger = logging.getLogger(__name__)
 
 # Kept short: the prompt is catalogue facts, not a creative brief, and a long
 # tail of adjectives makes the output less recognisable rather than more.
@@ -144,6 +153,7 @@ class A1111Generator:
                 json=payload,
                 timeout=timeout,
                 allow_redirects=False,
+                stream=True,
             )
         except requests.RequestException as exc:
             # requests exceptions can embed the configured URL, including
@@ -151,14 +161,27 @@ class A1111Generator:
             # useful without reflecting endpoint details.
             raise ArtworkGenerationError('Artwork endpoint unreachable') from exc
 
-        if response.status_code != 200:
-            raise ArtworkGenerationError(
-                f'Artwork endpoint returned HTTP {response.status_code}',
-            )
         try:
-            images = (response.json() or {}).get('images') or []
-        except ValueError as exc:
-            raise ArtworkGenerationError('Artwork endpoint returned invalid JSON') from exc
+            if response.status_code != 200:
+                raise ArtworkGenerationError(
+                    f'Artwork endpoint returned HTTP {response.status_code}',
+                )
+            try:
+                payload_data = json.loads(read_response_limited(response, MAX_OUTBOUND_IMAGE_BYTES))
+            except ResponseTooLarge as exc:
+                raise ArtworkGenerationError(
+                    'Artwork endpoint response is too large',
+                ) from exc
+            except ValueError as exc:
+                raise ArtworkGenerationError('Artwork endpoint returned invalid JSON') from exc
+            except requests.RequestException as exc:
+                raise ArtworkGenerationError(
+                    'Artwork endpoint response could not be read',
+                ) from exc
+        finally:
+            response.close()
+
+        images = (payload_data or {}).get('images') or []
         if not images:
             raise ArtworkGenerationError('Artwork endpoint returned no image')
 
@@ -277,9 +300,17 @@ def generate_and_store_cover(
     engine = artwork_engine(runtime_config)
     file_name = secure_filename(f'{game_uuid}_{kind}_gen_{_uuid.uuid4().hex[:10]}.png')
     save_dir = runtime_config['IMAGE_SAVE_PATH']
-    os.makedirs(save_dir, exist_ok=True)
-    with open(os.path.join(save_dir, file_name), 'wb') as handle:
-        handle.write(data)
+    try:
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, file_name), 'wb') as handle:
+            handle.write(data)
+    except OSError as exc:
+        # Filesystem errors include the configured save path. Keep that detail
+        # out of API errors and logs; retain the exception chain internally.
+        _logger.warning(
+            'Generated artwork could not be saved (%s)', type(exc).__name__,
+        )
+        raise ArtworkGenerationError('Could not save generated artwork') from exc
 
     # Replace a previous *generated* row of this kind, never a curated one.
     if kind in SINGULAR_IMAGE_KINDS:

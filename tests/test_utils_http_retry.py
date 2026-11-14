@@ -54,3 +54,27 @@ def test_retries_on_request_exception_then_succeeds(mock_safe_get, mock_sleep):
     resp = request_with_backoff('https://example.com/x', host_key='example')
     assert resp is good
     assert mock_safe_get.call_count == 2
+
+
+@patch('oneirodex.utils.http_retry.time.sleep', return_value=None)
+@patch('oneirodex.utils.http_retry.safe_get')
+def test_exhausted_request_log_omits_exception_url_and_credentials(
+    mock_safe_get, mock_sleep, capsys,
+):
+    import requests
+
+    secret = 'provider-secret-value'
+    mock_safe_get.side_effect = requests.exceptions.ConnectionError(
+        f"failed https://provider.example/search?api_key={secret}"
+    )
+
+    assert request_with_backoff(
+        'https://provider.example/search?api_key=' + secret,
+        host_key='provider',
+        max_retries=1,
+    ) is None
+
+    logged = capsys.readouterr().out
+    assert 'http_retry exhausted for provider: ConnectionError' in logged
+    assert secret not in logged
+    assert 'provider.example' not in logged

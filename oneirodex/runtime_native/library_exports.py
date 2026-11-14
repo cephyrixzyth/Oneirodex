@@ -8,44 +8,52 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect, _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+from .query_compat import first_query_value
 
 
 class LibraryExportData:
     def _games(self, user, platform):
         from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.models import Game
+        from oneirodex.models import Game, Library
+        from oneirodex.platform import LibraryPlatform
         from oneirodex.utils.library_acl import apply_game_access_filters
+        from sqlalchemy.orm import joinedload
 
-        games = list(
-            apply_game_access_filters(db.session.query(Game), user)
-            .limit(500)
-            .all()
-        )
-        if not platform:
-            return games
-        key = platform.upper()
-        return [
-            game for game in games
-            if getattr(getattr(getattr(game, 'library', None), 'platform', None), 'name', None)
-            and str(game.library.platform.name).upper() == key
-        ]
+        query = apply_game_access_filters(db.session.query(Game), user)
+        query = query.join(Library).options(joinedload(Game.library))
+        if platform:
+            requested = str(platform).strip().lower()
+            member = next((item for item in LibraryPlatform if (
+                item.name.lower() == requested or item.value.lower() == requested
+            )), None)
+            if member is None:
+                return []
+            query = query.filter(Library.platform == member)
+        # No silent row cap: exports contain every authorized matching title.
+        # yield_per bounds ORM buffering while the builders consume the rows.
+        return query.order_by(Game.name.asc(), Game.uuid.asc()).yield_per(250)
 
     def _rows(self, games, flask_app):
         from oneirodex.utils.frontend_export import portable_export_path
         from oneirodex.utils.security import get_allowed_base_directories
 
         roots = get_allowed_base_directories(flask_app)
-        return [{
-            'uuid': game.uuid,
-            'name': game.name,
-            'summary': getattr(game, 'summary', None) or '',
-            'path': portable_export_path(
-                getattr(game, 'full_disk_path', None) or '', library_roots=roots,
-            ) or game.name,
-            'cover_url': getattr(game, 'cover', None) or '',
-            'developer': '', 'publisher': '', 'genre': '',
-        } for game in games], roots
+
+        def iter_rows():
+            for game in games:
+                yield {
+                    'uuid': game.uuid,
+                    'name': game.name,
+                    'summary': getattr(game, 'summary', None) or '',
+                    'path': portable_export_path(
+                        getattr(game, 'full_disk_path', None) or '', library_roots=roots,
+                    ) or game.name,
+                    'cover_url': getattr(game, 'cover', None) or '',
+                    'developer': '', 'publisher': '', 'genre': '',
+                }
+
+        return iter_rows(), roots
 
     def esde(self, user, platform, flask_app):
         from oneirodex.utils.frontend_export import build_es_de_gamelist
@@ -77,7 +85,7 @@ def create_library_export_router(
 
     @router.api_route('/api/export/esde', methods=['GET', 'HEAD'])
     async def export_esde(request: Request):
-        platform = (request.query_params.get('platform') or '').strip()
+        platform = (first_query_value(request.query_params, 'platform') or '').strip()
         return await _export(
             request, flask_app, data, 'esde', platform, find_user, find_token,
             commit_token_touch, load_user_id, login_manager, database_scope,
@@ -85,7 +93,7 @@ def create_library_export_router(
 
     @router.api_route('/api/export/pegasus', methods=['GET', 'HEAD'])
     async def export_pegasus(request: Request):
-        platform = (request.query_params.get('platform') or '').strip()
+        platform = (first_query_value(request.query_params, 'platform') or '').strip()
         return await _export(
             request, flask_app, data, 'pegasus', platform, find_user, find_token,
             commit_token_touch, load_user_id, login_manager, database_scope,
@@ -108,6 +116,8 @@ async def _export(
         if auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
         else:
+            response = require_bearer_scope(auth, 'read:library')
+        if auth.user is not None and response is None:
             try:
                 if format_name == 'esde':
                     content = data.esde(auth.user, platform, flask_app)

@@ -85,10 +85,12 @@ def create_integrations_inventory_router(
                     )
                 else:
                     rows = data.inventory()
+                    from oneirodex.utils.secret_store import reusable_secret_storage_status
                     response = JSONResponse({
                         'integrations': rows,
                         'count': len(rows),
                         'hub_href': '/admin/integrations',
+                        'credential_storage': reusable_secret_storage_status(),
                     })
 
             from oneirodex.utils.security_headers import security_header_values

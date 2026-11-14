@@ -5,7 +5,6 @@ import { initiateGameDownload } from '../api/downloads'
 import { ContextBar } from '../chrome/ContextBar'
 import { RailIcon } from '../chrome/railIcons'
 import { queueClientCommand } from '../api/clientCommands'
-import { ThinSeatNote } from '../components/ThinSeatNote'
 import { seatCanUseCompanion } from '../utils/seatMode'
 import {
   addWantedUpdate,
@@ -27,6 +26,7 @@ export function UpdatesPage() {
   const navigate = useNavigate()
   const shellConfig = useShellConfig()
   const useNewChrome = Boolean(shellConfig.enableNewChrome)
+  const canDownload = String(shellConfig.role || '').toLowerCase() !== 'child'
   const [items, setItems] = useState<any>(null)
   const [error, setError] = useState<any>(null)
   const [retryCount, setRetryCount] = useState(0)
@@ -389,8 +389,17 @@ export function UpdatesPage() {
                       {pack?.download_url && seatCanUseCompanion() ? (
                         <Button
                           type="button"
-                          disabled={busyKey === applyKey}
+                          disabled={!canDownload || busyKey === applyKey}
+                          title={
+                            !canDownload
+                              ? 'Downloads are unavailable for child accounts'
+                              : undefined
+                          }
+                          aria-describedby={
+                            !canDownload ? `updates-child-restriction-${game.uuid}` : undefined
+                          }
                           onClick={() => {
+                            if (!canDownload) return
                             if (!pack || !pack.kind || !pack.uuid) return
                             setBusyKey(applyKey)
                             void initiateGameDownload(game.uuid, {
@@ -418,13 +427,31 @@ export function UpdatesPage() {
                       {pack && game.client_connected && seatCanUseCompanion() ? (
                         <Button
                           type="button"
-                          disabled={busyKey === applyKey}
+                          disabled={!canDownload || busyKey === applyKey}
+                          title={
+                            !canDownload
+                              ? 'Companion actions are unavailable for child accounts'
+                              : undefined
+                          }
+                          aria-describedby={
+                            !canDownload ? `updates-child-restriction-${game.uuid}` : undefined
+                          }
                           onClick={() => {
+                            if (!canDownload) return
                             void applyPack(game, pack)
                           }}
                         >
                           {busyKey === applyKey ? 'Queuing…' : 'Apply with companion'}
                         </Button>
+                      ) : null}
+                      {pack?.download_url && !canDownload ? (
+                        <span
+                          className="visually-hidden"
+                          id={`updates-child-restriction-${game.uuid}`}
+                          role="note"
+                        >
+                          Downloads unavailable for child accounts
+                        </span>
                       ) : null}
                       <Link className="od-btn" to={`/game_details/${game.uuid}`}>
                         Details

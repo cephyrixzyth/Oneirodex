@@ -328,6 +328,11 @@ export function resolveNavSection(pathname: string): string | null {
   // subtle way to reintroduce exactly this bug.
   const path = (pathname || '/').split('#')[0].split('?')[0].replace(/\/+$/, '') || '/'
 
+  // Keep retired standalone scan pages and compatibility aliases in the
+  // Libraries context while bookmarks settle on the scan-management routes.
+  if (path === '/admin/scan-jobs' || path === '/admin/scan-controls' || path === '/admin/unmatched')
+    return 'libraries'
+
   const owns = (href: string | undefined) => {
     // Fragments and query strings are the same page for ownership purposes.
     const base = (href || '').split('#')[0].split('?')[0].replace(/\/+$/, '')
@@ -387,14 +392,13 @@ export function railDestinations(sectionId: string) {
 }
 
 export const HUB_LINKS = {
-  // Libraries & scans sibling pages (no longer one Bootstrap tab document).
+  // Scan views share the THN page switcher so the rail stays focused on one Scan destination.
   libraries: [
     { href: '/libraries', label: 'Libraries' },
-    // Auto + Manual share one LHN row; mode switch lives in the THN.
+    // Auto, Manual and Jobs share one THN switcher.
     { href: '/scan_management?active_tab=auto', label: 'Scan' },
-    { href: '/admin/scan-jobs', label: 'Scan jobs' },
     { href: '/scan_management?active_tab=tools', label: 'Library tools' },
-    { href: '/admin/unmatched', label: 'Unmatched' },
+    { href: '/scan_management?active_tab=unmatched', label: 'Unmatched' },
     { href: '/admin/edit_filters', label: 'Scan filters' },
     { href: '/admin/extensions', label: 'Extensions' },
     { href: '/admin/images', label: 'Image queue' },

@@ -59,6 +59,7 @@ filesystem path can ride out in the envelope — the same rule
 from __future__ import annotations
 
 import functools
+import json
 from collections.abc import Mapping
 from typing import Any, Callable
 
@@ -148,6 +149,7 @@ def validate_body(
     model: type[BaseModel], *,
     methods: set[str] | frozenset[str] | None = None,
     on_error: Callable[[ValidationError], Any] | None = None,
+    max_body_bytes: int | None = None,
 ) -> Callable:
     """Validate the JSON request body against ``model`` before the view runs.
 
@@ -161,6 +163,36 @@ def validate_body(
     def decorator(view: Callable) -> Callable:
         @functools.wraps(view)
         def wrapper(*args: Any, **kwargs: Any):
+            if max_body_bytes is not None:
+                from flask import request
+
+                try:
+                    limit = max(0, int(max_body_bytes))
+                except (TypeError, ValueError, OverflowError):
+                    limit = 0
+                if request.content_length is not None and request.content_length > limit:
+                    return api_error('Request body is too large.', code='payload_too_large')
+                chunks = bytearray()
+                while len(chunks) <= limit:
+                    chunk = request.stream.read(limit + 1 - len(chunks))
+                    if not chunk:
+                        break
+                    chunks.extend(chunk)
+                raw = bytes(chunks)
+                if len(raw) > limit:
+                    return api_error('Request body is too large.', code='payload_too_large')
+                try:
+                    payload = json.loads(raw) if request.is_json and raw else None
+                except (TypeError, ValueError, UnicodeDecodeError):
+                    payload = None
+                try:
+                    validated = model.model_validate(payload if payload is not None else {})
+                except ValidationError as exc:
+                    if on_error is not None:
+                        return on_error(exc)
+                    return _refuse_unprocessable(exc)
+                kwargs['body'] = validated
+                return view(*args, **kwargs)
             if methods is not None:
                 from flask import request
 

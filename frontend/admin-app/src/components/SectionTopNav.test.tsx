@@ -63,6 +63,47 @@ test('pages outside Settings and Integrations get no section bar', () => {
   expect(container.querySelector('a')).toBeNull()
 })
 
+test.each([
+  ['/scan_management?active_tab=auto', 'Scanning'],
+  ['/scan_management?active_tab=manual', 'Manual identify'],
+  ['/scan_management?active_tab=auto#manual-identify', 'Manual identify'],
+  ['/scan_management?active_tab=jobs', 'Scan jobs'],
+  ['/scan_management?active_tab=unmatched', 'Unmatched'],
+])(
+  'scan view %s has one in-app switcher with the current view or section active',
+  (path, active) => {
+    at(path)
+    const links = screen.getAllByRole('link')
+    expect(links.map((link) => link.textContent?.trim())).toEqual([
+      'Scanning',
+      'Manual identify',
+      'Scan jobs',
+      'Unmatched',
+    ])
+    expect(screen.getByRole('link', { name: active })).toHaveAttribute(
+      'aria-current',
+      active === 'Manual identify' ? 'location' : 'page',
+    )
+    expect(links.every((link) => link.getAttribute('href'))).toBe(true)
+    expect(screen.getByRole('link', { name: 'Manual identify' })).toHaveAttribute(
+      'href',
+      '/scan_management?active_tab=auto#manual-identify',
+    )
+    expect(screen.getByRole('link', { name: 'Scanning' })).toHaveAttribute(
+      'href',
+      '/scan_management?active_tab=auto#automatic-scan',
+    )
+    expect(screen.getByRole('link', { name: 'Scan jobs' })).toHaveAttribute(
+      'href',
+      '/scan_management?active_tab=jobs',
+    )
+    expect(screen.getByRole('link', { name: 'Unmatched' })).toHaveAttribute(
+      'href',
+      '/scan_management?active_tab=unmatched',
+    )
+  },
+)
+
 test('every destination has exactly one home across Settings and Integrations', () => {
   const seen = new Map<string, string>()
   for (const sub of [...SETTINGS_GROUPS, ...INTEGRATION_SECTIONS]) {

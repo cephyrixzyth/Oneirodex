@@ -8,8 +8,11 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 from .csrf_compat import csrf_error_response
+
+COLLECTION_REORDER_BODY_MAX_BYTES = 64 * 1024
+_BODY_TOO_LARGE = object()
 
 
 class CollectionReadData:
@@ -17,7 +20,7 @@ class CollectionReadData:
         from sqlalchemy import func, select
 
         from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.models import GameCollection, GameCollectionItem
+        from oneirodex.models import Game, GameCollection, GameCollectionItem
 
         rows = db.session.execute(
             select(GameCollection).order_by(GameCollection.created_at.desc())
@@ -30,14 +33,20 @@ class CollectionReadData:
         ]
         collection_ids = [collection.id for collection in visible]
         if collection_ids:
-            counts = db.session.execute(
+            item_query = (
                 select(
                     GameCollectionItem.collection_id,
                     func.count(GameCollectionItem.id),
                 )
+                .join(Game, Game.uuid == GameCollectionItem.game_uuid)
                 .where(GameCollectionItem.collection_id.in_(collection_ids))
                 .group_by(GameCollectionItem.collection_id)
-            ).all()
+            )
+            if not admin_access:
+                from oneirodex.utils.library_acl import apply_game_access_filters
+
+                item_query = apply_game_access_filters(item_query, user)
+            counts = db.session.execute(item_query).all()
             count_map = {identifier: int(count) for identifier, count in counts}
         else:
             count_map = {}
@@ -53,7 +62,7 @@ class CollectionReadData:
         from sqlalchemy import select
 
         from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.models import GameCollection
+        from oneirodex.models import Game, GameCollection, GameCollectionItem
 
         collection = db.session.execute(
             select(GameCollection).filter_by(uuid=collection_uuid)
@@ -64,17 +73,20 @@ class CollectionReadData:
             collection.owner_user_id == user.id or admin_access
         ):
             return None, 403
-        payload = _collection_payload(
-            collection, user, admin_access=admin_access, include_items=True
+        item_query = (
+            select(GameCollectionItem)
+            .join(Game, Game.uuid == GameCollectionItem.game_uuid)
+            .where(GameCollectionItem.collection_id == collection.id)
+            .order_by(GameCollectionItem.position)
         )
-        if collection.owner_user_id != user.id and not admin_access:
-            from oneirodex.utils.library_acl import user_can_access_game
+        if not admin_access:
+            from oneirodex.utils.library_acl import apply_game_access_filters
 
-            payload['items'] = [
-                item.to_dict() for item in collection.items
-                if user_can_access_game(user, item.game)
-            ]
-            payload['item_count'] = len(payload['items'])
+            item_query = apply_game_access_filters(item_query, user)
+        items = db.session.execute(item_query).scalars().all()
+        payload = _collection_payload(collection, user, admin_access=admin_access)
+        payload['items'] = [item.to_dict() for item in items]
+        payload['item_count'] = len(items)
         return payload, 200
 
     def create(self, user, body):
@@ -90,6 +102,9 @@ class CollectionReadData:
         )
         db.session.add(collection)
         db.session.commit()
+        # Match Flask's expire-on-commit response: the timestamp is reloaded
+        # from PostgreSQL's timezone-naive column before it is serialized.
+        db.session.refresh(collection)
         return _collection_payload(collection, user, admin_access=False, item_count=0)
 
     def update(self, user, collection_uuid: str, payload: dict, *, admin_access: bool):
@@ -117,9 +132,12 @@ class CollectionReadData:
         if 'is_public' in payload:
             collection.is_public = bool(payload.get('is_public'))
         db.session.commit()
-        return _collection_payload(
-            collection, user, admin_access=admin_access, include_items=True
-        ), None
+        payload, status = self.detail(
+            user, collection_uuid, admin_access=admin_access
+        )
+        if status != 200:
+            return None, (status, 'not_found', 'Collection not found')
+        return payload, None
 
     def delete(self, user, collection_uuid: str, *, admin_access: bool):
         from sqlalchemy import select
@@ -250,16 +268,18 @@ def create_collection_reads_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                from starlette.responses import JSONResponse
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    from starlette.responses import JSONResponse
 
-                response = JSONResponse(data.list(
-                    auth.user,
-                    admin_access=_admin_access(auth.user, auth.token),
-                ))
-                if auth.should_set_session_cookie:
-                    from .oidc_status import _set_session_cookie
+                    response = JSONResponse(data.list(
+                        auth.user,
+                        admin_access=_admin_access(auth.user, auth.token),
+                    ))
+                    if auth.should_set_session_cookie:
+                        from .oidc_status import _set_session_cookie
 
-                    _set_session_cookie(response, flask_app, auth)
+                        _set_session_cookie(response, flask_app, auth)
             _finalize(response, flask_app, request)
             return response
 
@@ -299,12 +319,21 @@ def create_collection_reads_router(
             elif auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                payload = _json_object(await request.body())
-                result, refusal = data.update(
-                    auth.user, collection_uuid, payload,
-                    admin_access=_admin_access(auth.user, auth.token),
-                )
-                response = _error_response(refusal) if refusal else JSONResponse(result)
+                raw_body = await _bounded_request_body(request, 64 * 1024)
+                if raw_body is _BODY_TOO_LARGE:
+                    from oneirodex.utils.api_contract import api_error_payload
+
+                    payload, status = api_error_payload(
+                        'Request body is too large.', code='payload_too_large',
+                    )
+                    response = JSONResponse(payload, status_code=status)
+                else:
+                    payload = _json_object(raw_body)
+                    result, refusal = data.update(
+                        auth.user, collection_uuid, payload,
+                        admin_access=_admin_access(auth.user, auth.token),
+                    )
+                    response = _error_response(refusal) if refusal else JSONResponse(result)
             _finish_auth(response, flask_app, request, auth)
             return response
 
@@ -429,29 +458,31 @@ def create_collection_reads_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                from oneirodex.utils.api_contract import api_error_payload
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    from oneirodex.utils.api_contract import api_error_payload
 
-                payload, status = data.detail(
-                    auth.user,
-                    collection_uuid,
-                    admin_access=_admin_access(auth.user, auth.token),
-                )
-                if status != 200:
-                    message = (
-                        'Collection not found' if status == 404
-                        else 'That collection is private'
+                    payload, status = data.detail(
+                        auth.user,
+                        collection_uuid,
+                        admin_access=_admin_access(auth.user, auth.token),
                     )
-                    code = 'not_found' if status == 404 else 'forbidden'
-                    payload, response_status = api_error_payload(
-                        message, code=code, status=status
-                    )
-                    response = JSONResponse(payload, status_code=response_status)
-                else:
-                    response = JSONResponse(payload)
-                if auth.should_set_session_cookie:
-                    from .oidc_status import _set_session_cookie
+                    if status != 200:
+                        message = (
+                            'Collection not found' if status == 404
+                            else 'That collection is private'
+                        )
+                        code = 'not_found' if status == 404 else 'forbidden'
+                        payload, response_status = api_error_payload(
+                            message, code=code, status=status
+                        )
+                        response = JSONResponse(payload, status_code=response_status)
+                    else:
+                        response = JSONResponse(payload)
+                    if auth.should_set_session_cookie:
+                        from .oidc_status import _set_session_cookie
 
-                    _set_session_cookie(response, flask_app, auth)
+                        _set_session_cookie(response, flask_app, auth)
             _finalize(response, flask_app, request)
             return response
 
@@ -529,8 +560,19 @@ async def _parse_body(request, operation):
         'add_collection_item': AddCollectionItemBody,
         'reorder_collection_items': ReorderCollectionItemsBody,
     }
+    max_bytes = (
+        COLLECTION_REORDER_BODY_MAX_BYTES
+        if operation == 'reorder_collection_items' else 64 * 1024
+    )
+    raw_body = await _bounded_request_body(request, max_bytes)
+    if raw_body is _BODY_TOO_LARGE:
+        payload, status = api_error_payload(
+            'Request body is too large.', code='payload_too_large',
+            limit=max_bytes,
+        )
+        return None, JSONResponse(payload, status_code=status)
     try:
-        raw = json.loads(await request.body() or b'{}')
+        raw = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         raw = {}
     try:
@@ -542,6 +584,23 @@ async def _parse_body(request, operation):
         )
         return None, JSONResponse(payload, status_code=status)
     return body, None
+
+
+async def _bounded_request_body(request, max_bytes: int):
+    """Read a bounded body without aggregating an untrusted oversized stream."""
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                return _BODY_TOO_LARGE
+        except ValueError:
+            pass
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > max_bytes:
+            return _BODY_TOO_LARGE
+        body.extend(chunk)
+    return bytes(body)
 
 
 def _json_object(raw_body: bytes) -> dict:

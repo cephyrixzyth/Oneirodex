@@ -235,13 +235,17 @@ def art_studio_apply(body: ArtStudioApplyBody):
         return jsonify({'mode': 'game', **result})
     except LookupError as exc:
         return api_error(str(exc), code='not_found')
-    except (ValueError, FileNotFoundError) as exc:
-        return api_error(str(exc), code='bad_request')
-    except PermissionError:
-        return api_error('Permission denied writing cover art', code='internal')
-    except OSError:
-        return api_error('Failed to write cover art to disk', code='internal')
-    except Exception:  # noqa: BLE001 - surface DB/commit failures as JSON, not an HTML 500 page
+    except Exception as exc:
+        from oneirodex.utils.image_upload_limits import ImageWorkBusy
+
+        if isinstance(exc, ImageWorkBusy):
+            return api_error('Image processing is busy. Try again shortly.', code='unavailable')
+        if isinstance(exc, (ValueError, FileNotFoundError)):
+            return api_error(str(exc), code='bad_request')
+        if isinstance(exc, PermissionError):
+            return api_error('Permission denied writing cover art', code='internal')
+        if isinstance(exc, OSError):
+            return api_error('Failed to write cover art to disk', code='internal')
         return api_error('Unexpected error applying pack', code='internal')
 
 

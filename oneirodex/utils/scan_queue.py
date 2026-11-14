@@ -225,7 +225,7 @@ def normalize_schedule_fields(
         compute_next_run,
     )
 
-    choice = (schedule_choice or '').strip()
+    choice = '' if schedule_choice is None else schedule_choice
     out = {
         'schedule': None,
         'schedule_kind': 'once',
@@ -234,7 +234,10 @@ def normalize_schedule_fields(
         'next_run': None,
         'error': None,
     }
-    if not choice:
+    if not isinstance(choice, str):
+        out['error'] = 'Not a valid choice.'
+        return out
+    if not choice.strip():
         return out
     if choice in SCHEDULE_HOURS:
         out['schedule'] = choice
@@ -242,11 +245,35 @@ def normalize_schedule_fields(
         out['next_run'] = compute_next_run(choice)
         return out
     if choice == 'interval':
+        # AutoScanForm's IntegerField defaults to six when omitted. An
+        # explicitly submitted empty string remains empty and is rejected
+        # below, matching WTForms Optional + the legacy normalizer.
+        raw_interval_value = 6 if interval_value is None else interval_value
         try:
-            value = int(interval_value or 0)
+            # WTForms IntegerField rejects booleans and JSON floats; Python's
+            # int() would otherwise coerce True to 1 and 1.5 to 1.
+            if isinstance(raw_interval_value, (bool, float)):
+                raise ValueError
+            value = int(raw_interval_value or 0)
         except (TypeError, ValueError):
-            value = 0
-        unit = (interval_unit or 'hours').strip().lower()
+            out['error'] = (
+                'Not a valid integer value. Number must be between 1 and 10080.'
+            )
+            return out
+        # SelectField validates the submitted value against exact choice
+        # strings. The FastAPI JSON path bypasses that form, so do not trim or
+        # case-fold values here: malformed choices must fail as they did in
+        # v1.1.8 (for example, " hours " and "HOURS").
+        unit = 'hours' if interval_unit is None else interval_unit
+        if not isinstance(unit, str) or unit not in {'hours', 'minutes'}:
+            out['error'] = 'Not a valid choice.'
+            return out
+        # Match AutoScanForm.schedule_interval_value's WTForms range. The
+        # current SPA API bypasses that form, so enforce the same raw input cap
+        # here instead of accepting schedules the v1.1.8 form rejected.
+        if value > 10080 or (value < 1 and raw_interval_value not in (None, '')):
+            out['error'] = 'Number must be between 1 and 10080.'
+            return out
         minutes = value * 60 if unit == 'hours' else value
         if minutes < 1:
             out['error'] = 'Interval must be at least 1 minute.'
@@ -258,7 +285,13 @@ def normalize_schedule_fields(
         )
         return out
     if choice == 'cron':
-        expr = (cron_expr or '').strip()
+        raw_expr = cron_expr or ''
+        # Mirror AutoScanForm.schedule_cron's WTForms Length(max=64) check
+        # before trimming; otherwise padded valid expressions bypass it.
+        if len(raw_expr) > 64:
+            out['error'] = 'Field cannot be longer than 64 characters.'
+            return out
+        expr = raw_expr.strip()
         from oneirodex.utils.cron_schedule import validate_cron_expression
 
         if not expr:
@@ -272,11 +305,10 @@ def normalize_schedule_fields(
         out['schedule_cron'] = expr[:64]
         out['next_run'] = compute_next_run(schedule_kind='cron', cron_expr=expr)
         return out
-    # Unknown choice: fail closed like the cron/interval branches above. Falling
-    # through to `once` with no error armed nothing while the caller flashed
-    # success — a select option added to the template but not here would look
-    # like it worked.
-    out['error'] = f'Unknown schedule option: {choice}'
+    # Keep the SelectField choice-validation message for legacy form callers.
+    # Falling through to `once` would arm nothing while the caller flashed
+    # success, so unsupported schedule values must still fail closed.
+    out['error'] = 'Not a valid choice.'
     return out
 
 
@@ -468,7 +500,8 @@ def _has_older_busy_scan(candidate: ScanJob) -> bool:
 
 
 def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False,
-                      database_scope=None):
+                      database_scope=None, fetch_hltb: bool = False,
+                      force_hltb_refetch: bool = False):
     """Spawn daemon thread that runs ``scan_and_add_games`` for an existing job."""
     from oneirodex.utils.services.scan_orchestration import scan_and_add_games
 
@@ -497,6 +530,8 @@ def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False,
                 existing_job=existing,
                 download_missing_images=download_missing_images,
                 force_updates_extras_scan=force_updates_extras,
+                fetch_hltb=fetch_hltb,
+                force_hltb_refetch=force_hltb_refetch,
                 schedule=schedule,
                 force_parallel=force_parallel,
                 database_scope=database_scope,
@@ -521,6 +556,7 @@ def start_or_queue_scan(
     queue_policy: str = 'queue',
     allow_force: bool = False,
     app=None,
+    database_scope=None,
 ) -> dict:
     """Accept a scan request: start now, queue, force-parallel, or reject.
 
@@ -636,35 +672,13 @@ def start_or_queue_scan(
     except Exception:
         pass
 
-    # HLTB flags are request-scoped for the worker thread (not ScanJob columns).
-    job_id = job.id
-
-    def _run_with_hltb():
-        with flask_app.app_context():
-            from oneirodex.utilities import scan_and_add_games
-
-            existing = db.session.get(ScanJob, job_id)
-            if not existing:
-                return
-            scan_and_add_games(
-                folder_path,
-                scan_mode=scan_mode,
-                library_uuid=library_uuid,
-                remove_missing=remove_missing,
-                existing_job=existing,
-                download_missing_images=download_missing_images,
-                force_updates_extras_scan=force_updates_extras_scan,
-                fetch_hltb=fetch_hltb,
-                force_hltb_refetch=force_hltb_refetch,
-                schedule=schedule,
-                force_parallel=force,
-            )
-
-    Thread(
-        target=_run_with_hltb,
-        daemon=True,
-        name=f'oneirodex-scan-{job_id[:8]}',
-    ).start()
+    # HLTB flags are request-scoped (not ScanJob columns). Native callers
+    # supply a worker-local DB scope so the thread stays independent of Flask.
+    _start_job_thread(
+        job, flask_app, force_parallel=force,
+        database_scope=database_scope, fetch_hltb=fetch_hltb,
+        force_hltb_refetch=force_hltb_refetch,
+    )
 
     if force and busy:
         message = (
@@ -842,7 +856,7 @@ def drain_scan_queue(app=None, *, database_scope=None) -> ScanJob | None:
         return None
 
 
-def maybe_drain_scan_queue(app=None) -> ScanJob | None:
+def maybe_drain_scan_queue(app=None, *, database_scope=None) -> ScanJob | None:
     """Safety drain for status / Ops polls — skip while a scan is busy.
 
     Admin Libraries & scans polls ``GET /api/scan_jobs_status`` every few
@@ -854,7 +868,7 @@ def maybe_drain_scan_queue(app=None) -> ScanJob | None:
     """
     if is_scan_busy():
         return None
-    return drain_scan_queue(app)
+    return drain_scan_queue(app, database_scope=database_scope)
 
 
 def enqueue_library_refresh_jobs(libraries_with_folders: list[dict]) -> dict:

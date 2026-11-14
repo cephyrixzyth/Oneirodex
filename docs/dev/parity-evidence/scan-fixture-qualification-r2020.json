@@ -1,0 +1,65 @@
+{
+  "review_id": "R2020",
+  "doc_status": "Reference",
+  "title": "Scan fixture preconditions and combined remaining-module qualification",
+  "source_head_before_change": "f410c49ff6aede3aaa2641933700085b6e168fa6",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "tests/test_utilities.py": "b89afc3289cafdf6821288eb6d581d76520f3518b86dbe37d12cc7624642fe69"
+  },
+  "classification": {
+    "busy_scan_queue": "Not reproduced as product queue regression. Naive local fixture timestamps appeared over six hours old when interpreted as UTC and were correctly reclaimed. Busy fixtures now use UTC timestamps.",
+    "scan_worker_paths": "Not reproduced as product worker failure. Synthetic paths outside configured roots were correctly refused before intended I/O/database failure checks. Tests now configure actual temporary allowed roots and scan paths."
+  },
+  "assertion_preservation": {
+    "qualified_methods": 6,
+    "original_assertions_preserved": true,
+    "normalization": "Only the four historical synthetic scan paths normalized to the new temporary scan_path variable."
+  },
+  "checks": {
+    "scan-preconditions-green": {
+      "exit_code": 0,
+      "seconds": 22.11,
+      "counts": {
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 11
+      },
+      "owned_database_removed": true,
+      "log_sha256": "4c46db638e95afe1d68973db57a251d8c69e6ccad40b56bd07adec19119d391a"
+    },
+    "remaining-ci-modules-green": {
+      "exit_code": 0,
+      "seconds": 181.54,
+      "counts": {
+        "tests": 459,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 2,
+        "passed": 457
+      },
+      "owned_database_removed": true,
+      "log_sha256": "c7e3f6e1156123441d390e0cb7652b62bd79b46a07d6614d8540a44cb65a4bbf"
+    }
+  },
+  "verified_behavior": [
+    "Queue assertions still require one queued job when a live busy job exists.",
+    "Original denied-folder, restart state, two missing-game removals and commit-failure assertions retained and reached.",
+    "Entire same 24-module selection from the earlier 34-fail diagnostic completed after R2017-R2020 repairs; not a full-suite result."
+  ],
+  "environment": {
+    "platform": "Windows",
+    "python": "3.12.16",
+    "database": "Owned loopback PostgreSQL 17.6 plus isolated native SQLite fixtures",
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "limits": [
+    "Focused and combined selections overlap; do not sum as unique outcomes.",
+    "No production scan policy, timestamp handling or root-validation change.",
+    "Current CI and unrestricted-suite/platform/deployed/browser acceptance remain open."
+  ],
+  "capture": "Not applicable: test-only changes."
+}

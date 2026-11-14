@@ -2,6 +2,7 @@
 control rows, personal access tokens, client devices and invites."""
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from sqlalchemy import event, update
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -50,6 +51,15 @@ class User(db.Model):
     def set_password(self, password):
         # Now using Argon2 to hash new passwords
         self.password_hash = ph.hash(password)
+        if self.id is not None:
+            db.session.execute(
+                update(PersistentLoginSession)
+                .where(
+                    PersistentLoginSession.user_id == self.id,
+                    PersistentLoginSession.revoked_at.is_(None),
+                )
+                .values(revoked_at=datetime.now(timezone.utc))
+            )
 
     def check_password(self, password):
         # Only use Argon2 for password verification
@@ -162,16 +172,25 @@ class ApiToken(db.Model):
             return True
         return scope in scopes
 
+    @staticmethod
+    def _legacy_timestamp(value):
+        """Serialize token timestamps like the legacy naive-UTC columns."""
+        if value is None:
+            return None
+        if value.tzinfo is not None:
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value.isoformat()
+
     def to_public_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'token_prefix': self.token_prefix,
             'scopes': self.scopes or [],
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'last_used_at': self.last_used_at.isoformat() if self.last_used_at else None,
+            'created_at': self._legacy_timestamp(self.created_at),
+            'last_used_at': self._legacy_timestamp(self.last_used_at),
             'revoked': self.revoked_at is not None,
-            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'expires_at': self._legacy_timestamp(self.expires_at),
             'expired': self.is_expired(),
         }
 
@@ -219,6 +238,46 @@ class ClientDevice(db.Model):
             'client_version': self.client_version,
             'last_seen_at': self.last_seen_at.isoformat() if self.last_seen_at else None,
         }
+
+
+class PersistentLoginSession(db.Model):
+    """Server-side revocation and age record for one browser login."""
+
+    __tablename__ = 'persistent_login_sessions'
+    __table_args__ = (
+        db.Index('ix_persistent_login_sessions_user_active', 'user_id', 'revoked_at'),
+        db.Index('ix_persistent_login_sessions_expiry', 'expires_at'),
+    )
+
+    id = db.Column(db.String(32), primary_key=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    secret_hash = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    last_seen_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    revoked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    user = db.relationship(
+        'User',
+        backref=db.backref('persistent_login_sessions', lazy='dynamic', cascade='all, delete-orphan'),
+    )
+
+
+@event.listens_for(User.state, 'set')
+def _revoke_login_sessions_when_disabled(user, value, oldvalue, _initiator):
+    if value is False and oldvalue is not False and user.id is not None:
+        db.session.execute(
+            update(PersistentLoginSession)
+            .where(
+                PersistentLoginSession.user_id == user.id,
+                PersistentLoginSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=datetime.now(timezone.utc))
+        )
 
 class Whitelist(db.Model):
     __tablename__ = 'whitelist'
@@ -325,7 +384,10 @@ class DetailLayoutPreset(db.Model):
     layout = db.Column(JSONEncodedDict, nullable=False)
     created = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
-    user = db.relationship('User', backref='detail_layout_presets')
+    user = db.relationship(
+        'User',
+        backref=db.backref('detail_layout_presets', passive_deletes='all'),
+    )
 
     def __repr__(self):
         return f"<DetailLayoutPreset {self.user_id}:{self.name}>"
@@ -371,7 +433,10 @@ class SavedFilter(db.Model):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    user = db.relationship('User', backref='saved_filters')
+    user = db.relationship(
+        'User',
+        backref=db.backref('saved_filters', passive_deletes='all'),
+    )
 
     def to_dict(self):
         return {
@@ -429,6 +494,7 @@ __all__ = [
     "UserContentFilter",
     "ApiToken",
     "ClientDevice",
+    "PersistentLoginSession",
     "Whitelist",
     "UserPreference",
     "DetailLayoutPreset",

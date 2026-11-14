@@ -61,47 +61,57 @@ def create_admin_artwork_generation_router(
                 if csrf is not None:
                     response = csrf
                 else:
-                    try:
-                        body = await request.json()
-                    except Exception:
-                        body = {}
-                    try:
-                        from oneirodex.schemas.admin_images import GenerateArtworkBody
-                        from oneirodex.utils.validation import format_validation_errors
-                        model = GenerateArtworkBody.model_validate(body)
-                    except ValidationError as exc:
+                    import json
+                    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+                    raw_body = await read_bounded_body(request, 64 * 1024)
+                    if raw_body is BODY_TOO_LARGE:
                         payload, status = api_error_payload(
-                            'Invalid request.', code='unprocessable',
-                            detail=format_validation_errors(exc),
+                            'Request body is too large.', code='payload_too_large',
                         )
                         response = JSONResponse(payload, status_code=status)
                     else:
-                        if not data.enabled(flask_app.config):
+                        try:
+                            body = json.loads(raw_body or b'null')
+                        except Exception:
+                            body = {}
+                        try:
+                            from oneirodex.schemas.admin_images import GenerateArtworkBody
+                            from oneirodex.utils.validation import format_validation_errors
+                            model = GenerateArtworkBody.model_validate(body)
+                        except ValidationError as exc:
                             payload, status = api_error_payload(
-                                'Generated artwork is off. Set ENABLE_AI_ARTWORK=true and AI_ARTWORK_URL.',
-                                code='forbidden',
+                                'Invalid request.', code='unprocessable',
+                                detail=format_validation_errors(exc),
                             )
                             response = JSONResponse(payload, status_code=status)
                         else:
-                            try:
-                                result = data.generate(
-                                    model.game_uuid, model.image_type or 'cover',
-                                    config=flask_app.config,
+                            if not data.enabled(flask_app.config):
+                                payload, status = api_error_payload(
+                                    'Generated artwork is off. Set ENABLE_AI_ARTWORK=true and AI_ARTWORK_URL.',
+                                    code='forbidden',
                                 )
-                                response = JSONResponse(api_ok_payload(result))
-                            except LookupError:
-                                payload, status = api_error_payload('Game not found', code='not_found')
                                 response = JSONResponse(payload, status_code=status)
-                            except ValueError as exc:
-                                payload, status = api_error_payload(str(exc), code='bad_request')
-                                response = JSONResponse(payload, status_code=status)
-                            except Exception as exc:
-                                from oneirodex.utils.ai_artwork import ArtworkGenerationError
-                                if isinstance(exc, ArtworkGenerationError):
-                                    payload, status = api_error_payload(str(exc), code='bad_gateway')
+                            else:
+                                try:
+                                    result = data.generate(
+                                        model.game_uuid, model.image_type or 'cover',
+                                        config=flask_app.config,
+                                    )
+                                    response = JSONResponse(api_ok_payload(result))
+                                except LookupError:
+                                    payload, status = api_error_payload('Game not found', code='not_found')
                                     response = JSONResponse(payload, status_code=status)
-                                else:
-                                    raise
+                                except ValueError as exc:
+                                    payload, status = api_error_payload(str(exc), code='bad_request')
+                                    response = JSONResponse(payload, status_code=status)
+                                except Exception as exc:
+                                    from oneirodex.utils.ai_artwork import ArtworkGenerationError
+                                    if isinstance(exc, ArtworkGenerationError):
+                                        payload, status = api_error_payload(str(exc), code='bad_gateway')
+                                        response = JSONResponse(payload, status_code=status)
+                                    else:
+                                        raise
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values

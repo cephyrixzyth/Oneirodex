@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from flask import redirect as flask_redirect
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from oneirodex.runtime_native import integration_settings
 from oneirodex.runtime_native.integration_settings import create_integration_settings_router
-from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
 
 class FakeSettings:
@@ -30,11 +32,11 @@ class FakeSettings:
         return {'community_chat_url': url, 'community_chat_label': label.strip() or 'Open community'}
 
 
-def make_client(*, role='admin', data=None):
+def make_client(*, role='admin', data=None, csrf_enabled=False):
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY='native-integration-settings-secret', TESTING=True,
-        WTF_CSRF_ENABLED=False,
+        WTF_CSRF_ENABLED=csrf_enabled,
     )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(id=7, role=role, is_active=True, state=True, is_authenticated=True)
@@ -52,7 +54,9 @@ def make_client(*, role='admin', data=None):
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    client.cookies.set('session', dump_session_cookie({'_user_id': '7:fp'}, 'native-integration-settings-secret'))
+    session_data = {'_user_id': '7:fp'}
+    client.csrf_token = generate_csrf_token(session_data, 'native-integration-settings-secret')
+    client.cookies.set('session', dump_session_cookie(session_data, 'native-integration-settings-secret'))
     return client
 
 
@@ -83,6 +87,65 @@ def test_oidc_write_validates_https_and_passes_complete_payload_to_adapter():
     response = make_client(data=data).put('/api/admin/integrations/oidc', json=payload)
     assert response.status_code == 400
     assert data.oidc_saved['oidc_issuer_url'] == 'https://id.example.test'
+
+
+def test_oidc_data_adapter_encrypts_a_supplied_secret(monkeypatch):
+    import sys
+
+    row = SimpleNamespace(
+        oidc_enabled=False, oidc_display_name=None, oidc_issuer_url=None,
+        oidc_client_id=None, oidc_client_secret=None, oidc_redirect_uri=None,
+        oidc_scopes=None, oidc_role_claim=None, oidc_role_map={},
+        last_updated=None,
+    )
+    recorded = {}
+    readiness = {'ready': True}
+    monkeypatch.setattr(
+        'oneirodex.utils.global_settings.global_settings_row_or_create',
+        lambda: row,
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.secret_store.write_global_secret',
+        lambda target, name, value: (
+            recorded.update(row=target, name=name, plaintext=value),
+            setattr(target, name, 'odrc:v1:test:encrypted'),
+        ),
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.secret_store.has_global_secret', lambda *_args: True,
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.oidc.oidc_readiness_report', lambda _row: readiness,
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.cache.cache.delete', lambda _key: None,
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.event_logging.log_system_event', lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        'oneirodex.runtime_native.db_session',
+        SimpleNamespace(native_db=SimpleNamespace(session=SimpleNamespace(commit=lambda: None))),
+    )
+
+    from oneirodex.runtime_native.integration_settings import IntegrationSettingsData
+
+    result = IntegrationSettingsData().oidc_save({
+        'oidc_enabled': True,
+        'oidc_display_name': ' SSO ',
+        'oidc_issuer_url': 'https://id.example.test',
+        'oidc_client_id': 'client',
+        'oidc_client_secret': 'canary-secret',
+        'oidc_redirect_uri': 'https://app.example.test/callback',
+        'oidc_scopes': 'openid email profile',
+        'oidc_role_claim': 'groups',
+        'oidc_role_map': {'admins': 'admin'},
+    })
+
+    assert recorded == {'row': row, 'name': 'oidc_client_secret', 'plaintext': 'canary-secret'}
+    assert row.oidc_client_secret == 'odrc:v1:test:encrypted'
+    assert result['readiness'] is readiness
 
 
 def test_community_write_validates_and_normalizes_url(monkeypatch):
@@ -146,6 +209,83 @@ def test_legacy_integration_post_aliases_use_native_validators(monkeypatch):
     assert data.oidc_saved == oidc
     assert community_response.status_code == 200
     assert data.community_saved == ('https://community.example.test', 'Chat')
+
+
+def test_legacy_community_form_rejects_invalid_url_with_flash_redirect(monkeypatch):
+    from oneirodex.utils import security
+
+    monkeypatch.setattr(
+        security, 'validate_community_chat_url',
+        lambda _value: (False, 'Community chat URL host is not allowed'),
+    )
+    data = FakeSettings()
+    response = make_client(data=data).post(
+        '/admin/integrations/community',
+        data={'community_chat_url': 'javascript:alert(1)', 'community_chat_label': 'Bad'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/admin/integrations#community'
+    expected = flask_redirect('/admin/integrations#community', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
+    assert data.community_saved is None
+
+
+def test_legacy_community_form_accepts_hidden_csrf_and_preserves_redirect(monkeypatch):
+    from oneirodex.utils import security
+
+    monkeypatch.setattr(security, 'validate_community_chat_url', lambda value: (True, value.rstrip('/')))
+    data = FakeSettings()
+    client = make_client(data=data, csrf_enabled=True)
+    response = client.post(
+        '/admin/integrations/community',
+        data={
+            'community_chat_url': '', 'community_chat_label': 'Household chat',
+            'csrf_token': client.csrf_token,
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/admin/integrations#community'
+    expected = flask_redirect('/admin/integrations#community', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
+    assert data.community_saved == ('', 'Household chat')
+
+
+def test_legacy_community_form_caps_body_before_auth_and_parsing(monkeypatch):
+    monkeypatch.setattr(integration_settings, '_MAX_BODY', 128)
+    client = make_client(csrf_enabled=True)
+    client.cookies.clear()
+
+    response = client.post(
+        '/admin/integrations/community',
+        files={'file': ('large.bin', b'x' * 512, 'application/octet-stream')},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+
+
+def test_legacy_community_form_rejects_files_with_bounded_parser(monkeypatch):
+    monkeypatch.setattr(integration_settings, '_MAX_BODY', 2048)
+    data = FakeSettings()
+    client = make_client(data=data, csrf_enabled=True)
+
+    response = client.post(
+        '/admin/integrations/community',
+        data={'csrf_token': client.csrf_token},
+        files={'file': ('tiny.txt', b'x', 'text/plain')},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'Invalid community settings form.'
+    assert data.community_saved is None
 
 
 def test_legacy_integration_post_aliases_validate_csrf_before_body():

@@ -4,6 +4,8 @@ import { deleteJson, getJson, postJson, putJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import { Page } from '../components/Page'
 
+import { AdminLink } from '../components/AdminLink'
+
 interface QualityProfile {
   id: string
   name?: string
@@ -253,9 +255,9 @@ export function QualityProfilesPage() {
     return (
       <Page title="Quality Profiles">
         <PageStatus error={error} />
-        <a className="od-btn" href="/admin/settings">
+        <AdminLink className="od-btn" to="/admin/settings">
           Back to settings
-        </a>
+        </AdminLink>
       </Page>
     )
   }
@@ -392,9 +394,9 @@ export function QualityProfilesPage() {
           <Button type="submit" disabled={!selectedId || busy}>
             Save profile
           </Button>
-          <a className="od-btn" href="/admin/settings">
+          <AdminLink className="od-btn" to="/admin/settings">
             Back to settings
-          </a>
+          </AdminLink>
         </div>
       </form>
 

@@ -1,0 +1,236 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2037",
+  "finding": "FE-007",
+  "classification": "confirmed current client DOM disclosure; bounded correction verified, full acceptance remains open",
+  "source_base": "f913afcb5a10f5d15cb62ca5ddd78fe473d2df23",
+  "source_identity": "Uncommitted candidate byte fingerprints below; committed together with this report. Not a freshly rebuilt release image.",
+  "candidate_sha256": {
+    "frontend/shared/src/authBoundary.ts": "03bf263b97f040e4f06c140dae885a5b1d3f0a068f882e4ff471dfbf85e2a3c4",
+    "frontend/shared/src/AuthSessionBoundary.tsx": "bd5ec33bfa6bb25db8b2fc2af5c38ff0a07c5f48954ce72e24da84f1dda359ab",
+    "frontend/shared/src/AuthSessionBoundary.css": "8c5b5b5d9e846be4bfe8314ba4fe4a044770ad3f8461997b464e4e03672dd2cc",
+    "frontend/shared/src/authApi.ts": "64b7f0b66e2731e5206de414353af3b5250e61d7659aac4a2f0cb26abb18f0ba",
+    "frontend/shared/src/ViewerContext.tsx": "d316cff37a51e73de320e2eb47b7df50bc3fade8dcef0e9011eec36ef58d5fa5",
+    "frontend/shared/src/index.ts": "790d1a2a27cf35d56455119f9b98b8cef07389ae6846aaffc50dfa563a3e5d8f",
+    "frontend/admin-app/src/main.tsx": "78b5dd0a6331b151d658f4333f4c767616d889c825c103a9e4d29eb6c6601634",
+    "frontend/admin-app/src/staticPilot.tsx": "5ed014bb12ec6d279e2eed70f2d9bcb754776cda11303ec7169358c292b67d3d",
+    "frontend/ops-glance/src/main.tsx": "64c4d93bcf86b659ae4d7ca0aa6f5e450ffee8d5c01b0e8dbf63cbaa18f07565"
+  },
+  "test_sha256": "deb97d90eed868b98ffd4c0b840d98d9b9442ff14cd02eaf10b3525f724ecf68",
+  "red": {
+    "actual_browser_seconds": 40.43,
+    "held_authorized_adult_search_then_ui_logout_child_login": true,
+    "child_api_excluded_private_title": true,
+    "old_document_rendered_private_title": true,
+    "archive_sha256": "caa200bc9c986cb63fba915102070689beaf0dad3f0cdd71d4ea5035914c2508",
+    "unit_tdd": "RED3 with3 controls, then focused GREEN27; added sign-in RED1 with15 controls, then GREEN28. Selections overlap; not additive."
+  },
+  "correction": [
+    "Shared opaque local/storage/BroadcastChannel boundary after confirmed UI sign-out/sign-in.",
+    "Retire old member private React tree, regular/native admin roots and Ops root; focused sign-in recovery requires fresh navigation/server bootstrap.",
+    "Missed storage epochs checked on focus/restore; optional-channel failure controls, listener cleanup and malformed/unrelated signals covered. No identity/credential data in marker."
+  ],
+  "owning_suites": [
+    {
+      "suite": "shared",
+      "exit_code": 0,
+      "seconds": 44.22,
+      "passed_tests": 188
+    },
+    {
+      "suite": "member-app",
+      "exit_code": 0,
+      "seconds": 258.18,
+      "passed_tests": 1253
+    },
+    {
+      "suite": "admin-app",
+      "exit_code": 0,
+      "seconds": 223.6,
+      "passed_tests": 714
+    },
+    {
+      "suite": "ops-glance",
+      "exit_code": 0,
+      "seconds": 8.84,
+      "passed_tests": 7
+    }
+  ],
+  "owning_suite_runner_seconds": 534.93,
+  "build": {
+    "passed": true,
+    "runner_seconds": 61.9,
+    "results": [
+      {
+        "kind": "types",
+        "target": "frontend/shared/tsconfig.json",
+        "exit_code": 0
+      },
+      {
+        "kind": "types",
+        "target": "frontend/member-app/tsconfig.build.json",
+        "exit_code": 0
+      },
+      {
+        "kind": "types",
+        "target": "frontend/admin-app/tsconfig.build.json",
+        "exit_code": 0
+      },
+      {
+        "kind": "types",
+        "target": "frontend/ops-glance/tsconfig.json",
+        "exit_code": 0
+      },
+      {
+        "kind": "build",
+        "target": "member-app",
+        "exit_code": 0
+      },
+      {
+        "kind": "build",
+        "target": "member-auth",
+        "exit_code": 0
+      },
+      {
+        "kind": "build",
+        "target": "admin-app",
+        "exit_code": 0
+      },
+      {
+        "kind": "build",
+        "target": "admin-pilot",
+        "exit_code": 0
+      },
+      {
+        "kind": "build",
+        "target": "ops-glance",
+        "exit_code": 0
+      }
+    ],
+    "private_outputs": true,
+    "dotenv_disabled": true,
+    "envDir": false,
+    "artifact_hashes_retained_privately": true
+  },
+  "browser": {
+    "member": {
+      "checked_assertions": "passed before later independent admin setup failure",
+      "runner_passed": false,
+      "runner_seconds": 99.08,
+      "subsequent_failure": "Author harness used nonexistent admin URL (HTTP404); original failed run retained. Corrected only admin/Ops subcheck without repeating passed member trigger.",
+      "private_title_after_delayed_release": false,
+      "private_tree_retired": true,
+      "recovery_focused": true,
+      "child_api_excluded_private_title": true,
+      "actual_ui_post_logout": true
+    },
+    "admin_ops": {
+      "passed": true,
+      "runner_seconds": 51.2,
+      "native_admin_libraries_and_ops_summary_populated": true,
+      "private_roots_retired": true,
+      "recovery_focused": true
+    },
+    "source_fixed": true,
+    "finally_cleanup_and_resource_absence_verified": true,
+    "external_issue_sent": false,
+    "headless": true,
+    "base_image": "sha256:f63116797656d9cb79218410bf22dcabb497e37384b932eb8b16617aa47e7709",
+    "five_spa_and_relevant_backend_modules_read_only_overlaid": true
+  },
+  "ratchets": {
+    "results": [
+      {
+        "check": "eslint",
+        "exit_code": 0
+      },
+      {
+        "check": "format",
+        "exit_code": 0
+      },
+      {
+        "check": "css-token-lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "any_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "component_size_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "od_btn_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "api-envelope",
+        "exit_code": 0
+      },
+      {
+        "check": "R1972-validator",
+        "exit_code": 0
+      },
+      {
+        "check": "diff-check",
+        "exit_code": 0
+      }
+    ],
+    "seconds": 60.76,
+    "passed": true,
+    "dotenv_disabled": true
+  },
+  "screenshots": [
+    {
+      "name": "fe007-admin-ops-boundary-r2037-green-admin-before.png",
+      "sha256": "f1cca1743eef0df7c6bbf142745cc54d09b5ac6773666310b5e5d2eac76fe171",
+      "width": 1100,
+      "height": 850,
+      "public_image": false
+    },
+    {
+      "name": "fe007-admin-ops-boundary-r2037-green-admin-retired.png",
+      "sha256": "9508e5762a1dcfcacb559b2a633d330d558dfa014fa2c0a79c32661d70f86db8",
+      "width": 1100,
+      "height": 850,
+      "public_image": false
+    },
+    {
+      "name": "fe007-admin-ops-boundary-r2037-green-ops-before.png",
+      "sha256": "b156f6ef84b3282f0b4591b88d6188fe557e4bfc49fb70360f69a4a707456e45",
+      "width": 1100,
+      "height": 850,
+      "public_image": false
+    },
+    {
+      "name": "fe007-admin-ops-boundary-r2037-green-ops-retired.png",
+      "sha256": "08e2d814c2329e6c56aec3035e8e8c702b5cc8d0e62e479a93898eb09ba64ef8",
+      "width": 1100,
+      "height": 850,
+      "public_image": false
+    },
+    {
+      "name": "fe007-inflight-boundary-r2037-green-delayed-response.png",
+      "sha256": "9508e5762a1dcfcacb559b2a633d330d558dfa014fa2c0a79c32661d70f86db8",
+      "width": 1100,
+      "height": 850,
+      "public_image": false
+    }
+  ],
+  "private_archive": {
+    "filename": "browser-session-boundary-r2037.zip",
+    "sha256": "3d7a45c0f01bce65fa68069e8feae3dc9cce749504047f0dd436176e1f2cf75e",
+    "bytes": 995352,
+    "files_including_manifest": 75
+  },
+  "author_review": "Separate author bypass/consumer pass retained privately; weaker than final original-program independent review, still required.",
+  "limits": [
+    "Current Chromium on Windows only; no legacy/current parity promotion or fully verified shared routes.",
+    "Classic/hybrid DOM, unused details-island consumer, OIDC/classic server callbacks, server-only session/ACL changes and initial-bootstrap races remain unqualified.",
+    "Actual frozen/offline and blocked-channel browser combinations, other engines, headset/platform and full journey acceptance remain separate. Unit focus/restore cases are not all-browser proof.",
+    "Companion offline policy and backend authorization/session controls unchanged.",
+    "Unrestricted R2036 interrupted at81percent without terminal receipt; no full post-fix Python pass. New exact-head CI/full-suite qualification remains required.",
+    "No whole FE-007 closure, merge, release, deployment or model winner."
+  ]
+}

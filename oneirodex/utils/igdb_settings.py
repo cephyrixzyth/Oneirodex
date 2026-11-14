@@ -2,9 +2,10 @@
 
 
 def igdb_public_state(settings):
+    from oneirodex.utils.secret_store import has_global_secret
     return {
         'igdb_client_id': settings.igdb_client_id or '' if settings else '',
-        'secret_present': bool(settings and settings.igdb_client_secret),
+        'secret_present': has_global_secret(settings, 'igdb_client_secret'),
         'last_tested': settings.igdb_last_tested.isoformat()
         if settings and settings.igdb_last_tested else None,
     }

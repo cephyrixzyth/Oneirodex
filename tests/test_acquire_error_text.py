@@ -113,6 +113,27 @@ def test_a_blocked_destination_keeps_its_reason(signed_in, monkeypatch):
     assert 'zzz' not in str(body) and '169.254' not in str(body)
 
 
+def test_acquire_strips_magnet_network_targets_before_sending(signed_in, monkeypatch):
+    monkeypatch.setattr('oneirodex.routes_apis.acquire.arr_module_on', lambda: True)
+    sent = []
+    monkeypatch.setattr(
+        'oneirodex.routes_apis.acquire.send_to_download_client',
+        lambda url, *, provider: sent.append((url, provider)) or {'queued': True},
+    )
+    magnet = (
+        'magnet:?xt=urn:btih:abc&dn=Sample+game'
+        '&tr=http%3A%2F%2F127.0.0.1%3A8080%2Fannounce'
+    )
+
+    response = signed_in.post(
+        '/api/acquire/download',
+        json={'magnet': magnet, 'provider': 'qbittorrent'},
+    )
+
+    assert response.status_code == 200
+    assert sent == [('magnet:?xt=urn%3Abtih%3Aabc&dn=Sample+game', 'qbittorrent')]
+
+
 def test_a_debrid_http_error_does_not_leak_the_query_string_key(signed_in, monkeypatch):
     monkeypatch.setattr('oneirodex.routes_apis.acquire.debrid_enabled', lambda: True)
     response = requests.Response()
@@ -156,6 +177,26 @@ def test_the_admin_download_route_no_longer_500s_or_leaks(signed_in, monkeypatch
     body = reply.get_json()
     assert body['error_code'] == 'bad_gateway'
     assert INTERNAL_IP not in reply.get_data(as_text=True)
+
+
+def test_admin_arr_download_rejects_unrelated_schemes_but_keeps_magnets(signed_in, monkeypatch):
+    monkeypatch.setattr('oneirodex.routes_arr.arr_module_on', lambda: True)
+    sent = []
+    monkeypatch.setattr(
+        'oneirodex.routes_arr.qbittorrent_add_url',
+        lambda url: sent.append(url) or {'status': 'queued', 'download_url': url},
+    )
+    magnet = 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567'
+    accepted = signed_in.post('/api/arr/download', json={'download_url': magnet})
+    rejected = [
+        signed_in.post('/api/arr/download', json={'download_url': url})
+        for url in ('file:///etc/passwd', 'javascript:alert(1)', 'ftp://downloads.example/item')
+    ]
+
+    assert accepted.status_code == 202
+    assert sent == [magnet]
+    assert all(reply.status_code == 400 for reply in rejected)
+    assert all(reply.get_json()['error_code'] == 'bad_request' for reply in rejected)
 
 
 @pytest.mark.parametrize('exc', [

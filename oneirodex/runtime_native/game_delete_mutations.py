@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+import logging
 import os
 import shutil
 from pathlib import Path
 from typing import Any, Callable
+from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
@@ -68,6 +70,37 @@ class GameDeleteMutationData:
             db.session.delete(entry)
             db.session.commit()
 
+    def restore_folder_entry(self, entry) -> bool:
+        """Recreate a deleted unmatched-folder row after staged cleanup fails."""
+        if entry is None:
+            return True
+
+        from sqlalchemy import select
+
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.models import UnmatchedFolder
+
+        try:
+            existing = db.session.execute(
+                select(UnmatchedFolder).filter_by(folder_path=entry.folder_path),
+            ).scalars().first()
+            if existing is not None:
+                return True
+
+            values = {
+                column.key: getattr(entry, column.key)
+                for column in UnmatchedFolder.__table__.columns
+            }
+            db.session.add(UnmatchedFolder(**values))
+            db.session.commit()
+            return True
+        except Exception:
+            db.session.rollback()
+            logging.getLogger(__name__).exception(
+                'Could not restore unmatched-folder row after staged cleanup failed'
+            )
+            return False
+
     def rollback(self):
         from oneirodex.runtime_native.db_session import native_db as db
 
@@ -78,6 +111,56 @@ class GameDeleteMutationData:
             os.remove(path)
         else:
             shutil.rmtree(path)
+
+    def ensure_path_removable(self, path):
+        """Fail before staging when the current user cannot remove the path."""
+        required_directories = {os.path.dirname(path) or os.curdir}
+        if os.path.isdir(path) and not os.path.islink(path):
+            pending = [path]
+            while pending:
+                directory = pending.pop()
+                try:
+                    entries = list(os.scandir(directory))
+                except PermissionError:
+                    raise
+                if entries:
+                    # Removing children requires write and search permission
+                    # on their containing directory, as shutil.rmtree does.
+                    required_directories.add(directory)
+                pending.extend(
+                    entry.path for entry in entries
+                    if entry.is_dir(follow_symlinks=False)
+                )
+
+        for directory in required_directories:
+            if not os.access(directory, os.W_OK | os.X_OK):
+                raise PermissionError(
+                    f'Insufficient permissions to remove path within {directory}'
+                )
+
+    def stage_path(self, path):
+        """Move a path aside so a failed database delete can restore it."""
+        staged = f'{path}.delete-{uuid4().hex}'
+        os.replace(path, staged)
+        return staged
+
+    def restore_staged_path(self, staged, path):
+        os.replace(staged, path)
+
+    def discard_staged_path(self, staged):
+        try:
+            if os.path.isdir(staged) and not os.path.islink(staged):
+                shutil.rmtree(staged)
+            else:
+                os.unlink(staged)
+        except OSError:
+            # The route restores the staged path and its DB row before it
+            # reports a failed deletion to the caller.
+            logging.getLogger(__name__).warning(
+                'Folder delete committed but staged path cleanup failed'
+            )
+            return False
+        return True
 
     def path_exists(self, path):
         return os.path.exists(path)
@@ -103,10 +186,34 @@ class GameDeleteMutationData:
             target.relative_to(root)
         except ValueError as exc:
             raise ValueError('Invalid image path') from exc
+        staged = None
         if target.exists():
-            target.unlink()
-        db.session.delete(image)
-        db.session.commit()
+            if target.is_dir():
+                # Preserve the existing failure for directories.
+                target.unlink()
+            staged = target.with_name(f'.{target.name}.delete-{uuid4().hex}')
+            os.replace(target, staged)
+        try:
+            db.session.delete(image)
+            db.session.commit()
+        except Exception:
+            if staged is not None and staged.exists():
+                try:
+                    os.replace(staged, target)
+                except OSError:
+                    logging.getLogger(__name__).error(
+                        'Could not restore image after a failed database delete'
+                    )
+            raise
+        if staged is not None:
+            try:
+                staged.unlink()
+            except OSError:
+                # The record is committed. Leave the unreferenced staged file
+                # for operator cleanup rather than report a false DB failure.
+                logging.getLogger(__name__).warning(
+                    'Image delete committed but staged file cleanup failed'
+                )
         return image
 
     def rollback(self):
@@ -188,7 +295,7 @@ async def _handle(
             from .library_admin_mutations import _json_object_or_form
 
             full_disk_payload, full_disk_too_large = await _json_object_or_form(
-                request, app.config,
+                request, app.config, preserve_non_object_json=True,
             )
         if auth.token is None:
             csrf_token = None
@@ -200,6 +307,14 @@ async def _handle(
                 request, auth.session_data, app.config, token=csrf_token,
             )
         if csrf is not None:
+            if (
+                full_disk
+                and isinstance(full_disk_payload, dict)
+                and '__form__' in full_disk_payload
+            ):
+                from .csrf_compat import csrf_html_error_response
+
+                csrf = csrf_html_error_response(csrf)
             response = csrf
         elif auth.user is None:
             response = _login_redirect(app, request, login_manager, auth)
@@ -208,7 +323,20 @@ async def _handle(
 
             role = normalize_role(getattr(auth.user, 'role', None) or '')
             if role != 'admin':
-                response = _error('Admin required', 'forbidden', 403)
+                if (
+                    full_disk
+                    and isinstance(full_disk_payload, dict)
+                    and '__form__' in full_disk_payload
+                ):
+                    from .response_compat import flask_redirect_response
+
+                    flashes = list(auth.session_data.get('_flashes') or [])
+                    flashes.append(('danger', 'You must be an admin to access this page.'))
+                    auth.session_data['_flashes'] = flashes
+                    response = flask_redirect_response('/login')
+                    _set_session_cookie(response, app, auth)
+                else:
+                    response = _error('Admin required', 'forbidden', 403)
             elif auth.token is not None and not auth.has_scope('admin'):
                 response = _error('This token does not have the admin scope', 'forbidden', 403)
             elif folder_request:
@@ -259,6 +387,17 @@ def _error(message, code, status, *, body_status=None):
 
 
 async def _delete_folder(request, app, data):
+    content_type = (
+        request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    )
+    is_json = content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    )
+    if not is_json:
+        return _error(
+            'The request Content-Type must be application/json.',
+            'bad_request', 415, body_status='error',
+        )
     try:
         body = await request.json()
     except Exception:
@@ -283,11 +422,57 @@ async def _delete_folder(request, app, data):
             'The specified path does not exist. Entry removed if it was in the database.',
             'not_found', 404, body_status='error',
         )
+    staged_path = None
+
+    def rollback_and_restore():
+        rollback = getattr(data, 'rollback', None)
+        if callable(rollback):
+            rollback()
+        if staged_path is not None:
+            try:
+                data.restore_staged_path(staged_path, full_path)
+            except OSError:
+                logging.getLogger(__name__).exception(
+                    'Could not restore folder after a failed database delete'
+                )
+
     try:
-        data.remove_path(full_path)
-        if data.path_exists(full_path):
-            return _error('Could not delete the item. Database entry retained.', 'internal', 500, body_status='error')
+        ensure_path_removable = getattr(data, 'ensure_path_removable', None)
+        if callable(ensure_path_removable):
+            ensure_path_removable(full_path)
+        stage_path = getattr(data, 'stage_path', None)
+        if callable(stage_path):
+            staged_path = stage_path(full_path)
+        else:
+            data.remove_path(full_path)
+            if data.path_exists(full_path):
+                return _error('Could not delete the item. Database entry retained.', 'internal', 500, body_status='error')
         data.remove_folder_entry(entry)
+        if staged_path is not None:
+            discarded = data.discard_staged_path(staged_path)
+            if discarded is False:
+                try:
+                    data.restore_staged_path(staged_path, full_path)
+                    staged_path = None
+                    restore_folder_entry = getattr(data, 'restore_folder_entry', None)
+                    if entry is not None and (
+                        not callable(restore_folder_entry)
+                        or restore_folder_entry(entry) is False
+                    ):
+                        raise RuntimeError('Could not restore unmatched-folder row')
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        'Could not restore folder after staged cleanup failed'
+                    )
+                    return _error(
+                        'Could not complete the deletion. Administrator recovery may be required.',
+                        'internal', 500, body_status='error',
+                    )
+                if entry is None:
+                    message = 'Could not delete the item. The original folder was restored.'
+                else:
+                    message = 'Could not delete the item. The folder and database entry were restored.'
+                return _error(message, 'internal', 500, body_status='error')
         from oneirodex.utils.api_contract import api_ok_payload
 
         return JSONResponse(api_ok_payload({
@@ -295,14 +480,13 @@ async def _delete_folder(request, app, data):
             'message': 'Item deleted successfully. Database entry removed.',
         }))
     except PermissionError:
+        rollback_and_restore()
         return _error(
             'Failed to delete the item due to insufficient permissions. Database entry retained.',
             'forbidden', 403, body_status='error',
         )
     except Exception:
-        rollback = getattr(data, 'rollback', None)
-        if callable(rollback):
-            rollback()
+        rollback_and_restore()
         return _error('Could not delete the item. Database entry retained.', 'internal', 500, body_status='error')
 
 
@@ -314,11 +498,15 @@ def _delete_full_game(app, data, payload, *, too_large=False):
 
     if too_large:
         return _error('Request body is too large.', 'bad_request', 413)
-    form = payload.get('__form__', {}) if isinstance(payload, dict) else {}
-    source = payload if isinstance(payload, dict) else {}
-    body = dict(form) if form else dict(source)
-    body.pop('__form__', None)
-    body.pop(str(app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'), None)
+    if isinstance(payload, dict):
+        form = payload.get('__form__', {})
+        body = dict(form) if form else dict(payload)
+        body.pop('__form__', None)
+        body.pop(str(app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'), None)
+    else:
+        # Keep JSON scalars and arrays intact so Pydantic produces the same
+        # root-level validation detail as the legacy schema validator.
+        body = payload
     try:
         parsed = DeleteFullGameBody.model_validate(body)
     except ValidationError as exc:
@@ -374,12 +562,21 @@ async def _delete_image(request, app, data):
     from oneirodex.schemas.admin_game_images import DeleteGameImageBody
     from oneirodex.utils.validation import format_validation_errors
 
-    try:
-        body = await request.json()
-    except Exception:
+    content_type = (
+        request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    )
+    is_json = content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    )
+    if is_json:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+    else:
         body = {}
     try:
-        parsed = DeleteGameImageBody.model_validate(body if isinstance(body, dict) else {})
+        parsed = DeleteGameImageBody.model_validate({} if body is None else body)
     except ValidationError as exc:
         from oneirodex.utils.api_contract import api_error_payload
 

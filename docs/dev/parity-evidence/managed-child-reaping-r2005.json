@@ -1,0 +1,54 @@
+{
+  "review_id": "R2005",
+  "title": "Qualify direct-child reaping evidence and add platform-native test coverage",
+  "reviewed_on": "2026-11-08",
+  "finding": "DT-006 child-process reaping",
+  "classification": "direct-child waiter verified in explicit native Windows/macOS/Linux CI tests; packaged and wrapper lifecycle acceptance remains open",
+  "source_commit": "7435f7976d9cd12ec228833fed5e4d9ff52d8c20",
+  "change_reviewed": {
+    "ownership": "ManagedProcessRegistry receives the spawned Child and moves it into a waiter thread.",
+    "reaping": "The waiter calls Child::wait independently of webview polling and records completion for the managed process-status command.",
+    "playtime": "The desktop watcher stops its playtime session idempotently after the process-status command reports exit."
+  },
+  "verification": {
+    "workflow": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/42525201207",
+    "workflow_result": "success",
+    "focused_test": "managed_process_waiter_reaps_a_short_lived_child",
+    "test_behavior": "Spawns the Rust test binary as a short-lived child, observes it as running, and polls the managed registry until the waiter reports the reaped exit.",
+    "coverage": "Each full platform Native Rust tests step runs cargo test --lib --locked and explicitly reports the focused child-reaping test as passing.",
+    "platform_jobs": [
+      {
+        "job": "windows · full",
+        "native_tests": "success",
+        "tests_passed": 98,
+        "child_reaping_regression": "passed"
+      },
+      {
+        "job": "macos · full",
+        "native_tests": "success",
+        "tests_passed": 102,
+        "child_reaping_regression": "passed"
+      },
+      {
+        "job": "linux · full",
+        "native_tests": "success",
+        "tests_passed": 102,
+        "child_reaping_regression": "passed"
+      }
+    ],
+    "prior_evidence_correction": "Run 42523873947 tested Rust only on Linux. Its full platform Unit tests steps ran npm test, so they did not establish cross-platform native Rust behavior.",
+    "additional_coverage": "The 102-test macOS/Linux suites also explicitly passed the existing symlink escape regressions, narrowing DT-004 source-test uncertainty."
+  },
+  "limits": [
+    "This is native source-test coverage, not an installed or packaged game launch.",
+    "A wrapper that exits while a descendant game remains open is not tested.",
+    "Application exit/restart, PID reuse, stop-event count, and bounded server playtime after a real game exit are not covered by this regression."
+  ],
+  "related_paths": [
+    ".github/workflows/desktop-build.yml",
+    "clients/desktop/src-tauri/src/lib.rs",
+    "clients/desktop/src/playtime-session.ts",
+    "clients/desktop/src/playtime-session.test.ts",
+    "docs/dev/behavior-parity-review.md"
+  ]
+}

@@ -14,14 +14,110 @@ For containers, use [docker-compose-deploy.md](docker-compose-deploy.md) or
 | | |
 |---|---|
 | Python | 3.11+ |
-| PostgreSQL | 17+ (16 works; 17 is what CI and the images use) |
+| Node.js | 22.x and npm (the installer builds all five frontend bundles from source) |
+| PostgreSQL | 17+ recommended; core CI uses 16, local review and bundled images use 17 |
 | Disk | ~1 GB for the app and dependencies, plus covers/artwork under `UPLOAD_FOLDER` |
 | Port | 5006 by default |
 
-The installers below check these, create a virtual environment, create the
-databases, and write a `.env` with a generated `SECRET_KEY`. None of them
+The installers below check these, run `npm ci` from the repository root, build
+the member, member-auth, admin, admin-pilot and ops-glance bundles, create a
+Python virtual environment and databases, then write a `.env` with a generated
+`SECRET_KEY`. Node.js 22.x and npm must already be installed; the installers do
+not install Node.js for you. None of them
 install Docker, and none of them expose Oneirodex to the internet — put a
 reverse proxy in front for that ([login-rate-limit-proxy.md](login-rate-limit-proxy.md)).
+
+The shared `npm run build:native-spas` command builds into a clean staging
+generation, records the source commit (when available), root lockfile digest,
+and SHA-256/size for each output file in `server-ui-manifest.json`, then
+validates all five targets before promotion. A failed build or promotion keeps
+the last working bundle. Docker uses the same Node 22 build contract. The native
+runtime installer validates the manifest and files without importing Flask or
+requiring Node at server startup.
+
+On reinstall, an existing `.env` is preserved unless you pass `--force`
+(Linux/macOS) or `-Force` (Windows). New port/path options do not replace
+preserved settings. Linux also skips database provisioning and installer
+connection probes in this mode, so it does not rotate the role password behind
+the retained connection URL. Runtime validation still runs; fix invalid retained
+settings before retrying. A validation failure does not start the server.
+
+Explicit force mode backs up `.env` as `.env.backup.<timestamp>`, retains its
+existing signing key when present, then regenerates settings from installer
+options. Reapply any other custom settings from the backup before starting.
+Keep the backup private: it contains credentials. The tracked `config.py` is
+not regenerated. Fresh and forced installs persist the selected port in `.env`
+for subsequent launcher runs.
+
+On Linux and macOS, `startweb.sh` loads `.env` through the pinned dotenv parser,
+including quoted values, spaces, pipe-separated scan locations and `${NAME}`
+interpolation. File values take precedence over inherited environment values.
+The launcher does not execute shell substitutions or commands from this file.
+Invalid syntax, encoding, environment names or NUL bytes stop startup before
+initialization. `BASH_ENV`, `SHELLOPTS` and `BASHOPTS` are also rejected because
+they control Bash startup; keep shell setup outside the application `.env`.
+The file is not rewritten. Without `.env`, the launcher retains inherited
+settings. Windows continues to use `startweb_windows.cmd`.
+
+For linked-store and saved admin integration credentials, provide a separate
+operator-managed key-ring JSON file and set
+`ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE` to its absolute path (the old
+`ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE` name remains a compatibility alias).
+Keep the key file and a protected backup outside database and library backup
+payloads. The key ring is separate from `.env`'s `SECRET_KEY`; losing it makes
+encrypted credentials unavailable. Restore the matching key-ring backup or
+reconnect affected integrations if no backup exists. The JSON structure is
+`{ "active_key_id": "key-a", "keys": { "key-a": "<Fernet key>" } }`.
+On Linux, make the parent directory private and the key file mode `0600`; the
+app rejects group- or world-readable key-ring files. On Windows, use an NTFS ACL
+that grants read access only to the Oneirodex service account and administrators.
+The portable permission check cannot validate Windows ACLs.
+
+Encrypted emulator saves use a separate operator-managed keyring at
+`ONEIRODEX_SAVE_KEYRING_FILE`. Create a protected file with
+`python scripts/migrate_emulator_save_keys.py --initialize-keyring <protected-output>`
+while the existing `SECRET_KEY` is available, then configure the absolute path
+in the install's `.env`. Back up this keyring separately from database and
+library backups. New encrypted saves use `GTENC3`: the versioned key ID and
+ciphertext authenticate the owning user, game, slot and opaque generation ID.
+Copying a blob into another owner or generation fails authentication. `GTENC1`
+and older `GTENC2` saves remain readable; the rotation command writes bound
+`GTENC3` generations while retaining old keys for supported backups. The ring
+also keeps the legacy key needed to read existing `GTENC1` saves.
+Restore matching key IDs from the protected backup before restoring encrypted
+saves. Do not rotate `SECRET_KEY` as a substitute for save-key rotation.
+
+Stop save writers before inventorying or applying a save-key migration. The
+command preserves shared current/history files until their last reference moves,
+refreshes metadata under the save owner lock and retains ciphertext when commit
+or cleanup safety is uncertain. Report-only mode does not modify saves or acquire
+write row locks. Follow the save-key rotation procedure in the
+[Compose guide](docker-compose-deploy.md) and retain the protected old keys.
+[R2039](../dev/parity-evidence/save-rotation-safety-r2039.json) records bounded
+synthetic recovery checks; actual operator backup acceptance remains separate.
+
+After updating the schema with the new release, stop every old app writer and
+take a protected database backup before running both
+`python scripts/migrate_reusable_secrets.py` and
+`python scripts/migrate_store_credentials.py` from the repository root. A
+pre-conversion backup may contain plaintext provider credentials.
+For an external PostgreSQL database, set the correct `DATABASE_URL` and key-ring
+file path explicitly in the command's process environment. Run each command
+while the application writers are stopped. The reusable-secret converter also
+handles the scalar and JSON integration credentials; both commands are
+restartable and verify ciphertext before clearing legacy values. For an embedded
+database, the script resolves the database from `ONEIRODEX_CONFIG_DIR` (default
+`/config`) when embedded mode is enabled or auto-selected; run it in the
+environment that owns that database. The script does not read
+`.env` or fall back to `TEST_DATABASE_URL`. It verifies each ciphertext before
+clearing legacy plaintext, commits one row at a time, can be safely rerun, prints
+counts only, and makes no provider calls. Keep all old app writers stopped
+through conversion. Missing/invalid keys, conflicts, or row failures exit
+nonzero. Fix the cause and rerun before relying on existing links.
+
+For rotation, add a key ID, switch `active_key_id`, and rerun the same command.
+Keep old keys until `rotated=0`, no row failures, and no retained database
+backup requires the old key.
 
 The Linux, macOS, and Windows installers use the same expedition field-terminal
 presentation: Onei appears as a shaded, character-ramp portrait of an armored
@@ -90,7 +186,7 @@ build tools, then configures the database and `.env`.
 | `--port PORT` | Serve on a port other than 5006 |
 | `--no-db` | Skip PostgreSQL; point `DATABASE_URL` at an existing server |
 | `--dev` | Also install `requirements-dev.txt` |
-| `--force` | Overwrite an existing `.env` / `config.py` |
+| `--force` | Back up and regenerate `.env`; retain its existing signing key |
 | `--verbose` | Show the full output of every step |
 
 ```bash
@@ -251,13 +347,18 @@ when it is not on `PATH`, so a stock PostgreSQL install needs no extra work.
 | `-Port PORT` | Serve on a port other than 5006 |
 | `-SkipDb` | Use an existing PostgreSQL database |
 | `-Dev` | Also install `requirements-dev.txt` |
-| `-Force` | Overwrite an existing `.env` / `config.py` |
+| `-Force` | Back up and regenerate `.env`; retain its existing signing key |
 
 ```powershell
 .\install-windows.ps1 -GamesDir 'D:\Games' -LibraryRoots 'NAS ROMs=\\nas\roms'
 ```
 
 Start it: `.\startweb_windows.cmd`
+
+The Windows launcher defaults to one Uvicorn worker. Keep this default because
+login attempt limits, caches, and event state are held per process. Set
+`UVICORN_WORKERS` in `.env` only if you accept split per-worker state or have
+configured shared state and throttling.
 
 ### Run as a service
 
@@ -325,7 +426,7 @@ library database — game *files* on disk are untouched.
 | `connection refused` on 5432 | PostgreSQL is not running — `systemctl status postgresql`, `brew services list`, or Services on Windows |
 | `database ... does not exist` | Re-run the installer, or `createdb oneirodex` |
 | Port 5006 in use | `PORT=5010 ./startweb.sh`, or `--port` at install time |
-| Library grid unstyled | Frontend bundles missing — `cd frontend/member-app && npm ci && npm run build` |
+| Library grid unstyled | Frontend bundles missing — from the repository root run `npm ci` then `npm run build:native-spas` with Node.js 22.x |
 | Scan sees an empty folder | Permissions or an unmounted share — [remote-scan-locations.md](remote-scan-locations.md#troubleshooting) |
 
 More: [../admin/troubleshooting.md](../admin/troubleshooting.md) ·

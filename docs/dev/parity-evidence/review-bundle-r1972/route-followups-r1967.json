@@ -1,0 +1,41 @@
+{
+  "review_id": "R1967",
+  "status": "partial",
+  "route_family": [
+    "GET /api/tokens",
+    "POST /api/tokens",
+    "DELETE /api/tokens/{token_id}"
+  ],
+  "exact_images": {
+    "legacy": {
+      "tag": "oneirodex:parity-v1.1.8",
+      "id": "sha256:19648d0ed947d72ba0b74292ecd91b3d92d4a37be3ac8063ab16e80a43bc864e"
+    },
+    "current": {
+      "tag": "oneirodex:parity-current-00b0bf2a",
+      "id": "sha256:17a0bbdc97e24c51f6c30746b4af5f35151089361cb11428edb669451d6471d1",
+      "source_revision": "00b0bf2ab06b531938476d9d765c4c4e99a706b3"
+    }
+  },
+  "evidence": ".artifacts/parity-v1.1.8/api-token-lifecycle-exact-r1967.json",
+  "matrix": ".artifacts/parity-v1.1.8/route-action-matrix-current-r1967.json",
+  "paired_actions": 29,
+  "matched": 29,
+  "differences": 0,
+  "coverage": [
+    "Initial/list readback and cross-user isolation for member, other, admin, and child accounts",
+    "Missing-CSRF token creation and deletion with state readback",
+    "Malformed JSON, object-valued name, and unknown preset validation",
+    "Valid creation, one-time secret shape/redaction, role and scope restrictions",
+    "Foreign-owner revoke, owner revoke, repeat revoke, and active/revoked bearer authorization"
+  ],
+  "state": "All mutations ran against per-image disposable clones restored from a shared read-only pg_dump snapshot. All 29 status/body/location comparisons and semantic assertions passed. External egress and provider calls were blocked; cleanup removed test apps, relays, cloned databases, volumes, and network.",
+  "route_status_promoted": false,
+  "remaining": [
+    "Inject and compare database failures for list/create/revoke paths",
+    "Cover expiration and additional malformed payload/scope boundary cases",
+    "Complete token-management UI states, direct navigation, copy/dismiss, and responsive behavior",
+    "Keep synthesized HEAD/OPTIONS method behavior separately unverified"
+  ],
+  "prior_attempt": "The first R1967 startup stopped before paired requests because relay config files were not copied to the new harness folder; cleanup passed. The corrected run completed successfully."
+}

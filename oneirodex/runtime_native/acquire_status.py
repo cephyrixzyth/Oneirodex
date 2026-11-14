@@ -7,9 +7,11 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, Response
 
+from .cookie_compat import set_cookie as set_response_cookie
 from .request_auth import RequestAuthContext, request_auth_context
+from .response_compat import add_vary_header, flask_redirect_response
 
 
 class AcquireStatusData:
@@ -117,22 +119,29 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context: Re
         rule = next(iter(flask_app.url_map.iter_rules(login_url)), None)
         login_url = rule.rule if rule is not None else '/login'
         parsed_login = urlsplit(login_url)
-    parsed_current = urlsplit(str(request.url))
+    # Werkzeug's Request.url is an IRI: valid percent-encoded UTF-8 and safe
+    # query characters are decoded before Flask-Login encodes ``next``. Starlette
+    # keeps the original URI escapes, which would double-encode them in the
+    # redirect unless we normalize to the same IRI representation first.
+    from .url_compat import request_url_iri
+
+    current_url = request_url_iri(request)
+    parsed_current = urlsplit(current_url)
     same_origin = (
         (not parsed_login.scheme or parsed_login.scheme == parsed_current.scheme)
         and (not parsed_login.netloc or parsed_login.netloc == parsed_current.netloc)
     )
     next_url = (
         urlunsplit(('', '', parsed_current.path, parsed_current.query, ''))
-        if same_origin else str(request.url)
+        if same_origin else current_url
     )
     query = parse_qs(parsed_login.query, keep_blank_values=True)
     query['next'] = [next_url]
     forced_host = flask_app.config.get('FORCE_HOST_FOR_REDIRECTS')
     if forced_host:
         parsed_login = parsed_login._replace(netloc=forced_host)
-    response = RedirectResponse(
-        urlunsplit(parsed_login._replace(query=urlencode(query, doseq=True))), status_code=302
+    response = flask_redirect_response(
+        urlunsplit(parsed_login._replace(query=urlencode(query, doseq=True)))
     )
 
     message = getattr(login_manager, 'login_message', None)
@@ -154,15 +163,25 @@ def _set_session_cookie(response, flask_app, auth_context):
     from oneirodex.runtime_native.session_compat import dump_session_cookie
 
     config = flask_app.config
+    cookie_name = config.get('SESSION_COOKIE_NAME', 'session')
+    if any(
+        item.split(';', 1)[0].strip().startswith(f'{cookie_name}=')
+        for item in response.headers.getlist('set-cookie')
+    ):
+        return
     secret_key = config.get('SECRET_KEY')
     if not secret_key:
         return
     session_data = auth_context.session_data
+    from oneirodex.utils.persistent_sessions import prepare_session_identity_for_cookie
+
+    prepare_session_identity_for_cookie(session_data, config)
     lifetime = config.get('PERMANENT_SESSION_LIFETIME')
     expires = datetime.now(timezone.utc) + lifetime if session_data.get('_permanent') and lifetime else None
     samesite = config.get('SESSION_COOKIE_SAMESITE')
-    response.set_cookie(
-        config.get('SESSION_COOKIE_NAME', 'session'),
+    set_response_cookie(
+        response,
+        cookie_name,
         dump_session_cookie(
             session_data,
             secret_key,
@@ -173,7 +192,7 @@ def _set_session_cookie(response, flask_app, auth_context):
         domain=config.get('SESSION_COOKIE_DOMAIN'),
         secure=bool(config.get('SESSION_COOKIE_SECURE', False)),
         httponly=bool(config.get('SESSION_COOKIE_HTTPONLY', True)),
-        samesite=str(samesite).lower() if samesite else None,
+        samesite=str(samesite) if samesite else None,
         partitioned=bool(config.get('SESSION_COOKIE_PARTITIONED', False)),
     )
-    response.headers.add_vary_header('Cookie')
+    add_vary_header(response, 'Cookie')

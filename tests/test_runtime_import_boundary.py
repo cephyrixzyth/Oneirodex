@@ -30,6 +30,38 @@ def test_runtime_requirements_exclude_legacy_framework_packages():
     assert 'itsdangerous' in runtime, (
         'native session compatibility needs an explicit runtime serializer dependency'
     )
+    assert 'httpx2' in runtime, (
+        'Authlib Starlette OIDC needs its HTTPX2 client in the Flask-free runtime'
+    )
+
+
+def test_hash_identify_imports_without_flask():
+    script = r'''
+import sys
+from importlib.abc import MetaPathFinder
+
+class BlockFlask(MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'flask' or fullname.startswith('flask.'):
+            raise ModuleNotFoundError('Flask is intentionally unavailable')
+        return None
+
+sys.meta_path.insert(0, BlockFlask())
+from oneirodex.utils import hash_identify
+from oneirodex.utils import mod_catalog
+assert hash_identify._testing() is False
+assert hash_identify.base_url() == hash_identify.DEFAULT_BASE_URL
+assert mod_catalog.catalog_enabled()
+assert set(mod_catalog.source_ids()) == {'thunderstore', 'modrinth', 'gamebanana', 'nexus'}
+'''
+    result = subprocess.run(
+        [sys.executable, '-c', script],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 def test_native_runtime_source_does_not_import_flask_or_jinja():
@@ -144,6 +176,8 @@ def test_native_api_contract_and_asgi_imports_do_not_load_flask():
                 'import oneirodex.utils.role_catalog; '
                 'import oneirodex.utils.server_settings; '
                 'import oneirodex.utils.setup; '
+                'import oneirodex.utils.game_mods; '
+                'import oneirodex.utils.api_tokens; '
                 'assert "flask" not in sys.modules; '
                 'assert "flask_caching" not in sys.modules; '
                 'assert "jinja2" not in sys.modules; '
@@ -184,11 +218,12 @@ def test_asgi_router_startup_does_not_construct_or_import_flask():
                 'import asyncio, sys; '
                 'from types import SimpleNamespace; '
                 'import oneirodex.runtime_native.admin_pilot as admin_pilot; '
-                'user = SimpleNamespace(id=7, name="Admin", role="admin", is_active=True, avatarpath="newstyle/avatars/default.svg", preferences=SimpleNamespace(theme=None, icon_pack="outline"), session_fingerprint=lambda: "fresh"); '
+                'user = SimpleNamespace(id=7, name="Admin", role="admin", is_active=True, avatarpath="newstyle/avatars/default.svg", preferences=SimpleNamespace(theme=None, icon_pack="outline"), session_fingerprint=lambda: "0123456789abcdef"); '
                 'admin_pilot._native_auth_backend = lambda _app: (lambda uid: user if uid == 7 else None, lambda _prefix: None, lambda _token: None); '
                 'from asgi import LazyASGIApp; '
                 'from oneirodex.runtime_native.runtime_context import NativeRuntimeContext; '
-                'runtime = LazyASGIApp(); '
+                'from tests.fixtures.native_runtime_probe import persisted_runtime_probe; '
+                'runtime, identity = persisted_runtime_probe(user); '
                 'asyncio.run(runtime._ensure_flask()); '
                 'import httpx; '
                 'client = httpx.AsyncClient(transport=httpx.ASGITransport(app=runtime), base_url="http://localhost"); '
@@ -198,7 +233,7 @@ def test_asgi_router_startup_does_not_construct_or_import_flask():
                 'assert response.headers["location"] == "/login?next=%2Fapi%2Faccount%2Fsummary"; '
                 'runtime._runtime_config["SESSION_PROTECTION"] = "none"; '
                 'from oneirodex.runtime_native.session_compat import dump_session_cookie; '
-                'cookie = dump_session_cookie({"_user_id": "7:fresh", "_fresh": True}, runtime._runtime_config["SECRET_KEY"]); '
+                'cookie = dump_session_cookie({"_user_id": identity, "_fresh": True}, runtime._runtime_config["SECRET_KEY"]); '
                 'client = httpx.AsyncClient(transport=httpx.ASGITransport(app=runtime), base_url="http://localhost", cookies={"session": cookie}); '
                 'response = asyncio.run(client.get("/admin/api/runtime-bootstrap")); '
                 'asyncio.run(client.aclose()); '
@@ -300,6 +335,14 @@ assert set(started) == {
 }
 assert not any(name == 'flask' or name.startswith(('flask.', 'flask_')) for name in sys.modules)
 assert not any(name == 'jinja2' or name.startswith('jinja2.') for name in sys.modules)
+from oneirodex.background import _WORKER_HANDLES
+worker_threads = [handle.thread for handle in _WORKER_HANDLES if getattr(handle, 'thread', None)]
+assert worker_threads, 'The actual file cleanup worker did not start'
+from oneirodex.background import stop_background_workers
+stop_background_workers()
+for thread in worker_threads:
+    thread.join(timeout=5)
+assert not any(thread.is_alive() for thread in worker_threads), 'Worker still active before engine disposal'
 app.native_engine.dispose()
 '''
     child_env = os.environ.copy()
@@ -400,6 +443,7 @@ class BlockFrameworkImports(MetaPathFinder):
 sys.meta_path.insert(0, BlockFrameworkImports())
 import oneirodex.utils.arr_hardlink_pipeline
 import oneirodex.utils.rbac
+import oneirodex.utils.bios_install
 assert not any(name == 'flask' or name.startswith(('flask.', 'flask_')) for name in sys.modules)
 assert not any(name == 'jinja2' or name.startswith('jinja2.') for name in sys.modules)
 '''
@@ -437,7 +481,7 @@ user = SimpleNamespace(
     id=7, name='Admin', role='admin', is_active=True,
     avatarpath='newstyle/avatars/default.svg',
     preferences=SimpleNamespace(theme=None, icon_pack='outline'),
-    session_fingerprint=lambda: 'fresh',
+    session_fingerprint=lambda: '0123456789abcdef',
 )
 admin_pilot._native_auth_backend = lambda _app: (
     lambda uid: user if uid == 7 else None,
@@ -445,7 +489,8 @@ admin_pilot._native_auth_backend = lambda _app: (
     lambda _token: None,
 )
 from asgi import LazyASGIApp
-runtime = LazyASGIApp()
+from tests.fixtures.native_runtime_probe import persisted_runtime_probe
+runtime, identity = persisted_runtime_probe(user)
 asyncio.run(runtime._ensure_flask())
 runtime._runtime_config['SESSION_PROTECTION'] = 'none'
 import httpx
@@ -458,7 +503,7 @@ async def main():
         assert anonymous.status_code == 302
         assert anonymous.headers['location'] == '/login?next=%2Fapi%2Faccount%2Fsummary'
         cookie = dump_session_cookie(
-            {'_user_id': '7:fresh', '_fresh': True},
+            {'_user_id': identity, '_fresh': True},
             runtime._runtime_config['SECRET_KEY'],
         )
         client.cookies.set('session', cookie)

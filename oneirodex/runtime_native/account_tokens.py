@@ -18,6 +18,7 @@ from .request_auth import request_auth_context
 
 
 _logger = logging.getLogger(__name__)
+_MAX_JSON_BODY_BYTES = 16 * 1024
 
 
 class PersonalTokenData:
@@ -212,13 +213,17 @@ def mount_account_tokens_routes(app: FastAPI, flask_app, **kwargs):
 
 
 async def _validated_body(request: Request) -> tuple[Any | None, Response | None]:
+    from oneirodex.runtime_native.bounded_request_body import BODY_TOO_LARGE, read_bounded_body
     from oneirodex.schemas.tokens import CreateApiTokenBody
 
+    raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return None, _api_error('Request body is too large.', code='payload_too_large')
     try:
-        payload = json.loads(await request.body() or b'{}')
+        payload = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         payload = {}
-    if not isinstance(payload, dict):
+    if payload is None:
         payload = {}
     try:
         return CreateApiTokenBody.model_validate(payload), None

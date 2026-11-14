@@ -7,6 +7,9 @@ import time
 
 import requests
 
+from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.security import validate_user_outbound_http_url
+
 logger = logging.getLogger(__name__)
 
 #: Steam's store API rate-limits (HTTP 429) and sometimes answers 403 to a bare
@@ -19,7 +22,10 @@ def _get_with_retry(url: str, *, timeout: float, attempts: int = 3, max_wait: fl
     """GET with a short backoff on rate limits / transient errors."""
     resp = None
     for attempt in range(attempts):
-        resp = requests.get(url, timeout=timeout, headers=_STEAM_HEADERS)
+        resp = safe_request(
+            'GET', url, validator=validate_user_outbound_http_url,
+            timeout=timeout, headers=_STEAM_HEADERS,
+        )
         if resp.status_code not in _RETRY_STATUSES or attempt == attempts - 1:
             return resp
         try:

@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_users_read import create_admin_users_read_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 
@@ -32,7 +34,7 @@ def _client(*, role='admin'):
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=18, user_id='admin-id', role=role, is_active=True, state=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -52,7 +54,7 @@ def _client(*, role='admin'):
     client = TestClient(app)
     client.cookies.set(
         'session', dump_session_cookie(
-            {'_user_id': '18:fingerprint', '_fresh': True}, flask_app.config['SECRET_KEY'],
+            {'_user_id': login_identity_for(18), '_fresh': True}, flask_app.config['SECRET_KEY'],
         ),
     )
     return client
@@ -87,3 +89,5 @@ def test_admin_user_roster_rejects_member_and_unauthenticated_requests():
     assert member.status_code == anonymous.status_code == 302
     assert member.headers['location'].startswith('/login')
     assert anonymous.headers['location'].startswith('/login')
+    assert anonymous.headers['content-type'] == 'text/html; charset=utf-8'
+    assert len(anonymous.headers.get_list('set-cookie')) == 1

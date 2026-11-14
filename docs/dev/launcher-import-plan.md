@@ -29,6 +29,9 @@ because app names are only unique per runner.
 2. Never auto-link on a name alone; unmatched titles go to the review queue.
 3. Fail with a member-safe sentence (`ValueError`), never exception text.
 4. Cap size (`MAX_TITLES`) and id length (`EXTERNAL_APP_ID_MAX`).
+5. Enforce the request-body limit while streaming, before JSON or multipart
+   parsing: JSON is capped at 8 MiB; multipart allows an 8 MiB file plus at most
+   64 KiB for framing and fields. Oversized requests return HTTP 413.
 
 ## Adding a launcher
 

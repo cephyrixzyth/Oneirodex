@@ -11,16 +11,18 @@ See docs/strategy/security-legal-playbook.md.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from flask import Flask, g
+from flask_login import login_user
 
 from oneirodex.models import ApiToken, User
 from oneirodex.utils import api_tokens
 from oneirodex.utils.api_tokens import (
     generate_api_token,
     require_api_scope,
+    require_api_token_scope,
     user_has_scope,
     verify_bearer_token_detailed,
 )
@@ -160,51 +162,73 @@ class TestTokenExpiry:
         assert public['expires_at'] is not None
         assert public['expired'] is False
 
+    def test_public_dict_serializes_aware_timestamps_as_legacy_utc(self):
+        row = ApiToken(
+            name='aware timestamps',
+            token_prefix='deadbeef',
+            token_hash='x',
+            scopes=['read:library'],
+            created_at=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
+            last_used_at=datetime(2026, 1, 1, 5, 0, tzinfo=timezone(timedelta(hours=5))),
+            expires_at=datetime(2026, 1, 1, 6, 0, tzinfo=timezone(timedelta(hours=5))),
+        )
+
+        public = row.to_public_dict()
+
+        assert public['created_at'] == '2026-01-01T00:00:00'
+        assert public['last_used_at'] == '2026-01-01T00:00:00'
+        assert public['expires_at'] == '2026-01-01T01:00:00'
+
+
+@pytest.fixture
+def scope_request(app):
+    """Exercise the real Flask request-local token and login proxies."""
+    with app.test_request_context('/api/thing'):
+        g.api_token = None
+        yield
+
+
+def _login_scope_actor(role):
+    # Scope-policy unit checks need no database identity lookup. LoginManager
+    # receives a real model, and stores the current user in the real request.
+    login_user(User(id=1, role=role, password_hash='synthetic-scope-fixture', state=True))
+
 
 # --- S10: session-cookie scopes -------------------------------------------
 
 class TestSessionScopes:
     @pytest.fixture(autouse=True)
-    def _no_bearer_token(self, app, monkeypatch):
-        monkeypatch.setattr(api_tokens, 'g', SimpleNamespace(api_token=None))
+    def _session_request(self, scope_request):
+        pass
 
-    def _as(self, monkeypatch, role):
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=True, role=role),
-        )
+    def _as(self, role):
+        _login_scope_actor(role)
 
     @pytest.mark.parametrize('scope', ['admin', 'write:library', 'write:download'])
-    def test_child_is_denied_write_and_admin_scopes(self, monkeypatch, scope):
-        self._as(monkeypatch, 'child')
+    def test_child_is_denied_write_and_admin_scopes(self, scope):
+        self._as('child')
         assert user_has_scope(scope) is False
 
     @pytest.mark.parametrize('scope', ['read:library', 'read:social', 'write:presence'])
-    def test_child_keeps_read_and_presence(self, monkeypatch, scope):
-        self._as(monkeypatch, 'child')
+    def test_child_keeps_read_and_presence(self, scope):
+        self._as('child')
         assert user_has_scope(scope) is True
 
     @pytest.mark.parametrize('scope', ['read:library', 'write:library', 'write:download'])
-    def test_member_keeps_every_non_admin_scope(self, monkeypatch, scope):
-        self._as(monkeypatch, 'user')
+    def test_member_keeps_every_non_admin_scope(self, scope):
+        self._as('user')
         assert user_has_scope(scope) is True
 
-    def test_member_is_still_denied_admin(self, monkeypatch):
-        self._as(monkeypatch, 'user')
+    def test_member_is_still_denied_admin(self):
+        self._as('user')
         assert user_has_scope('admin') is False
 
-    def test_admin_gets_everything(self, monkeypatch):
-        self._as(monkeypatch, 'admin')
+    def test_admin_gets_everything(self):
+        self._as('admin')
         assert user_has_scope('admin') is True
         assert user_has_scope('write:library') is True
 
-    def test_anonymous_gets_nothing(self, monkeypatch):
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=False, role=None),
-        )
+    def test_anonymous_gets_nothing(self):
         assert user_has_scope('read:library') is False
 
 
@@ -218,12 +242,7 @@ class TestScopeDecoratorEnvelope:
 
         return handler
 
-    def test_unauthenticated_returns_the_envelope(self, app, monkeypatch):
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=False, role=None),
-        )
+    def test_unauthenticated_returns_the_envelope(self, app):
         with app.test_request_context('/api/thing'):
             response, status = self._route(app)()
             assert status == 401
@@ -231,20 +250,45 @@ class TestScopeDecoratorEnvelope:
             assert body['ok'] is False
             assert body['error_code'] == 'unauthorized'
 
-    def test_missing_scope_returns_the_envelope(self, app, monkeypatch):
-        monkeypatch.setattr(api_tokens, 'g', SimpleNamespace(api_token=None))
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=True, role='user'),
-        )
+    def test_missing_scope_returns_the_envelope(self, app):
         with app.test_request_context('/api/thing'):
+            g.api_token = None
+            _login_scope_actor('user')
             response, status = self._route(app)()
             assert status == 403
             body = response.get_json()
             assert body['ok'] is False
             assert body['error_code'] == 'forbidden'
             assert body['detail']['required_scope'] == 'admin'
+
+
+def test_bearer_scope_decorator_denies_narrow_token_and_keeps_sessions(monkeypatch):
+    app = Flask(__name__)
+    monkeypatch.setattr(
+        api_tokens,
+        'user_has_scope',
+        lambda scope: scope == 'read:social',
+        raising=False,
+    )
+    calls = []
+
+    @require_api_token_scope('read:library')
+    def protected_route():
+        calls.append('called')
+        return {'ok': True}
+
+    with app.test_request_context('/api/library'):
+        g.api_token = object()
+        denied, status = protected_route()
+        assert status == 403
+        assert denied.get_json()['detail'] == {'required_scope': 'read:library'}
+
+    assert calls == []
+
+    with app.test_request_context('/api/library'):
+        g.api_token = None
+        assert protected_route() == {'ok': True}
+    assert calls == ['called']
 
 
 # --- Child ACL: Bearer deny-list, minting, acquire, companion commands ------
@@ -278,29 +322,21 @@ def child_user(db_session):
 
 
 class TestBearerRoleScopes:
-    def test_child_bearer_cannot_use_denied_scopes_even_when_token_has_them(
-        self, monkeypatch,
-    ):
-        token = SimpleNamespace(has_scope=lambda scope: True)
-        monkeypatch.setattr(api_tokens, 'g', SimpleNamespace(api_token=token))
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=True, role='child'),
-        )
+    @pytest.fixture(autouse=True)
+    def _bearer_request(self, scope_request):
+        pass
+
+    def test_child_bearer_cannot_use_denied_scopes_even_when_token_has_them(self):
+        g.api_token = ApiToken(scopes=['admin'])
+        _login_scope_actor('child')
         assert user_has_scope('write:download') is False
         assert user_has_scope('write:library') is False
         assert user_has_scope('admin') is False
         assert user_has_scope('read:library') is True
 
-    def test_member_bearer_keeps_write_download(self, monkeypatch):
-        token = SimpleNamespace(has_scope=lambda scope: scope == 'write:download')
-        monkeypatch.setattr(api_tokens, 'g', SimpleNamespace(api_token=token))
-        monkeypatch.setattr(
-            api_tokens,
-            'current_user',
-            SimpleNamespace(is_authenticated=True, role='user'),
-        )
+    def test_member_bearer_keeps_write_download(self):
+        g.api_token = ApiToken(scopes=['write:download'])
+        _login_scope_actor('user')
         assert user_has_scope('write:download') is True
 
 
@@ -314,6 +350,12 @@ class TestChildTokenMinting:
         assert 'write:download' not in (row.scopes or [])
         assert 'read:library' in row.scopes
         assert raw.startswith('gt_')
+
+    def test_child_can_mint_narrow_save_scope(self, db_session, child_user):
+        row, _raw = generate_api_token(child_user, 'save access', ['write:saves'])
+        assert row.scopes == ['write:saves']
+        with pytest.raises(ValueError, match='not allowed'):
+            generate_api_token(child_user, 'library access', ['write:library'])
 
     def test_child_cannot_mint_companion_preset(self, client, app, child_user):
         _login(client, app, child_user)
@@ -354,6 +396,74 @@ class TestChildAcquireAndCommands:
         body = resp.get_json()
         assert body['error_code'] == 'forbidden'
         assert 'child' in (body.get('error') or '').lower()
+
+    def test_acquire_search_requires_read_library_scope_for_bearer_tokens(
+        self, client, member, db_session, monkeypatch,
+    ):
+        from oneirodex.routes_apis import acquire
+
+        calls = []
+        monkeypatch.setattr(acquire, 'arr_module_on', lambda: True)
+        monkeypatch.setattr(
+            acquire, 'search_indexers',
+            lambda query: calls.append(query) or [],
+        )
+        monkeypatch.setattr(
+            acquire, 'indexer_status_summary', lambda: {'warnings': []},
+        )
+
+        _row, limited_token = generate_api_token(
+            member, 'social-only', ['read:social'],
+        )
+        denied = client.get(
+            '/api/acquire/search?q=fixture',
+            headers={'Authorization': f'Bearer {limited_token}'},
+        )
+        assert denied.status_code == 403
+        assert denied.get_json()['detail'] == {'required_scope': 'read:library'}
+        assert calls == []
+
+    def test_acquire_search_accepts_read_library_scope_for_bearer_tokens(
+        self, client, member, db_session, monkeypatch,
+    ):
+        from oneirodex.routes_apis import acquire
+
+        calls = []
+        monkeypatch.setattr(acquire, 'arr_module_on', lambda: True)
+        monkeypatch.setattr(
+            acquire, 'search_indexers',
+            lambda query: calls.append(query) or [],
+        )
+        monkeypatch.setattr(
+            acquire, 'indexer_status_summary', lambda: {'warnings': []},
+        )
+        _row, library_token = generate_api_token(
+            member, 'library-read', ['read:library'],
+        )
+
+        allowed = client.get(
+            '/api/acquire/search?q=fixture',
+            headers={'Authorization': f'Bearer {library_token}'},
+        )
+
+        assert allowed.status_code == 200
+        assert calls == ['fixture']
+
+    def test_acquire_search_keeps_browser_session_access(
+        self, client, app, member, monkeypatch,
+    ):
+        from oneirodex.routes_apis import acquire
+
+        monkeypatch.setattr(acquire, 'arr_module_on', lambda: True)
+        monkeypatch.setattr(acquire, 'search_indexers', lambda _query: [])
+        monkeypatch.setattr(
+            acquire, 'indexer_status_summary', lambda: {'warnings': []},
+        )
+        _login(client, app, member)
+
+        response = client.get('/api/acquire/search?q=fixture')
+
+        assert response.status_code == 200
 
     def test_child_cannot_queue_install(self, client, app, child_user):
         _login(client, app, child_user)

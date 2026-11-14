@@ -36,6 +36,11 @@ Each log line carries a short `request_id` when emitted during a request, so a
 household member's report ("it broke when I hit Scan") can be traced across
 lines. The backend is mid-migration from `print()` to `logging`; a ratchet
 (`scripts/print_lint.py`) keeps the remaining `print()` count from growing.
+Uvicorn access lines and structured request-path fields redact
+reset/confirmation path tokens and credential-like query values. Outbound
+metadata retries log the exception type without its
+message or URL; provider query parameters can contain API keys and must not be
+copied into container logs.
 
 ## Adding Prometheus later
 

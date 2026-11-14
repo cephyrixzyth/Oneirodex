@@ -42,44 +42,56 @@ const SCAN_STATUS_URL = '/api/scan_jobs_status'
  * passes the finished job's own folder and settings so "Scan again" repeats
  * *that* scan rather than whatever the library was last pointed at.
  */
-export function useLibraryScan() {
+export function useLibraryScan({ persistentErrors = false }: { persistentErrors?: boolean } = {}) {
   const [conflictOpen, setConflictOpen] = useState(false)
   const [busyKey, setBusyKey] = useState('')
+  const [scanError, setScanError] = useState('')
   // Held across the conflict modal: the operator picks a policy after the POST
   // has already been rejected, so the retry needs the target that was refused.
   const pendingTarget = useRef<ScanTarget | null>(null)
+  const clearScanError = useCallback(() => setScanError(''), [])
 
-  const postScan = useCallback(async (target: ScanTarget, policy: ScanQueuePolicy | null) => {
-    const body = {
-      library_uuid: target.libraryUuid,
-      ...(target.folder ? { folder: target.folder } : {}),
-      ...(target.settings || {}),
-      // null = operator has not chosen yet (idle path) → default queue fields.
-      ...buildScanQueueRequestFields(policy == null ? undefined : policy),
-    }
-    setBusyKey(target.key || target.libraryUuid || 'scan')
-    try {
-      const { ok, status, data } = await postJsonResult(SCAN_URL, body)
-      if (isAlreadyRunningReject(status, data) && policy == null) {
-        pendingTarget.current = target
-        setConflictOpen(true)
-        return { deferred: true }
+  const postScan = useCallback(
+    async (target: ScanTarget, policy: ScanQueuePolicy | null) => {
+      const body = {
+        library_uuid: target.libraryUuid,
+        ...(target.folder ? { folder: target.folder } : {}),
+        ...(target.settings || {}),
+        // null = operator has not chosen yet (idle path) → default queue fields.
+        ...buildScanQueueRequestFields(policy == null ? undefined : policy),
       }
-      const toast = toastForScanStartResponse(data, ok)
-      const label = target.label ? `${target.label}: ` : ''
-      showToast(`${label}${toast.text}`, toastToneForScanVariant(toast.variant))
-      setConflictOpen(false)
-      pendingTarget.current = null
-      return { ok, status, data, deferred: false }
-    } catch (err) {
-      showToast(errorText(err) || 'Scan failed to start.', 'error')
-      setConflictOpen(false)
-      pendingTarget.current = null
-      return { ok: false, deferred: false, error: err }
-    } finally {
-      setBusyKey('')
-    }
-  }, [])
+      setScanError('')
+      setBusyKey(target.key || target.libraryUuid || 'scan')
+      try {
+        const { ok, status, data } = await postJsonResult(SCAN_URL, body)
+        if (isAlreadyRunningReject(status, data) && policy == null) {
+          pendingTarget.current = target
+          setConflictOpen(true)
+          return { deferred: true }
+        }
+        const toast = toastForScanStartResponse(data, ok)
+        const label = target.label ? `${target.label}: ` : ''
+        if (toast.variant === 'error' && persistentErrors) {
+          setScanError(`${label}${toast.text}`)
+        } else {
+          showToast(`${label}${toast.text}`, toastToneForScanVariant(toast.variant))
+        }
+        setConflictOpen(false)
+        pendingTarget.current = null
+        return { ok, status, data, deferred: false }
+      } catch (err) {
+        const message = errorText(err) || 'Scan failed to start.'
+        if (persistentErrors) setScanError(message)
+        else showToast(message, 'error')
+        setConflictOpen(false)
+        pendingTarget.current = null
+        return { ok: false, deferred: false, error: err }
+      } finally {
+        setBusyKey('')
+      }
+    },
+    [persistentErrors],
+  )
 
   const startScan = useCallback(
     async (target: ScanTarget | null | undefined) => {
@@ -107,10 +119,12 @@ export function useLibraryScan() {
         }
         await postScan(target, null)
       } catch (err) {
-        showToast(errorText(err) || 'Could not check scan status.', 'error')
+        const message = errorText(err) || 'Could not check scan status.'
+        if (persistentErrors) setScanError(message)
+        else showToast(message, 'error')
       }
     },
-    [postScan],
+    [persistentErrors, postScan],
   )
 
   const onConflictChoose = useCallback(
@@ -136,6 +150,8 @@ export function useLibraryScan() {
     /** Key of the row currently posting, '' when idle. */
     busyKey,
     scanning: Boolean(busyKey),
+    scanError,
+    clearScanError,
     startScan,
     onConflictChoose,
     onConflictClose,

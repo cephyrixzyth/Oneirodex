@@ -119,7 +119,7 @@ def create_retroachievements_settings_router(
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             csrf_response = None
-            if request.method == 'PUT':
+            if request.method in {'POST', 'PUT'}:
                 from .csrf_compat import csrf_error_response
                 from .request_auth import _lifetime_seconds
                 from .session_compat import load_session_cookie
@@ -154,10 +154,16 @@ def create_retroachievements_settings_router(
                 elif admin_only and auth.token is not None and not auth.has_scope('admin'):
                     payload, status = api_error_payload('This token does not have the admin scope', code='forbidden')
                     response = JSONResponse(payload, status_code=status)
+                elif operation == 'member' and request.method == 'GET' and auth.token is not None and not auth.has_scope('read:library'):
+                    payload, status = api_error_payload(
+                        'Missing scope: read:library', code='forbidden',
+                        detail={'required_scope': 'read:library'},
+                    )
+                    response = JSONResponse(payload, status_code=status)
                 elif request.method == 'PUT':
-                    body = await _read_json(request)
+                    body = await _read_json(request, object_only=operation != 'member')
                     try:
-                        if body is None:
+                        if body is None and operation == 'settings':
                             raise ValueError('Request body must be a JSON object')
                         if operation == 'settings':
                             model = RetroAchievementsSettingsBody.model_validate(body)
@@ -168,7 +174,8 @@ def create_retroachievements_settings_router(
                             result = data.save_settings(username=username, api_key=api_key,
                                                         clear_api_key=model.clear_api_key)
                         else:
-                            model = MemberRetroAchievementsBody.model_validate(body)
+                            # The legacy validated-body decorator treats missing/malformed JSON as {}.
+                            model = MemberRetroAchievementsBody.model_validate(body if body is not None else {})
                             name = model.ra_username.strip()
                             if name and not all(ch.isalnum() or ch in '_-.' for ch in name):
                                 raise ValueError('Username may only contain letters, digits, _ - .')
@@ -176,21 +183,50 @@ def create_retroachievements_settings_router(
                         response = JSONResponse(api_ok_payload(result))
                         if auth.should_set_session_cookie:
                             _set_session_cookie(response, flask_app, auth)
-                    except (ValidationError, ValueError) as exc:
-                        message = str(exc) if isinstance(exc, ValueError) else 'Invalid RetroAchievements settings.'
-                        payload, status = api_error_payload(message, code='bad_request')
+                    except ValidationError as exc:
+                        from oneirodex.utils.validation import format_validation_errors
+                        detail = format_validation_errors(exc)
+                        if operation == 'member':
+                            # Preserve the model name exposed by the legacy
+                            # validated-body decorator for non-object JSON.
+                            if '__root__' in detail:
+                                detail['__root__'] = detail['__root__'].replace(
+                                    'MemberRetroAchievementsBody', 'RaUsernameBody'
+                                )
+                            payload, status = api_error_payload(
+                                'Invalid request.', code='unprocessable',
+                                detail=detail,
+                            )
+                        else:
+                            payload, status = api_error_payload(
+                                'Invalid request.', code='unprocessable', detail=detail,
+                            )
+                        response = JSONResponse(payload, status_code=status)
+                    except ValueError as exc:
+                        payload, status = api_error_payload(str(exc), code='bad_request')
                         response = JSONResponse(payload, status_code=status)
                     except Exception:
                         from oneirodex.runtime_native.db_session import native_db as db
                         db.session.rollback()
-                        payload, status = api_error_payload('Could not save RetroAchievements settings.', code='internal')
+                        message = (
+                            'Something went wrong on our end. The error has been logged.'
+                            if operation == 'member' else 'Could not save RetroAchievements settings.'
+                        )
+                        payload, status = api_error_payload(message, code='internal')
                         response = JSONResponse(payload, status_code=status)
                 elif operation == 'match':
-                    body = await _read_json(request)
+                    media_type = str(request.headers.get('content-type') or '').partition(';')[0].strip().lower()
+                    is_json = media_type == 'application/json' or (
+                        media_type.startswith('application/') and media_type.endswith('+json')
+                    )
+                    body = await _read_match_json(request) if is_json else None
                     try:
-                        if body is None:
-                            raise ValueError('A valid JSON object is required.')
-                        model = RetroAchievementsMatchBody.model_validate(body)
+                        # Flask's validated-body decorator maps missing and
+                        # JSON null to {}, but sends malformed and non-object
+                        # JSON to model validation as a root-level error.
+                        model = RetroAchievementsMatchBody.model_validate(
+                            body if body is not None else {}
+                        )
                         if not data.configured():
                             payload, status = api_error_payload(
                                 'RetroAchievements is not configured — save the household username and web API key under Admin → Integrations.',
@@ -210,9 +246,20 @@ def create_retroachievements_settings_router(
                                 response = JSONResponse(api_ok_payload(
                                     data.match_platform(platform, rehash=model.rehash)
                                 ))
-                    except (ValidationError, ValueError) as exc:
-                        message = str(exc) if isinstance(exc, ValueError) else 'Invalid RetroAchievements match request.'
-                        payload, status = api_error_payload(message, code='bad_request')
+                    except ValidationError as exc:
+                        from oneirodex.utils.validation import format_validation_errors
+                        detail = format_validation_errors(exc)
+                        if '__root__' in detail:
+                            detail['__root__'] = detail['__root__'].replace(
+                                'RetroAchievementsMatchBody', 'MatchBody'
+                            )
+                        payload, status = api_error_payload(
+                            'Invalid request.', code='unprocessable',
+                            detail=detail,
+                        )
+                        response = JSONResponse(payload, status_code=status)
+                    except ValueError as exc:
+                        payload, status = api_error_payload(str(exc), code='bad_request')
                         response = JSONResponse(payload, status_code=status)
                     except RuntimeError as exc:
                         payload, status = api_error_payload(str(exc), code='forbidden')
@@ -266,6 +313,12 @@ def _game_achievements(request, flask_app, data, find_user, find_token,
                 category=getattr(login_manager, 'login_message_category', 'message'),
                 include_next=True,
             )
+        elif auth.token is not None and not auth.has_scope('read:library'):
+            payload, status = api_error_payload(
+                'Missing scope: read:library', code='forbidden',
+                detail={'required_scope': 'read:library'},
+            )
+            response = JSONResponse(payload, status_code=status)
         else:
             game = data.game(game_uuid)
             if game is None:
@@ -297,7 +350,7 @@ def _game_achievements(request, flask_app, data, find_user, find_token,
     return response
 
 
-async def _read_json(request):
+async def _read_json(request, *, object_only=True):
     import json
     try:
         length = int(request.headers.get('content-length') or '0')
@@ -309,9 +362,23 @@ async def _read_json(request):
             if len(raw) > 8 * 1024:
                 return None
         value = json.loads(raw)
-        return value if isinstance(value, dict) else None
+        return value if not object_only or isinstance(value, dict) else None
     except (ValueError, UnicodeDecodeError):
         return None
+
+
+async def _read_match_json(request):
+    """Preserve Flask's distinction between JSON null and parse failures."""
+    import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+    try:
+        raw = await read_bounded_body(request, 8 * 1024)
+        if raw is BODY_TOO_LARGE:
+            return None
+        return json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return raw.decode('utf-8', errors='replace')
 
 
 def mount_retroachievements_settings_routes(app: FastAPI, flask_app, **kwargs):

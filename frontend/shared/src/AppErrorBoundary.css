@@ -1,0 +1,24 @@
+.od-app-error {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: var(--od-space-6, 1.5rem);
+  background: var(--od-bg, #07110f);
+  color: var(--od-text, #e8f5ef);
+}
+
+.od-app-error__card {
+  display: grid;
+  width: min(100%, 34rem);
+  gap: var(--od-space-4, 1rem);
+  padding: var(--od-space-6, 1.5rem);
+  border: 1px solid var(--od-border, #294239);
+  border-radius: var(--od-radius-xl, 1rem);
+  background: var(--od-surface, #10211c);
+  box-shadow: var(--od-shadow-lg, 0 1.5rem 3rem rgb(0 0 0 / 30%));
+}
+
+.od-app-error__card h1,
+.od-app-error__card p {
+  margin: 0;
+}

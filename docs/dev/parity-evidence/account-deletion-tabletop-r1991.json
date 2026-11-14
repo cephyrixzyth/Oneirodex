@@ -1,0 +1,81 @@
+{
+  "review_id": "R1991",
+  "title": "Account deletion policy tabletop",
+  "date": "2026-11-08",
+  "policy_source": "ADR 0013, owner decisions recorded in docs/dev/behavior-parity-review.md, and current account-deletion implementation.",
+  "schema_basis": "Current ORM/Alembic schema and disposable PostgreSQL tests; no deployed operator database was inspected.",
+  "scenarios": [
+    {
+      "scenario": "child or adult member deletion",
+      "classification": "shared service behavior exercised with a child-role account",
+      "outcome": "The shared deletion service removes account-linked private rows and credentials, retains shared rows under their declared disposition, and queues owned files after the database transaction. The deletion service has no child-specific data-retention branch. The R1994 populated relation fixture exercises the common service with a child-role account and a surviving admin.",
+      "evidence": [
+        "oneirodex/utils/user_deletion.py:delete_user_account",
+        "tests/test_user_deletion_inventory.py:test_populated_manifest_relations_follow_owner_dispositions",
+        "docs/dev/parity-evidence/account-deletion-relation-manifest-r1994.json"
+      ],
+      "limits": "Child-role deletion is now exercised in the R1994 populated relation fixture through the shared deletion service. A full authenticated admin-route child deletion replay is not separately covered. Existing child save-access policy is independent of this deletion disposition."
+    },
+    {
+      "scenario": "admin deletion",
+      "classification": "confirmed by focused PostgreSQL concurrency regression",
+      "outcome": "Two concurrent native admin deletions serialize; one succeeds and the other is denied after the actor is no longer active, leaving one active admin.",
+      "evidence": [
+        "tests/test_admin_user_mutation_concurrency.py:test_concurrent_native_admin_deletion_keeps_one_active",
+        "docs/dev/parity-evidence/admin-native-deletion-race-r1987.json"
+      ],
+      "limits": "This protects the final active admin in the tested route and transaction path; deployed-schema qualification remains open."
+    },
+    {
+      "scenario": "shared channel or space owner departs",
+      "classification": "confirmed against populated relation fixture",
+      "outcome": "Shared chat spaces and channels are retained with creator references cleared; the departing member's membership rows are deleted. Shared messages remain and render with the anonymous member label, while that member's attachment metadata and uploaded bytes are deleted after commit.",
+      "evidence": [
+        "tests/test_user_deletion_inventory.py:test_populated_manifest_relations_follow_owner_dispositions",
+        "tests/test_admin_user_delete_retention.py:test_admin_delete_user_removes_private_data_and_preserves_shared_data",
+        "docs/dev/parity-evidence/account-deletion-chat-retention-r1981.json",
+        "docs/dev/parity-evidence/account-deletion-relation-manifest-r1989.json"
+      ],
+      "limits": "The tests use synthetic current-schema rows and do not inspect a deployed household database."
+    },
+    {
+      "scenario": "departed member download history",
+      "classification": "confirmed local row/file ownership boundary",
+      "outcome": "DownloadRequest rows are deleted. Their file_location and zip_file_path refer to game/library source content selected by download routes and constrained to configured library roots; they are not user-owned download copies. Account deletion must preserve those shared library files.",
+      "evidence": [
+        "oneirodex/routes_apis/download.py:_create_or_get_download_request and api_initiate_game_download",
+        "oneirodex/runtime_native/download_mutations.py:DownloadMutationData",
+        "oneirodex/utils/security.py:get_allowed_base_directories",
+        "oneirodex/utils/user_deletion.py:delete_user_owned_rows",
+        "docs/dev/parity-evidence/account-deletion-relation-manifest-r1989.json"
+      ],
+      "limits": "No separate test asserts the source file bytes through a download request; the deletion file-candidate inventory excludes DownloadRequest paths and protects the explicitly managed user-file classes."
+    },
+    {
+      "scenario": "external store disconnect during account deletion",
+      "classification": "owner policy selected; no applicable provider-supported revocation endpoint identified for current credential contracts",
+      "outcome": "The owner selected attempting provider-supported revocation before local deletion, while local deletion must proceed if revocation is unsupported or unreachable. Source review found no documented revocation endpoint applicable to the exact credential types Oneirodex stores: Steam stores an account identifier; GOG, Epic Games Launcher, Amazon Games, Xbox and PlayStation use launcher/private or unofficial credentials; Meta Quest is import-only. Epic EOS's documented OAuth revoke endpoint is for EOS-issued tokens and does not match Epic Launcher device-auth records. The departing account's StoreAccount rows, encrypted credentials, and owned-title rows are deleted locally by declared cascades, and the surviving account's rows remain. No undocumented provider endpoint is called.",
+      "evidence": [
+        "oneirodex/models/ownership.py:StoreAccount.user_id and UserOwnedTitle.user_id foreign keys",
+        "oneirodex/utils/user_deletion.py:delete_user_account",
+        "tests/test_admin_user_delete_retention.py:test_admin_delete_user_removes_private_data_and_preserves_shared_data",
+        "docs/dev/parity-evidence/account-deletion-credential-isolation-r1985.json"
+      ],
+      "limits": "The source review found no revocation operation supported for the current stored credential contracts; this is not proof that a provider has no private revocation endpoint. The member may still need to remove Oneirodex or the relevant launcher authorization in that provider's account settings. Reassess when an integration adopts a provider-documented revocable credential flow.",
+      "provider_references": [
+        "Steam's official OAuth overview describes its grant and token use; current Oneirodex Steam linking stores an account identifier, not a per-member OAuth token: https://partner.steamgames.com/doc/webapi_overview/oauth",
+        "Epic documents OAuth revocation for Epic Online Services tokens; Oneirodex's Epic adapter instead stores Epic Games Launcher device-auth material: https://dev.epicgames.com/docs/web-api-ref/authentication?lang=en-US",
+        "Amazon's Login with Amazon support guidance directs users to remove an app through Manage Login with Amazon; Oneirodex Amazon Games uses a separate unofficial Nile/Heroic credential shape: https://developer.amazon.com/docs/login-with-amazon/faq.html"
+      ]
+    }
+  ],
+  "verification": {
+    "source_review": "Completed for all five scenarios listed above.",
+    "focused_tests": "R1994 fresh-schema PostgreSQL deletion/inventory/admin-race suite passed 19/19; the populated relation test deletes a child-role account. An authenticated admin-route child deletion replay remains open.",
+    "bundle_validator": "The R1972 seven-report validator was rerun and passed; R1991 is a separate follow-up artifact outside that immutable bundle.",
+    "remaining": [
+      "Reassess provider revocation when a supported integration begins storing a credential with a provider-documented revocation operation.",
+      "Compare deployed operator schema and exercise restore/reapplication and production restart only under separately authorized operations."
+    ]
+  }
+}

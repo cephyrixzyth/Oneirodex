@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_cover_batch import create_admin_cover_batch_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -35,7 +37,7 @@ def _client():
     )
     user = SimpleNamespace(
         id=10, user_id='admin', role='admin', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -43,7 +45,7 @@ def _client():
         login_message_category='message', localize_callback=None,
         session_protection='basic',
     )
-    session = {'_user_id': '10:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(10), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     data = FakeCoverBatch()
     app = FastAPI()
@@ -83,3 +85,18 @@ def test_artwork_auto_pick_maps_downloaded_filter_and_uses_envelope():
     assert data.calls[0]['missing_cover'] is False
     assert data.calls[0]['limit_games'] == 5
     assert data.calls[0]['policy'] == 'best_available'
+
+
+def test_cover_batch_mutations_reject_oversized_json_before_data_work():
+    for path in (
+        '/admin/api/covers/batch/apply',
+        '/admin/api/artwork/auto-pick',
+    ):
+        client, data = _client()
+        response = client.post(
+            path, content=b' ' * (64 * 1024 + 1),
+            headers={'Content-Type': 'application/json'},
+        )
+        assert response.status_code == 413
+        assert response.json()['error_code'] == 'payload_too_large'
+        assert data.calls == []

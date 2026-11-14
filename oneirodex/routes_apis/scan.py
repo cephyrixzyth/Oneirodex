@@ -129,6 +129,13 @@ def open_path_info():
     if len(raw) > 2048:
         return api_error('path too long', code='bad_request')
 
+    from oneirodex.utils.client_commands import validate_open_path_target
+
+    try:
+        raw = validate_open_path_target(raw)
+    except ValueError:
+        return api_error('path is outside configured library roots', code='forbidden', status=403)
+
     exists = False
     try:
         exists = os.path.exists(raw)

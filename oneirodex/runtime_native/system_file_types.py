@@ -6,7 +6,7 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
@@ -86,6 +86,8 @@ def validate_file_type_value(value):
         return None
     if value.startswith('.'):
         value = value[1:]
+    if not value:
+        return None
     if len(value) > 10:
         return None
     return value
@@ -105,8 +107,20 @@ def create_system_file_types_router(
     router = APIRouter()
     data = data_access or SystemFileTypeData()
 
-    @router.api_route('/api/file_types/{type_category}', methods=['GET', 'POST', 'PUT', 'DELETE', 'HEAD'])
+    @router.api_route('/api/file_types/{type_category}', methods=['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS'])
     async def manage_file_types(type_category: str, request: Request):
+        if request.method == 'OPTIONS':
+            response = Response(
+                content=b'',
+                status_code=200,
+                headers={'Allow': 'GET, DELETE, POST, OPTIONS, HEAD, PUT'},
+                media_type='text/html',
+            )
+            from oneirodex.utils.security_headers import security_header_values
+
+            for key, value in security_header_values(flask_app.config).items():
+                response.headers.setdefault(key, value)
+            return response
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             auth = request_auth_context(
@@ -151,7 +165,7 @@ def create_system_file_types_router(
 
 
 async def _handle_file_type_request(request, category, data):
-    method = request.method
+    method = 'GET' if request.method == 'HEAD' else request.method
     if method == 'GET':
         try:
             return JSONResponse(data.list(category))
@@ -159,19 +173,33 @@ async def _handle_file_type_request(request, category, data):
             data.rollback()
             return _error(500, 'internal', 'An error occurred while processing your request')
 
-    if not request.headers.get('content-type', '').lower().startswith('application/json'):
+    content_type = (
+        request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    )
+    is_json = content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    )
+    if not is_json:
         return _error(400, 'bad_request', 'Request must be JSON')
     try:
         body = await request.json()
     except Exception:
         return _error(400, 'bad_request', 'Invalid JSON format')
-    if not isinstance(body, dict):
+    if body is None:
         return _error(400, 'bad_request', 'Invalid JSON format')
 
     required = {'POST': ('value',), 'PUT': ('id', 'value'), 'DELETE': ('id',)}.get(method, ())
-    for field in required:
-        if field not in body:
-            return _error(400, 'bad_request', f'Missing required field: {field}')
+    try:
+        for field in required:
+            if field not in body:
+                return _error(400, 'bad_request', f'Missing required field: {field}')
+    except TypeError:
+        return _error(400, 'bad_request', 'Invalid JSON format')
+
+    if not isinstance(body, dict):
+        if method == 'POST':
+            return _error(500, 'internal', 'An error occurred while processing your request')
+        return _error(400, 'bad_request', 'Invalid ID format')
     if method == 'POST':
         value = validate_file_type_value(body.get('value'))
         if value is None:

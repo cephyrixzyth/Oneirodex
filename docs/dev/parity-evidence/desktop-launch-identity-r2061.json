@@ -1,0 +1,130 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2061",
+  "finding": "DT-006 launch identity prerequisite for verified descendants",
+  "source_base": "25b2833fc343044a40ec2959f9f61119f4ccb458",
+  "observed_utc": "2026-11-13T02:45:00.799147+00:00",
+  "candidate_source_sha256": {
+    "clients/desktop/src-tauri/src/lib.rs": "eb746c921b34c35a72b5ab5762c763905978b9214c11eeb85353f21d1fc7ac68",
+    "clients/desktop/src-tauri/Cargo.toml": "ade1f5c0a89dbf54d38aa6034cb4b054c61dffe65fcbd293c253bd25f374ccf7",
+    "clients/desktop/src-tauri/Cargo.lock": "e08e201c94d8576f518505dc44e041402442661cb015fc1da6931b921ca26c3d",
+    "clients/desktop/src/process-status.ts": "46664da0847f1c19a4d05489f337796e35458d48deaad68970358bf1a8f37a82",
+    "clients/desktop/src/process-status.test.ts": "624ac74b273b7c9119ab8d0f861901e518ee0137f2d71653263fa82670b46fb1",
+    "clients/desktop/src/playtime-session.ts": "c012ea5d7b5ece70a735eb2f281e898f1e87d5b596bf5a15382f721790404714",
+    "clients/desktop/src/playtime-session.test.ts": "ee2dfb3efe92fc57adb066e95b4206a1791f20503aaf529847c3f7db2052471d",
+    "clients/desktop/src/launch.ts": "c029ad0179f8dcb2ffa303f9e302f1a3ad3999a1b0f5743a4b2e48c5003da60b",
+    "clients/desktop/src/launch.test.ts": "8b02e04dea635030cb8c77575ac60191736e4663bc91ac6413a29897398acc26",
+    "clients/desktop/src/app-access-boundary.test.ts": "1cbd6bc8f4b53da2ba20f7eb330eaca7187505a03f8795dfe9161b52548d4e89"
+  },
+  "classification": "Native/client launch-identity primitive implemented and locally verified; full descendant tracking remains open.",
+  "behavior": [
+    "Native launch returns a fresh UUIDv4 with its PID. The live registry is keyed by UUID and verifies the expected PID.",
+    "An older waiter removes only its launch entry; missing, mismatched or retired identities cannot adopt another launch.",
+    "Every client status query carries the native identity through its playtime watcher. PID-only and malformed queries are refused.",
+    "An old native reply without identity still represents a successful local launch but starts no unverifiable server session or watcher.",
+    "No child is killed by watcher retirement; direct-child waiting/reaping is retained and completed entries are removed."
+  ],
+  "verification": {
+    "red": {
+      "native": "1 runtime assertion failed: old receipt is only a u32, with no launch_id.",
+      "client": "11 failed / 7 controls passed",
+      "watcher": "1 failed / 2 unrelated tests skipped"
+    },
+    "green": {
+      "focused_client": 21,
+      "all_desktop_tests": 340,
+      "desktop_test_files": 45,
+      "native_windows": 103,
+      "native_ignored": 1,
+      "ignored_reason": "Real ENOSPC requires the separate owned Linux tmpfs fixture.",
+      "final_runner_seconds": 75.51,
+      "types": "passed",
+      "eslint": "passed",
+      "prettier": "passed",
+      "full_and_thin_assets": "built and hashed",
+      "native_format": "passed",
+      "native_clippy_all_targets_warnings_denied": "passed",
+      "R1972": "passed"
+    },
+    "native_controls": [
+      "Two real EOF-controlled child processes retain separate identities and retire independently.",
+      "Both PID and ID must match; a tracked PID without its ID is refused.",
+      "An actual old child waiter finishes after a controlled same-PID replacement entry; the replacement ID remains live. This models identity substitution, not actual kernel PID recycling.",
+      "Existing direct-child and exit regressions remain in the full native suite."
+    ],
+    "lock_delta": "One root dependency edge to existing uuid1.24.0; no package/version/checksum changes.",
+    "source_fixed": true,
+    "limits": "Focused counts overlap the full desktop suite; subprocess libtest fixture summaries are not added to the outer native count."
+  },
+  "rework": [
+    "Initial patch rejected before mutation; split patches applied.",
+    "Initial client RED log-tail display hit cp1252 after UTF-8 raw evidence was saved. Read retained results without repeating tests and corrected helper stdout.",
+    "Existing launch and account-forget native mocks now provide the new receipt field; this preserves their tracking coverage instead of silently skipping tracking.",
+    "Prettier and rustfmt applied before the final frozen-source checks."
+  ],
+  "owner_policy": "Follow verified game child processes; the R2060 disposable Windows mechanism probe is not product integration.",
+  "remaining": [
+    "Integrate dedicated game-family supervision and verify short wrappers, grandchildren, independent/repeated launches and unknown or detached cases.",
+    "Durable restart reconciliation and server/account isolation must use verified launch identity, never PID/name matching.",
+    "Actual kernel PID reuse, macOS/Linux native identity paths, packaged launch/exit/restart and original DT-006 acceptance remain open.",
+    "No route-parity promotion, fresh whole-program review, merge, release or deployment qualification."
+  ],
+  "parent_source_qualification": {
+    "source": "25b2833fc343044a40ec2959f9f61119f4ccb458",
+    "main_run": 43350306811,
+    "main_jobs_passed": 9,
+    "core": {
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1781.61,
+      "coverage_percent": 74.98,
+      "job": 131639489129,
+      "raw_log_sha256": "789c238e89779a7dfaa79d8c0866e4400c803bc6894bedd1eb2ef0488dd43832"
+    },
+    "desktop_push_run": 43350298925,
+    "desktop_PR_run": 43350307045,
+    "desktop_active_jobs_passed_per_run": 7,
+    "limits": "Existing CI selection; duplicate automatic desktop events are not additional unique coverage. No release assets published. R2061 later candidate needs its own exact-head qualification."
+  },
+  "published_source_ci_followup": {
+    "observed_utc": "2026-11-13T16:32:11.578483+00:00",
+    "runs": [
+      {
+        "conclusion": "success",
+        "event": "pull_request",
+        "headSha": "3ad789700e65e2c3cb7c5590fac2dc843592a015",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43372719090",
+        "run_id": 43372719090
+      },
+      {
+        "conclusion": "success",
+        "event": "push",
+        "headSha": "3ad789700e65e2c3cb7c5590fac2dc843592a015",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43372711763",
+        "run_id": 43372711763
+      },
+      {
+        "conclusion": "success",
+        "event": "pull_request",
+        "headSha": "3ad789700e65e2c3cb7c5590fac2dc843592a015",
+        "status": "completed",
+        "url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43372719117",
+        "run_id": 43372719117
+      }
+    ],
+    "core": {
+      "job_id": 131712004644,
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1576.67,
+      "raw_log_sha256": "b0808a5c4b8a7181987cdf66fd95c3f1b63b529e9d2182efc137763a3a59ae1f"
+    },
+    "scope": "Exact published 3ad prerequisite only; no later supervisor or packaged qualification."
+  }
+}

@@ -3,7 +3,7 @@ import os
 import uuid
 from html import escape as html_escape
 from flask import Blueprint, redirect, url_for, request, flash, current_app, abort, session, get_flashed_messages
-from flask_login import current_user, login_required, login_user, logout_user
+from flask_login import current_user, login_required
 from oneirodex import db
 from oneirodex.models import User, InviteToken, GlobalSettings, Whitelist
 from oneirodex.utils.global_settings import global_settings_row
@@ -13,17 +13,19 @@ from oneirodex.utils.public_origin import (
     site_url_is_configured,
 )
 from oneirodex.forms import LoginForm, RegistrationForm, ResetPasswordRequestForm, InviteForm, UserPasswordForm
-from oneirodex.utils.auth import burn_password_check, safe_next_url, sign_in_and_redirect
+from oneirodex.utils.auth import (
+    burn_password_check, login_user, logout_user, safe_next_url, sign_in_and_redirect,
+)
 from oneirodex.utils.accounts import is_placeholder_email
 from oneirodex.utils.api_response import api_error, api_ok
-from oneirodex.schemas.auth import LoginBody
+from oneirodex.schemas.auth import EmailConfirmationBody, LoginBody
 from oneirodex.schemas.registration import RegistrationBody
 from oneirodex.schemas.password_reset import PasswordResetRequestBody, PasswordResetConfirmBody
 from oneirodex.utils.validation import validate_body
 from oneirodex.utils.smtp import send_email, send_password_reset_email, send_invite_email
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.oidc import (
-    AUTHLIB_AVAILABLE,
+    AUTHLIB_FLASK_AVAILABLE,
     build_oidc_config,
     format_oidc_callback_error,
     format_oidc_idp_error,
@@ -41,6 +43,7 @@ from oneirodex.utils.login_rate_limit import (
     client_ip_from_request,
     is_rate_limited,
     login_rate_key,
+    password_reset_email_key,
     record_failure,
 )
 from datetime import datetime, timedelta, timezone
@@ -51,9 +54,15 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import MultiDict
 
-from oneirodex.utils.tokens import get_serializer
+from oneirodex.utils.tokens import (
+    email_verification_token_digest,
+    email_verification_token_matches,
+    get_serializer,
+    password_reset_token_digest,
+)
 from oneirodex.utils.rbac import is_admin
 from oneirodex.utils.member_auth_spa import render_member_auth_spa
+from oneirodex.utils.member_spa import render_member_spa
 
 
 login_bp = Blueprint('login', __name__)
@@ -79,7 +88,7 @@ def _registration_confirmation_email(confirm_url: str) -> str:
 <style>body{{background:#f3f4f6;color:#333;font-family:'Courier New',Courier,monospace;padding:20px}}.container{{background:#fff;border:1px solid #ddd;padding:20px;border-radius:10px;max-width:600px;margin:20px auto;box-shadow:0 2px 4px rgba(0,0,0,.1)}}h1{{color:#007bff}}a{{background:#007bff;color:#fff;padding:10px 20px;text-decoration:none;border-radius:5px;font-weight:bold}}p{{margin-bottom:20px}}</style></head>
 <body><div class="container"><h2>Ready, Player One!</h2>
 <p>You're just one click away from joining the elite ranks at Oneirodex. Grab your controller and get ready to dive into an epic gaming adventure. But first, let's complete your character creation!</p>
-<p>Click the power-up below to confirm your email and activate your account. Quick, before the server resets!</p>
+<p>Open the link to confirm your email. You will choose the password that activates the account on the confirmation page.</p>
 <a href="{safe_url}">Confirm Your Email</a>
 <p>If you didn't try to create an account with us, just ignore this message and no action is needed. This email will despawn automatically.</p></div></body></html>'''
 
@@ -175,10 +184,12 @@ def is_smtp_configured():
     settings = global_settings_row()
     if not settings:
         return False
-    return bool(settings.smtp_server and 
-                settings.smtp_port and 
-                settings.smtp_username and 
-                settings.smtp_password)
+    from oneirodex.utils.secret_store import has_global_secret
+
+    return bool(
+        settings.smtp_server and settings.smtp_port and settings.smtp_username
+        and has_global_secret(settings, 'smtp_password')
+    )
 
 @login_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -280,6 +291,9 @@ def api_register(body: RegistrationBody):
 
     username = form.username.data
     email_address = form.email.data.lower()
+    if invite is not None and invite.recipient_email:
+        if invite.recipient_email.strip().lower() != email_address:
+            return _registration_ack()
     if db.session.execute(
         select(User).filter(func.lower(User.email) == email_address)
     ).scalar_one_or_none():
@@ -299,13 +313,14 @@ def api_register(body: RegistrationBody):
         return _registration_ack()
 
     user_uuid = str(uuid4())
+    verification_token = get_serializer().dumps(email_address, salt='email-confirm')
     user = User(
         user_id=user_uuid,
         name=username,
         email=email_address,
         role='user',
         is_email_verified=False,
-        email_verification_token=get_serializer().dumps(email_address, salt='email-confirm'),
+        email_verification_token=email_verification_token_digest(verification_token),
         token_creation_time=datetime.now(timezone.utc),
         created=datetime.now(timezone.utc),
     )
@@ -332,7 +347,7 @@ def api_register(body: RegistrationBody):
         return _registration_ack()
 
     log_system_event(f"New user registered: {user.name}", event_type='audit', event_level='information')
-    confirm_path = url_for('login.confirm_email', token=user.email_verification_token)
+    confirm_path = url_for('login.confirm_email', token=verification_token)
     confirm_url = f'{public_origin()}{confirm_path}'
     html = _registration_confirmation_email(confirm_url)
     send_email(user.email, 'Please confirm your email', html)
@@ -342,7 +357,9 @@ def api_register(body: RegistrationBody):
 def _password_reset_user(token: str):
     """Resolve a live reset token using the same 15-minute UTC rule everywhere."""
     user = db.session.execute(
-        select(User).filter_by(password_reset_token=token)
+        select(User).where(User.password_reset_token.in_(
+            (password_reset_token_digest(token), token),
+        ))
     ).scalar_one_or_none()
     issued_at = user.token_creation_time if user else None
     if issued_at is not None and issued_at.tzinfo is None:
@@ -375,15 +392,24 @@ def api_password_reset_request(body: PasswordResetRequestBody):
             'Too many password reset requests. Please wait and try again.',
             code='rate_limited',
         )
+    record_failure(reset_key)
+    recipient_key = password_reset_email_key(
+        form.email.data, current_app.config.get('SECRET_KEY', ''),
+    )
+    if is_rate_limited(recipient_key):
+        return api_ok({
+            'requested': True,
+            'message': 'If that email is registered, password reset instructions were sent.',
+        })
+    record_failure(recipient_key)
     user = db.session.execute(
         select(User).filter_by(email=form.email.data.lower())
     ).scalar_one_or_none()
     # Count requests for both known and unknown accounts; the response body is
     # intentionally identical to prevent email-address enumeration.
-    record_failure(reset_key)
     if user:
         token = get_serializer().dumps(user.email, salt='password-reset-salt')
-        user.password_reset_token = token
+        user.password_reset_token = password_reset_token_digest(token)
         user.token_creation_time = datetime.now(timezone.utc)
         log_system_event(
             f"Password reset requested for user: {user.email}",
@@ -436,7 +462,7 @@ def oidc_start():
         flash('Single sign-on is not enabled.', 'warning')
         return redirect(url_for('login.login'))
 
-    if not AUTHLIB_AVAILABLE:
+    if not AUTHLIB_FLASK_AVAILABLE:
         flash('SSO is configured but authlib is not installed. Contact an administrator.', 'error')
         return redirect(url_for('login.login'))
 
@@ -472,7 +498,7 @@ def oidc_callback():
         flash('Single sign-on is not enabled.', 'warning')
         return redirect(url_for('login.login'))
 
-    if not AUTHLIB_AVAILABLE:
+    if not AUTHLIB_FLASK_AVAILABLE:
         flash('SSO is configured but authlib is not installed.', 'error')
         return redirect(url_for('login.login'))
 
@@ -565,6 +591,10 @@ def register():
     if form.validate_on_submit():
         try:
             email_address = form.email.data.lower()
+            if invite is not None and invite.recipient_email:
+                if invite.recipient_email.strip().lower() != email_address:
+                    flash(_REGISTRATION_ACK, 'message')
+                    return redirect(url_for('site.index'))
             existing_user_email = db.session.execute(select(User).filter(func.lower(User.email) == email_address)).scalar_one_or_none()
             if existing_user_email:
                 flash(_REGISTRATION_ACK, 'message')
@@ -590,13 +620,14 @@ def register():
                 flash('An error occurred while registering. Please try again.')
                 return redirect(url_for('login.register'))
 
+            verification_token = get_serializer().dumps(email_address, salt='email-confirm')
             user = User(
                 user_id=user_uuid,
                 name=form.username.data,
                 email=form.email.data.lower(),
                 role='user',
                 is_email_verified=False,
-                email_verification_token=get_serializer().dumps(email_address, salt='email-confirm'),
+                email_verification_token=email_verification_token_digest(verification_token),
                 token_creation_time=datetime.now(timezone.utc),
                 created=datetime.now(timezone.utc)
             )
@@ -623,7 +654,6 @@ def register():
             log_system_event(f"New user registered: {user.name}", event_type='audit', event_level='information')
 
             # Verification email
-            verification_token = user.email_verification_token
             confirm_path = url_for('login.confirm_email', token=verification_token)
             confirm_url = f'{public_origin()}{confirm_path}'
             html = _registration_confirmation_email(confirm_url)
@@ -646,8 +676,8 @@ def register():
     return render_member_auth_spa()
 
 
-def _confirm_email_token(token: str):
-    """Verify a confirmation link and return a stable transition outcome."""
+def _confirm_email_token(token: str, *, password: str | None = None):
+    """Inspect or complete a confirmation link with mailbox-owner credentials."""
     try:
         email = get_serializer().loads(token, salt='email-confirm', max_age=900)  # 15 minutes
     except SignatureExpired:
@@ -662,7 +692,13 @@ def _confirm_email_token(token: str):
         return None, 'not_found'
     if user.is_email_verified:
         return user, 'already_confirmed'
+    if not email_verification_token_matches(user.email_verification_token, token):
+        return None, 'invalid'
+    if password is None:
+        return user, 'pending'
+    user.set_password(password)
     user.is_email_verified = True
+    user.email_verification_token = None
     db.session.add(user)
     db.session.commit()
     return user, 'confirmed'
@@ -675,17 +711,41 @@ def confirm_email(token):
     return render_member_auth_spa()
 
 
-@login_bp.route('/api/auth/confirm/<token>')
-def api_confirm_email(token: str):
-    """JSON confirmation state for the static authentication shell."""
-    _user, outcome = _confirm_email_token(token)
+def _confirmation_body_error(exc):
+    password_invalid = any(
+        not issue.get('loc') or issue['loc'][0] == 'password'
+        for issue in exc.errors(include_input=False)
+    )
+    return api_error(
+        'Password must be at least 8 characters.' if password_invalid else 'Passwords do not match.',
+        code='unprocessable',
+    )
+
+
+@login_bp.route('/api/auth/confirm/<token>', methods=['GET', 'POST'])
+@validate_body(EmailConfirmationBody, methods={'POST'}, on_error=_confirmation_body_error)
+def api_confirm_email(token: str, body: EmailConfirmationBody | None = None):
+    """Inspect on GET; activate and set mailbox-owner credentials on POST."""
+    password = None
+    if request.method == 'POST':
+        password = body.password
+        confirm_password = body.confirm_password
+        if password != confirm_password:
+            return api_error('Passwords do not match.', code='unprocessable')
+    _user, outcome = _confirm_email_token(token, password=password)
     if outcome == 'expired':
         return api_error('The confirmation link has expired.', code='bad_request')
     if outcome == 'invalid':
         return api_error('The confirmation link is invalid.', code='bad_request')
     if outcome == 'not_found':
         return api_error('The account for this confirmation link was not found.', code='not_found')
-    return api_ok({'confirmed': True, 'already_confirmed': outcome == 'already_confirmed'})
+    return api_ok({
+        'confirmed': (
+            (request.method == 'POST' and outcome == 'confirmed')
+            or outcome == 'already_confirmed'
+        ),
+        'already_confirmed': outcome == 'already_confirmed',
+    })
 
 
 @login_bp.route('/reset_password_request', methods=['GET', 'POST'])
@@ -699,13 +759,20 @@ def reset_password_request():
         if is_rate_limited(reset_key):
             flash('Too many password reset requests. Please wait and try again.', 'error')
             return redirect(url_for('login.reset_password_request'))
+        record_failure(reset_key)
+        recipient_key = password_reset_email_key(
+            form.email.data, current_app.config.get('SECRET_KEY', ''),
+        )
+        if is_rate_limited(recipient_key):
+            flash('If that email is registered, password reset instructions were sent.')
+            return redirect(url_for('login.login'))
+        record_failure(recipient_key)
         user = db.session.execute(select(User).filter_by(email=form.email.data.lower())).scalar_one_or_none()
         # Always record attempt (even unknown email) to slow enumeration
-        record_failure(reset_key)
         if user:
             # Generate a unique token
             token = get_serializer().dumps(user.email, salt='password-reset-salt')
-            user.password_reset_token = token
+            user.password_reset_token = password_reset_token_digest(token)
             user.token_creation_time = datetime.now(timezone.utc)
             
             log_system_event(f"Password reset requested for user: {user.email}", event_type='password_reset', event_level='information')
@@ -761,7 +828,7 @@ def invites():
             'warning',
         )
     if request.method == 'GET':
-        return redirect(url_for('library.library', account='invites'))
+        return render_member_spa(title='Invites')
 
     form = InviteForm()
     if form.validate_on_submit():

@@ -129,14 +129,65 @@ body.od-shell-host header.od-topbar .od-topbar__start {
   body.od-shell-host header.od-topbar .od-topbar__page {
     grid-area: page;
     justify-content: flex-start;
+    align-items: stretch;
+    flex-direction: column;
     flex: none;
+    gap: var(--od-space-1);
     min-width: 0;
     width: 100%;
+  }
+
+  body.od-shell-host header.od-topbar .od-topbar__page > .od-cbtn-group,
+  body.od-shell-host header.od-topbar .od-topbar__page > .od-contextbar__views {
+    display: flex;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: flex-start;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    gap: var(--od-space-1);
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    touch-action: pan-x;
+  }
+
+  body.od-shell-host
+    header.od-topbar
+    .od-topbar__page
+    > .od-cbtn-group[aria-label='Scan pages']
+    > .od-cbtn--section {
+    padding-inline: 0;
+  }
+
+  body.od-shell-host header.od-topbar .od-topbar__page > .od-cbtn-group[aria-label='Scan pages'] {
+    gap: 2px;
+  }
+
+  body.od-shell-host header.od-topbar .od-topbar__page > .od-cbtn-group > *,
+  body.od-shell-host header.od-topbar .od-topbar__page > .od-contextbar__views > * {
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   body.od-shell-host header.od-topbar .od-topbar__actions {
     grid-area: actions;
     flex: none;
+  }
+}
+
+@media (max-width: 340px) {
+  body.od-shell-host header.od-topbar .od-topbar__page > .od-cbtn-group[aria-label='Scan pages'] {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    justify-content: start;
+    gap: 2px var(--od-space-1);
+    overflow: visible;
+    touch-action: auto;
   }
 }
 
@@ -193,9 +244,14 @@ body.od-shell-host header.od-topbar .od-topbar__start {
 .od-topnav__dropdown-panel a.active,
 .od-topnav__dropdown-panel button[role='menuitem']:hover,
 .od-topnav__dropdown-panel button[role='menuitem']:focus-visible {
-  background: color-mix(in srgb, var(--od-accent) 16%, transparent);
-  color: var(--od-accent);
-  outline: none;
+  background: color-mix(in srgb, var(--od-accent) 30%, var(--od-surface-2));
+  color: var(--od-text);
+}
+
+.od-topnav__dropdown-panel a:focus-visible,
+.od-topnav__dropdown-panel button[role='menuitem']:focus-visible {
+  outline: 2px solid var(--od-focus-ring, var(--od-accent));
+  outline-offset: 2px;
 }
 
 .od-topnav__dropdown-panel.od-menu-surface :is(a[role='menuitem'], button[role='menuitem']) {
@@ -214,8 +270,8 @@ body.od-shell-host header.od-topbar .od-topbar__start {
 .od-topnav__dropdown-panel.od-menu-surface :is(a[role='menuitem'], button[role='menuitem']):hover,
 .od-topnav__dropdown-panel.od-menu-surface
   :is(a[role='menuitem'], button[role='menuitem']):focus-visible {
-  background: color-mix(in srgb, var(--od-accent) 16%, transparent);
-  color: var(--od-accent);
+  background: color-mix(in srgb, var(--od-accent) 30%, var(--od-surface-2));
+  color: var(--od-text);
 }
 
 .od-topnav__username {

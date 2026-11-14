@@ -54,6 +54,8 @@ def validate_layout_payload(payload: dict | None) -> dict[str, Any]:
         return _default_layout()
     if not isinstance(raw_sections, list):
         raise ValueError('sections must be a list')
+    if len(raw_sections) > len(DEFAULT_SECTIONS):
+        raise ValueError(f'sections must contain at most {len(DEFAULT_SECTIONS)} items')
     for item in raw_sections:
         if not isinstance(item, dict) or item.get('id') not in DEFAULT_SECTIONS:
             raise ValueError(f"Unknown or invalid section id: {item!r}")

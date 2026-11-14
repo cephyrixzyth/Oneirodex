@@ -1,5 +1,7 @@
 import pytest
 import json
+import csv
+from io import StringIO
 from unittest.mock import patch, Mock
 from uuid import uuid4
 from datetime import datetime, timezone, timedelta
@@ -752,6 +754,9 @@ class TestExportUnmatchedFolders:
 
     def test_export_csv_default(self, client, admin_user, sample_unmatched_folder):
         """Test CSV export (default format) includes the unmatched folder."""
+        formula = '=HYPERLINK("review-cell")'
+        sample_unmatched_folder.folder_path = '/test/unmatched/' + formula
+        db.session.commit()
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
@@ -763,7 +768,9 @@ class TestExportUnmatchedFolders:
 
         body = response.get_data(as_text=True)
         assert 'folder_path' in body  # header row
-        assert '/test/unmatched/folder' in body
+        rows = list(csv.DictReader(StringIO(body)))
+        assert rows[0]['folder_name'] == "'" + formula
+        assert rows[0]['folder_path'] == '/test/unmatched/' + formula
 
     def test_export_json_format(self, client, admin_user, sample_unmatched_folder):
         """Test JSON export returns the unmatched folder as a list of dicts."""

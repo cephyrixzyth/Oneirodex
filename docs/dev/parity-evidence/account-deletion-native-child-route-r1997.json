@@ -1,0 +1,29 @@
+{
+  "review_id": "R1997",
+  "title": "Replay child account deletion through the authenticated native admin route",
+  "classification": "Confirmed route-level verification gap closed for current schema.",
+  "scenario": {
+    "actor": "Active admin with a valid test session and CSRF token.",
+    "target": "Child-role account with a retained audit event containing the child's name, email, and an absolute local path.",
+    "route": "DELETE /admin/api/user/{user_id} through the native FastAPI admin router and AdminUserMutationData adapter."
+  },
+  "result": {
+    "response": "HTTP 200 from the authenticated route.",
+    "account": "The child user row is absent after the request.",
+    "audit": "The audit row remains with a null author reference and without the child's name, email, or absolute path."
+  },
+  "verification": {
+    "database": "Fresh disposable PostgreSQL 17.6 database upgraded through Alembic head e1f2a3b4c5d6; database dropped after the run.",
+    "command": "uv run --python <Python-3.12.16-path> --with-requirements requirements-dev.txt pytest tests/test_native_admin_user_mutations.py tests/test_admin_user_delete_retention.py -q",
+    "result": "24 passed in 350.85 seconds.",
+    "includes": [
+      "The new authenticated native-route child deletion and audit anonymization replay.",
+      "The Flask admin-route child deletion and audit retention replay.",
+      "Existing deletion relation, failure-injection, retry, and file-cleanup regressions in the two focused modules."
+    ]
+  },
+  "limits": [
+    "This verifies application behavior against a fresh current schema; no deployed database was read or changed.",
+    "Restore reapplication, production restart qualification, and any future provider revocation adapter remain separate checks."
+  ]
+}

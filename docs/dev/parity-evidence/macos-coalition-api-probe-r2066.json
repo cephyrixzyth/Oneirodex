@@ -1,0 +1,77 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2066",
+  "observed_utc": "2026-11-13T19:29:08.658008+00:00",
+  "source_base": "fa6b890d53f03786c1bf4795ec5cf63f5f5a926c",
+  "scope": "Prepared ordinary-user macOS API/job-isolation native fixture; no production tracking change.",
+  "local_verification": {
+    "platform": "Windows",
+    "controller_safety": {
+      "red_failures": 3,
+      "red_controls": 3,
+      "green_passed": 6,
+      "scope": "Simulated controller command faults; no macOS API execution."
+    },
+    "compile": "passed",
+    "nonmac_refusal": {
+      "exit_code": 2,
+      "status": "unsupported",
+      "api_and_job_isolation_passed": false,
+      "family_recovery_acceptance": false
+    },
+    "source_sha256": {
+      "scripts/ci/probe-macos-launch-coalition.py": "6f852552828978fab95cc796497ef8fdf043679813c0f2dca134f7b940bef8ed",
+      "scripts/ci/test_macos_launch_coalition_probe.py": "e1672e8658c94900869bf7d54270accf7d2ac82460763ca2f970aee0fdb278f4"
+    }
+  },
+  "native_macos": {
+    "status": "observed_unsupported",
+    "job_name": "macOS coalition API/isolation probe",
+    "failure_waiver": false,
+    "privileged_setup": false,
+    "observed_utc": "2026-11-13T19:37:52.574Z",
+    "source_head": "039ba881a85309f3c0c0eff14b55a897e870903c",
+    "run_id": 43492989735,
+    "job_id": 132118723620,
+    "platform": "Darwin25.6.0 arm64",
+    "own_coalition_APIs": "succeeded",
+    "user_domain_bootstrap_exit_code": 5,
+    "cleanup_errors": 0,
+    "raw_log_sha256": "6d34049ac15e2f6bf2d16e7211b469dd4fd850a455b549f90f985ae98a06f2c6",
+    "limits": "Per-game isolation not established. Bootstrap stderr was discarded; underlying cause unknown. No domain change or elevation inferred."
+  },
+  "primary_source": {
+    "repository": "apple-oss-distributions/xnu",
+    "commit": "f6217f891ac0bb64f3d375211650a4c1ff8ca1ea"
+  },
+  "archive": {
+    "filename": "macos-coalition-api-probe-ci-ready-r2066.zip",
+    "sha256": "bc50c99cdce113ca81be152efbd0211498ec146ae45c1475a5f814654583a056",
+    "files": 14,
+    "bytes": 18825,
+    "storage": "Private canonical DT-006 artifacts; raw local paths withheld from public Git."
+  },
+  "evidence_selection": "Selected CI-ready archive freezes the fixture, local checks and explicit fresh-checkout artifact-directory setup. Earlier archives are retained. Final staged preflight and eventual native CI are separate; no native pass is inferred.",
+  "remaining": [
+    "Bootstrap failure5 cause and per-game coalition isolation remain unverified; basic ordinary-user query APIs were observed on source039ba881 only.",
+    "Detached descendants, rapid exec/crash/API-denial controls and guardian-loss game survival.",
+    "Successive launches, production UUID/lease/account integration and actual packaged/platform acceptance.",
+    "All original parity/security/operator/restore/accessibility gates and final whole-program review/release readiness."
+  ],
+  "prior_candidate_archive": {
+    "filename": "macos-coalition-api-probe-candidate-r2066.zip",
+    "sha256": "78b67f0c7cf5b061933ee7b11cc721577078532f6b8f8ef522b3aacabf59b334",
+    "files": 12,
+    "bytes": 16642,
+    "storage": "Private canonical DT-006 artifacts; raw local paths withheld from public Git."
+  },
+  "prior_candidate_archives": [
+    {
+      "filename": "macos-coalition-api-probe-final-r2066.zip",
+      "sha256": "9ffdac071eb20a4e126243ab5792a491d71d233abcdb5e60a7b34b6975c68e91",
+      "files": 14,
+      "bytes": 18740,
+      "storage": "Private canonical DT-006 artifacts; raw local paths withheld from public Git."
+    }
+  ]
+}

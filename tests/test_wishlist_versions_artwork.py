@@ -254,11 +254,14 @@ def test_wishlist_create_cancel_and_admin_fulfill(client, app, db_session, user,
     _login(client, app, user)
     create = client.post('/api/requests', json={'title': f'Title {uuid4().hex[:6]}', 'notes': 'want'})
     assert create.status_code == 201
-    req_id = create.get_json()['id']
+    created_request = create.get_json()
+    req_id = created_request['id']
+    assert created_request['created_at'].endswith('+00:00')
 
     listed = client.get('/api/requests')
     assert listed.status_code == 200
-    assert any(r['id'] == req_id for r in listed.get_json()['requests'])
+    listed_request = next(r for r in listed.get_json()['requests'] if r['id'] == req_id)
+    assert listed_request['created_at'] == created_request['created_at']
 
     game = Game(
         uuid=str(uuid4()),
@@ -281,8 +284,13 @@ def test_wishlist_create_cancel_and_admin_fulfill(client, app, db_session, user,
     body = fulfill.get_json()
     assert body['status'] == 'fulfilled'
     assert body['linked_game_uuid'] == game.uuid
-
+    assert body['resolved_at'].endswith('+00:00')
     _login(client, app, user)
+    fulfilled_request = next(
+        r for r in client.get('/api/requests').get_json()['requests'] if r['id'] == req_id
+    )
+    assert fulfilled_request['resolved_at'] == body['resolved_at']
+
     create2 = client.post('/api/requests', json={'title': f'Cancel me {uuid4().hex[:6]}'})
     cancel_id = create2.get_json()['id']
     cancel = client.delete(f'/api/requests/{cancel_id}')

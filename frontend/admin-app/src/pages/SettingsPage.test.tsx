@@ -1,9 +1,13 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { SettingsPage } from './SettingsPage'
 import { SETTINGS_GROUPS } from '../components/navConfig'
+
+function CurrentRoute() {
+  return <output data-testid="current-route">{useLocation().pathname}</output>
+}
 
 function stubModuleStatus(payload: any, { ok = true, status = 200 } = {}) {
   const fetchMock = vi.fn(async (url) => {
@@ -100,6 +104,21 @@ describe('SettingsPage module badges', () => {
     )
     expect(screen.getByRole('tabpanel', { name: /Library & matching/ })).toBeInTheDocument()
     expect(screen.queryByText('Remote play')).not.toBeInTheDocument()
+  })
+
+  test('settings destinations navigate within the admin router', async () => {
+    stubModuleStatus({})
+    render(
+      <MemoryRouter initialEntries={['/admin/settings']}>
+        <SettingsPage />
+        <CurrentRoute />
+      </MemoryRouter>,
+    )
+
+    await userEvent.setup().click(screen.getByRole('link', { name: /Server settings/ }))
+    await waitFor(() =>
+      expect(screen.getByTestId('current-route')).toHaveTextContent('/admin/new_server_settings'),
+    )
   })
 
   test('section keyboard navigation moves selection and focus and retains configured links', async () => {

@@ -9,6 +9,9 @@ import httpx
 from fastapi import FastAPI
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
+from oneirodex.runtime_native import attract_mode_reads
 from oneirodex.runtime_native.attract_mode_reads import mount_attract_mode_routes
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -38,7 +41,7 @@ def setup():
     )
     user = SimpleNamespace(
         id=3, user_id='user-guid', name='Member', role='user', state=True,
-        is_active=True, session_fingerprint=lambda: 'fingerprint',
+        is_active=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     data = Data()
     lookups = []
@@ -99,7 +102,7 @@ def test_write_rejects_missing_csrf_before_resolving_auth():
 
 def test_signed_session_csrf_write_persists_override_through_adapter():
     flask_app, native, _user, data, _lookups = setup()
-    session_data = {'_user_id': '3:fingerprint', '_fresh': True}
+    session_data = {'_user_id': login_identity_for(3), '_fresh': True}
     csrf_token = generate_csrf_token(session_data, flask_app.config['SECRET_KEY'])
     session_cookie = dump_session_cookie(session_data, flask_app.config['SECRET_KEY'])
     payload = {'filters': {'genres': [1, 4]}, 'autoplay': {'enabled': False}}
@@ -116,3 +119,22 @@ def test_signed_session_csrf_write_persists_override_through_adapter():
     assert response.json()['message'] == 'Your attract mode preferences have been saved'
     assert data.saved == [(3, payload)]
     assert data.rollbacks == 0
+
+
+def test_signed_session_rejects_oversized_override_before_save(monkeypatch):
+    flask_app, native, _user, data, _lookups = setup()
+    monkeypatch.setattr(attract_mode_reads, '_MAX_JSON_BODY_BYTES', 8)
+    session_data = {'_user_id': login_identity_for(3), '_fresh': True}
+    csrf_token = generate_csrf_token(session_data, flask_app.config['SECRET_KEY'])
+    session_cookie = dump_session_cookie(session_data, flask_app.config['SECRET_KEY'])
+
+    response = request(
+        native, 'POST', '/api/attract-mode/user-override',
+        content=b'{"filters":"' + b'x' * 32 + b'"}',
+        headers={'X-CSRFToken': csrf_token, 'Content-Type': 'application/json'},
+        cookies={'session': session_cookie},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.saved == []

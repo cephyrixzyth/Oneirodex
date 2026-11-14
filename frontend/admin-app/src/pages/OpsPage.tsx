@@ -3,6 +3,7 @@ import { PageStatus } from '@oneirodex/ui'
 
 import { getJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
+import { useAdminDocumentTitle } from '../components/Page'
 import { DashboardBoard } from '../components/DashboardBoard'
 import { OpsLogModal } from '../components/OpsLogModal'
 import { defaultOpsLayout, OPS_STORAGE_KEY, opsWidgetMins } from '../components/opsLayout'
@@ -66,6 +67,7 @@ export function malwareTone(malware: OpsSummary): 'good' | 'warn' | 'bad' | 'na'
 /** Panel id → heading. The ids are the keys of the /admin/api/ops/system
  *  payload, so a panel and its data cannot drift apart. */
 export function OpsPage() {
+  useAdminDocumentTitle('Ops')
   const [snapshot, setSnapshot] = useState<OpsSummary>(null)
   const [error, setError] = useState<unknown>(null)
   /** Initial mount only — never flash content away on background poll. */

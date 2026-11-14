@@ -98,7 +98,7 @@ class TestHandleDeleteUnmatchedOnly:
                     # Verify audit logging was called
                     mock_log_system_event.assert_called()
                     
-                    mock_url_for.assert_called_once_with('admin2.scan_management')
+                    mock_url_for.assert_called_once_with('admin2.scan_management', active_tab='unmatched')
                     mock_redirect.assert_called_once_with('/scan-management')
                     
                     assert result == mock_redirect_response
@@ -272,7 +272,7 @@ class TestHandleDeleteUnmatched:
                     # Verify session was updated
                     mock_session.__setitem__.assert_called_with('active_tab', 'unmatched')
                     
-                    mock_url_for.assert_called_once_with('admin2.scan_management')
+                    mock_url_for.assert_called_once_with('admin2.scan_management', active_tab='unmatched')
                     mock_redirect.assert_called_once_with('/scan-management')
                     
                     assert result == mock_redirect_response

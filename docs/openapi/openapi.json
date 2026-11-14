@@ -550,6 +550,8 @@
                                   "server_key",
                                   "opt_in",
                                   "client_package",
+                                  "credential_keyring",
+                                  "credential_migration",
                                   null
                                 ]
                               }
@@ -565,12 +567,18 @@
                                   "household",
                                   "unknown",
                                   "none",
-                                  "not_required"
+                                  "not_required",
+                                  "unavailable",
+                                  "migration_required"
                                 ],
                                 "description": "Which sign-in a sync would use. `unknown`: saved before LIB-04 on a server that has a household sign-in for this store, so it may be a household copy; reconnecting settles it."
                               },
                               "household_available": {
                                 "type": "boolean"
+                              },
+                              "keyring_available": {
+                                "type": "boolean",
+                                "description": "Whether member store credentials can be securely saved on this server. Optional in responses from older servers."
                               }
                             }
                           },
@@ -1000,6 +1008,7 @@
                         "write:presence",
                         "write:download",
                         "write:library",
+                        "write:saves",
                         "admin"
                       ]
                     }
@@ -1405,24 +1414,45 @@
       "post": {
         "summary": "Member-facing freshness sweep of the library",
         "description": "Re-probes titles the caller can see, oldest-checked first, in one bounded batch — each title is a live store request, so an unbounded sweep would hold a request thread for minutes and rate-limit the caller. The inbox only reads what a probe already found; this is what makes a probe happen. Returns remaining so the UI can say how much of the library is still unswept.",
-        "security": [{ "cookieAuth": [] }, { "bearerAuth": [] }],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
-                  "limit": { "type": "integer", "default": 25, "maximum": 50 },
-                  "library_uuid": { "type": "string" },
-                  "only_stale": { "type": "boolean", "default": true, "description": "Skip titles probed in the last 24h." }
+                  "limit": {
+                    "type": "integer",
+                    "default": 25,
+                    "maximum": 50
+                  },
+                  "library_uuid": {
+                    "type": "string"
+                  },
+                  "only_stale": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Skip titles probed in the last 24h."
+                  }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": { "description": "ok envelope with requested, checked, behind[], behind_count, errors[], remaining, limit, only_stale" },
-          "500": { "description": "ok:false, error_code internal — results could not be saved" }
+          "200": {
+            "description": "ok envelope with requested, checked, behind[], behind_count, errors[], remaining, limit, only_stale"
+          },
+          "500": {
+            "description": "ok:false, error_code internal — results could not be saved"
+          }
         }
       }
     },
@@ -1430,12 +1460,27 @@
       "post": {
         "summary": "Start or queue a scan for one library",
         "description": "Admin only. Body/query: library_uuid (required), folder (defaults to the library's last_scan_folder), scan_mode folders|files, remove_missing, download_missing_images, force_updates_extras, queue_policy queue|force / force_parallel. Response uses the scan-queue contract, not the api_ok envelope: { status: 'queued'|'started'|'rejected', job_id, position, message, risk? }.",
-        "security": [{ "cookieAuth": [] }, { "bearerAuth": [] }],
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
-          "200": { "description": "status started or queued" },
-          "400": { "description": "rejected — no library_uuid, or no folder and no last_scan_folder" },
-          "404": { "description": "rejected — library not found" },
-          "409": { "description": "rejected — a scan is already running and queue_policy did not allow it" }
+          "200": {
+            "description": "status started or queued"
+          },
+          "400": {
+            "description": "rejected — no library_uuid, or no folder and no last_scan_folder"
+          },
+          "404": {
+            "description": "rejected — library not found"
+          },
+          "409": {
+            "description": "rejected — a scan is already running and queue_policy did not allow it"
+          }
         }
       }
     },
@@ -2258,18 +2303,355 @@
         }
       },
       "post": {
-        "summary": "Create support ticket (optional GitHub sync)",
+        "summary": "Create local support ticket; external forwarding requires opt-in and a current redacted preview",
         "security": [
           {
             "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "body": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "symptom": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "kind": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "area": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "severity": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "logs": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "deploy_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "deploy": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "client_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "client": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "url_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "url": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "sync_to_github": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Explicit opt-in. Always redact; a valid server preview approval is required."
+                  },
+                  "request_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "Client-generated UUID, or reference returned by preview. Retain it across unchanged retries to recover one local receipt; required for external forwarding."
+                  },
+                  "preview_token": {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "nullable": true,
+                    "description": "15-minute signed preview approval, bound to this account, normalized content, report reference and configured destination."
+                  },
+                  "retry_github": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Explicit retry of an existing unchanged report after definite rejection/skipping only. Requires sync_to_github, request_id, a new retry_id and a fresh operation-bound preview."
+                  },
+                  "retry_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "Distinct attempt UUID returned by retry preview. Retain across lost replies; changing it requires a new preview. Replays recover the current local receipt without another POST."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
-            "description": "Created"
+            "description": "Durable local receipt, including replay of an existing same-account request. External state is independent of local acceptance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "github_sync"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        },
+                        "github_sync": {
+                          "type": "string",
+                          "enum": [
+                            "local_only",
+                            "pending",
+                            "sending",
+                            "unknown",
+                            "synced",
+                            "rejected",
+                            "skipped",
+                            "error",
+                            "reconciled"
+                          ]
+                        },
+                        "github_attempt_id": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "github_repository": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "github_last_status": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "github_retry_after_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "nullable": true,
+                          "description": "Persisted provider/hourly-budget wait. A local receipt returned during this wait does not imply a new attempt started."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Missing/changed/expired preview, or the same request UUID reused for different normalized contents. No new external attempt."
+          }
+        }
+      }
+    },
+    "/api/support/preview": {
+      "post": {
+        "summary": "Preview the mandatory redacted GitHub report and configured destination without saving or sending",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "body": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "symptom": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "kind": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "area": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "severity": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "logs": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "deploy_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "deploy": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "client_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "client": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "url_hint": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "url": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "sync_to_github": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Explicit opt-in. Always redact; a valid server preview approval is required."
+                  },
+                  "request_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "Report reference returned by the preview; required for external forwarding."
+                  },
+                  "preview_token": {
+                    "type": "string",
+                    "maxLength": 2048,
+                    "nullable": true,
+                    "description": "15-minute signed preview approval, bound to this account, normalized content, report reference and configured destination."
+                  },
+                  "retry_github": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Explicit retry of an existing unchanged report after definite rejection/skipping only. Requires sync_to_github, request_id, a new retry_id and a fresh operation-bound preview."
+                  },
+                  "retry_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "nullable": true,
+                    "description": "Distinct attempt UUID returned by retry preview. Retain across lost replies; changing it requires a new preview. Replays recover the current local receipt without another POST."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preview metadata. unavailable keeps local reporting usable; visibility is unknown, never assumed private. Signed approval contains hashes, not raw diagnostics.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "preview": {
+                      "type": "object",
+                      "required": [
+                        "available",
+                        "destination",
+                        "visibility",
+                        "redaction",
+                        "preview_token"
+                      ],
+                      "properties": {
+                        "available": {
+                          "type": "boolean",
+                          "description": "Configuration is present and valid; does not verify provider reachability or authorization."
+                        },
+                        "destination": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "visibility": {
+                          "type": "string",
+                          "enum": [
+                            "unknown"
+                          ]
+                        },
+                        "redaction": {
+                          "type": "string",
+                          "enum": [
+                            "mandatory"
+                          ]
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "labels": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "preview_token": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "retry_id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Browser session required"
+          },
+          "422": {
+            "description": "Invalid request"
           }
         }
       }
@@ -2580,6 +2962,69 @@
           },
           "404": {
             "description": "Not yours, or already gone"
+          }
+        }
+      }
+    },
+    "/api/support/tickets/{ticket_id}/reconcile": {
+      "post": {
+        "summary": "Read-only check of an uncertain delivery against an exact existing GitHub issue",
+        "description": "Browser session and CSRF required. Owner/admin only; fixed original attempt repository, bounded GET and exact stored redacted title/body fingerprint. Does not POST, unlock retries or prove authorship. Five checks/hour/account, including failed checks. Legacy records without a verifiable attempt require manual operator checking.",
+        "security": [
+          {
+            "cookieAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticket_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "issue_number"
+                ],
+                "properties": {
+                  "issue_number": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owned receipt; reconciled means matching existing issue found, not evidence of who created it."
+          },
+          "403": {
+            "description": "Browser session required"
+          },
+          "404": {
+            "description": "Report not found or not accessible"
+          },
+          "409": {
+            "description": "No exact verifiable match; provider details withheld and no new issue sent"
+          },
+          "422": {
+            "description": "Invalid request"
+          },
+          "429": {
+            "description": "Account lookup budget exhausted"
           }
         }
       }

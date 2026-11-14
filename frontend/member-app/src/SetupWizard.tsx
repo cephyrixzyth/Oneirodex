@@ -11,12 +11,12 @@ const STEP_URLS: Record<number, string> = {
   6: '/setup/library',
 }
 const STEP_TITLES: Record<number, string> = {
-  1: 'Create administrator',
-  2: 'Email delivery',
-  3: 'Choose features',
-  4: 'IGDB matching',
-  5: 'Optional connections',
-  6: 'First library',
+  1: 'Create your admin account',
+  2: 'Email (SMTP)',
+  3: 'Features',
+  4: 'Connect game metadata',
+  5: 'Choose API connections',
+  6: 'Create your first library',
 }
 const navigateWindow = (url: string) => window.location.assign(url)
 
@@ -26,6 +26,7 @@ function input(
   type = 'text',
   required = false,
   value = '',
+  maxLength?: number,
 ): ReactNode {
   return (
     <label className="auth-pilot__field" key={name}>
@@ -35,6 +36,7 @@ function input(
         type={type}
         defaultValue={value}
         autoComplete={type === 'password' ? 'new-password' : undefined}
+        maxLength={maxLength}
         required={required}
       />
     </label>
@@ -51,17 +53,29 @@ function checkbox(name: string, label: string, checked = true): ReactNode {
 }
 
 function validationMessages(cause: unknown): string[] {
+  const messageFor = (field: string, value: unknown) => {
+    const message = String(value || 'Invalid value')
+    if (/passwords do not match/i.test(message)) return 'Passwords must match'
+    if (!field || field === 'root') return message.replace(/^Value error,\s*/i, '')
+    return `${field.replaceAll('_', ' ')}: ${message}`
+  }
   const detail = (cause as { data?: { detail?: unknown } })?.data?.detail
   if (Array.isArray(detail)) {
     return detail.map((item) => {
       const row = item as { loc?: unknown[]; msg?: unknown }
-      return `${Array.isArray(row.loc) ? row.loc.slice(1).join('.') : 'Setup'}: ${String(row.msg || 'Invalid value')}`
+      const field = Array.isArray(row.loc)
+        ? row.loc
+            .slice(1)
+            .filter((part) => part !== 'root')
+            .join('.')
+        : 'Setup'
+      return messageFor(field, row.msg)
     })
   }
   if (detail && typeof detail === 'object') {
     return Object.entries(detail as Record<string, unknown>).flatMap(([field, messages]) =>
-      (Array.isArray(messages) ? messages : [messages]).map(
-        (message) => `${field.replaceAll('_', ' ')}: ${String(message)}`,
+      (Array.isArray(messages) ? messages : [messages]).map((message) =>
+        messageFor(field, message),
       ),
     )
   }
@@ -112,8 +126,20 @@ export function SetupWizard({
       if (result.complete) navigate(result.next_url || '/libraries')
       else if (result.next_url) navigate(result.next_url)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'This setup step could not be saved.')
-      setDetails(validationMessages(cause))
+      const messages = validationMessages(cause)
+      const passwordMismatch = messages.includes('Passwords must match')
+      setError(
+        passwordMismatch
+          ? 'Passwords must match'
+          : cause instanceof Error
+            ? cause.message
+            : 'This setup step could not be saved.',
+      )
+      setDetails(
+        passwordMismatch
+          ? messages.filter((message) => message !== 'Passwords must match')
+          : messages,
+      )
     } finally {
       setBusy(false)
     }
@@ -146,31 +172,67 @@ export function SetupWizard({
   const features = (settings.features || {}) as Record<string, boolean>
   const providerKeys = (settings.provider_keys || {}) as Record<string, boolean>
   const oidc = (settings.oidc || {}) as Record<string, string | boolean>
+  const progressLabels = ['Admin', 'Email', 'Features', 'Metadata', 'APIs', 'Library']
 
   return (
     <>
-      <h1 className="auth-pilot__title">{STEP_TITLES[step] || 'Oneirodex setup'}</h1>
+      <nav className="auth-pilot__setup-progress" aria-label="Setup progress">
+        {progressLabels.map((label, index) => (
+          <span key={label} aria-current={step === index + 1 ? 'step' : undefined}>
+            {index + 1} · {label}
+          </span>
+        ))}
+      </nav>
+      <img className="auth-pilot__setup-mark" src="/static/newstyle/oneirodex_mark.svg" alt="" />
+      <h1 className="auth-pilot__title" id="setup-page-title">
+        {STEP_TITLES[step] || 'Oneirodex setup'}
+      </h1>
       <p className="auth-pilot__lede">
-        Step {step} of 6. You can change these choices later in settings.
+        {step === 3
+          ? 'Step 3 of 6. Everything useful is on by default. Uncheck anything you do not want.'
+          : step === 4
+            ? 'Optional. IGDB helps identify games and fill in metadata. You can skip it and choose other supported services in the next step.'
+            : step === 5
+              ? 'Optional. Add credentials for the services you want Oneirodex to use. You can skip this step and finish setup.'
+              : step === 6
+                ? 'Optional. Add a library now and start its first scan, or finish setup and add it later. Use a path visible inside the server, such as /storage/nes, under an allowed library location. Game files remain read-only.'
+                : step === 1
+                  ? 'Oneirodex initial setup — one household admin to get started.'
+                  : step === 2
+                    ? 'Optional — enables invites, registration mail, and password reset.'
+                    : `Step ${step} of 6. You can change these choices later in settings.`}
       </p>
-      <form className="auth-pilot__form" onSubmit={(event) => void submit(event)}>
+      {step === 3 ? (
+        <p className="auth-pilot__lede auth-pilot__lede--muted">
+          Authentication (OIDC/SSO) stays off — enable later under Admin → Integrations if needed.
+        </p>
+      ) : null}
+      <form
+        className={`auth-pilot__form${step === 4 ? ' auth-pilot__form--igdb' : ''}${
+          step === 5
+            ? ' auth-pilot__form--providers'
+            : step === 6
+              ? ' auth-pilot__form--library'
+              : step === 3
+                ? ' auth-pilot__form--features'
+                : ''
+        }`}
+        onSubmit={(event) => void submit(event)}
+      >
         {step === 1 ? (
           <>
             <p className="auth-pilot__message">
-              Create the administrator account that will finish configuring this library.
+              Local username and password is enough for home installs. Authentik / OIDC SSO is
+              optional and can be enabled later under Admin → Integrations.
             </p>
-            {input('username', 'Administrator username', 'text', true)}
-            {input('email', 'Administrator email', 'email', true)}
+            {input('username', 'Admin Username', 'text', true)}
+            {input('email', 'Admin Email', 'email', true)}
             {input('password', 'Password', 'password', true)}
-            {input('confirm_password', 'Confirm password', 'password', true)}
+            {input('confirm_password', 'Confirm Password', 'password', true)}
           </>
         ) : null}
         {step === 2 ? (
           <>
-            <p className="auth-pilot__message">
-              Configure SMTP if this server should send invitation and account emails. Leave the
-              password blank to keep the saved one.
-            </p>
             {input('smtp_server', 'SMTP server', 'text', false, String(settings.smtp_server || ''))}
             {input('smtp_port', 'SMTP port', 'number', false, String(settings.smtp_port || 587))}
             {input(
@@ -198,49 +260,69 @@ export function SetupWizard({
         ) : null}
         {step === 3 ? (
           <>
+            <fieldset className="auth-pilot__feature-group">
+              <legend>Library</legend>
+              {checkbox(
+                'enable_game_updates',
+                'Game updates',
+                features.enable_game_updates !== false,
+              )}
+              {checkbox('enable_game_extras', 'Game extras', features.enable_game_extras !== false)}
+              {checkbox(
+                'attract_mode_enabled',
+                'Attract mode',
+                features.attract_mode_enabled !== false,
+              )}
+            </fieldset>
+            <fieldset className="auth-pilot__feature-group">
+              <legend>Modules</legend>
+              {checkbox(
+                'enable_arr_module',
+                'Arr / indexers',
+                features.enable_arr_module !== false,
+              )}
+              {checkbox('enable_ai_assist', 'AI assist', features.enable_ai_assist !== false)}
+              {checkbox(
+                'enable_malware_scan',
+                'Malware scanner',
+                features.enable_malware_scan !== false,
+              )}
+            </fieldset>
             <p className="auth-pilot__message">
-              Choose which optional household features should be available. Authentication providers
-              remain disabled until explicitly enabled later.
+              Change anytime under Admin → Features. Compose/.env flags apply after restart.
             </p>
-            {checkbox(
-              'enable_game_updates',
-              'Game update notices',
-              features.enable_game_updates !== false,
-            )}
-            {checkbox('enable_game_extras', 'Game extras', features.enable_game_extras !== false)}
-            {checkbox(
-              'attract_mode_enabled',
-              'Attract Mode',
-              features.attract_mode_enabled !== false,
-            )}
-            {checkbox(
-              'enable_arr_module',
-              'Arr integrations',
-              features.enable_arr_module !== false,
-            )}
-            {checkbox('enable_ai_assist', 'AI Assist', features.enable_ai_assist !== false)}
-            {checkbox(
-              'enable_malware_scan',
-              'Archive malware scanning',
-              features.enable_malware_scan !== false,
-            )}
           </>
         ) : null}
         {step === 4 ? (
           <>
-            <p className="auth-pilot__message">
-              IGDB credentials improve title matching. You can skip this and add them later.
-            </p>
+            <details className="auth-pilot__message">
+              <summary>How do I get IGDB credentials?</summary>
+              <ol>
+                <li>
+                  Open the{' '}
+                  <a href="https://dev.twitch.tv/console" target="_blank" rel="noopener noreferrer">
+                    Twitch Developer Console
+                  </a>{' '}
+                  and sign in.
+                </li>
+                <li>
+                  Register an application with the Website Integration category and an OAuth
+                  redirect URL of <code>http://localhost</code>.
+                </li>
+                <li>Copy its Client ID and create a Client Secret. Keep both private.</li>
+              </ol>
+              <p>IGDB is owned by Twitch. You can safely finish setup without these credentials.</p>
+            </details>
             {input(
               'igdb_client_id',
-              'IGDB client ID',
+              'Client ID',
               'text',
               true,
               String(settings.igdb_client_id || ''),
             )}
             {input(
               'igdb_client_secret',
-              settings.igdb_secret_configured ? 'IGDB client secret (saved)' : 'IGDB client secret',
+              settings.igdb_secret_configured ? 'Client Secret (saved)' : 'Client Secret',
               'password',
               true,
             )}
@@ -249,68 +331,124 @@ export function SetupWizard({
         {step === 5 ? (
           <>
             <p className="auth-pilot__message">
-              Optional provider credentials are stored on this server. Blank values keep existing
-              credentials. OIDC stays disabled until an administrator turns it on.
+              Secrets are saved in the local settings database and never filled back into this form.
+              Leave a credential blank to keep an existing value.
             </p>
-            {(
-              [
-                'steam_web_api_key',
-                'steamgriddb_api_key',
-                'giantbomb_api_key',
-                'mobygames_api_key',
-                'thegamesdb_api_key',
-              ] as const
-            ).map((key) =>
-              input(
-                key,
-                `${key.replaceAll('_', ' ')}${providerKeys[key] ? ' (saved)' : ''}`,
-                'password',
-              ),
-            )}
-            {checkbox(
-              'enable_hltb_integration',
-              'Enable HowLongToBeat data',
-              Boolean(settings.enable_hltb_integration),
-            )}
-            {checkbox('configure_oidc', 'Configure OIDC fields (provider remains disabled)', false)}
-            {input(
-              'oidc_issuer_url',
-              `OIDC issuer URL${oidc.secret_configured ? ' (secret saved)' : ''}`,
-              'text',
-              false,
-              String(oidc.issuer_url || ''),
-            )}
-            {input('oidc_client_id', 'OIDC client ID', 'text', false, String(oidc.client_id || ''))}
-            {input('oidc_client_secret', 'OIDC client secret', 'password')}
-            {input(
-              'oidc_redirect_uri',
-              'OIDC redirect URI',
-              'text',
-              false,
-              String(oidc.redirect_uri || ''),
-            )}
-            {input(
-              'oidc_scopes',
-              'OIDC scopes',
-              'text',
-              false,
-              String(oidc.scopes || 'openid email profile'),
-            )}
-            {input(
-              'oidc_role_claim',
-              'OIDC role claim',
-              'text',
-              false,
-              String(oidc.role_claim || ''),
-            )}
+            <div className="auth-pilot__provider-grid">
+              {[
+                {
+                  key: 'steam_web_api_key',
+                  title: 'Steam Web API',
+                  configure: 'Configure Steam ownership lookup',
+                },
+                {
+                  key: 'steamgriddb_api_key',
+                  title: 'SteamGridDB',
+                  configure: 'Configure game artwork lookup',
+                },
+                {
+                  key: 'giantbomb_api_key',
+                  title: 'Giant Bomb',
+                  configure: 'Configure metadata lookup',
+                },
+                {
+                  key: 'mobygames_api_key',
+                  title: 'MobyGames',
+                  configure: 'Configure metadata lookup',
+                },
+                {
+                  key: 'thegamesdb_api_key',
+                  title: 'TheGamesDB',
+                  configure: 'Configure metadata and artwork lookup',
+                },
+              ].map(({ key, title, configure }) => (
+                <fieldset className="auth-pilot__provider" key={key}>
+                  <legend>{title}</legend>
+                  {checkbox(`configure_${key}`, configure, Boolean(providerKeys[key]))}
+                  {input(
+                    key,
+                    providerKeys[key] ? 'API key (saved)' : 'API key',
+                    'password',
+                    false,
+                    '',
+                    255,
+                  )}
+                </fieldset>
+              ))}
+              <fieldset className="auth-pilot__provider">
+                <legend>HowLongToBeat</legend>
+                {checkbox(
+                  'enable_hltb_integration',
+                  'Enable playtime estimates (no API key required)',
+                  Boolean(settings.enable_hltb_integration),
+                )}
+              </fieldset>
+              <fieldset className="auth-pilot__provider">
+                <legend>OIDC / SSO</legend>
+                {checkbox(
+                  'configure_oidc',
+                  'Save identity-provider details',
+                  Boolean(oidc.issuer_url || oidc.client_id),
+                )}
+                <p className="auth-pilot__message">
+                  The issuer must use HTTPS to protect discovery and client credentials.
+                </p>
+                {input(
+                  'oidc_issuer_url',
+                  'Issuer URL',
+                  'url',
+                  false,
+                  String(oidc.issuer_url || ''),
+                )}
+                {input('oidc_client_id', 'Client ID', 'text', false, String(oidc.client_id || ''))}
+                {input(
+                  'oidc_client_secret',
+                  oidc.secret_configured ? 'Client secret (saved)' : 'Client secret',
+                  'password',
+                )}
+                {input(
+                  'oidc_redirect_uri',
+                  'Redirect URI (optional)',
+                  'url',
+                  false,
+                  String(oidc.redirect_uri || ''),
+                )}
+                <details className="auth-pilot__advanced-oidc">
+                  <summary>Advanced OIDC settings</summary>
+                  {input(
+                    'oidc_scopes',
+                    'OIDC scopes',
+                    'text',
+                    false,
+                    String(oidc.scopes || 'openid email profile'),
+                  )}
+                  {input(
+                    'oidc_role_claim',
+                    'OIDC role claim',
+                    'text',
+                    false,
+                    String(oidc.role_claim || ''),
+                  )}
+                </details>
+                <p className="auth-pilot__message">
+                  Credentials are saved for later review; SSO stays off until an operator enables
+                  OIDC after setup.
+                </p>
+              </fieldset>
+            </div>
+            <details className="auth-pilot__message">
+              <summary>Other optional services</summary>
+              <p>
+                IGDB and email were offered in earlier steps. Keyless catalogue sources work
+                automatically. LiveKit voice, *arr connections, unofficial store links, support
+                integrations, and several community services use installation environment settings;
+                you can review them under Admin → Integrations after setup.
+              </p>
+            </details>
           </>
         ) : null}
         {step === 6 ? (
           <>
-            <p className="auth-pilot__message">
-              Add the first library now or finish setup and add it later. The server path must exist
-              inside an allowed library location.
-            </p>
             {input('library_name', 'Library name')}
             <label className="auth-pilot__field">
               <span>Platform</span>
@@ -355,7 +493,19 @@ export function SetupWizard({
           </div>
         ) : null}
         <Button variant="primary" className="auth-pilot__submit" disabled={busy} type="submit">
-          {busy ? 'Saving…' : step === 6 ? 'Finish setup' : 'Continue'}
+          {busy
+            ? 'Saving…'
+            : step === 1
+              ? 'Next Step'
+              : step === 2
+                ? 'Next step'
+                : step === 4
+                  ? 'Save IGDB and continue'
+                  : step === 5
+                    ? 'Save choices and continue'
+                    : step === 6
+                      ? 'Create library and start scan'
+                      : 'Continue'}
         </Button>
         {[2, 4, 5, 6].includes(step) ? (
           <Button
@@ -371,7 +521,15 @@ export function SetupWizard({
                 )
             }}
           >
-            {step === 6 ? 'Finish without a library' : 'Skip this step'}
+            {step === 2
+              ? 'Skip SMTP'
+              : step === 4
+                ? 'Skip and continue'
+                : step === 5
+                  ? 'Skip API setup'
+                  : step === 6
+                    ? 'Finish without a library'
+                    : 'Skip this step'}
           </Button>
         ) : null}
       </form>

@@ -46,7 +46,10 @@ def create_theme_font_router(
                 content=body,
                 media_type='text/css',
                 headers={
-                    'Cache-Control': 'public, max-age=60',
+                    # The default stylesheet varies by the signed-in user's
+                    # preference. Do not let a shared cache replay it to others.
+                    'Cache-Control': 'private, max-age=60',
+                    'Vary': 'Cookie',
                     'Content-Length': str(len(body)),
                 },
             )

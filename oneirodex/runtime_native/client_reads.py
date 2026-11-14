@@ -13,6 +13,14 @@ from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
 from .request_auth import request_auth_context
 
+_MAX_LIFECYCLE_BODY_BYTES = 1024 * 1024
+_MAX_HEARTBEAT_BODY_BYTES = 16 * 1024
+_MAX_COMMAND_BODY_BYTES = 64 * 1024
+
+
+class _ClientRequestBodyTooLarge(Exception):
+    pass
+
 
 def api_error(message, *, code='bad_request', status=None, detail=None, **extra):
     from oneirodex.utils.api_contract import api_error_payload
@@ -207,9 +215,32 @@ def create_client_reads_router(
                 if csrf_response is not None:
                     response = csrf_response
                 else:
+                    try:
+                        payload = await _heartbeat_payload(
+                            request, data, auth.user.id, auth.token, auth.user
+                        )
+                    except _ClientRequestBodyTooLarge:
+                        response, _ = api_error(
+                            'Request body is too large.', code='payload_too_large', status=413,
+                        )
+                    else:
+                        from starlette.responses import JSONResponse
+
+                        response = JSONResponse(payload)
+                        if auth.should_set_session_cookie:
+                            from .oidc_status import _set_session_cookie
+
+                            _set_session_cookie(response, flask_app, auth)
+            else:
+                try:
                     payload = await _heartbeat_payload(
                         request, data, auth.user.id, auth.token, auth.user
                     )
+                except _ClientRequestBodyTooLarge:
+                    response, _ = api_error(
+                        'Request body is too large.', code='payload_too_large', status=413,
+                    )
+                else:
                     from starlette.responses import JSONResponse
 
                     response = JSONResponse(payload)
@@ -217,17 +248,6 @@ def create_client_reads_router(
                         from .oidc_status import _set_session_cookie
 
                         _set_session_cookie(response, flask_app, auth)
-            else:
-                payload = await _heartbeat_payload(
-                    request, data, auth.user.id, auth.token, auth.user
-                )
-                from starlette.responses import JSONResponse
-
-                response = JSONResponse(payload)
-                if auth.should_set_session_cookie:
-                    from .oidc_status import _set_session_cookie
-
-                    _set_session_cookie(response, flask_app, auth)
             _finalize(response, flask_app, request)
             return response
 
@@ -301,6 +321,11 @@ def create_client_reads_router(
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
                 body = await _json_body(request)
+                from .bounded_request_body import BODY_TOO_LARGE
+
+                too_large = body is BODY_TOO_LARGE
+                if too_large:
+                    body = {}
                 game_uuid = _text(body.get('game_uuid'))
                 action = _text(body.get('action')).lower()
                 kind = body.get('kind')
@@ -310,7 +335,11 @@ def create_client_reads_router(
 
                 from oneirodex.utils.client_commands import WRITE_DOWNLOAD_ACTIONS
 
-                if action in WRITE_DOWNLOAD_ACTIONS and not auth.has_scope('write:download'):
+                if too_large:
+                    response, _ = api_error(
+                        'Request body is too large.', code='payload_too_large', status=413,
+                    )
+                elif action in WRITE_DOWNLOAD_ACTIONS and not auth.has_scope('write:download'):
                     flask_response, status = api_error(
                         'Missing scope: write:download', code='forbidden',
                         detail={'required_scope': 'write:download'},
@@ -444,6 +473,37 @@ def create_client_reads_router(
             _finalize(response, flask_app, request)
             return response
 
+    @router.api_route('/api/client/identity', methods=['GET', 'HEAD'])
+    def client_identity(request: Request):
+        """Return only the stable account ID needed to bind an offline shelf."""
+        with open_database_scope():
+            auth = request_auth_context(
+                request, flask_app.config,
+                find_user=find_user,
+                find_token=find_token,
+                commit_token_touch=commit_token_touch,
+                load_user_id=load_user_id,
+                login_manager=login_manager,
+            )
+            if auth.user is None:
+                response = _login_redirect(flask_app, request, login_manager, auth)
+            elif not auth.has_scope('read:library'):
+                flask_response, status = api_error(
+                    'Missing scope: read:library', code='forbidden'
+                )
+                response = _from_flask_response(flask_response, status)
+            else:
+                flask_response, status = api_ok({
+                    'account_id': str(getattr(auth.user, 'user_id', '') or ''),
+                })
+                response = _from_flask_response(flask_response, status)
+                if auth.should_set_session_cookie:
+                    from .oidc_status import _set_session_cookie
+
+                    _set_session_cookie(response, flask_app, auth)
+            _finalize(response, flask_app, request)
+            return response
+
     @router.post('/api/client/lifecycle')
     async def client_lifecycle_update(request: Request):
         with open_database_scope():
@@ -513,17 +573,22 @@ async def _lifecycle_body(request: Request):
     import json
 
     from oneirodex.schemas.client import ClientLifecycleBody
+    from oneirodex.runtime_native.bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
     from oneirodex.utils.validation import format_validation_errors
 
+    raw_body = await read_bounded_body(request, _MAX_LIFECYCLE_BODY_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        flask_response, status = api_error(
+            'Request body is too large.', code='payload_too_large',
+        )
+        return None, _from_flask_response(flask_response, status)
     try:
-        value = json.loads(await request.body() or b'{}')
+        value = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         value = {}
     try:
-        return ClientLifecycleBody.model_validate(
-            value if isinstance(value, dict) else {}
-        ), None
+        return ClientLifecycleBody.model_validate(value), None
     except ValidationError as exc:
         flask_response, status = api_error(
             'Invalid request.', code='unprocessable',
@@ -534,11 +599,21 @@ async def _lifecycle_body(request: Request):
 
 async def _heartbeat_payload(request: Request, data, user_id: int, token, user):
     import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
-    body = await request.body()
-    try:
-        value = json.loads(body or b'{}')
-    except (TypeError, ValueError):
+    body = await read_bounded_body(request, _MAX_HEARTBEAT_BODY_BYTES)
+    if body is BODY_TOO_LARGE:
+        raise _ClientRequestBodyTooLarge
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    is_json = content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    )
+    if is_json:
+        try:
+            value = json.loads(body or b'{}')
+        except (TypeError, ValueError):
+            value = {}
+    else:
         value = {}
     if not isinstance(value, dict):
         value = {}
@@ -558,11 +633,15 @@ async def _heartbeat_payload(request: Request, data, user_id: int, token, user):
     )
 
 
-async def _json_body(request: Request) -> dict:
+async def _json_body(request: Request) -> Any:
     import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
+    raw_body = await read_bounded_body(request, _MAX_COMMAND_BODY_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return BODY_TOO_LARGE
     try:
-        body = json.loads(await request.body() or b'{}')
+        body = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         return {}
     return body if isinstance(body, dict) else {}
@@ -622,16 +701,27 @@ async def _client_command_ack(
             response = _from_flask_response(flask_response, status)
         else:
             body = await _json_body(request)
+            from .bounded_request_body import BODY_TOO_LARGE
+
+            too_large = body is BODY_TOO_LARGE
+            if too_large:
+                body = {}
             ids = body.get('ids') if isinstance(body.get('ids'), list) else []
             ids = [str(value) for value in ids]
-            count = (
-                data.acknowledge(auth.user.id, ids)
-                if action == 'ack'
-                else data.negative_acknowledge(auth.user.id, ids)
-            )
-            field = 'removed' if action == 'ack' else 'released'
-            flask_response, status = api_ok({field: count})
-            response = _from_flask_response(flask_response, status)
+            if too_large:
+                flask_response, status = api_error(
+                    'Request body is too large.', code='payload_too_large', status=413,
+                )
+                response = _from_flask_response(flask_response, status)
+            else:
+                count = (
+                    data.acknowledge(auth.user.id, ids)
+                    if action == 'ack'
+                    else data.negative_acknowledge(auth.user.id, ids)
+                )
+                field = 'removed' if action == 'ack' else 'released'
+                flask_response, status = api_ok({field: count})
+                response = _from_flask_response(flask_response, status)
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
 

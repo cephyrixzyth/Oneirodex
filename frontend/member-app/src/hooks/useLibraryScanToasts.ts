@@ -3,6 +3,7 @@ import {
   burstToastMessages,
   groupLibraryScanToasts,
   markLibraryScanToastSeen,
+  MAX_NARROW_INDIVIDUAL_TOASTS,
   pickUnseenLibraryScanToasts,
 } from '@oneirodex/ui'
 import { fetchNotificationSnapshot } from '../api/notifications'
@@ -34,16 +35,29 @@ export function useLibraryScanToasts({ enabled = true, intervalMs = POLL_MS }: L
           : Array.isArray(data)
             ? data
             : []
-        // One toast per library, not per increment (GT-B11). More than five
-        // libraries collapse to “N notifications” so a FIFO drain cannot cover
-        // the page. Every row in a burst is marked seen so it cannot re-toast.
+        // One toast per library, not per increment (GT-B11). Narrow layouts
+        // collapse after two libraries; wider layouts collapse after three, so
+        // a burst cannot cover the page. Every row is marked seen to avoid
+        // repeating the same notice.
+        const maxIndividual = window.matchMedia?.('(max-width: 40rem)').matches
+          ? MAX_NARROW_INDIVIDUAL_TOASTS
+          : undefined
         for (const burst of burstToastMessages(
           groupLibraryScanToasts(pickUnseenLibraryScanToasts(rows)),
+          { maxIndividual },
         )) {
           if (burst.count > 1) {
-            showToast(burst.message, 'success', { count: burst.count })
-          } else {
+            showToast(
+              burst.message,
+              'success',
+              maxIndividual === undefined
+                ? { count: burst.count }
+                : { count: burst.count, maxIndividual },
+            )
+          } else if (maxIndividual === undefined) {
             showToast(burst.message, 'success')
+          } else {
+            showToast(burst.message, 'success', { maxIndividual })
           }
           for (const row of burst.rows) {
             markLibraryScanToastSeen(row.id ?? row.uuid ?? row.created_at ?? row.title)

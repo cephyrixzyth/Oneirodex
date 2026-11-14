@@ -15,8 +15,9 @@ See docs/strategy/security-legal-playbook.md (S2).
 
 from __future__ import annotations
 
-import ipaddress
+import gzip
 import io
+import ipaddress
 import socketserver
 import threading
 from types import SimpleNamespace
@@ -32,6 +33,7 @@ from oneirodex.utils.http_safe import (
     read_response_limited,
     safe_get,
     safe_request,
+    safe_request_limited,
 )
 from oneirodex.utils.security import (
     _embedded_ipv4,
@@ -39,6 +41,7 @@ from oneirodex.utils.security import (
     is_blocked_outbound_host,
     is_cloud_metadata_host,
     validate_connector_http_url,
+    validate_download_client_url,
     validate_user_outbound_http_url,
 )
 
@@ -69,6 +72,127 @@ def test_read_response_limited_accepts_exact_limit_and_rejects_declared_length()
     oversized = _ChunkedResponse([b''], headers={'Content-Length': '5'})
     with pytest.raises(ResponseTooLarge):
         read_response_limited(oversized, 4)
+
+
+def test_safe_request_limited_streams_caches_and_closes_response(monkeypatch):
+    import oneirodex.utils.http_safe as http_safe
+
+    response = _ChunkedResponse([b'{"ok":', b'true}'])
+    session = requests.Session()
+    captured = {}
+
+    def fake_safe_request(method, url, *, validator, session, **kwargs):
+        captured.update(method=method, url=url, session=session, kwargs=kwargs)
+        return response
+
+    monkeypatch.setattr(http_safe, 'safe_request', fake_safe_request)
+    try:
+        bounded = safe_request_limited(
+            'GET', 'https://provider.invalid/list', validator=lambda url: (True, url),
+            max_response_bytes=16, session=session, timeout=5,
+        )
+    finally:
+        session.close()
+
+    assert captured['session'] is session
+    assert captured['kwargs']['stream'] is True
+    assert bounded._content == b'{"ok":true}'
+    assert bounded._content_consumed is True
+    assert bounded.closed is True
+
+
+def test_safe_request_limited_closes_and_rejects_oversized_response(monkeypatch):
+    import oneirodex.utils.http_safe as http_safe
+
+    response = _ChunkedResponse([b'abcd', b'ef'])
+    session = requests.Session()
+    monkeypatch.setattr(http_safe, 'safe_request', lambda *a, **k: response)
+    try:
+        with pytest.raises(ResponseTooLarge):
+            safe_request_limited(
+                'GET', 'https://provider.invalid/list', validator=lambda url: (True, url),
+                max_response_bytes=5, session=session,
+            )
+    finally:
+        session.close()
+    assert response.closed is True
+
+
+def test_read_response_limited_caps_real_gzip_decoded_bytes():
+    from urllib3.response import HTTPResponse
+
+    def response_for(payload):
+        encoded = gzip.compress(payload)
+        response = requests.Response()
+        response.status_code = 200
+        response.headers = {
+            'Content-Encoding': 'gzip',
+            'Content-Length': str(len(encoded)),
+        }
+        response.raw = HTTPResponse(
+            body=io.BytesIO(encoded),
+            headers=response.headers,
+            preload_content=False,
+            decode_content=False,
+        )
+        return response
+
+    exact = response_for(b'x' * 4096)
+    assert int(exact.headers['Content-Length']) < 4096
+    assert read_response_limited(exact, 4096) == b'x' * 4096
+    exact.close()
+
+    expanded = response_for(b'x' * 4097)
+    assert int(expanded.headers['Content-Length']) < 4096
+    with pytest.raises(ResponseTooLarge):
+        read_response_limited(expanded, 4096)
+    assert expanded.raw.closed is True
+
+
+def test_download_magnets_drop_embedded_network_targets_but_keep_normal_metadata():
+    magnet = (
+        'magnet:?xt=urn:btih:abc&dn=Sample+game&xl=512'
+        '&tr=http%3A%2F%2F127.0.0.1%3A8080%2Fannounce'
+        '&ws=http%3A%2F%2Fdb%3A5432%2F'
+        '&as=http%3A%2F%2F127.0.0.1%2Fsource'
+        '&xs=http%3A%2F%2F127.0.0.1%2Fexact'
+        '&x.pe=127.0.0.1%3A8080&unknown=http%3A%2F%2Flocalhost%2F'
+    )
+
+    ok, sanitized = validate_download_client_url(magnet)
+
+    assert ok is True
+    assert sanitized == 'magnet:?xt=urn%3Abtih%3Aabc&dn=Sample+game&xl=512'
+    assert all(key not in sanitized for key in ('tr=', 'ws=', 'as=', 'xs=', 'x.pe=', 'unknown='))
+
+
+def test_download_magnet_filters_semicolon_delimited_targets_and_preserves_hash_only_uri():
+    ok, sanitized = validate_download_client_url(
+        'magnet:?xt=urn:btih:abc;tr=http%3A%2F%2F127.0.0.1%2Fannounce'
+    )
+    plain = 'magnet:?xt=urn:btih:abc'
+
+    assert ok is True
+    assert sanitized == 'magnet:?xt=urn%3Abtih%3Aabc'
+    assert validate_download_client_url(plain) == (True, plain)
+
+
+def test_download_magnet_drops_double_encoded_query_delimiters_and_fragment():
+    ok, sanitized = validate_download_client_url(
+        'magnet:?xt=urn:btih:abc&dn=Safe%252526tr%253Dhttp%253A%252F%252F127.0.0.1%252Fannounce#tr=http://127.0.0.1'
+    )
+
+    assert ok is True
+    assert sanitized == 'magnet:?xt=urn%3Abtih%3Aabc'
+
+
+def test_download_magnet_rejects_identity_when_repeated_decoding_reveals_delimiter():
+    ok, error = validate_download_client_url(
+        'magnet:?xt=urn:btih:abc%2526tr%253Dhttp%253A%252F%252F127.0.0.1%252Fannounce'
+    )
+
+    assert ok is False
+    assert 'valid magnet URI' in error
 
 
 def test_provider_image_fetch_streams_and_enforces_shared_limit(monkeypatch):

@@ -6,6 +6,8 @@ import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 import './BatchLibraryEditModal.css'
 
+import { AdminLink } from './AdminLink'
+
 export type LibraryEditTarget = { uuid: string; name: string }
 type PlatformOption = { key: string; label: string }
 
@@ -181,12 +183,12 @@ export function BatchLibraryEditModal({
           </select>
         </label>
         {single ? (
-          <a
+          <AdminLink
             className="od-cbtn od-library-edit-modal__full"
-            href={`/admin/library/edit/${encodeURIComponent(targets[0].uuid)}`}
+            to={`/admin/library/edit/${encodeURIComponent(targets[0].uuid)}`}
           >
             Open full editor
-          </a>
+          </AdminLink>
         ) : (
           <p className="od-admin-hint">Rename and library image stay on each full editor.</p>
         )}

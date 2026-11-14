@@ -5,6 +5,8 @@ all database and filesystem work behind ``EmulatorMutationData``.
 """
 from __future__ import annotations
 
+import json
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from io import BytesIO
 from typing import Any, Callable
@@ -15,6 +17,14 @@ from starlette.responses import JSONResponse, Response
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
+
+_MULTIPART_OVERHEAD_BYTES = 64 * 1024
+_CHEAT_JSON_BODY_BYTES = 1024 * 1024 + _MULTIPART_OVERHEAD_BYTES
+_MAX_CHEAT_CODES = 1000
+_MAX_CHEAT_CODE_CHARS = 4096
+_MAX_CHEAT_DESCRIPTION_CHARS = 1024
+_MAX_CHEAT_NAME_CHARS = 160
 
 
 class EmulatorMutationData:
@@ -79,13 +89,16 @@ class EmulatorMutationData:
 
         return is_state_slot(row)
 
-    def store_save(self, user_id, game_uuid, slot_name, filename, payload):
+    def store_save(
+        self, user_id, game_uuid, slot_name, filename, payload, *, expected_revision=None,
+    ):
         from werkzeug.datastructures import FileStorage
         from oneirodex.utils.emulator_saves import store_save
 
         return store_save(
             user_id=user_id, game_uuid=game_uuid, slot_name=slot_name,
             file_storage=FileStorage(stream=BytesIO(payload), filename=filename),
+            expected_revision=expected_revision,
         )
 
     def read_save(self, row):
@@ -203,16 +216,28 @@ def create_emulator_mutations_router(
                         auth.token is None or auth.has_scope('admin')
                     )
                 else:
-                    needed = 'write:library' if request.method in {'POST', 'DELETE'} else 'read:library'
-                    scope_ok = auth.has_scope(needed)
+                    if operation.startswith('save') and request.method in {'POST', 'DELETE'}:
+                        from oneirodex.utils.role_catalog import normalize_role
+
+                        role = normalize_role(getattr(auth.user, 'role', None))
+                        scope_ok = auth.has_scope('write:saves') or (
+                            role != 'child' and auth.has_scope('write:library')
+                        )
+                    else:
+                        needed = 'write:library' if request.method in {'POST', 'DELETE'} else 'read:library'
+                        scope_ok = auth.has_scope(needed)
                 if not scope_ok:
-                    response = _error(403, 'forbidden', 'This token does not have the required library scope')
+                    message = (
+                        'This token does not have the required library scope'
+                        if auth.token is not None else 'Librarian or admin required'
+                    )
+                    response = _error(403, 'forbidden', message)
                 else:
                     try:
                         response = await _dispatch(data, auth, request, game_uuid, operation, filename, flask_app)
                     except Exception:
                         flask_app.logger.exception('Emulator API request failed')
-                        response = _error(500, 'internal', 'An error occurred while processing your request')
+                        response = _error(500, 'internal', 'Something went wrong on our end. The error has been logged.')
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
             return _finish(response, flask_app, request)
@@ -233,7 +258,7 @@ def create_emulator_mutations_router(
                 response = None
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
-            elif response is None:
+            if response is None:
                 from oneirodex.utils.role_catalog import normalize_role
 
                 is_admin = normalize_role(getattr(auth.user, 'role', None)) == 'admin'
@@ -249,7 +274,7 @@ def create_emulator_mutations_router(
                     response = _error(403, 'forbidden', 'This token does not have the admin scope')
                 else:
                     try:
-                        if operation == 'overview' and request.method == 'GET':
+                        if operation == 'overview' and request.method in {'GET', 'HEAD'}:
                             response = JSONResponse(data.bios_overview(flask_app))
                         elif operation == 'scan':
                             source, error = await _firmware_source(data, flask_app, request)
@@ -287,7 +312,7 @@ def create_emulator_mutations_router(
                             form, response = await _bounded_form(request, flask_app.config)
                             if form is not None:
                                 try:
-                                    upload = form.get('file')
+                                    upload = first_form_upload(form, 'file')
                                     if upload is None:
                                         response = _error(400, 'bad_request', 'Choose a firmware file to upload.')
                                     else:
@@ -315,15 +340,51 @@ def create_emulator_mutations_router(
 
     @router.api_route('/api/games/{game_uuid}/cheats/{filename:path}', methods=['GET', 'DELETE', 'HEAD'])
     async def cheat_file(game_uuid: str, filename: str, request: Request):
+        if not filename:
+            from .response_compat import flask_route_not_found_response
+
+            return flask_route_not_found_response(flask_app, request)
         return await run(request, game_uuid, 'cheat_file', filename)
 
     @router.api_route('/api/games/{game_uuid}/saves', methods=['GET', 'POST', 'HEAD'])
     async def saves(game_uuid: str, request: Request):
         return await run(request, game_uuid, 'saves')
 
+    @router.options('/api/games/{game_uuid}/saves', include_in_schema=False)
+    async def saves_options(game_uuid: str):
+        return Response(
+            status_code=200,
+            headers={
+                'Allow': 'HEAD, GET, OPTIONS, POST',
+                'Content-Type': 'text/html; charset=utf-8',
+            },
+        )
+
     @router.api_route('/api/games/{game_uuid}/saves/{slot_name}', methods=['GET', 'DELETE', 'HEAD'])
     async def save_file(game_uuid: str, slot_name: str, request: Request):
         return await run(request, game_uuid, 'save_file', slot_name)
+
+    @router.options('/api/games/{game_uuid}/saves/{slot_name}', include_in_schema=False)
+    async def save_file_options(game_uuid: str, slot_name: str):
+        return Response(
+            status_code=200,
+            headers={
+                'Allow': 'HEAD, GET, OPTIONS, DELETE',
+                'Content-Type': 'text/html; charset=utf-8',
+            },
+        )
+
+    @router.options('/api/games/{game_uuid}/pc_cheats', include_in_schema=False)
+    async def pc_cheats_options(game_uuid: str):
+        # Flask's automatic OPTIONS response preserves this method order.
+        # Starlette's synthesized response sorts the same set differently.
+        return Response(
+            status_code=200,
+            headers={
+                'Allow': 'OPTIONS, GET, HEAD, POST',
+                'Content-Type': 'text/html; charset=utf-8',
+            },
+        )
 
     @router.api_route('/api/games/{game_uuid}/pc_cheats', methods=['GET', 'POST', 'HEAD'])
     async def pc_cheats(game_uuid: str, request: Request):
@@ -351,6 +412,27 @@ def create_emulator_mutations_router(
 async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_app):
     user = auth.user
     method = 'GET' if request.method == 'HEAD' else request.method
+    pc_cheat_body = None
+    if operation == 'pc_cheats' and method == 'POST':
+        pc_cheat_body = await _json_for_validation(request)
+        from pydantic import ValidationError
+        from oneirodex.schemas.emulator_cheats import CreatePcCheatBody
+        from oneirodex.utils.validation import format_validation_errors
+
+        try:
+            pc_cheat_body = CreatePcCheatBody.model_validate(pc_cheat_body)
+        except ValidationError as exc:
+            return _error(422, 'unprocessable', 'Invalid request.', detail=format_validation_errors(exc))
+
+    if operation == 'pc_cheat' and method == 'DELETE':
+        try:
+            cheat_id = int(filename)
+        except (TypeError, ValueError):
+            return _error(400, 'bad_request', 'Invalid cheat id')
+        if not data.delete_pc_cheat(game_uuid, cheat_id):
+            return _error(404, 'not_found', 'Cheat not found')
+        return _ok({'removed': cheat_id})
+
     game = data.game(game_uuid)
     if game is None:
         return _error(404, 'not_found', 'Game not found')
@@ -385,11 +467,16 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
         if operation == 'cheats' and method == 'POST':
             content_type = request.headers.get('content-type', '').lower()
             if content_type.startswith('multipart/form-data'):
-                form, error = await _bounded_form(request, flask_app.config)
+                from oneirodex.utils.emulator_cheats import MAX_CHEAT_FILE_BYTES
+
+                form, error = await _bounded_form(
+                    request, flask_app.config,
+                    max_bytes=MAX_CHEAT_FILE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+                )
                 if error is not None:
                     return error
                 try:
-                    upload = form.get('file')
+                    upload = first_form_upload(form, 'file')
                     if upload is not None and getattr(upload, 'filename', '').strip():
                         try:
                             payload = await upload.read()
@@ -402,8 +489,14 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                         return JSONResponse(row, status_code=201)
                 finally:
                     await form.close()
-            body = await _json(request)
+                return _error(400, 'bad_request', 'Send a .cht file, or a JSON body with name and codes')
+            body, error = await _bounded_json(request, flask_app.config, _CHEAT_JSON_BODY_BYTES)
+            if error is not None:
+                return error
             if isinstance(body, dict):
+                error = _validate_cheat_json_limits(body)
+                if error is not None:
+                    return error
                 try:
                     row = data.create_cheat(game_uuid, name=body.get('name'),
                                             codes=body.get('codes'), dialect=body.get('dialect'))
@@ -416,27 +509,53 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
     if operation.startswith('save'):
         if operation == 'saves' and method == 'GET':
             rows = data.list_saves(user.id, game_uuid)
+            from oneirodex.utils.role_catalog import normalize_role
+
+            role = normalize_role(getattr(user, 'role', None))
+            can_write = auth.has_scope('write:saves') or (
+                role != 'child' and auth.has_scope('write:library')
+            )
             return JSONResponse({
                 'enabled': data.save_sync_enabled(), 'game_uuid': game_uuid,
                 'csrf_token': _csrf_token(auth.session_data, flask_app.config),
+                'can_write_own_save': can_write,
+                'can_delete_own_save': can_write,
                 'saves': [{**row.to_dict(), 'is_state': data.is_state_slot(row)} for row in rows],
             })
         if operation == 'saves' and method == 'POST':
             if not data.save_sync_enabled():
                 return _error(403, 'forbidden', 'Emulator save sync is disabled')
-            form, error = await _bounded_form(request, flask_app.config)
+            from oneirodex.utils.emulator_saves import MAX_SAVE_BYTES
+
+            form, error = await _bounded_form(
+                request, flask_app.config,
+                max_bytes=MAX_SAVE_BYTES + _MULTIPART_OVERHEAD_BYTES,
+            )
             if error is not None:
                 return error
             try:
-                upload = form.get('file') or form.get('save')
+                upload = first_form_upload(form, 'file') or first_form_upload(form, 'save')
                 if upload is None:
                     return _error(400, 'bad_request', 'multipart file field "file" is required')
-                slot = (str(form.get('slot') or request.query_params.get('slot') or 'slot1')).strip()
+                slot = (str(first_form_value(form, 'slot') or first_query_value(request.query_params, 'slot') or 'slot1')).strip()
                 try:
                     payload = await upload.read()
-                    row = data.store_save(user.id, game_uuid, slot, getattr(upload, 'filename', None), payload)
+                    revision_value = first_form_value(form, 'expected_revision')
+                    expected_revision = int(revision_value) if revision_value not in (None, '') else None
+                    row = data.store_save(
+                        user.id, game_uuid, slot, getattr(upload, 'filename', None), payload,
+                        expected_revision=expected_revision,
+                    )
                 except ValueError as exc:
-                    return _error(400, 'bad_request', str(exc))
+                    from oneirodex.utils.emulator_saves import SaveRevisionConflict
+
+                    if isinstance(exc, SaveRevisionConflict):
+                        return _error(
+                            409, 'conflict', str(exc),
+                            current_revision=exc.current_revision,
+                        )
+                    code = getattr(exc, 'code', 'bad_request')
+                    return _error(413 if code == 'payload_too_large' else 400, code, str(exc))
                 except RuntimeError as exc:
                     return _error(403, 'forbidden', str(exc))
                 return JSONResponse(row.to_dict(), status_code=201)
@@ -485,15 +604,7 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
         if auth.token is not None and not auth.has_scope('admin'):
             return _error(403, 'forbidden', 'This token does not have the admin scope')
         if operation == 'pc_cheats' and method == 'POST':
-            body = await _json(request)
-            from pydantic import ValidationError
-            from oneirodex.schemas.emulator_cheats import CreatePcCheatBody
-            from oneirodex.utils.validation import format_validation_errors
-
-            try:
-                body = CreatePcCheatBody.model_validate(body or {})
-            except ValidationError as exc:
-                return _error(422, 'unprocessable', 'Invalid request.', detail=format_validation_errors(exc))
+            body = pc_cheat_body
             label = body.label
             method = (body.method or 'note').strip().lower()
             if method not in methods:
@@ -506,14 +617,6 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                 created_by_user_id=getattr(user, 'id', None),
             )
             return _ok({'cheat': row.to_dict()}, status=201)
-        if operation == 'pc_cheat' and method == 'DELETE':
-            try:
-                cheat_id = int(filename)
-            except (TypeError, ValueError):
-                return _error(400, 'bad_request', 'Invalid cheat id')
-            if not data.delete_pc_cheat(game_uuid, cheat_id):
-                return _error(404, 'not_found', 'Cheat not found')
-            return _ok({'removed': cheat_id})
     return _error(405, 'bad_request', 'Method not allowed')
 
 
@@ -531,6 +634,19 @@ async def _json(request):
     except Exception:
         return None
     return value if isinstance(value, dict) else None
+
+
+async def _json_for_validation(request):
+    """Mirror validate_body: default absent/malformed JSON to an object.
+
+    Keep a successfully parsed non-object value intact so Pydantic returns the
+    same root validation error as the Flask decorator.
+    """
+    try:
+        value = await request.json()
+    except Exception:
+        return {}
+    return {} if value is None else value
 
 
 async def _firmware_source(data, flask_app, request):
@@ -558,21 +674,26 @@ def _body_limit(config):
     return max(0, value)
 
 
-def _too_large(config):
-    limit_mb = config.get('MAX_UPLOAD_MB', max(1, _body_limit(config) // (1024 * 1024)))
+def _too_large(config, limit_bytes=None):
+    if limit_bytes is None:
+        limit_mb = config.get('MAX_UPLOAD_MB', max(1, _body_limit(config) // (1024 * 1024)))
+    else:
+        limit_mb = max(1, (limit_bytes + (1024 * 1024) - 1) // (1024 * 1024))
     return _error(
         413, 'payload_too_large',
-        f'The file you tried to upload is too large. Maximum size is {limit_mb}MB.',
+        f'The upload request is too large. Maximum size is {limit_mb}MB.',
     )
 
 
-async def _bounded_form(request, config):
-    """Read no more than Flask's total request limit before multipart parsing."""
+async def _bounded_form(request, config, *, max_bytes=None):
+    """Read no more than the configured or route-specific request limit."""
     limit = _body_limit(config)
+    if max_bytes is not None:
+        limit = min(limit, max(0, int(max_bytes)))
     declared = request.headers.get('content-length')
     try:
         if declared is not None and int(declared) > limit:
-            return None, _too_large(config)
+            return None, _too_large(config, limit if max_bytes is not None else None)
     except ValueError:
         return None, _error(400, 'bad_request', 'Invalid content length')
 
@@ -581,7 +702,7 @@ async def _bounded_form(request, config):
     async for chunk in request.stream():
         size += len(chunk)
         if size > limit:
-            return None, _too_large(config)
+            return None, _too_large(config, limit if max_bytes is not None else None)
         chunks.append(chunk)
     body = b''.join(chunks)
     delivered = False
@@ -600,6 +721,69 @@ async def _bounded_form(request, config):
         return await parsed_request.form(), None
     except Exception:
         return None, _error(400, 'bad_request', 'Invalid multipart form data')
+
+
+async def _bounded_json(request, config, max_bytes):
+    """Parse bounded JSON without trusting Content-Length or request.json()."""
+    limit = min(_body_limit(config), max(0, int(max_bytes)))
+    declared = request.headers.get('content-length')
+    try:
+        if declared is not None and int(declared) > limit:
+            return None, _too_large(config, limit)
+    except ValueError:
+        return None, _error(400, 'bad_request', 'Invalid content length')
+
+    chunks = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            return None, _too_large(config, limit)
+        chunks.append(chunk)
+    try:
+        return json.loads(b''.join(chunks)), None
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError):
+        return None, None
+
+
+def _validate_cheat_json_limits(body):
+    """Reject extreme easy-create payloads before generating the .cht string."""
+    name = body.get('name')
+    if name is not None and not isinstance(name, str):
+        return _error(400, 'bad_request', 'name must be text')
+    if isinstance(name, str) and len(name) > _MAX_CHEAT_NAME_CHARS:
+        return _error(413, 'payload_too_large', 'Cheat name is too long')
+
+    dialect = body.get('dialect')
+    if dialect is not None and not isinstance(dialect, str):
+        return _error(400, 'bad_request', 'dialect must be text')
+    if isinstance(dialect, str) and len(dialect) > 32:
+        return _error(413, 'payload_too_large', 'Cheat dialect is too long')
+
+    codes = body.get('codes')
+    if not isinstance(codes, list):
+        return None
+    if len(codes) > _MAX_CHEAT_CODES:
+        return _error(
+            413, 'payload_too_large',
+            f'Cheat files may contain at most {_MAX_CHEAT_CODES} codes',
+        )
+    for row in codes:
+        if not isinstance(row, dict):
+            continue
+        code = row.get('code')
+        if code is not None:
+            if not isinstance(code, (str, int, float, bool)):
+                return _error(400, 'bad_request', 'Cheat codes must be text or numbers')
+            if len(str(code)) > _MAX_CHEAT_CODE_CHARS:
+                return _error(413, 'payload_too_large', 'A cheat code is too long')
+        desc = row.get('desc') or row.get('description')
+        if desc is not None:
+            if not isinstance(desc, str):
+                return _error(400, 'bad_request', 'Code descriptions must be text')
+            if len(desc) > _MAX_CHEAT_DESCRIPTION_CHARS:
+                return _error(413, 'payload_too_large', 'A cheat description is too long')
+    return None
 
 
 def _ok(payload=None, status=200):
@@ -621,7 +805,11 @@ def _download(payload, name, mime):
 
     safe_name = secure_filename(str(name or 'download')) or 'download'
     return StreamingResponse(BytesIO(payload), media_type=mime,
-                             headers={'Content-Disposition': f'attachment; filename="{safe_name}"'})
+                             headers={
+                                 'Cache-Control': 'no-cache',
+                                 'Content-Disposition': f'attachment; filename="{safe_name}"',
+                                 'Content-Length': str(len(payload)),
+                             })
 
 
 def _finish(response: Response, flask_app, request):

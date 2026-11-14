@@ -3,20 +3,142 @@
 from __future__ import annotations
 
 import os
+import tempfile
+import stat
+from pathlib import Path
 from datetime import datetime, timezone
 from io import BytesIO
+from uuid import uuid4
 
 from oneirodex.utils.runtime_config import get_runtime_config
-from sqlalchemy import select
+from sqlalchemy import func, select
 from werkzeug.utils import secure_filename
 
 from oneirodex.runtime_native.db_session import native_db as db
-from oneirodex.models import EmulatorSave, GlobalSettings
-from oneirodex.utils.save_crypto import maybe_decrypt, maybe_encrypt
+from oneirodex.models import EmulatorSave, EmulatorSaveGeneration, GlobalSettings, User
+from oneirodex.utils.save_crypto import context_for_row, maybe_decrypt, maybe_encrypt, save_context
 from oneirodex.utils.library_paths import library_dir
 
 MAX_SAVE_BYTES = 2 * 1024 * 1024  # 2 MiB
 MAX_SLOTS_PER_GAME = 10
+DEFAULT_USER_SAVE_QUOTA_MB = 1024
+DEFAULT_SAVE_AUDIT_ENTRY_LIMIT = 100_000
+
+
+def _fsync_directory(directory: str | os.PathLike[str]) -> bool:
+    """Persist a directory entry update where the platform supports it."""
+    if os.name == 'nt' or not hasattr(os, 'O_DIRECTORY'):
+        return False
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    return True
+
+
+def audit_save_storage(
+    session,
+    root: str | os.PathLike[str],
+    *,
+    entry_limit: int = DEFAULT_SAVE_AUDIT_ENTRY_LIMIT,
+) -> dict:
+    """Return a path-free, report-only inventory of managed save files."""
+    resolved_root = Path(root).resolve()
+    report = {
+        'root_available': resolved_root.is_dir(),
+        'complete': False,
+        'entry_limit': max(1, int(entry_limit)),
+        'entries_scanned': 0,
+        'regular_files': 0,
+        'referenced_files': 0,
+        'missing_references': 0,
+        'outside_root_references': 0,
+        'unreferenced_files': 0,
+        'symlinks_skipped': 0,
+        'scan_limit_reached': False,
+        'mutated_files': False,
+    }
+    if not report['root_available']:
+        return report
+
+    referenced: set[str] = set()
+    paths = session.execute(select(EmulatorSave.storage_path)).scalars().all()
+    paths += session.execute(select(EmulatorSaveGeneration.storage_path)).scalars().all()
+    for stored_path in paths:
+        if not stored_path:
+            continue
+        candidate = Path(os.path.abspath(stored_path))
+        try:
+            candidate.relative_to(resolved_root)
+        except ValueError:
+            report['outside_root_references'] += 1
+            continue
+        normalized = os.path.normcase(str(candidate))
+        referenced.add(normalized)
+        if not candidate.is_file():
+            report['missing_references'] += 1
+
+    report['referenced_files'] = len(referenced)
+    limit = report['entry_limit']
+    pending_dirs = [resolved_root]
+    while pending_dirs:
+        directory = pending_dirs.pop()
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    report['entries_scanned'] += 1
+                    if report['entries_scanned'] > limit:
+                        report['scan_limit_reached'] = True
+                        return report
+                    try:
+                        if entry.is_symlink():
+                            report['symlinks_skipped'] += 1
+                        elif entry.is_dir(follow_symlinks=False):
+                            pending_dirs.append(Path(entry.path))
+                        elif stat.S_ISREG(entry.stat(follow_symlinks=False).st_mode):
+                            report['regular_files'] += 1
+                            if os.path.normcase(os.path.abspath(entry.path)) not in referenced:
+                                report['unreferenced_files'] += 1
+                    except OSError:
+                        report['complete'] = False
+                        return report
+        except OSError:
+            report['complete'] = False
+            return report
+    report['complete'] = True
+    return report
+
+
+class SaveQuotaExceeded(ValueError):
+    """An upload would exceed the member's aggregate save-storage quota."""
+
+    code = 'payload_too_large'
+
+
+class SaveRevisionConflict(ValueError):
+    """The slot changed since the caller last read it."""
+
+    code = 'conflict'
+
+    def __init__(self, current_revision: int):
+        self.current_revision = int(current_revision)
+        super().__init__('A newer save exists for this slot')
+
+
+def save_quota_would_be_exceeded(
+    total_bytes: int,
+    replacement_bytes: int,
+    upload_bytes: int,
+    quota_bytes: int,
+) -> bool:
+    """Check a write against the member total, excluding the replaced slot."""
+    return (
+        max(0, int(total_bytes))
+        - max(0, int(replacement_bytes))
+        + max(0, int(upload_bytes))
+        > max(0, int(quota_bytes))
+    )
 
 # Slot vocabulary the WebRetro shell writes. `auto` is the state taken when
 # the member leaves the room (Back / Power / tab hidden); `cloud-state` is the
@@ -105,7 +227,7 @@ def read_save_bytes(row: EmulatorSave) -> bytes:
         raise FileNotFoundError('Save file missing on disk')
     with open(row.storage_path, 'rb') as handle:
         payload = handle.read()
-    return maybe_decrypt(payload)
+    return maybe_decrypt(payload, context=context_for_row(row))
 
 
 def store_save(
@@ -114,13 +236,25 @@ def store_save(
     game_uuid: str,
     slot_name: str,
     file_storage,
+    expected_revision: int | None = None,
 ) -> EmulatorSave:
     if not save_sync_enabled():
         raise RuntimeError('Emulator save sync is disabled')
 
-    slot = (slot_name or 'slot1').strip()[:64] or 'slot1'
+    # Serialize this member's uploads so concurrent requests cannot both pass
+    # the aggregate quota check. The lock is held until the save row commits.
+    db.session.execute(
+        select(User.id).where(User.id == user_id).with_for_update(),
+    ).first()
+
+    slot = (slot_name or 'slot1').strip() or 'slot1'
+    if len(slot) > 64:
+        raise ValueError('Save slot name exceeds 64 characters')
     existing = list_saves(user_id, game_uuid)
     current = next((row for row in existing if row.slot_name == slot), None)
+    current_revision = int(current.revision or 1) if current else 0
+    if expected_revision is not None and int(expected_revision) != current_revision:
+        raise SaveRevisionConflict(current_revision)
     if current is None and len(existing) >= MAX_SLOTS_PER_GAME:
         raise ValueError(f'Maximum of {MAX_SLOTS_PER_GAME} save slots per game')
 
@@ -130,18 +264,61 @@ def store_save(
     if len(raw) > MAX_SAVE_BYTES:
         raise ValueError(f'Save exceeds {MAX_SAVE_BYTES} byte limit')
 
+    config = get_runtime_config() or {}
+    try:
+        quota_mb = max(1, int(config.get('EMULATOR_SAVES_USER_QUOTA_MB', DEFAULT_USER_SAVE_QUOTA_MB)))
+    except (TypeError, ValueError):
+        quota_mb = DEFAULT_USER_SAVE_QUOTA_MB
+    quota_bytes = quota_mb * 1024 * 1024
+    total_bytes = db.session.execute(
+        select(func.coalesce(func.sum(EmulatorSave.size_bytes), 0))
+        .where(EmulatorSave.user_id == user_id),
+    ).scalar_one()
+    history_bytes = db.session.execute(
+        select(func.coalesce(func.sum(EmulatorSaveGeneration.size_bytes), 0))
+        .join(EmulatorSave, EmulatorSave.id == EmulatorSaveGeneration.save_id)
+        .where(EmulatorSave.user_id == user_id),
+    ).scalar_one()
+    # Replaced bytes are retained as a generation, so replacement does not
+    # free quota; only an explicit delete releases retained storage.
+    replacement_bytes = 0
+    if save_quota_would_be_exceeded(
+        (total_bytes or 0) + (history_bytes or 0), replacement_bytes, len(raw), quota_bytes,
+    ):
+        raise SaveQuotaExceeded(
+            f'Member save-storage quota exceeded ({quota_mb} MiB total)',
+        )
+
     original = secure_filename(getattr(file_storage, 'filename', None) or 'save.state')
     if not original:
         original = 'save.state'
 
-    payload, encrypted = maybe_encrypt(raw)
-
     dest_dir = os.path.join(_saves_root(), str(user_id), game_uuid)
     os.makedirs(dest_dir, exist_ok=True)
-    dest_name = f'{secure_filename(slot)}_{original}'
+    # Opaque unique names avoid collisions between distinct display slots that
+    # sanitize to the same filesystem name, and ensure writes never truncate a
+    # previously committed generation.
+    generation_id = uuid4().hex
+    dest_name = f'{generation_id}.save'
     dest_path = os.path.join(dest_dir, dest_name)
-    with open(dest_path, 'wb') as handle:
-        handle.write(payload)
+    payload, encrypted = maybe_encrypt(
+        raw,
+        context=save_context(user_id, game_uuid, slot, generation_id),
+    )
+    fd, temp_path = tempfile.mkstemp(prefix='.pending-', dir=dest_dir)
+    try:
+        with os.fdopen(fd, 'wb') as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, dest_path)
+        _fsync_directory(dest_dir)
+    except Exception:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+        raise
 
     if current is None:
         current = EmulatorSave(
@@ -152,26 +329,40 @@ def store_save(
             size_bytes=len(raw),
             storage_path=dest_path,
             encrypted=encrypted,
+            revision=1,
         )
         db.session.add(current)
     else:
-        old_path = current.storage_path
+        db.session.add(EmulatorSaveGeneration(
+            save_id=current.id,
+            filename=current.filename,
+            size_bytes=current.size_bytes,
+            storage_path=current.storage_path,
+            encrypted=current.encrypted,
+        ))
         current.filename = original
         current.size_bytes = len(raw)
         current.storage_path = dest_path
         current.encrypted = encrypted
         current.updated_at = datetime.now(timezone.utc)
-        if old_path and old_path != dest_path and os.path.isfile(old_path):
-            try:
-                os.remove(old_path)
-            except OSError:
-                pass
-
-    db.session.commit()
+        current.revision = current_revision + 1
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        # The commit result can be ambiguous if the connection fails after the
+        # server commits. Preserve the unique unreferenced blob for a later,
+        # reference-aware recovery/cleanup pass; never risk deleting a live row.
+        raise
     return current
 
 
 def delete_save(user_id: int, game_uuid: str, slot_name: str) -> bool:
+    # Serialize deletion with writes so quota accounting and shared legacy-path
+    # reference checks cannot race a replacement.
+    db.session.execute(
+        select(User.id).where(User.id == user_id).with_for_update(),
+    ).first()
     row = db.session.execute(
         select(EmulatorSave).filter_by(
             user_id=user_id,
@@ -181,13 +372,29 @@ def delete_save(user_id: int, game_uuid: str, slot_name: str) -> bool:
     ).scalars().first()
     if not row:
         return False
-    if row.storage_path and os.path.isfile(row.storage_path):
-        try:
-            os.remove(row.storage_path)
-        except OSError:
-            pass
+    paths = [row.storage_path]
+    histories = list(db.session.execute(
+        select(EmulatorSaveGeneration).filter_by(save_id=row.id),
+    ).scalars().all())
+    paths.extend(item.storage_path for item in histories)
+    for item in histories:
+        db.session.delete(item)
     db.session.delete(row)
     db.session.commit()
+    # Delete bytes only after metadata commits, and only when no legacy/shared
+    # slot path still references them.
+    for path in set(paths):
+        if path and not db.session.execute(
+            select(EmulatorSave.id).where(EmulatorSave.storage_path == path).limit(1),
+        ).first() and not db.session.execute(
+            select(EmulatorSaveGeneration.id).where(
+                EmulatorSaveGeneration.storage_path == path,
+            ).limit(1),
+        ).first():
+            try:
+                os.remove(path)
+            except OSError:
+                pass
     return True
 
 

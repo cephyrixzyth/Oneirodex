@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 
 import { getJson, putJson } from '../api/adminApi'
 import { AdminPageActions } from '../components/AdminPageActions'
+import { useAdminDocumentTitle } from '../components/Page'
 import { CreateUserForm } from '../components/CreateUserForm'
 import { DataTable } from '../components/DataTable'
 import { Button, PageStatus } from '@oneirodex/ui'
@@ -9,6 +10,8 @@ import { MetricStrip } from '../components/opsWidgets'
 import { PM_IGNORE } from '../components/formIgnore'
 import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
+
+import { AdminLink } from '../components/AdminLink'
 
 const ROLES = ['user', 'librarian', 'child', 'admin']
 
@@ -92,6 +95,7 @@ function UserEditor({
 }
 
 export function UsersPage() {
+  useAdminDocumentTitle('Users')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [error, setError] = useState<unknown>(null)
   // Distinct from "empty" on purpose — the old copy said "Loading or no users",
@@ -122,15 +126,15 @@ export function UsersPage() {
       </p>
 
       <AdminPageActions label="User actions">
-        <a className="od-btn" href="/admin/invites">
+        <AdminLink className="od-btn" to="/admin/invites">
           Invites
-        </a>
-        <a className="od-btn" href="/admin/support">
+        </AdminLink>
+        <AdminLink className="od-btn" to="/admin/support">
           Support inbox
-        </a>
-        <a className="od-btn" href="/admin/manage_invites">
+        </AdminLink>
+        <AdminLink className="od-btn" to="/admin/manage_invites">
           Invite quotas
-        </a>
+        </AdminLink>
       </AdminPageActions>
 
       <CreateUserForm onCreated={load} title="Create user" />

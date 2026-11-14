@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { arrangeDiscoverSections, DiscoverApp } from './DiscoverApp'
@@ -91,6 +91,41 @@ test('renders discover section titles and games as horizontal shelves', async ()
     '/api/discover/sections',
     expect.objectContaining({ credentials: 'include' }),
   )
+})
+
+test('Discover uses roving cover focus and moves across its shelf stack', async () => {
+  mockDiscoverFetch([
+    {
+      identifier: 'latest_games',
+      title: 'Latest Games',
+      games: [
+        { uuid: 'discover-1', name: 'First Game', cover_url: '/first.jpg', genres: [] },
+        { uuid: 'discover-2', name: 'Second Game', cover_url: '/second.jpg', genres: [] },
+      ],
+    },
+    {
+      identifier: 'highest_rated',
+      title: 'Highest Rated',
+      games: [
+        { uuid: 'discover-3', name: 'Third Game', cover_url: '/third.jpg', genres: [] },
+        { uuid: 'discover-4', name: 'Fourth Game', cover_url: '/fourth.jpg', genres: [] },
+      ],
+    },
+  ])
+
+  renderDiscover()
+
+  const first = await screen.findByRole('link', { name: 'First Game' })
+  const second = screen.getByRole('link', { name: 'Second Game' })
+  const fourth = screen.getByRole('link', { name: 'Fourth Game' })
+  await waitFor(() => expect(first).toHaveAttribute('tabindex', '0'))
+  expect([second, fourth].every((cell) => cell.getAttribute('tabindex') === '-1')).toBe(true)
+
+  first.focus()
+  fireEvent.keyDown(first, { key: 'ArrowRight' })
+  expect(document.activeElement).toBe(second)
+  fireEvent.keyDown(second, { key: 'ArrowDown' })
+  expect(document.activeElement).toBe(fourth)
 })
 
 test('does not render empty discover sections', async () => {

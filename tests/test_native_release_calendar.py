@@ -49,6 +49,17 @@ def test_anonymous_calendar_redirects_with_path_next_flash_and_signed_cookie():
     )
     assert response.status_code == 302
     assert response.headers['location'] == '/login?next=%2Fapi%2Fcalendar%3Fdays_ahead%3D20'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/login?next=%2Fapi%2Fcalendar%3Fdays_ahead%3D20">'
+        '/login?next=%2Fapi%2Fcalendar%3Fdays_ahead%3D20</a>. If not, click the link.\n'
+    )
+    assert len(response.headers.get_list('set-cookie')) == 1
     assert response.headers['X-Content-Type-Options'] == 'nosniff'
     assert 'cookie' in response.headers['vary'].lower()
     session = load_session_cookie(

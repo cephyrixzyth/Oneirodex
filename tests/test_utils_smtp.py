@@ -367,7 +367,7 @@ class TestSendEmail:
         self.test_template = "<h1>Test Email</h1>"
     
     @patch('oneirodex.utils.smtp.log_system_event')
-    @patch('oneirodex.utils.smtp.flash')
+    @patch('flask.flash')
     @patch('oneirodex.utils.smtp.get_smtp_settings')
     def test_send_email_no_settings(self, mock_get_settings, mock_flash, mock_log):
         """Test send_email when SMTP settings are not configured."""
@@ -383,7 +383,7 @@ class TestSendEmail:
         mock_flash.assert_called_with("SMTP settings not configured. Email not sent.", "error")
     
     @patch('oneirodex.utils.smtp.log_system_event')
-    @patch('oneirodex.utils.smtp.flash')
+    @patch('flask.flash')
     @patch('oneirodex.utils.smtp.get_smtp_settings')
     def test_send_email_smtp_disabled(self, mock_get_settings, mock_flash, mock_log):
         """Test send_email when SMTP is disabled."""
@@ -399,7 +399,7 @@ class TestSendEmail:
         mock_flash.assert_called_with("SMTP is not enabled. Email not sent.", "error")
     
     @patch('oneirodex.utils.smtp.log_system_event')
-    @patch('oneirodex.utils.smtp.flash')
+    @patch('flask.flash')
     @patch('oneirodex.utils.smtp.is_smtp_config_valid')
     @patch('oneirodex.utils.smtp.get_smtp_settings')
     def test_send_email_invalid_config(self, mock_get_settings, mock_is_valid, mock_flash, mock_log):
@@ -417,7 +417,7 @@ class TestSendEmail:
         mock_flash.assert_called_with("Invalid SMTP configuration: Missing required fields: SMTP Server", "error")
     
     @patch('oneirodex.utils.smtp.log_system_event')
-    @patch('oneirodex.utils.smtp.flash')
+    @patch('flask.flash')
     @patch('oneirodex.utils.smtp.is_server_reachable')
     @patch('oneirodex.utils.smtp.is_smtp_config_valid')
     @patch('oneirodex.utils.smtp.get_smtp_settings')
@@ -448,8 +448,8 @@ class TestSendEmail:
         )
     
     @patch('oneirodex.utils.smtp.log_system_event')
-    @patch('oneirodex.utils.smtp.flash')
-    @patch('oneirodex.utils.smtp.smtplib.SMTP')
+    @patch('flask.flash')
+    @patch('oneirodex.utils.smtp_transport.smtplib.SMTP')
     @patch('oneirodex.utils.smtp.is_server_reachable')
     @patch('oneirodex.utils.smtp.is_smtp_config_valid')
     @patch('oneirodex.utils.smtp.get_smtp_settings')
@@ -494,8 +494,8 @@ class TestSendEmail:
         )
     
     @patch('oneirodex.utils.smtp.log_system_event')
-    @patch('oneirodex.utils.smtp.flash')
-    @patch('oneirodex.utils.smtp.smtplib.SMTP')
+    @patch('flask.flash')
+    @patch('oneirodex.utils.smtp_transport.smtplib.SMTP')
     @patch('oneirodex.utils.smtp.is_server_reachable')
     @patch('oneirodex.utils.smtp.is_smtp_config_valid')
     @patch('oneirodex.utils.smtp.get_smtp_settings')
@@ -529,8 +529,8 @@ class TestSendEmail:
         mock_flash.assert_called_with("SMTP Authentication failed: (535, 'Authentication failed')", "error")
     
     @patch('oneirodex.utils.smtp.log_system_event')
-    @patch('oneirodex.utils.smtp.flash')
-    @patch('oneirodex.utils.smtp.smtplib.SMTP')
+    @patch('flask.flash')
+    @patch('oneirodex.utils.smtp_transport.smtplib.SMTP')
     @patch('oneirodex.utils.smtp.is_server_reachable')
     @patch('oneirodex.utils.smtp.is_smtp_config_valid')
     @patch('oneirodex.utils.smtp.get_smtp_settings')
@@ -564,8 +564,8 @@ class TestSendEmail:
         mock_flash.assert_called_with("SMTP error occurred: Message rejected", "error")
     
     @patch('oneirodex.utils.smtp.log_system_event')
-    @patch('oneirodex.utils.smtp.flash')
-    @patch('oneirodex.utils.smtp.smtplib.SMTP')
+    @patch('flask.flash')
+    @patch('oneirodex.utils.smtp_transport.smtplib.SMTP')
     @patch('oneirodex.utils.smtp.is_server_reachable')
     @patch('oneirodex.utils.smtp.is_smtp_config_valid')
     @patch('oneirodex.utils.smtp.get_smtp_settings')
@@ -597,8 +597,8 @@ class TestSendEmail:
         mock_flash.assert_called_with("Connection timed out while sending email", "error")
     
     @patch('oneirodex.utils.smtp.log_system_event')
-    @patch('oneirodex.utils.smtp.flash')
-    @patch('oneirodex.utils.smtp.smtplib.SMTP')
+    @patch('flask.flash')
+    @patch('oneirodex.utils.smtp_transport.smtplib.SMTP')
     @patch('oneirodex.utils.smtp.is_server_reachable')
     @patch('oneirodex.utils.smtp.is_smtp_config_valid')
     @patch('oneirodex.utils.smtp.get_smtp_settings')
@@ -631,8 +631,8 @@ class TestSendEmail:
     
     @patch('oneirodex.utils.smtp.traceback.format_exc')
     @patch('oneirodex.utils.smtp.log_system_event')
-    @patch('oneirodex.utils.smtp.flash')
-    @patch('oneirodex.utils.smtp.smtplib.SMTP')
+    @patch('flask.flash')
+    @patch('oneirodex.utils.smtp_transport.smtplib.SMTP')
     @patch('oneirodex.utils.smtp.is_server_reachable')
     @patch('oneirodex.utils.smtp.is_smtp_config_valid')
     @patch('oneirodex.utils.smtp.get_smtp_settings')

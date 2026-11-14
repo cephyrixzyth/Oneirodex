@@ -3,7 +3,7 @@
 #
 # A real standalone install (launcher + bundled PostgreSQL 17) with Windows-style
 # game paths, artwork, a generated pack, an uploaded theme and encrypted saves is
-# exported with `python -m oneirodex_standalone export`, imported into an empty
+# backed up with `python -m oneirodex_standalone backup`, imported into an empty
 # database on a separate PostgreSQL 17 server whose SECRET_KEY differs, checked,
 # and then served by the real server. Every refusal is rehearsed and must exit
 # exactly 1 and change nothing. Throwaway containers and volumes only; no
@@ -15,7 +15,7 @@ export MSYS_NO_PATHCONV=1
 REPO=${REPO:-C:/Apps/Oneirodex}
 IMG=oneirodex:standalone-proof PGIMG=postgres:17.6
 NET=p05e-net DB=p05e-db SA=p05e-standalone SRV=p05e-server
-VOLS=(p05e-data p05e-move p05e-library)
+VOLS=(p05e-data p05e-move p05e-library p05e-key-backup)
 PW=proof-only-pw SERVER_SECRET=proof-only-server-secret
 TARGET="postgresql://postgres:$PW@$DB:5432/oneirodex_moved"
 BUSY="postgresql://postgres:$PW@$DB:5432/oneirodex"
@@ -26,20 +26,38 @@ FAILS=0
 
 cleanup() { docker rm -f -v "$SA" "$DB" "$SRV" >/dev/null 2>&1; docker volume rm "${VOLS[@]}" >/dev/null 2>&1
             docker network rm "$NET" >/dev/null 2>&1; }
+for name in "$SA" "$DB" "$SRV"; do
+  if docker container inspect "$name" >/dev/null 2>&1; then
+    echo "refusing to run: container $name already exists" >&2
+    exit 2
+  fi
+done
+for name in "${VOLS[@]}"; do
+  if docker volume inspect "$name" >/dev/null 2>&1; then
+    echo "refusing to run: volume $name already exists" >&2
+    exit 2
+  fi
+done
+if docker network inspect "$NET" >/dev/null 2>&1; then
+  echo "refusing to run: network $NET already exists" >&2
+  exit 2
+fi
 trap cleanup EXIT
 ok() { if "$@"; then echo "PASS"; else echo "FAIL"; FAILS=$((FAILS + 1)); fi; }
 refused() { "$@"; local rc=$?; if [ $rc -eq 1 ]; then echo "PASS (refused)"; else echo "FAIL (expected exit 1, got $rc)"; FAILS=$((FAILS + 1)); fi; }
 # The standalone machine: user nobody, no network, read-only install.
 standalone() { docker run --rm --network none --user 65534:65534 -e HOME=/data -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/app -e SECRET_KEY=unused \
+  -e ONEIRODEX_SAVE_KEYRING_FILE=/data/save-keyring.json \
   --read-only --tmpfs /tmp "${CODE[@]}" -v p05e-data:/data -v p05e-move:/move -w /app --entrypoint python "$IMG" "$@"; }
 # The server's app container: PostgreSQL 17 client tools, the server library volume, the move folder read-only.
 server() { docker run --rm --network "$NET" -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/app "${CODE[@]}" \
-  -v p05e-move:/move:ro -v p05e-library:/srv/library -w /app "$@"; }
+  -v p05e-key-backup:/operator-key-backup:ro -v p05e-move:/move:ro -v p05e-library:/srv/library -w /app "$@"; }
 # import_ DOCKER_ENV... -- IMPORT_ARGS...  (pg_restore from the bundle; move finds its libs)
 import_() { local env=(); while [ "$1" != -- ]; do env+=("$1"); shift; done; shift
-  server "${env[@]}" --entrypoint python "$IMG" -m oneirodex_standalone import /move/bundle --expect "$FP" \
+  server "${env[@]}" -e ONEIRODEX_SAVE_KEYRING_FILE=/operator-key-backup/save-keyring.json --entrypoint python "$IMG" -m oneirodex_standalone import /move/bundle --expect "$FP" \
     --library-dir /srv/library --pg-bin $PGBIN "$@"; }
-check() { server -e DATABASE_URL="$TARGET" -e SECRET_KEY=$SERVER_SECRET --entrypoint python "$IMG" scripts/spikes/desk03/proof_e/check_server.py "$@"; }
+check() { server -e DATABASE_URL="$TARGET" -e SECRET_KEY=$SERVER_SECRET -e ONEIRODEX_SAVE_KEYRING_FILE=/operator-key-backup/save-keyring.json \
+  --entrypoint python "$IMG" scripts/spikes/desk03/proof_e/check_server.py "$@"; }
 awake() { docker exec "$1" python -c "
 import time, urllib.request
 for _ in range($2):
@@ -49,7 +67,6 @@ for _ in range($2):
     time.sleep(1)
 raise SystemExit(1)"; }
 
-cleanup
 echo "== images and throwaway volumes"
 ok docker build -q -t "$IMG" "$REPO/scripts/spikes/desk03/proof_d" >/dev/null
 for v in "${VOLS[@]}"; do docker volume create "$v" >/dev/null; done
@@ -61,19 +78,23 @@ docker run -d --name "$SA" --network none --user 65534:65534 -e HOME=/data -e PY
   -m oneirodex_standalone --pg-home $PGHOME --data-dir /data --port 5006 >/dev/null
 ok awake "$SA" 240
 refused docker exec "$SA" python -m oneirodex_standalone export --pg-home $PGHOME --data-dir /data --to /move/while-running
+refused docker exec "$SA" python -m oneirodex_standalone backup --pg-home $PGHOME --data-dir /data --to /move/while-running
 docker stop -t 60 "$SA" >/dev/null && docker rm "$SA" >/dev/null
 
 echo "== standalone: seed data worth moving (Windows-style game folder, encrypted saves)"
 ok standalone scripts/spikes/desk03/proof_e/seed.py
+ok standalone -c "import json, os; from pathlib import Path; from scripts.migrate_emulator_save_keys import initialize_keyring; Path('/data').chmod(0o700); s=json.loads(Path('/data/standalone.json').read_text()); initialize_keyring(Path('/data/save-keyring.json'), s['secret_key'])"
+ok docker run --rm -v p05e-data:/data:ro -v p05e-key-backup:/key-backup --entrypoint sh "$IMG" -c 'mkdir -p /key-backup && cp /data/save-keyring.json /key-backup/save-keyring.json && chmod 700 /key-backup && chmod 600 /key-backup/save-keyring.json'
+echo "== matching save keyring restored from a separate protected operator backup volume"
 
-echo "== export"
+echo "== backup"
 # The trailing separator is deliberate: it must not change which paths match.
-out=$(standalone -m oneirodex_standalone export --pg-home $PGHOME --data-dir /data --to /move/bundle --root 'games=C:\Games\')
+out=$(standalone -m oneirodex_standalone backup --pg-home $PGHOME --data-dir /data --to /move/bundle --root 'games=C:\Games\')
 ok test $? -eq 0
 echo "$out"
-FP=$(sed -n 's/^fingerprint: //p' <<<"$out")
+FP=$(sed -n 's/^manifest sha256: //p' <<<"$out")
 ok test ${#FP} -eq 64
-refused standalone -m oneirodex_standalone export --pg-home $PGHOME --data-dir /data --to /move/bundle --root 'games=C:\Games'
+refused standalone -m oneirodex_standalone backup --pg-home $PGHOME --data-dir /data --to /move/bundle --root 'games=C:\Games'
 
 echo "== server: PostgreSQL 17 on an internal network; the target is a new empty database"
 docker network create --internal "$NET" >/dev/null
@@ -85,7 +106,9 @@ docker exec "$DB" psql -U postgres -h 127.0.0.1 -d oneirodex -qc 'CREATE TABLE b
 echo "== refusals: each exits 1 and leaves the target untouched"
 refused import_ -e DATABASE_URL="$TARGET" -e SECRET_KEY=$SERVER_SECRET --                           # games folder not named
 refused import_ -e DATABASE_URL="$TARGET" -e SECRET_KEY=$SERVER_SECRET -- --root games=/elsewhere/x --root extra=/y
-refused import_ -e DATABASE_URL="$TARGET" -- --root games=/mnt/user/games                               # encrypted saves, no key
+refused server -e DATABASE_URL="$TARGET" -e ONEIRODEX_SAVE_KEYRING_FILE=/missing/keyring.json \
+  --entrypoint python "$IMG" -m oneirodex_standalone import /move/bundle --expect "$FP" \
+  --library-dir /srv/library --root games=/mnt/user/games --pg-bin $PGBIN                 # encrypted saves, no key
 refused import_ -e DATABASE_URL="$BUSY" -e SECRET_KEY=$SERVER_SECRET -- --root games=/mnt/user/games    # target not empty
 first=$(docker run --rm -v p05e-move:/move --entrypoint python "$IMG" -c "import json;print(json.load(open('/move/bundle/manifest.json'))['files'][0]['path'])")
 docker run --rm -v p05e-library:/srv/library --entrypoint sh "$IMG" -c "mkdir -p \"\$(dirname '/srv/library/$first')\" && echo other > '/srv/library/$first'"
@@ -109,6 +132,12 @@ open('/move/resealed/manifest.json', 'w').write(raw)
 open('/move/resealed/manifest.sha256', 'w').write(hashlib.sha256(raw.encode()).hexdigest() + '\n')"
 refused server -e DATABASE_URL="$TARGET" -e SECRET_KEY=$SERVER_SECRET --entrypoint python "$IMG" \
   -m oneirodex_standalone import /move/resealed --expect "$FP" --library-dir /srv/library --root games=/mnt/user/games --pg-bin $PGBIN
+docker run --rm -v p05e-move:/move --entrypoint sh "$IMG" -c 'printf "{}\\n" > /move/tampered-marker.json && cp /move/tampered-marker.json /move/bundle/backup.complete.json'
+refused import_ -e DATABASE_URL="$TARGET" -e SECRET_KEY=$SERVER_SECRET -- --root games=/mnt/user/games # completion marker mismatch
+docker run --rm -v p05e-move:/move --entrypoint python "$IMG" -c "
+import json, hashlib
+m=json.load(open('/move/bundle/manifest.json'))
+open('/move/bundle/backup.complete.json','w').write(json.dumps({'format':'oneirodex-standalone-backup-complete/2','manifest_sha256':hashlib.sha256(open('/move/bundle/manifest.json','rb').read()).hexdigest()})+'\\n')"
 ok check untouched
 
 echo "== import"
@@ -126,7 +155,10 @@ ok standalone -m oneirodex_standalone export --pg-home $PGHOME --data-dir /data 
 ok docker run --rm -v p05e-move:/move --entrypoint python "$IMG" -c "
 import json
 a, b = (json.load(open(f'/move/{n}/manifest.json')) for n in ('bundle', 'after'))
-assert a['db'] == b['db'] and a['files'] == b['files'], 'standalone changed'"
+def stable_files(entries):
+  return sorted((e['path'], e.get('plain_sha256'), e.get('save_key_id'),
+                 None if 'plain_sha256' in e else e['sha256']) for e in entries)
+assert a['db'] == b['db'] and stable_files(a['files']) == stable_files(b['files']), 'standalone changed'"
 
 echo "== the real server starts on the moved data and serves a moved file"
 docker run -d --name "$SRV" --network "$NET" -e PYTHONDONTWRITEBYTECODE=1 -e DATABASE_URL="$TARGET" -e SECRET_KEY=$SERVER_SECRET \

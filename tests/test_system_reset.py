@@ -15,14 +15,15 @@ from oneirodex import db
 from oneirodex.models import User
 from oneirodex.utils.system_reset import (
     RESET_SCOPES,
+    PRESERVED_RESET_TABLES,
     SCOPE_IMPLIES,
     expand_scopes,
     plan_reset,
 )
 
 
-def test_every_table_belongs_to_exactly_one_scope():
-    """A new model must be assigned a scope, or the reset silently skips it."""
+def test_every_table_has_exactly_one_reset_or_preservation_policy():
+    """New models need an explicit policy; preservation cannot hide unknowns."""
     import oneirodex.models  # noqa: F401  — populates db.metadata
 
     all_tables = {table.name for table in db.metadata.sorted_tables}
@@ -39,12 +40,15 @@ def test_every_table_belongs_to_exactly_one_scope():
             seen.add(name)
 
     assert not duplicated, f'tables listed in two scopes: {sorted(set(duplicated))}'
-    assert not (all_tables - seen), (
-        'tables missing from RESET_SCOPES — assign each to a scope: '
-        f'{sorted(all_tables - seen)}'
+    assert PRESERVED_RESET_TABLES == {'user_deletion_file_jobs'}
+    assert seen.isdisjoint(PRESERVED_RESET_TABLES)
+    covered = seen | PRESERVED_RESET_TABLES
+    assert not (all_tables - covered), (
+        'tables missing a reset/preservation policy: '
+        f'{sorted(all_tables - covered)}'
     )
-    assert not (seen - all_tables), (
-        f'RESET_SCOPES names tables that do not exist: {sorted(seen - all_tables)}'
+    assert not (covered - all_tables), (
+        f'reset policy names tables that do not exist: {sorted(covered - all_tables)}'
     )
 
 
@@ -57,6 +61,20 @@ def test_clearing_libraries_implies_clearing_the_catalog():
 def test_unknown_scopes_are_dropped_not_raised():
     assert expand_scopes(['catalog', 'nonsense']) == ['catalog']
     assert expand_scopes([]) == []
+
+
+def test_user_reset_explicitly_covers_save_history_and_login_sessions():
+    assert {'emulator_save_generations', 'persistent_login_sessions'} <= set(RESET_SCOPES['users'])
+
+
+def test_reset_refuses_a_cascade_into_committed_file_cleanup(monkeypatch):
+    from oneirodex.utils import system_reset
+
+    monkeypatch.setattr(system_reset, '_cascade_closure', lambda tables: [
+        *tables, 'user_deletion_file_jobs',
+    ])
+    with pytest.raises(ValueError, match='preserved'):
+        plan_reset(['users'])
 
 
 def test_plan_reports_cascaded_tables_beyond_those_named(app):
@@ -100,6 +118,7 @@ def test_plan_matches_what_postgres_will_actually_truncate(app, db_session):
         for scopes in (['catalog'], ['libraries'], ['users'], ['settings'], list(RESET_SCOPES)):
             plan = plan_reset(scopes)
             predicted = set(plan['tables']) | set(plan['cascaded'])
+            assert predicted.isdisjoint(PRESERVED_RESET_TABLES)
 
             actual = set(
                 db_session.execute(
@@ -246,10 +265,21 @@ class TestResetApi:
 
     def test_user_reset_keeps_the_acting_admin(self, admin_client, db_session, admin_user):
         """Never lock the operator out of the install they just reset."""
-        from oneirodex.models import User
+        from datetime import datetime, timezone
+        from oneirodex.models import User, SupportTicket, SupportDeliveryAttempt, SupportDeliveryCheckBudget
 
         admin_id = admin_user.id
         admin_name = admin_user.name
+        ticket = SupportTicket(user_id=admin_id, title='Synthetic support receipt', body='Kept locally')
+        db_session.add(ticket)
+        db_session.flush()
+        db_session.add_all([
+            SupportDeliveryAttempt(id=str(uuid4()), user_id=admin_id, ticket_id=ticket.id,
+                                   created_at=datetime.now(timezone.utc), repository='example/repo',
+                                   payload_sha256='a' * 64, outcome='unknown'),
+            SupportDeliveryCheckBudget(user_id=admin_id, window_started_at=datetime.now(timezone.utc), count=1),
+        ])
+        db_session.commit()
 
         response = admin_client.post(
             '/admin/api/system/reset',
@@ -265,6 +295,42 @@ class TestResetApi:
         assert survivor is not None
         assert survivor.name == admin_name
         assert db_session.query(User).count() == 1
+        assert db_session.query(SupportTicket).count() == 0
+        assert db_session.query(SupportDeliveryAttempt).count() == 0
+        assert db_session.query(SupportDeliveryCheckBudget).count() == 0
+
+    def test_user_reset_preserves_previously_committed_file_cleanup(
+        self, admin_client, db_session, tmp_path,
+    ):
+        import hashlib
+        from oneirodex.models import UserDeletionFileJob
+        from oneirodex.utils.user_deletion import process_pending_file_jobs
+
+        target = tmp_path / 'deleted-account-avatar.png'
+        target.write_bytes(b'previously committed account deletion')
+        root, relative = str(tmp_path.resolve()), target.name
+        job = UserDeletionFileJob(
+            path_key=hashlib.sha256(f'{root}\0{relative}'.encode()).hexdigest(),
+            root_path=root, relative_path=relative, state='failed', attempts=1,
+        )
+        db_session.add(job)
+        db_session.commit()
+        job_id = job.id
+
+        response = admin_client.post('/admin/api/system/reset', json={
+            'scopes': list(RESET_SCOPES), 'confirm': 'RESET ONEIRODEX',
+        })
+        assert response.status_code == 200
+        assert response.get_json()['touches_files'] is False
+        assert target.exists()
+        db_session.expire_all()
+        retained = db_session.get(UserDeletionFileJob, job_id)
+        assert retained is not None
+        assert retained.state == 'failed' and retained.attempts == 1
+
+        assert process_pending_file_jobs(db_session) == 0
+        assert not target.exists()
+        assert db_session.get(UserDeletionFileJob, job_id) is None
 
     def test_non_admin_forbidden(self, client, regular_user):
         with client.session_transaction() as sess:

@@ -3,7 +3,9 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { createAuthStore } from './auth.js'
 import {
   downloadGameArchive,
+  consumeLimitedDownloadBody,
   fetchDownloadStream,
+  MAX_GAME_ARCHIVE_BYTES,
   kickoffDownload,
   resolveArchivePath,
   resolveExtractPath,
@@ -51,7 +53,12 @@ describe('download kickoff helper', () => {
       ok: true,
       headers: new Headers({ 'content-length': '4' }),
       arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
-      body: null,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3, 4]))
+          controller.close()
+        },
+      }),
     })
 
     const api = {
@@ -67,6 +74,7 @@ describe('download kickoff helper', () => {
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://example.com/download_zip/7',
       expect.objectContaining({
+        redirect: 'error',
         headers: expect.objectContaining({
           Authorization: 'Bearer gt_prefix_secret',
         }),
@@ -99,7 +107,12 @@ describe('download kickoff helper', () => {
       ok: true,
       headers: new Headers({ 'content-length': '2' }),
       arrayBuffer: async () => new Uint8Array([9, 9]).buffer,
-      body: null,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([9, 9]))
+          controller.close()
+        },
+      }),
     })
     const api = {
       downloads: { initiateGameDownload: initiate },
@@ -191,7 +204,12 @@ describe('download kickoff helper', () => {
       ok: true,
       headers: new Headers(),
       arrayBuffer: async () => new Uint8Array([1]).buffer,
-      body: null,
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1]))
+          controller.close()
+        },
+      }),
     })
 
     const record = await downloadGameArchive(api as never, auth, 'game-42', {
@@ -264,6 +282,69 @@ describe('archive download redirects', () => {
         ['write_file_bytes', 'append_file_bytes', 'save_installs'].includes(command),
       )
 
+  it('stops an unknown-length response at the cumulative byte limit', async () => {
+    const cancel = vi.fn()
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1, 2]))
+        controller.enqueue(new Uint8Array([3, 4]))
+      },
+      cancel,
+    })
+    const onChunk = vi.fn()
+
+    await expect(consumeLimitedDownloadBody(body, 3, onChunk)).rejects.toThrow(
+      /Game archive exceeds the download size limit \(3 bytes\)/,
+    )
+    expect(onChunk).toHaveBeenCalledTimes(1)
+    expect(cancel).toHaveBeenCalled()
+  })
+
+  it('rejects an oversized declared archive before truncating or writing a file', async () => {
+    const { auth, api, fetchImpl, cancel } = setup(undefined, {
+      headers: new Headers({ 'content-length': String(MAX_GAME_ARCHIVE_BYTES + 1) }),
+    })
+
+    await expect(
+      kickoffDownload(api as never, auth, createLifecycleRegistry(), 'game-7', { fetchImpl }),
+    ).rejects.toThrow(/download size limit \(100 GiB\)/)
+    expect(written()).toEqual([])
+    expect(cancel).toHaveBeenCalled()
+  })
+
+  it('caps and cancels oversized non-success response bodies in both download paths', async () => {
+    const makeErrorBody = (cancel: ReturnType<typeof vi.fn>) =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(64 * 1024 + 1))
+        },
+        cancel,
+      })
+
+    const bufferedCancel = vi.fn()
+    const buffered = setup(undefined, {
+      ok: false,
+      status: 502,
+      body: makeErrorBody(bufferedCancel),
+    })
+    await expect(
+      fetchDownloadStream(buffered.auth, '/download_zip/7', { fetchImpl: buffered.fetchImpl }),
+    ).rejects.toThrow(/Download failed with HTTP 502/)
+    expect(buffered.text).not.toHaveBeenCalled()
+    expect(bufferedCancel).toHaveBeenCalled()
+
+    const nativeCancel = vi.fn()
+    const native = setup(undefined, { ok: false, status: 502, body: makeErrorBody(nativeCancel) })
+    await expect(
+      kickoffDownload(native.api as never, native.auth, createLifecycleRegistry(), 'game-7', {
+        fetchImpl: native.fetchImpl,
+      }),
+    ).rejects.toThrow(/Download failed with HTTP 502/)
+    expect(native.text).not.toHaveBeenCalled()
+    expect(nativeCancel).toHaveBeenCalled()
+    expect(written()).toEqual([])
+  })
+
   it('refuses an https server that redirects the archive to plain http:// on a public host', async () => {
     const { auth, api, fetchImpl, cancel } = setup('http://cdn.example.com/game.zip')
     const registry = createLifecycleRegistry()
@@ -286,17 +367,23 @@ describe('archive download redirects', () => {
     expect(text).not.toHaveBeenCalled()
   })
 
-  it.each([
-    'https://cdn.example.com/game.zip',
-    'https://example.com/download_zip/7',
-    'http://tower.lan:5006/download_zip/7',
-    'http://192.168.1.5/game.zip',
-    'http://100.100.100.100/game.zip',
-  ])('accepts a download that landed on %s', async (landedOn) => {
-    const { auth, api, fetchImpl } = setup(landedOn)
+  it('accepts direct same-origin HTTPS and configured local-server archive responses', async () => {
+    const { auth, api, fetchImpl } = setup('https://example.com/download_zip/7')
     const registry = createLifecycleRegistry()
     await expect(
       kickoffDownload(api as never, auth, registry, 'game-7', { fetchImpl }),
+    ).resolves.toBe('downloaded')
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://example.com/download_zip/7',
+      expect.objectContaining({ redirect: 'error' }),
+    )
+
+    const local = setup('http://tower.lan:5006/download_zip/7')
+    local.auth.setBaseUrl('http://tower.lan:5006')
+    await expect(
+      kickoffDownload(local.api as never, local.auth, createLifecycleRegistry(), 'game-8', {
+        fetchImpl: local.fetchImpl,
+      }),
     ).resolves.toBe('downloaded')
   })
 
@@ -305,6 +392,10 @@ describe('archive download redirects', () => {
     await expect(
       kickoffDownload(api as never, auth, createLifecycleRegistry(), 'game-7', { fetchImpl }),
     ).resolves.toBe('downloaded')
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://example.com/download_zip/7',
+      expect.objectContaining({ redirect: 'error' }),
+    )
     const empty = setup('')
     await expect(
       kickoffDownload(empty.api as never, empty.auth, createLifecycleRegistry(), 'game-8', {
@@ -318,10 +409,14 @@ describe('archive download redirects', () => {
     await expect(fetchDownloadStream(auth, '/download_zip/7', { fetchImpl })).rejects.toThrow(
       /Refusing http:\/\/ download redirect/,
     )
-    const ok = setup('https://cdn.example.com/game.zip')
+    const ok = setup('https://example.com/download_zip/7')
     await expect(
       fetchDownloadStream(ok.auth, '/download_zip/7', { fetchImpl: ok.fetchImpl }),
     ).resolves.toBeInstanceOf(ArrayBuffer)
+    expect(ok.fetchImpl).toHaveBeenCalledWith(
+      'https://example.com/download_zip/7',
+      expect.objectContaining({ redirect: 'error' }),
+    )
   })
 
   it('still refuses when the stub response has no body to cancel', async () => {

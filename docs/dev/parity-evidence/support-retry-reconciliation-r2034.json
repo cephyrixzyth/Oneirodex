@@ -1,0 +1,167 @@
+{
+  "doc_status": "Reference",
+  "review_id": "R2034",
+  "captured_utc": "2026-11-11T06:28:58.161489+00:00",
+  "base_commit": "ed13111ca742c4250604ce5f0ba7ace5df8dd7d2",
+  "source_state": "Fingerprint-qualified candidate before review-branch commit",
+  "finding": "UC-004 / P3-07",
+  "classification": "confirmed",
+  "remediation": "Tested mandatory redaction, consent, durable initial delivery, explicit retry and read-only reconciliation gaps addressed across R2031-R2034. Whole-program independent acceptance remains open.",
+  "owner_policy": "Always redact; preview before sending; local-only reporting available; no raw override.",
+  "source_sha256": {
+    "oneirodex/utils/github_issues.py": "ab79f3256802cbacc252d857b122ec1487d5674c85b109a2e542537a91bc2320",
+    "oneirodex/utils/support_privacy.py": "4a79ab29aebc5cae14ed3b916e20d04f9b9a113d53a015cd028337137cb58560",
+    "oneirodex/utils/support_reports.py": "adf176cd1b8e40a4d67d88c96dfc68c223e130cc6aa2a8590cc464fcdf88ac4b",
+    "oneirodex/schemas/support.py": "530bdf7738a51e9862f7f7ac23013db02443ca20d85d4b2ffcd8648cbe348984",
+    "oneirodex/routes_apis/support.py": "f499745857b0b3ae984b4657891496d8ab3ea99d019bf7e52034a062b055b474",
+    "oneirodex/runtime_native/support_mutations.py": "5884dc841f90f99ab8c9107197a06892fe3e18b8f406a54be712cfc8498f064d",
+    "oneirodex/models/misc.py": "ee725dcc26292bc366e2682052ced2279ebc251a2d94649b0168d6805f3f17b5",
+    "oneirodex/updateschema.py": "e26faafe7d9ce0b9f229d59c627f6741137e11993e72ab8cd5e4fb906a5bdf60",
+    "oneirodex/utils/support_delivery.py": "91af0386fad87ab889c2ace437742edfa303470c0ccf43424c68cbec5cf9fdcc",
+    "alembic/versions/f2a3b4c5d6e7_support_request_receipts.py": "602201dfb701c25b478009a8625953329f6c0172091776c4b24a891dd7ca06c7",
+    "alembic/versions/a4b5c6d7e8f9_support_delivery_attempts.py": "65456491e017300101b88b82b419e1ec2ca31f84253f622ff66922ab3c1760bc",
+    "frontend/member-app/src/api/support.ts": "bdc8db08ba194d63f1f2fce52435c383c77a072d524b73ed443f74eb5c29a273",
+    "frontend/member-app/src/pages/ReportIssuePage.tsx": "834f278fc7b75309a0c07ac6f95925943891b40213191f7cafdf1454208d0622",
+    "frontend/member-app/src/pages/ReportIssuePage.test.tsx": "c7958a49c991c1c9dd73b3e47816f0c2875096a10a6bb3b34690af6f3f4bbbbe",
+    "tests/test_support_delivery_transactions.py": "5b184f434fc2cc2c9b45b1003dc064358b12b94563861d0ded363bef83a2f591",
+    "tests/test_support_forwarding_privacy.py": "e7df43a2aad4fdd2f4bd21d356988196d72f25289c2d5247d74c8e33c59dd43a",
+    "tests/test_github_issues.py": "f0ec7984168f34ac98953b6ce80f5dc8bb745268e4403c8d579f1ae52248d2d3",
+    "tests/test_native_support_mutations.py": "354b44ff34905294908cd2cedf2c0ea224cb92fcea61bc76cc5aa5f55d01fe22",
+    "tests/test_asgi_native_browse.py": "0430581d76852e4d4572f09cf56811614094a097101ab98b84c2d1487e71d33f",
+    "tests/test_user_deletion_inventory.py": "ad270239cb36e9a78b88f7d3e89b412ec6d2e78a37b13992ad14d15effa7e7f3"
+  },
+  "verification": {
+    "backend_security": {
+      "passed": 444,
+      "pytest_seconds": 88.43,
+      "runner_seconds": 102.79,
+      "scope": "Support HTTP on Flask/native, GitHub helper, real PostgreSQL retry/race/ack/migration/cascade, security/headers/SSRF/RTC, deletion inventory and retention, actual ASGI dispatch fixture"
+    },
+    "member_component_contract": {
+      "passed": 381,
+      "runner_seconds": 15.19,
+      "scope": "ReportIssuePage12, shared envelope367, rendered button ratchet2; overlapping earlier selections are not additive"
+    },
+    "types": {
+      "passed": true,
+      "seconds": 15.16
+    },
+    "production_build": {
+      "passed": true,
+      "seconds": 7.53
+    },
+    "ratchets": {
+      "passed": true,
+      "checks": 10,
+      "baselines_increased": false
+    },
+    "headless": {
+      "passed": true,
+      "seconds": 51.62,
+      "base_image": "sha256:f63116797656d9cb79218410bf22dcabb497e37384b932eb8b16617aa47e7709",
+      "image_scope": "R2030 image with exact read-only support Python and member SPA overlays; not a fresh release image",
+      "steps": [
+        "Populated synthetic account, library and game using actual schema",
+        "Configured: disabled before preview; destination/unknown visibility; redacted desktop/mobile; exact preview equals one intercepted outbound payload; local receipt201",
+        "Actual committed HTTP response deliberately lost; UI retries same UUID and receives original ticket with no second provider call",
+        "Unknown provider response keeps local receipt, shows warning, and same-UUID replay causes no additional provider call",
+        "Unknown delivery: exact existing issue checked via one intercepted GET; reconciled receipt, no additional POST; no authorship guarantee",
+        "Definite rejection: fresh operation-bound retry preview; locked original contents; actual committed retry reply dropped; same nonce recovery returns same ticket with only one additional provider POST",
+        "Unconfigured actual environment: preview unavailable; local-only201; no second intercepted GitHub request"
+      ],
+      "provider_posts_intercepted": 4,
+      "provider_reads_intercepted": 1,
+      "real_provider_request": false
+    },
+    "cleanup": {
+      "owned_resources_removed_and_absence_checked": true,
+      "database_removed": true
+    },
+    "screenshots": [
+      {
+        "name": "uc004-recovery-capture-reviewed-desktop.png",
+        "sha256": "804014af1cdf7a6907077e21f0e9ff13dbbd52ed945e4ca10126c8aa11c76467",
+        "width": 1100,
+        "height": 850,
+        "published": false
+      },
+      {
+        "name": "uc004-recovery-capture-reviewed-mobile.png",
+        "sha256": "53faee6c39f589592b0289576a8982c27fad91370fce97c261039128f67cb68a",
+        "width": 375,
+        "height": 812,
+        "published": false
+      },
+      {
+        "name": "uc004-recovery-capture-reviewed-reconciled-mobile.png",
+        "sha256": "680e0a0d8a99b832dc8aec948c12e7ec24937a564404e681e9e6a3ca5f842686",
+        "width": 375,
+        "height": 812,
+        "published": false
+      },
+      {
+        "name": "uc004-recovery-capture-reviewed-retry-body-mobile.png",
+        "sha256": "d907e709ed5b4211b3bb9cc9022d6259e754e9c5d22e41a52bc541fd214b50f0",
+        "width": 375,
+        "height": 812,
+        "published": false
+      },
+      {
+        "name": "uc004-recovery-capture-reviewed-retry-preview-mobile.png",
+        "sha256": "70573a0edcbed10da8d754d5d9b2617bc16f6efa71ad5390b066eb651ecb2211",
+        "width": 375,
+        "height": 812,
+        "published": false
+      },
+      {
+        "name": "uc004-recovery-capture-reviewed-uncertain-mobile.png",
+        "sha256": "e4140a9c575b4737fdbcd3a837233e18a34df5588d0b60c7af6fed8208d43827",
+        "width": 375,
+        "height": 812,
+        "published": false
+      },
+      {
+        "name": "uc004-recovery-capture-reviewed-unconfigured-mobile.png",
+        "sha256": "741c714e7d993c42d2a5cfd14dcc1bc2b5a5c99ff42ab1f8f276244288f0394e",
+        "width": 375,
+        "height": 812,
+        "published": false
+      }
+    ]
+  },
+  "review": {
+    "kind": "Separate author bypass/regression review; weaker than an independent reviewer",
+    "coverage": [
+      "Both browser/CSRF gates and owner/admin isolation",
+      "Account-scoped unchanged report and operation/nonce approval binding",
+      "Committed journal before POST, no locks during provider I/O, concurrent same nonce and replay after lost reply",
+      "Persisted provider cooldown across reports and exact hourly-budget expiry",
+      "Fixed-origin bounded GET, exact stored redacted fingerprint and generic private mismatch refusal",
+      "Conditional result updates preserve reconciliation or newer attempts",
+      "Historical/startup migrations, guarded rollback, account-owned cascade metadata",
+      "Typed client, locked retry contents, retained local receipt after retry failure, escaped preview and safe issue links"
+    ],
+    "remaining": [
+      "Fresh whole-original-program review",
+      "Actual provider permissions, visibility and availability are unverified",
+      "No provider exactly-once guarantee; uncertain delivery never unlocks a POST",
+      "Legacy receipts without journal/fingerprint require manual operator checking",
+      "No packaged desktop, supported-platform or full-route acceptance inferred"
+    ]
+  },
+  "previous_commit_ci": {
+    "commit": "ed13111ca742c4250604ce5f0ba7ace5df8dd7d2",
+    "run": 42966453567,
+    "conclusion": "failure",
+    "failed_test": "tests/test_asgi_native_browse.py::test_lazy_asgi_dispatches_support_create_and_resolve_natively",
+    "passed": 7816,
+    "skipped": 14,
+    "deselected": 548,
+    "pytest_seconds": 1941.38,
+    "correction": "Stale fake data adapter now implements the production request_receipt contract; focused create/check/resolve path passes in the444 selection. New-commit CI remains due.",
+    "desktop_run": 42966453586,
+    "desktop_conclusion": "success"
+  },
+  "coverage_limit": "R1972 bundle remains valid:7 reports,1545 shared rows,160 current-only. Current-only tests do not establish legacy behavior parity.",
+  "no_merge_release_or_deployment": true
+}

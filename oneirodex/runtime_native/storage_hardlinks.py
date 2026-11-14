@@ -118,6 +118,7 @@ async def _handle_hardlink_request(request: Request, flask_app, data, actor) -> 
     from oneirodex.schemas.storage import HardlinkBody
     from oneirodex.utils.api_contract import api_error_payload
     from oneirodex.utils.validation import format_validation_errors
+    from .batch_favorite import JSON_BODY_TOO_LARGE, bounded_json_object
 
     is_apply = request.url.path.endswith('/apply')
     config = flask_app.config
@@ -125,10 +126,14 @@ async def _handle_hardlink_request(request: Request, flask_app, data, actor) -> 
     apply_enabled = enabled and str(config.get('ALLOW_HARDLINK_APPLY', '')).lower() in {
         '1', 'true', 'yes', 'on',
     }
-    try:
-        body_data = await request.json()
-    except Exception:
-        body_data = {}
+    body_data = await bounded_json_object(
+        request, max_bytes=64 * 1024, require_json_content_type=False,
+    )
+    if body_data is JSON_BODY_TOO_LARGE:
+        payload, status = api_error_payload(
+            'Request body is too large.', code='payload_too_large', status=413,
+        )
+        return JSONResponse(payload, status_code=status)
     try:
         body = HardlinkBody.model_validate(body_data if isinstance(body_data, dict) else {})
     except ValidationError as exc:

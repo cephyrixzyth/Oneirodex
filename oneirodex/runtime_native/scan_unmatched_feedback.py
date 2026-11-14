@@ -258,7 +258,10 @@ async def _flag_bad_match(request, data, auth, *, folder_id, **_):
 
 
 async def _json_dict(request):
-    if not request.headers.get('content-type', '').lower().startswith('application/json'):
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if content_type != 'application/json' and not (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    ):
         return {}
     try:
         payload = await request.json()

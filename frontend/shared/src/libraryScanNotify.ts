@@ -143,18 +143,23 @@ export function groupedToastMessage(group: ScanToastGroup): string {
 }
 
 /**
- * Five libraries stay named. Six or more become one “N notifications” toast
- * so a FIFO drain cannot cover Discover (or any other page).
+ * A small number of libraries stay named; larger bursts become one
+ * “N notifications” toast so notices cannot cover the active page.
  */
 export function burstToastMessages(
   groups: Array<Pick<ScanToastGroup, 'rows'>> | null | undefined,
+  options: { maxIndividual?: number } = {},
 ): BurstToastMessage[] {
   const list = Array.isArray(groups) ? groups : []
   if (list.length === 0) {
     return []
   }
   const allRows = list.flatMap((group) => group.rows || [])
-  if (list.length > MAX_INDIVIDUAL_TOASTS) {
+  const maxIndividual =
+    Number.isInteger(options.maxIndividual) && options.maxIndividual! > 0
+      ? options.maxIndividual!
+      : MAX_INDIVIDUAL_TOASTS
+  if (list.length > maxIndividual) {
     return [
       {
         message: stackSummaryMessage(list.length),

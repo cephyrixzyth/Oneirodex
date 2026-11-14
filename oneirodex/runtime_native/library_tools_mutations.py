@@ -5,6 +5,9 @@ so the router can be exercised using fake-only tests.
 """
 from __future__ import annotations
 
+import json
+
+from .form_compat import first_form_value
 from typing import Any, Callable
 from urllib.parse import urlencode
 
@@ -26,9 +29,12 @@ class LibraryToolsMutationData:
         return is_safe_path(path, self.allowed_bases(app))
 
     def game(self, app, game_uuid):
+        from sqlalchemy import select
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game
-        return db.session.get(Game, game_uuid)
+        return db.session.execute(
+            select(Game).filter_by(uuid=game_uuid)
+        ).scalars().first()
 
     def build_rename_preview(self, root, *, title, year, template, rename_root,
                              rename_media, move_bucket):
@@ -46,9 +52,20 @@ class LibraryToolsMutationData:
         from oneirodex.utils.library_doctor import doctor_write_proposals
         return doctor_write_proposals(rows)
 
-    def directory_readable(self, path):
-        import os
-        return os.path.isdir(path) and os.access(path, os.R_OK)
+    def game_path_readable(self, path):
+        from oneirodex.utils.security import is_readable_game_path
+        return is_readable_game_path(path)
+
+    def log_unsafe_existing_game_path(self, path, reason, actor_name, actor_id):
+        from oneirodex.utils.event_logging import log_system_event
+        from oneirodex.utils.security import sanitize_path_for_logging
+
+        safe_path = sanitize_path_for_logging(path)
+        log_system_event(
+            f"Path validation failed for admin {actor_name} linking existing game: "
+            f"{safe_path} - {reason}",
+            event_type='security', event_level='warning', audit_user=actor_id,
+        )
 
     def link_existing_game(self, app, game_uuid, path, actor_name, actor_id):
         from sqlalchemy import select
@@ -56,7 +73,9 @@ class LibraryToolsMutationData:
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game, UnmatchedFolder
         from oneirodex.utils.event_logging import log_system_event
-        game = db.session.get(Game, game_uuid)
+        game = db.session.execute(
+            select(Game).filter_by(uuid=game_uuid)
+        ).scalars().first()
         if not game:
             return None, 'not_found'
         try:
@@ -83,6 +102,10 @@ class LibraryToolsMutationData:
                     'removed_from_unmatched': bool(unmatched)}, None
         except SQLAlchemyError:
             db.session.rollback()
+            log_system_event(
+                f"Database error linking existing game '{game_uuid}' to folder "
+                f"by admin {actor_name}",
+                event_type='error', event_level='error', audit_user=actor_id)
             return None, 'internal'
 
     def validate_rename_plan(self, plan, root):
@@ -90,13 +113,16 @@ class LibraryToolsMutationData:
         return validate_plan_for_game(plan, root)
 
     def apply_rename(self, app, game_uuid, plan, allowed_bases):
+        from sqlalchemy import select
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game
         from oneirodex.utils.disk_rename import apply_rename_plan
         from oneirodex.utils.path_repoint import _moved as path_moved, repoint_paths
         results = apply_rename_plan(plan, allowed_bases)
         roots = [row for row in results if row.get('ok') and row.get('kind') == 'root_folder']
-        game = db.session.get(Game, game_uuid)
+        game = db.session.execute(
+            select(Game).filter_by(uuid=game_uuid)
+        ).scalars().first()
         if not game:
             return results, '', True
         if roots:
@@ -248,7 +274,8 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                                      login_manager, database_scope):
     from contextlib import nullcontext
 
-    from starlette.responses import RedirectResponse
+    from starlette.responses import Response
+    from werkzeug.utils import redirect as werkzeug_redirect
 
     from .csrf_compat import csrf_error_response
     from .oidc_status import _login_redirect, _set_session_cookie
@@ -270,8 +297,10 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
             )
             response = csrf_error_response(
                 request, session_data, flask_app.config,
-                token=str(form.get('csrf_token') or ''),
+                token=str(first_form_value(form, 'csrf_token') or ''),
             )
+            if response is not None:
+                response = _csrf_html_response(response)
             auth = None
             if response is None:
                 auth = request_auth_context(
@@ -289,13 +318,15 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                     )
                 elif auth.token is not None and not auth.has_scope('admin'):
                     from .library_tools import _error
-                    response = _error(403, 'forbidden', 'Admin required')
+                    response = _error(
+                        403, 'forbidden', 'This token does not have the admin scope',
+                    )
 
             if response is None:
-                game_uuid = str(form.get('game_uuid') or '').strip()
-                full_disk_path = str(form.get('full_disk_path') or '').strip()
-                library_uuid = str(form.get('library_uuid') or '').strip()
-                from_unmatched = str(form.get('from_unmatched') or 'false') == 'true'
+                game_uuid = str(first_form_value(form, 'game_uuid') or '').strip()
+                full_disk_path = str(first_form_value(form, 'full_disk_path') or '').strip()
+                library_uuid = str(first_form_value(form, 'library_uuid') or '').strip()
+                from_unmatched = str(first_form_value(form, 'from_unmatched') or 'false') == 'true'
                 if not game_uuid or not full_disk_path:
                     message, category = 'Select a game and a folder path before linking.', 'error'
                 else:
@@ -306,8 +337,13 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                         else:
                             safe, reason = data.safe_path(flask_app, full_disk_path)
                             if not safe:
+                                data.log_unsafe_existing_game_path(
+                                    full_disk_path, reason,
+                                    getattr(auth.user, 'name', 'administrator'),
+                                    getattr(auth.user, 'id', None),
+                                )
                                 message, category = f'Access denied: {reason}', 'error'
-                            elif not data.directory_readable(full_disk_path):
+                            elif not data.game_path_readable(full_disk_path):
                                 message, category = 'The selected folder does not exist or cannot be read.', 'error'
                             else:
                                 result, error_code = data.link_existing_game(
@@ -317,6 +353,11 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                                 )
                                 if error_code == 'not_found':
                                     message, category = 'Selected game could not be found.', 'error'
+                                elif error_code == 'internal':
+                                    message, category = (
+                                        'An error occurred while linking the game. Please try again.',
+                                        'error',
+                                    )
                                 elif error_code:
                                     message, category = 'Unable to link this folder to the selected game.', 'error'
                                 else:
@@ -331,22 +372,56 @@ async def _legacy_link_existing_game(request, *, flask_app, data, find_user,
                 flashes = list(auth.session_data.get('_flashes') or [])
                 flashes.append((category, message))
                 auth.session_data['_flashes'] = flashes
-                if category == 'success' and from_unmatched:
-                    location = '/admin/scan_management?active_tab=unmatched'
-                elif category == 'success':
-                    location = '/libraries'
+                if category == 'success':
+                    # The legacy blueprint's url_for destination is rooted at
+                    # /scan_management, without the current admin-shell prefix.
+                    location = '/scan_management?active_tab=unmatched'
                 else:
-                    query = urlencode({
-                        'full_disk_path': full_disk_path,
-                        'library_uuid': library_uuid,
-                        'from_unmatched': 'true' if from_unmatched else 'false',
-                    })
+                    # Match Flask's legacy url_for behavior: omit empty/None
+                    # query values and sort the remaining keys.
+                    query_values = []
+                    if full_disk_path:
+                        query_values.append(('full_disk_path', full_disk_path))
+                    if library_uuid:
+                        query_values.append(('library_uuid', library_uuid))
+                    query_values.append((
+                        'from_unmatched', 'true' if from_unmatched else 'false',
+                    ))
+                    query = urlencode(query_values, safe='/')
                     location = '/add_game_manual?' + query
-                response = RedirectResponse(location, status_code=302)
+                legacy_redirect = werkzeug_redirect(location, code=302)
+                response = Response(
+                    content=legacy_redirect.get_data(),
+                    status_code=legacy_redirect.status_code,
+                    headers={
+                        'content-type': legacy_redirect.headers['content-type'],
+                        'location': legacy_redirect.headers['location'],
+                    },
+                )
                 _set_session_cookie(response, flask_app, auth)
             return response
         finally:
             await form.close()
+
+
+def _csrf_html_response(csrf):
+    import json
+
+    from starlette.responses import Response
+    from werkzeug.exceptions import BadRequest
+
+    try:
+        error_payload = json.loads(csrf.body or b'{}')
+    except (TypeError, ValueError, UnicodeDecodeError):
+        error_payload = {}
+    bad_request = BadRequest(
+        description=error_payload.get('message') or 'The CSRF token is invalid.',
+    ).get_response()
+    return Response(
+        content=bad_request.get_data(),
+        status_code=bad_request.status_code,
+        media_type='text/html',
+    )
 
 
 async def _run(request, *, flask_app, data, find_user, find_token,
@@ -375,7 +450,14 @@ async def _run(request, *, flask_app, data, find_user, find_token,
                 try:
                     response = await handler(request, flask_app, data)
                 except Exception:
-                    response = _error(500, 'internal', 'An error occurred while processing your request')
+                    flask_app.logger.exception(
+                        'Unhandled exception during %s %s',
+                        request.method, request.url.path,
+                    )
+                    response = _error(
+                        500, 'internal',
+                        'Something went wrong on our end. The error has been logged.',
+                    )
         if auth.should_set_session_cookie:
             from .oidc_status import _set_session_cookie
             _set_session_cookie(response, flask_app, auth)
@@ -437,12 +519,21 @@ async def _approve_proposal(request, app, data):
 
 
 async def _doctor_write_proposals(request, app, data):
-    body = await _json_body(request)
-    rows = body.get('rows', []) if body is not None else None
-    if not isinstance(rows, list):
-        return _error(400, 'bad_request', 'rows must be a list')
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = None
+    from pydantic import ValidationError
+    from oneirodex.schemas.library_tools import WriteProposalsBody
+    from oneirodex.utils.validation import format_validation_errors
+
+    try:
+        body = WriteProposalsBody.model_validate(payload)
+    except ValidationError as exc:
+        return _error(422, 'unprocessable', 'Invalid request.',
+                      detail=format_validation_errors(exc))
     filtered = []
-    for row in rows:
+    for row in body.rows:
         if not isinstance(row, dict):
             continue
         path = row.get('path')
@@ -470,7 +561,7 @@ async def _link_existing_game(request, app, data):
     safe, error = data.safe_path(app, body.full_disk_path)
     if not safe:
         return _error(403, 'forbidden', error or 'Unsafe path')
-    if not data.directory_readable(body.full_disk_path):
+    if not data.game_path_readable(body.full_disk_path):
         return _error(400, 'bad_request', 'The selected folder does not exist or cannot be read')
     result, error_code = data.link_existing_game(
         app, body.game_uuid, body.full_disk_path,
@@ -525,7 +616,22 @@ async def _doctor_apply_renames(request, app, data):
 
 
 async def _backfill_steam_metadata(request, app, data):
-    body = await _json_body(request) or {}
+    raw_body = await request.body()
+    if raw_body.strip():
+        try:
+            parsed_body = json.loads(raw_body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return _error(400, 'bad_request', 'Request body must be valid JSON')
+        if isinstance(parsed_body, dict):
+            body = parsed_body
+        elif parsed_body:
+            return _error(400, 'bad_request', 'Request body must be a JSON object')
+        else:
+            # Preserve the legacy empty-body defaults for JSON null, false,
+            # zero, empty strings, and empty arrays.
+            body = {}
+    else:
+        body = {}
     try:
         limit = min(max(int(body.get('limit') or 100), 1), 500)
     except (TypeError, ValueError):
@@ -551,4 +657,3 @@ async def _check_freshness(request, app, data):
     result = data.check_freshness(app, body.library_uuid, limit=limit,
                                   only_missing=bool(body.only_missing))
     return _ok(result)
-

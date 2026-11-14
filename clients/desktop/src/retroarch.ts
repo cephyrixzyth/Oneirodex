@@ -149,7 +149,7 @@ export async function fetchCheatText(opts: {
   const url = `${base}/api/games/${encodeURIComponent(opts.gameUuid)}/cheats/${encodeURIComponent(opts.filename)}`
   const fetchFn = opts.fetchImpl || fetch
   try {
-    const response = await fetchFn(url, { credentials: 'include' })
+    const response = await fetchFn(url, { credentials: 'include', redirect: 'error' })
     if (!response.ok) {
       return { ok: false, error: `cheat download ${response.status}` }
     }

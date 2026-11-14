@@ -162,6 +162,7 @@ def sync_all_linked_accounts() -> dict:
     from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.models import StoreAccount
     from oneirodex.utils import store_ownership
+    from oneirodex.utils.store_credentials import has_store_credential
     from oneirodex.utils.store_sync_errors import AUTH_REASONS, SyncOutcomeError
     from oneirodex.utils.store_sync_jobs import is_stale, latest_jobs, run_store_sync
 
@@ -184,8 +185,9 @@ def sync_all_linked_accounts() -> dict:
         select(StoreAccount).filter(StoreAccount.store.in_(tuple(usable)))
     ).scalars().all()
     # Snapshot account facts up front: every job commits, which expires ORM rows.
+    # Keep presence only, including encrypted credentials, rather than secret data.
     accounts = [
-        (a.user_id, (a.store or '').lower(), a.external_account_id, getattr(a, 'credential', None), a.updated_at)
+        (a.user_id, (a.store or '').lower(), a.external_account_id, has_store_credential(a), a.updated_at)
         for a in accounts
     ]
     # Same for the latest jobs: a disconnect during this cycle deletes its
@@ -198,7 +200,7 @@ def sync_all_linked_accounts() -> dict:
     synced = 0
     failed = 0
     waiting = 0
-    for user_id, store, external_account_id, credential, updated_at in accounts:
+    for user_id, store, external_account_id, has_credential, updated_at in accounts:
         handler = usable.get(store)
         if handler is None:
             # Unreachable given the filter, and deliberately not a fallthrough:
@@ -207,11 +209,11 @@ def sync_all_linked_accounts() -> dict:
             continue
         if store == 'steam' and not external_account_id:
             continue
-        if store == 'gog' and not (credential or store_ownership.get_gog_api_token()):
+        if store == 'gog' and not (has_credential or store_ownership.get_gog_api_token()):
             continue
-        if store == 'epic' and not (credential or store_ownership.get_epic_api_token()):
+        if store == 'epic' and not (has_credential or store_ownership.get_epic_api_token()):
             continue
-        if store == 'amazon' and not (credential or store_ownership.get_amazon_api_token()):
+        if store == 'amazon' and not (has_credential or store_ownership.get_amazon_api_token()):
             continue
         # A sign-in the provider already refused will be refused again; wait
         # for the member to reconnect instead of retrying it every cycle. A

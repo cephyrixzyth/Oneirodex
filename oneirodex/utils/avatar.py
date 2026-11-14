@@ -12,12 +12,17 @@ import os
 from uuid import uuid4
 
 from PIL import Image as PILImage
-from werkzeug.utils import secure_filename
-
 from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.image_upload_limits import (
+    ImageWorkBusy,
+    image_decode_work_slot,
+)
 
 MAX_AVATAR_BYTES = 5 * 1024 * 1024
-ALLOWED_AVATAR_EXTENSIONS = frozenset({'jpg', 'jpeg', 'png', 'gif', 'webp'})
+MAX_AVATAR_PIXELS = 16_000_000
+MAX_AVATAR_TOTAL_PIXELS = 32_000_000
+MAX_AVATAR_FRAMES = 200
+AVATAR_FORMAT_EXTENSIONS = {'JPEG': 'jpg', 'PNG': 'png', 'GIF': 'gif', 'WEBP': 'webp'}
 
 # The unset-avatar mark: a gamepad in grey rather than the accent, so it reads
 # as "no picture chosen" while still saying *games*. It replaced a headset,
@@ -165,6 +170,35 @@ AVATAR_MAX_EDGE = 500
 THUMBNAIL_MAX_EDGE = 50
 
 
+class AvatarResourceLimitError(ValueError):
+    """The compressed image is small enough, but costly to decode or animate."""
+
+
+def _close_image(img) -> None:
+    if img is not None:
+        try:
+            img.close()
+        except Exception:  # cleanup must still run if a decoder close fails
+            pass
+
+
+def _remove_partial_avatar_files(image_path: str) -> None:
+    for candidate in (image_path, _thumbnail_path(image_path)):
+        try:
+            if os.path.exists(candidate):
+                os.remove(candidate)
+        except OSError:
+            pass
+
+
+def _validate_avatar_dimensions(img) -> None:
+    width, height = img.size
+    if width <= 0 or height <= 0 or width * height > MAX_AVATAR_PIXELS:
+        raise AvatarResourceLimitError(
+            f'Image exceeds the {MAX_AVATAR_PIXELS // 1_000_000}-megapixel avatar limit.'
+        )
+
+
 def avatar_upload_folder(app) -> str:
     """Where avatars live on disk. Created on demand."""
     return os.path.join(app.config['UPLOAD_FOLDER'], 'images/avatars_users')
@@ -187,11 +221,6 @@ def validate_avatar(file) -> str | None:
     if not file or not getattr(file, 'filename', ''):
         return 'Choose an image first.'
 
-    extension = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-    if extension not in ALLOWED_AVATAR_EXTENSIONS:
-        allowed = ', '.join(sorted(ALLOWED_AVATAR_EXTENSIONS))
-        return f'Unsupported image type. Use one of: {allowed}.'
-
     if _file_size(file) > MAX_AVATAR_BYTES:
         return f'Image is larger than the {MAX_AVATAR_BYTES // 1024 // 1024}MB limit.'
 
@@ -201,8 +230,20 @@ def validate_avatar(file) -> str | None:
 def _resize_animated_gif(img, image_path: str) -> None:
     """Keep the animation. Resizing frame by frame is the only way to."""
     frames = []
+    total_pixels = 0
     try:
         while True:
+            if len(frames) >= MAX_AVATAR_FRAMES:
+                raise AvatarResourceLimitError(
+                    f'Animated avatar exceeds the {MAX_AVATAR_FRAMES}-frame limit.'
+                )
+            width, height = img.size
+            total_pixels += width * height
+            if total_pixels > MAX_AVATAR_TOTAL_PIXELS:
+                raise AvatarResourceLimitError(
+                    'Animated avatar exceeds the '
+                    f'{MAX_AVATAR_TOTAL_PIXELS // 1_000_000}-megapixel total frame limit.'
+                )
             frame = img.copy()
             frame.thumbnail((AVATAR_MAX_EDGE, AVATAR_MAX_EDGE), PILImage.LANCZOS)
             frames.append(frame)
@@ -241,12 +282,29 @@ def _remove_previous(upload_folder: str, previous_path: str | None) -> None:
             pass
 
 
+def finalize_avatar_change(
+    app, previous_path: str | None, new_path: str | None, *, committed: bool,
+) -> None:
+    """Retire files only after the database decides which avatar path is live."""
+    upload_root = app.config.get('UPLOAD_FOLDER')
+    if not upload_root:
+        return
+    upload_folder = os.path.join(upload_root, 'images/avatars_users')
+    if committed:
+        if previous_path != new_path:
+            _remove_previous(upload_folder, previous_path)
+    elif new_path and new_path.startswith(AVATAR_URL_PREFIX):
+        # A failed commit rolled the model back to the previous value. Remove
+        # the newly written files while retaining the old avatar on disk.
+        _remove_previous(upload_folder, new_path)
+
+
 def save_avatar(file, user, app) -> tuple[str | None, str | None]:
     """Store ``file`` as ``user``'s avatar.
 
     Returns ``(avatarpath, error)`` — exactly one of the two is set. The caller
-    commits; this function only touches the filesystem and the in-memory user,
-    so a failed commit does not leave a half-applied change.
+    commits and then calls :func:`finalize_avatar_change`, so a failed commit
+    retains the previous file and removes the newly written files.
     """
     error = validate_avatar(file)
     if error:
@@ -259,35 +317,72 @@ def save_avatar(file, user, app) -> tuple[str | None, str | None]:
         app.logger.warning('avatar upload folder unavailable: %s', exc)
         return None, 'Could not write to the avatar folder.'
 
-    filename = secure_filename(file.filename)
-    extension = filename.rsplit('.', 1)[-1].lower()
-    stored_name = f'{uuid4()}.{extension}'
-    image_path = os.path.join(upload_folder, stored_name)
+    upload_id = uuid4().hex
+    staged_path = os.path.join(upload_folder, f'{upload_id}.upload')
+    image_path = None
 
-    previous = user.avatarpath
+    img = None
     try:
         from oneirodex.utils.functions import square_image
 
-        file.save(image_path)
-        img = PILImage.open(image_path)
-        if img.format == 'GIF' and 'duration' in img.info:
-            _resize_animated_gif(img, image_path)
-        else:
-            squared = square_image(img, AVATAR_MAX_EDGE)
-            squared.save(image_path)
-            thumbnail = squared.copy()
-            thumbnail.thumbnail((THUMBNAIL_MAX_EDGE, THUMBNAIL_MAX_EDGE), PILImage.LANCZOS)
-            thumbnail.save(_thumbnail_path(image_path))
-    except Exception as exc:  # Pillow raises a wide family for bad image data
-        app.logger.warning('avatar processing failed: %s', exc)
+        with image_decode_work_slot():
+            file.save(staged_path)
+            img = PILImage.open(staged_path)
+            image_format = str(img.format or '').upper()
+            if image_format not in AVATAR_FORMAT_EXTENSIONS:
+                raise AvatarResourceLimitError('Choose a supported avatar image format.')
+            _validate_avatar_dimensions(img)
+            extension = AVATAR_FORMAT_EXTENSIONS[image_format]
+            image_path = os.path.join(upload_folder, f'{upload_id}.{extension}')
+            if image_format == 'GIF' and 'duration' in img.info:
+                _resize_animated_gif(img, image_path)
+            else:
+                squared = square_image(img, AVATAR_MAX_EDGE)
+                if image_format == 'JPEG' and squared.mode not in ('RGB', 'L'):
+                    converted = squared.convert('RGB')
+                    if squared is not img:
+                        _close_image(squared)
+                    squared = converted
+                squared.save(image_path, format=image_format)
+                thumbnail = squared.copy()
+                thumbnail.thumbnail((THUMBNAIL_MAX_EDGE, THUMBNAIL_MAX_EDGE), PILImage.LANCZOS)
+                thumbnail.save(_thumbnail_path(image_path), format=image_format)
+                if squared is not img:
+                    _close_image(squared)
+                _close_image(thumbnail)
+            _close_image(img)
+            img = None
+        os.remove(staged_path)
+    except ImageWorkBusy:
+        _close_image(img)
+        _remove_partial_avatar_files(image_path) if image_path else None
         try:
-            if os.path.exists(image_path):
-                os.remove(image_path)
+            os.remove(staged_path)
+        except OSError:
+            pass
+        return None, 'Image processing is busy. Try again shortly.'
+    except AvatarResourceLimitError as exc:
+        _close_image(img)
+        app.logger.info('avatar upload rejected by image limits: %s', exc)
+        if image_path:
+            _remove_partial_avatar_files(image_path)
+        try:
+            os.remove(staged_path)
+        except OSError:
+            pass
+        return None, str(exc)
+    except Exception as exc:  # Pillow raises a wide family for bad image data
+        _close_image(img)
+        app.logger.warning('avatar processing failed: %s', exc)
+        if image_path:
+            _remove_partial_avatar_files(image_path)
+        try:
+            os.remove(staged_path)
         except OSError:
             pass
         return None, 'That file could not be read as an image.'
 
-    _remove_previous(upload_folder, previous)
+    stored_name = os.path.basename(image_path)
     user.avatarpath = AVATAR_URL_PREFIX + stored_name
     return user.avatarpath, None
 
@@ -313,13 +408,12 @@ def set_stock_avatar(avatar_id: str, user, app) -> tuple[str | None, str | None]
 
     Same contract as :func:`save_avatar` — ``(avatarpath, error)`` — so the
     route can treat "uploaded a file" and "picked a stock one" identically. The
-    previously uploaded file is retired here too; otherwise switching to a stock
-    avatar would quietly leave an orphan behind on every switch.
+    caller retires the previous uploaded file only after the database commit
+    succeeds, using :func:`finalize_avatar_change`.
     """
     entry = stock_avatar(avatar_id)
     if entry is None:
         return None, 'That is not one of the avatars we ship.'
 
-    _remove_previous(avatar_upload_folder(app), user.avatarpath)
     user.avatarpath = entry['path']
     return user.avatarpath, None

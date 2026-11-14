@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 
-from oneirodex.runtime_native.game_servers import create_game_servers_router
+from oneirodex.runtime_native.game_servers import GameServersData, create_game_servers_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 
 
@@ -88,16 +92,16 @@ def runtime():
     )
     users = {
         'admin': SimpleNamespace(id=7, role='admin', state=True, is_active=True,
-                                 is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                 is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'member': SimpleNamespace(id=8, role='user', state=True, is_active=True,
-                                  is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                  is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'child': SimpleNamespace(id=9, role='child', state=True, is_active=True,
-                                 is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                 is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
     }
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda identity: next(
-        (user for user in users.values() if identity == f'{user.id}:fp'), None,
+        (user for user in users.values() if identity.split(':', 1)[0] == str(user.id)), None,
     ))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     fake = FakeData()
@@ -114,7 +118,7 @@ def runtime():
         login_manager=manager, data_access=fake,
     ))
     cookies = {
-        name: dump_session_cookie({'_user_id': f'{user.id}:fp', '_fresh': True},
+        name: dump_session_cookie({'_user_id': login_identity_for(user.id), '_fresh': True},
                                   'game-servers-test-secret')
         for name, user in users.items()
     }
@@ -143,6 +147,42 @@ def test_member_listing_and_detail_keep_admin_fields_private(runtime):
     assert 'invite_note' in listing.json()['servers'][0]
     assert 'health_url' not in listing.json()['servers'][0]
     assert 'health_url' not in detail.json()
+
+
+def test_game_server_create_accepts_vendor_json_like_legacy_validator(runtime):
+    app, flask_app, data, _users, _tokens, cookies = runtime
+    from oneirodex.schemas.game_servers import CreateGameServerBody
+    from oneirodex.utils.validation import validate_body
+
+    @validate_body(CreateGameServerBody)
+    def legacy_validator(body):
+        return {'payload': body.model_dump(exclude_none=True)}
+
+    flask_app.add_url_rule('/legacy-json-check', view_func=legacy_validator, methods=['POST'])
+    vendor_type = 'application/vnd.oneirodex+json'
+    vendor_body = {'display_name': 'Vendor server', 'connect_string': 'host:2456'}
+    legacy = flask_app.test_client().post(
+        '/legacy-json-check', data=json.dumps(vendor_body), content_type=vendor_type,
+    )
+    current = _request(
+        app, '/api/game-servers', cookie=cookies['admin'], method='POST',
+        json=vendor_body, headers={'Content-Type': vendor_type},
+    )
+
+    assert legacy.status_code == 200
+    assert legacy.json['payload'] == vendor_body
+    assert current.status_code == 201
+    assert current.json()['display_name'] == vendor_body['display_name']
+    assert current.json()['connect_string'] == vendor_body['connect_string']
+    assert ('create', {
+        'display_name': vendor_body['display_name'],
+        'connect_string': vendor_body['connect_string'],
+        'game_uuid': None,
+        'health_url': None,
+        'compose_project': None,
+        'container_id': None,
+        'invite_note': None,
+    }) in data.calls
 
 
 def test_anonymous_request_redirects_and_acl_child_projection(runtime):
@@ -205,8 +245,8 @@ def test_admin_bearer_token_requires_admin_scope(runtime):
     token = SimpleNamespace(
         user_id=7, token_hash=hashlib.sha256(b'secret').hexdigest(),
         revoked_at=None, scopes=['read:library'], last_used_at=None,
-        has_scope=lambda scope: scope in ['read:library'],
     )
+    token.has_scope = lambda scope: scope in token.scopes
     tokens['prefix'] = token
     denied = _request(
         app, '/api/game-servers', method='POST',
@@ -216,14 +256,38 @@ def test_admin_bearer_token_requires_admin_scope(runtime):
     assert denied.status_code == 403
     assert not any(call[0] == 'create' for call in data.calls)
 
-    limited_read = _request(
-        app, '/api/game-servers',
-        headers={'Authorization': 'Bearer gt_prefix_secret'},
+    read_paths = (
+        '/api/game-servers',
+        '/api/game-servers/srv-1',
+        '/api/game-servers/srv-1/status',
+        '/api/game-servers/acl-check',
     )
-    assert limited_read.status_code == 200
-    assert 'health_url' not in limited_read.json()['servers'][0]
-    acl = _request(app, '/api/game-servers/acl-check',
-                   headers={'Authorization': 'Bearer gt_prefix_secret'})
+    for path in read_paths:
+        denied_read = _request(
+            app, path, headers={'Authorization': 'Bearer gt_prefix_secret'},
+        )
+        assert denied_read.status_code == 403
+        assert denied_read.json()['error'] == 'Missing scope: read:social'
+        assert denied_read.json()['detail'] == {'required_scope': 'read:social'}
+    assert data.calls == []
+
+    token.scopes.append('read:social')
+    listing = _request(
+        app, '/api/game-servers', headers={'Authorization': 'Bearer gt_prefix_secret'},
+    )
+    detail = _request(
+        app, '/api/game-servers/srv-1', headers={'Authorization': 'Bearer gt_prefix_secret'},
+    )
+    status = _request(
+        app, '/api/game-servers/srv-1/status', headers={'Authorization': 'Bearer gt_prefix_secret'},
+    )
+    acl = _request(
+        app, '/api/game-servers/acl-check', headers={'Authorization': 'Bearer gt_prefix_secret'},
+    )
+    assert listing.status_code == detail.status_code == status.status_code == acl.status_code == 200
+    assert 'health_url' not in listing.json()['servers'][0]
+    assert 'health_url' not in detail.json()
+    assert status.json()['reachable'] is True
     assert acl.json()['can_manage'] is False
 
 
@@ -243,3 +307,37 @@ def test_missing_server_returns_legacy_not_found_envelope(runtime):
     response = _request(app, '/api/game-servers/missing', cookie=cookies['member'])
     assert response.status_code == 404
     assert response.json()['error_code'] == 'not_found'
+
+
+def test_database_adapter_refreshes_created_server_after_commit(monkeypatch):
+    class Session:
+        def __init__(self):
+            self.server = None
+            self.refreshed = []
+
+        def add(self, server):
+            self.server = server
+
+        def commit(self):
+            created = datetime(2026, 10, 21, 22, 35, tzinfo=timezone.utc)
+            self.server.created_at = created
+            self.server.updated_at = created
+
+        def refresh(self, server):
+            self.refreshed.append(server)
+            server.created_at = server.created_at.replace(tzinfo=None)
+            server.updated_at = server.updated_at.replace(tzinfo=None)
+
+    session = Session()
+    monkeypatch.setattr(
+        'oneirodex.runtime_native.db_session.native_db',
+        SimpleNamespace(session=session),
+    )
+
+    server = GameServersData().create_server(
+        display_name='Parity', connect_string='host:7',
+    )
+
+    assert session.refreshed == [server]
+    assert server.to_dict(admin=True)['created_at'] == '2026-10-21T22:35:00'
+    assert server.to_dict(admin=True)['updated_at'] == '2026-10-21T22:35:00'

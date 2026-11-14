@@ -18,19 +18,39 @@ class IgdbSettingsData:
 
         return {'settings': igdb_public_state(global_settings_row())}
 
+    def existing_secret_length(self) -> int:
+        from oneirodex.utils.global_settings import global_settings_row
+        from oneirodex.utils.secret_store import read_global_secret
+
+        settings = global_settings_row()
+        return len((read_global_secret(settings, 'igdb_client_secret') or '') if settings else '')
+
     def save(self, payload: dict) -> dict:
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.utils.cache import cache
         from oneirodex.utils.global_settings import global_settings_row, global_settings_row_or_create
         from oneirodex.utils.igdb_settings import igdb_public_state
+        from oneirodex.utils.secret_store import write_global_secret
 
         settings = global_settings_row() or global_settings_row_or_create()
         settings.igdb_client_id = payload['igdb_client_id']
         if payload['igdb_client_secret']:
-            settings.igdb_client_secret = payload['igdb_client_secret']
+            write_global_secret(settings, 'igdb_client_secret', payload['igdb_client_secret'])
         db.session.commit()
         cache.delete('global_settings')
         return {'settings': igdb_public_state(settings)}
+
+    def save_legacy(self, payload):
+        """Preserve the v1.1.8 admin form POST while the JSON API stays strict."""
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.global_settings import global_settings_row_or_create
+        from oneirodex.utils.secret_store import write_global_secret
+
+        settings = global_settings_row_or_create()
+        settings.igdb_client_id = payload.get('igdb_client_id')
+        if payload.get('igdb_client_secret'):
+            write_global_secret(settings, 'igdb_client_secret', payload.get('igdb_client_secret'))
+        db.session.commit()
 
     def test_connection(self) -> dict | bool | None:
         from datetime import datetime, timezone
@@ -39,9 +59,10 @@ class IgdbSettingsData:
         from oneirodex.utils.global_settings import global_settings_row
         from oneirodex.utils.igdb_api import make_igdb_api_request
         from oneirodex.utils.igdb_settings import igdb_public_state
+        from oneirodex.utils.secret_store import has_global_secret
 
         settings = global_settings_row()
-        if not settings or not settings.igdb_client_id or not settings.igdb_client_secret:
+        if not settings or not settings.igdb_client_id or not has_global_secret(settings, 'igdb_client_secret'):
             return None
         result = make_igdb_api_request(
             'https://api.igdb.com/v4/games', 'fields name; limit 1;'
@@ -51,6 +72,30 @@ class IgdbSettingsData:
         settings.igdb_last_tested = datetime.now(timezone.utc)
         db.session.commit()
         return {'settings': igdb_public_state(settings)}
+
+    def test_connection_legacy(self) -> dict | bool | None:
+        """Preserve the response contract of the v1.1.8 connection button."""
+        from datetime import datetime, timezone
+
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.global_settings import global_settings_row
+        from oneirodex.utils.igdb_api import make_igdb_api_request
+        from oneirodex.utils.secret_store import has_global_secret
+
+        settings = global_settings_row()
+        if not settings or not settings.igdb_client_id or not has_global_secret(settings, 'igdb_client_secret'):
+            return None
+        result = make_igdb_api_request(
+            'https://api.igdb.com/v4/games', 'fields name; limit 1;'
+        )
+        if not isinstance(result, list):
+            return False
+        settings.igdb_last_tested = datetime.now(timezone.utc)
+        db.session.commit()
+        return {
+            'status': 'success',
+            'message': 'IGDB API test successful',
+        }
 
 
 def create_igdb_settings_router(
@@ -131,7 +176,41 @@ def create_igdb_settings_router(
                         'This token does not have the admin scope', code='forbidden'
                     )
                     response = JSONResponse(payload, status_code=status)
-                elif request.url.path in {'/admin/igdb_settings', '/admin/integrations/igdb/save'}:
+                elif request.url.path == '/admin/igdb_settings':
+                    from .legacy_json_compat import (
+                        LegacyJSONError,
+                        legacy_json_error_response,
+                        legacy_unexpected_error_response,
+                        parse_legacy_json,
+                    )
+
+                    try:
+                        body = await parse_legacy_json(request)
+                    except LegacyJSONError as exc:
+                        response = legacy_json_error_response(request, exc)
+                    else:
+                        if not isinstance(body, dict):
+                            response = legacy_unexpected_error_response(request)
+                        else:
+                            try:
+                                legacy_save = getattr(data, 'save_legacy', None)
+                                if legacy_save is None:
+                                    data.save(body)
+                                else:
+                                    legacy_save(body)
+                                response = JSONResponse(api_ok_payload({
+                                    'status': 'success',
+                                    'message': 'IGDB settings updated successfully',
+                                }))
+                            except Exception:
+                                from oneirodex.runtime_native.db_session import native_db as db
+                                import logging
+
+                                db.session.rollback()
+                                logging.getLogger(__name__).warning('IGDB settings form save failed')
+                                payload, status = api_error_payload('Could not save IGDB settings', code='internal')
+                                response = JSONResponse(payload, status_code=status)
+                elif request.url.path == '/admin/integrations/igdb/save':
                     try:
                         body = await request.json()
                     except Exception:
@@ -140,10 +219,26 @@ def create_igdb_settings_router(
 
                     try:
                         payload = validate_igdb_data(body)
+                        settings_state = data.read().get('settings') or {}
+                        client_id = payload['igdb_client_id'].strip()
+                        client_secret = payload['igdb_client_secret'].strip()
+                        secret_length = getattr(data, 'existing_secret_length', None)
+                        existing_secret_length = (
+                            int(secret_length()) if callable(secret_length)
+                            else 20 if settings_state.get('secret_present') else 0
+                        )
+                        effective_secret_length = len(client_secret) or existing_secret_length
+                        if len(client_id) < 20 or effective_secret_length < 20:
+                            raise ValueError(
+                                'Client ID and Secret must be at least 20 characters long'
+                            )
+                        payload = {
+                            'igdb_client_id': client_id,
+                            'igdb_client_secret': client_secret,
+                        }
                         data.save(payload)
                         response = JSONResponse(api_ok_payload({
-                            'status': 'success',
-                            'message': 'IGDB settings updated successfully',
+                            'message': 'IGDB settings saved successfully',
                         }))
                     except ValueError as exc:
                         payload, status = api_error_payload(str(exc), code='bad_request')
@@ -158,31 +253,53 @@ def create_igdb_settings_router(
                         response = JSONResponse(payload, status_code=status)
                 elif request.method == 'POST':
                     try:
-                        result = data.test_connection()
+                        legacy_test = request.url.path in {
+                            '/admin/test_igdb', '/admin/integrations/igdb/test',
+                        }
+                        integration_test = request.url.path == '/admin/integrations/igdb/test'
+                        test_connection = (
+                            getattr(data, 'test_connection_legacy', data.test_connection)
+                            if legacy_test else data.test_connection
+                        )
+                        result = test_connection()
                         if result is None:
                             payload, status = api_error_payload(
+                                'IGDB settings not configured' if request.url.path == '/admin/test_igdb' else
+                                'IGDB settings not configured. Please save your settings first.'
+                                if integration_test else
                                 'Save a client ID and secret before testing the connection',
                                 code='bad_request',
                             )
                             response = JSONResponse(payload, status_code=status)
                         elif result is False:
                             payload, status = api_error_payload(
+                                'Invalid API response' if legacy_test else
                                 'IGDB connection failed. Check the saved credentials and provider access.',
-                                code='bad_gateway',
+                                code='internal' if legacy_test else 'bad_gateway',
                             )
                             response = JSONResponse(payload, status_code=status)
                         else:
-                            response = JSONResponse(api_ok_payload({
-                                **result, 'message': 'IGDB connection successful.',
-                            }))
+                            if legacy_test:
+                                success = {'message': result['message']} if integration_test else result
+                                response = JSONResponse(api_ok_payload(success))
+                            else:
+                                response = JSONResponse(api_ok_payload({
+                                    **result, 'message': 'IGDB connection successful.',
+                                }))
                     except Exception:
                         from oneirodex.runtime_native.db_session import native_db as db
                         import logging
 
                         db.session.rollback()
                         logging.getLogger(__name__).warning('IGDB connection test failed')
+                        legacy_test = request.url.path in {
+                            '/admin/test_igdb', '/admin/integrations/igdb/test',
+                        }
+                        integration_test = request.url.path == '/admin/integrations/igdb/test'
                         payload, status = api_error_payload(
-                            'IGDB connection test failed', code='bad_gateway'
+                            'The IGDB connection test failed.' if integration_test else
+                            'IGDB API test failed' if legacy_test else 'IGDB connection test failed',
+                            code='internal' if legacy_test else 'bad_gateway',
                         )
                         response = JSONResponse(payload, status_code=status)
                 elif request.method == 'PUT':

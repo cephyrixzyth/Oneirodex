@@ -9,6 +9,8 @@ import { Page } from '../components/Page'
 import { getJson, putJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 
+import { AdminLink } from '../components/AdminLink'
+
 interface RemotePlayForm {
   enabled: boolean
   provider: string
@@ -201,9 +203,9 @@ export function RemotePlayPage() {
             <Button type="submit" disabled={busy || loadFailed}>
               {busy ? 'Saving…' : 'Save settings'}
             </Button>
-            <a className="od-btn od-btn--ghost" href="/admin/settings">
+            <AdminLink className="od-btn od-btn--ghost" to="/admin/settings">
               Settings hub
-            </a>
+            </AdminLink>
           </div>
           {message ? <PageStatus announcement="status">{message}</PageStatus> : null}
         </form>

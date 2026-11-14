@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+from io import BytesIO
+from threading import Event
 from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+from PIL import Image
+import pytest
 
 from oneirodex.runtime_native.account_avatar_upload import (
     create_account_avatar_upload_router,
@@ -20,15 +25,26 @@ class FakeAvatarData:
         self.error = error
         self.commit_error = commit_error
         self.calls = []
+        self.cleanup_calls = []
         self.commits = 0
         self.rollbacks = 0
+        self.save_had_running_event_loop = None
 
     def save(self, file, user, _app):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self.save_had_running_event_loop = False
+        else:
+            self.save_had_running_event_loop = True
         self.calls.append((file.filename, file.read(), user.id))
         return ('library/images/avatars_users/new.png', self.error)
 
     def avatar_url(self, path):
         return '/' + path
+
+    def prepare_cleanup(self, user, previous_path, new_path, _app):
+        self.cleanup_calls.append((user.id, previous_path, new_path))
 
     def commit(self):
         self.commits += 1
@@ -39,7 +55,7 @@ class FakeAvatarData:
         self.rollbacks += 1
 
 
-def make_client(*, data=None):
+def make_client(*, data=None, upload_folder=None, avatarpath='old.png'):
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY=SECRET,
@@ -47,6 +63,7 @@ def make_client(*, data=None):
         WTF_CSRF_ENABLED=True,
         SESSION_COOKIE_NAME='session',
         REMEMBER_COOKIE_NAME='remember_token',
+        UPLOAD_FOLDER=str(upload_folder) if upload_folder is not None else None,
     )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
@@ -54,7 +71,7 @@ def make_client(*, data=None):
         is_active=True,
         state=True,
         is_authenticated=True,
-        avatarpath='old.png',
+        avatarpath=avatarpath,
     )
     login_manager = SimpleNamespace(
         login_view='login.login',
@@ -106,9 +123,115 @@ def test_avatar_upload_extracts_file_and_preserves_success_payload():
         'success': True,
     }
     assert data.calls == [('face.png', b'image-bytes', 167)]
+    assert data.save_had_running_event_loop is False
+    assert data.cleanup_calls == [(167, 'old.png', 'library/images/avatars_users/new.png')]
     assert data.commits == 1
     assert data.rollbacks == 0
     assert response.headers['x-content-type-options'] == 'nosniff'
+
+
+@pytest.mark.parametrize('cancel_count', [1, 3])
+def test_cancelled_avatar_upload_waits_for_worker_then_rolls_back_and_cleans(monkeypatch, cancel_count):
+    from oneirodex.runtime_native import account_avatar_upload
+
+    worker_started = Event()
+    finish_worker = Event()
+    app_marker = object()
+    previous_path = 'old.png'
+    cleanup_calls = []
+
+    class Data:
+        rollbacks = 0
+
+        def save(self, _file, _user, _app):
+            worker_started.set()
+            assert finish_worker.wait(timeout=5)
+            return 'new.png', None
+
+        def rollback(self):
+            self.rollbacks += 1
+
+    data = Data()
+    monkeypatch.setattr(
+        'oneirodex.utils.avatar.finalize_avatar_change',
+        lambda *args, **kwargs: cleanup_calls.append((args, kwargs)),
+    )
+
+    async def scenario():
+        task = asyncio.create_task(account_avatar_upload._save_avatar_cancellable(
+            data, object(), object(), app_marker, previous_path,
+        ))
+        try:
+            assert await asyncio.to_thread(worker_started.wait, 5)
+            for _ in range(cancel_count):
+                task.cancel()
+                for _turn in range(4):
+                    await asyncio.sleep(0)
+                assert not task.done(), 'Avatar cleanup was bypassed by repeated cancellation'
+        finally:
+            finish_worker.set()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(scenario())
+    assert data.rollbacks == 1
+    assert cleanup_calls == [(
+        (app_marker, previous_path, 'new.png'), {'committed': False},
+    )]
+
+
+@pytest.mark.parametrize('overflow', ['fields', 'files'])
+def test_avatar_upload_rejects_excess_multipart_parts_before_saving(overflow):
+    data = FakeAvatarData()
+    client = make_client(data=data)
+    if overflow == 'fields':
+        response = client.post(
+            '/api/account/avatar',
+            headers=browser_headers(),
+            data={'unused_one': 'x', 'unused_two': 'y'},
+            files={'avatar': ('face.png', b'image-bytes', 'image/png')},
+        )
+    else:
+        response = client.post(
+            '/api/account/avatar',
+            headers=browser_headers(),
+            files=[
+                ('avatar', ('face.png', b'image-bytes', 'image/png')),
+                ('unused', ('unused.txt', b'x', 'text/plain')),
+            ],
+        )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
+    assert data.commits == 0
+
+
+def test_avatar_upload_rejects_thousands_of_small_multipart_fields():
+    data = FakeAvatarData()
+    client = make_client(data=data)
+    boundary = 'avatar-boundary'
+    fields = [
+        f'--{boundary}\r\nContent-Disposition: form-data; name="field-{index}"\r\n\r\nx\r\n'
+        for index in range(2000)
+    ]
+    body = ''.join(fields) + (
+        f'--{boundary}\r\nContent-Disposition: form-data; name="avatar"; '
+        'filename="face.png"\r\nContent-Type: image/png\r\n\r\nimage-bytes\r\n'
+        f'--{boundary}--\r\n'
+    )
+
+    response = client.post(
+        '/api/account/avatar',
+        headers={**browser_headers(), 'Content-Type': f'multipart/form-data; boundary={boundary}'},
+        content=body,
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
+    assert data.commits == 0
 
 
 def test_missing_avatar_uses_existing_error_envelope():
@@ -162,6 +285,124 @@ def test_avatar_commit_failure_rolls_back_and_hides_internal_detail():
     assert data.rollbacks == 1
 
 
+def test_real_avatar_files_survive_native_route_commit_failure(tmp_path):
+    from io import BytesIO
+
+    from PIL import Image
+
+    from oneirodex.utils.avatar import AVATAR_URL_PREFIX, save_avatar
+
+    class RealSaveCommitFailure:
+        def __init__(self):
+            self.user = None
+            self.previous_path = None
+
+        def save(self, file, user, flask_app):
+            self.user = user
+            self.previous_path = user.avatarpath
+            return save_avatar(file, user, flask_app)
+
+        def avatar_url(self, path):
+            return '/' + path
+
+        def commit(self):
+            raise RuntimeError('synthetic commit failure')
+
+        def rollback(self):
+            self.user.avatarpath = self.previous_path
+
+    upload_folder = tmp_path / 'uploads'
+    avatar_folder = upload_folder / 'images' / 'avatars_users'
+    avatar_folder.mkdir(parents=True)
+    previous_path = AVATAR_URL_PREFIX + 'old.png'
+    old_avatar = avatar_folder / 'old.png'
+    old_thumbnail = avatar_folder / 'old_thumbnail.png'
+    old_avatar.write_bytes(b'old avatar bytes')
+    old_thumbnail.write_bytes(b'old thumbnail bytes')
+    data = RealSaveCommitFailure()
+    client = make_client(
+        data=data, upload_folder=upload_folder, avatarpath=previous_path,
+    )
+    image = BytesIO()
+    Image.new('RGB', (48, 48), 'green').save(image, format='PNG')
+
+    response = client.post(
+        '/api/account/avatar', headers=browser_headers(),
+        files={'avatar': ('replacement.png', image.getvalue(), 'image/png')},
+    )
+
+    assert response.status_code == 500
+    assert data.user.avatarpath == previous_path
+    assert old_avatar.read_bytes() == b'old avatar bytes'
+    assert old_thumbnail.read_bytes() == b'old thumbnail bytes'
+    assert set(avatar_folder.iterdir()) == {old_avatar, old_thumbnail}
+
+
+def test_repeated_avatar_cancellation_removes_real_uncommitted_files(tmp_path):
+    from werkzeug.datastructures import FileStorage
+    from oneirodex.runtime_native.account_avatar_upload import _save_avatar_cancellable
+    from oneirodex.utils.avatar import AVATAR_URL_PREFIX, save_avatar
+
+    upload_folder = tmp_path / 'uploads'
+    folder = upload_folder / 'images' / 'avatars_users'
+    folder.mkdir(parents=True)
+    old_avatar, old_thumbnail = folder / 'old.png', folder / 'old_thumbnail.png'
+    old_avatar.write_bytes(b'prior avatar')
+    old_thumbnail.write_bytes(b'prior thumbnail')
+    previous = AVATAR_URL_PREFIX + 'old.png'
+    user = SimpleNamespace(id=167, avatarpath=previous)
+    flask_app = Flask(__name__)
+    flask_app.config['UPLOAD_FOLDER'] = str(upload_folder)
+    staged, release = Event(), Event()
+    premature_completion = []
+
+    class Data:
+        rollbacks = 0
+
+        def save(self, file, owner, app):
+            result = save_avatar(file, owner, app)
+            assert result[0] and result[1] is None
+            staged.set()
+            assert release.wait(5)
+            return result
+
+        def rollback(self):
+            self.rollbacks += 1
+            user.avatarpath = previous
+
+    image = BytesIO()
+    Image.new('RGB', (48, 48), 'green').save(image, format='PNG')
+    image.seek(0)
+    data = Data()
+
+    async def scenario():
+        task = asyncio.create_task(_save_avatar_cancellable(
+            data, FileStorage(stream=image, filename='replacement.png'),
+            user, flask_app, previous,
+        ))
+        try:
+            assert await asyncio.to_thread(staged.wait, 5)
+            assert user.avatarpath != previous
+            assert len(list(folder.iterdir())) == 4
+            for _ in range(3):
+                task.cancel()
+                for _turn in range(4):
+                    await asyncio.sleep(0)
+                premature_completion.append(task.done())
+        finally:
+            release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(scenario())
+    assert set(folder.iterdir()) == {old_avatar, old_thumbnail}
+    assert data.rollbacks == 1
+    assert user.avatarpath == previous
+    assert old_avatar.read_bytes() == b'prior avatar'
+    assert old_thumbnail.read_bytes() == b'prior thumbnail'
+    assert premature_completion == [False, False, False]
+
+
 def test_legacy_profile_edit_get_redirects_to_avatar_settings():
     client = make_client()
     client.cookies.set('session', dump_session_cookie({'_user_id': '167:fp'}, SECRET))
@@ -185,9 +426,54 @@ def test_legacy_profile_edit_post_accepts_hidden_csrf_and_redirects():
     )
 
     assert response.status_code == 302
-    assert response.headers['location'] == '/library?account=avatar'
+    assert response.headers['location'] == '/settings_profile_edit'
+    assert response.headers['content-type'].startswith('text/html')
+    assert response.content
     assert data.calls == [('face.png', b'image-bytes', 167)]
     assert data.commits == 1
+
+
+def test_legacy_profile_edit_rejects_excess_multipart_parts_without_saving():
+    data = FakeAvatarData()
+    client = make_client(data=data)
+    session = {'_user_id': '167:fp', '_fresh': True}
+    token = generate_csrf_token(session, SECRET)
+    client.cookies.set('session', dump_session_cookie(session, SECRET))
+
+    response = client.post(
+        '/settings_profile_edit',
+        data={'csrf_token': token, 'unused': 'x'},
+        files={'avatar': ('face.png', b'image-bytes', 'image/png')},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 413
+    assert response.headers['content-type'].startswith('text/html')
+    assert data.calls == []
+    assert data.commits == 0
+
+
+def test_legacy_profile_edit_passes_filename_suffix_to_decoder_adapter():
+    data = FakeAvatarData()
+    client = make_client(data=data)
+    session = {'_user_id': '167:fp', '_fresh': True}
+    token = generate_csrf_token(session, SECRET)
+    client.cookies.set('session', dump_session_cookie(session, SECRET))
+    content = BytesIO()
+    Image.new('RGB', (16, 16), 'green').save(content, format='PNG')
+    image_bytes = content.getvalue()
+
+    response = client.post(
+        '/settings_profile_edit',
+        data={'csrf_token': token},
+        files={'avatar': ('face.txt', image_bytes, 'application/octet-stream')},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert data.calls == [('face.txt', image_bytes, 167)]
+    assert data.commits == 1
+    assert data.rollbacks == 0
 
 
 def test_legacy_profile_edit_post_rejects_missing_hidden_csrf():
@@ -201,5 +487,6 @@ def test_legacy_profile_edit_post_rejects_missing_hidden_csrf():
     )
 
     assert response.status_code == 400
+    assert response.headers['content-type'].startswith('text/html')
     assert data.calls == []
     assert data.commits == 0

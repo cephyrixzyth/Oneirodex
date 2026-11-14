@@ -22,8 +22,6 @@ export function useScanControls() {
   const { search } = useLocation()
   const query = new URLSearchParams(search)
   const preferredLibraryUuid = query.get('library_uuid') || ''
-  const activeTab = query.get('active_tab') || ''
-  const manualMode = activeTab === 'manual'
   const [libraries, setLibraries] = useState<Library[]>([])
   const [roots, setRoots] = useState<Root[]>([])
   const [libraryUuid, setLibraryUuid] = useState('')
@@ -63,7 +61,15 @@ export function useScanControls() {
   const [browseError, setBrowseError] = useState('')
   const browseTitleId = useId()
   const closeBrowseRef = useRef<HTMLButtonElement | null>(null)
-  const { conflictOpen, scanning, startScan, onConflictChoose, onConflictClose } = useLibraryScan()
+  const {
+    conflictOpen,
+    scanning,
+    scanError,
+    clearScanError,
+    startScan,
+    onConflictChoose,
+    onConflictClose,
+  } = useLibraryScan({ persistentErrors: true })
 
   useEffect(() => {
     let cancelled = false
@@ -108,6 +114,36 @@ export function useScanControls() {
       cancelled = true
     }
   }, [preferredLibraryUuid, revision])
+
+  useEffect(() => {
+    if (query.get('active_tab') !== 'manual') return
+    let cancelled = false
+    getJson('/api/admin/scan/manual-identify/session-preview')
+      .then((payload) => {
+        if (cancelled || !Array.isArray(payload.games) || payload.games.length === 0) return
+        const rows = payload.games.filter(
+          (row: unknown): row is { name: string; full_path: string } =>
+            Boolean(
+              row &&
+              typeof row === 'object' &&
+              typeof (row as { name?: unknown }).name === 'string' &&
+              typeof (row as { full_path?: unknown }).full_path === 'string',
+            ),
+        )
+        if (!rows.length) return
+        setManualRows(rows)
+        setManualListed(true)
+        if (typeof payload.library_uuid === 'string' && payload.library_uuid)
+          setLibraryUuid(payload.library_uuid)
+      })
+      .catch((error) => {
+        if (!cancelled)
+          setManualError(errorText(error) || 'Unable to restore the manual identify preview.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [search])
 
   async function browse(path: string, nextRoot = rootId) {
     setBrowseBusy(true)
@@ -196,7 +232,12 @@ export function useScanControls() {
         setManualListed(true)
       }
     } catch (error) {
-      setManualError(errorText(error) || 'Unable to list games in this folder.')
+      const message = errorText(error)
+      setManualError(
+        message === 'The selected folder does not exist or cannot be read'
+          ? 'Folder does not exist or cannot be accessed.'
+          : message || 'Unable to list games in this folder.',
+      )
     } finally {
       setManualBusy(false)
     }
@@ -273,8 +314,6 @@ export function useScanControls() {
     search,
     query,
     preferredLibraryUuid,
-    activeTab,
-    manualMode,
     libraries,
     setLibraries,
     roots,
@@ -353,6 +392,8 @@ export function useScanControls() {
     closeBrowseRef,
     conflictOpen,
     scanning,
+    scanError,
+    clearScanError,
     startScan,
     onConflictChoose,
     onConflictClose,

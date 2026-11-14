@@ -95,6 +95,30 @@ class TestFontUpload:
         assert response.status_code == 400
         assert 'does not look like a font' in json.loads(response.data)['error']
 
+    def test_write_failure_does_not_expose_server_path(
+        self, client, app, admin_user, tmp_path, monkeypatch,
+    ):
+        from oneirodex.utils import theme_fonts
+
+        private_path = r'C:\private\oneirodex\fonts\custom.ttf'
+        app.config['FONT_PATH'] = str(tmp_path)
+        _login(client, admin_user)
+
+        def fail_write(*_args, **_kwargs):
+            raise OSError(13, 'Permission denied', private_path)
+
+        monkeypatch.setattr(theme_fonts, 'store_font_file', fail_write)
+        response = client.post(
+            '/admin/api/theme/fonts',
+            data={'file': (io.BytesIO(TTF_HEAD + b'\x00' * 64), 'custom.ttf')},
+            content_type='multipart/form-data',
+        )
+
+        body = json.loads(response.data)
+        assert response.status_code == 503
+        assert body['error'] == 'Could not write the font file.'
+        assert private_path not in response.get_data(as_text=True)
+
     def test_magic_check_covers_every_accepted_container(self):
         for sig in (b'\x00\x01\x00\x00', b'OTTO', b'wOFF', b'wOF2', b'true', b'ttcf'):
             assert looks_like_font(sig + b'rest')

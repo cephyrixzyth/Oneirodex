@@ -4,6 +4,8 @@ import { getJson, postJson, deleteJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 import { Page } from '../components/Page'
 
+import { AdminLink } from '../components/AdminLink'
+
 type Entry = { id: number; email: string; is_registered: boolean }
 
 export function WhitelistPage() {
@@ -18,6 +20,12 @@ export function WhitelistPage() {
     setEntries(Array.isArray(data.entries) ? data.entries : [])
   }
   useEffect(() => {
+    const legacyFormState = document.getElementById('od-whitelist-form-state')
+    if (legacyFormState) {
+      setEmail(legacyFormState.getAttribute('data-email') ?? '')
+      setError(legacyFormState.getAttribute('data-error') ?? '')
+      legacyFormState.remove()
+    }
     reload()
       .catch((err) => setError(errorText(err)))
       .finally(() => setLoading(false))
@@ -89,8 +97,8 @@ export function WhitelistPage() {
       title="Whitelist"
       lede={
         <>
-          Grant self-registration to selected email addresses. <a href="/admin/invites">Invites</a>{' '}
-          can also grant access.
+          Grant self-registration to selected email addresses.{' '}
+          <AdminLink to="/admin/invites">Invites</AdminLink> can also grant access.
         </>
       }
     >

@@ -2,13 +2,18 @@
 
 from unittest.mock import patch
 from uuid import uuid4
+import json
+import os
 
 import pytest
-from flask_login import login_user
+from flask import Flask
+from flask_login import LoginManager, login_user
 from sqlalchemy import select
 
 from oneirodex.models import Game, GlobalSettings, Library, StoreAccount, User, UserOwnedTitle
 from oneirodex.platform import LibraryPlatform
+from oneirodex.utils import store_ownership
+from oneirodex.utils import store_ownership_common
 from oneirodex.utils.store_ownership import (
     connect_gog_account,
     disconnect_epic_account,
@@ -21,6 +26,21 @@ from oneirodex.utils.store_ownership import (
     ownership_flags,
     upsert_owned_title,
 )
+from oneirodex.utils.store_sync_errors import StoreSyncError
+
+
+@pytest.fixture(autouse=True)
+def _store_credential_test_keyring(tmp_path, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    path = tmp_path / 'store-credential-test-keyring.json'
+    path.write_text(json.dumps({
+        'active_key_id': 'test',
+        'keys': {'test': Fernet.generate_key().decode('ascii')},
+    }), encoding='utf-8')
+    if os.name != 'nt':
+        path.chmod(0o600)
+    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
 
 
 @pytest.fixture
@@ -58,6 +78,20 @@ def _login(client, app, user):
 def _unique_steam_app_id() -> int:
     """Avoid collisions with leftover rows in the shared test DB."""
     return 700_000_000 + (uuid4().int % 99_000_000)
+
+
+def test_ownership_outbound_maps_oversized_provider_body_to_redacted_error(monkeypatch):
+    from oneirodex.utils.http_safe import ResponseTooLarge
+
+    def too_large(*_args, **_kwargs):
+        raise ResponseTooLarge('private upstream body content')
+
+    monkeypatch.setattr(store_ownership_common, 'safe_request_limited', too_large)
+    with pytest.raises(StoreSyncError) as caught:
+        store_ownership_common._outbound('GET', 'https://provider.invalid/list')
+
+    assert caught.value.reason == 'invalid_response'
+    assert 'private upstream' not in str(caught.value)
 
 
 def test_match_steam_app_id(db_session, lib):
@@ -165,10 +199,32 @@ def test_upsert_owned_title_matches_library(db_session, lib, user):
     )
     db_session.add(game)
     db_session.commit()
-
     row = upsert_owned_title(user.id, 'steam', str(app_id), 'Half-Life 2')
     db_session.commit()
     assert row.matched_game_uuid == game_uuid
+
+
+def test_owned_title_safety_cap_is_atomic_and_allows_existing_updates(db_session, user, monkeypatch):
+    monkeypatch.setattr(store_ownership_common, 'MAX_OWNED_TITLES_PER_USER', 2)
+    upsert_owned_title(user.id, 'gog', 'quota-a', 'First')
+    upsert_owned_title(user.id, 'gog', 'quota-b', 'Second')
+    db_session.commit()
+
+    with pytest.raises(StoreSyncError) as caught:
+        upsert_owned_title(user.id, 'gog', 'quota-c', 'Third')
+    assert caught.value.reason == 'ownership_limit'
+    rows = db_session.execute(
+        select(UserOwnedTitle).filter_by(user_id=user.id, store='gog')
+    ).scalars().all()
+    assert len(rows) == 2
+
+    existing = upsert_owned_title(user.id, 'gog', 'quota-a', 'Renamed')
+    db_session.commit()
+    assert existing.name == 'Renamed'
+    rows = db_session.execute(
+        select(UserOwnedTitle).filter_by(user_id=user.id, store='gog')
+    ).scalars().all()
+    assert len(rows) == 2
 
 
 def test_import_steam_csv(db_session, lib, user):
@@ -193,6 +249,27 @@ def test_import_steam_csv(db_session, lib, user):
         select(UserOwnedTitle).filter_by(user_id=user.id, store='steam')
     ).scalars().all()
     assert len(rows) == 2
+
+
+def test_ownership_csv_route_returns_safe_conflict_at_cumulative_cap(
+    client, app, db_session, user, monkeypatch,
+):
+    _ensure_global_settings(db_session, enable_store_ownership_sync=True)
+    monkeypatch.setattr(store_ownership_common, 'MAX_OWNED_TITLES_PER_USER', 1)
+    _login(client, app, user)
+    first_id, second_id = str(_unique_steam_app_id()), str(_unique_steam_app_id())
+
+    first = client.post('/api/ownership/steam/csv', json={'csv': f'appid\n{first_id}\n'})
+    assert first.status_code == 200
+    blocked = client.post('/api/ownership/steam/csv', json={'csv': f'appid\n{second_id}\n'})
+
+    assert blocked.status_code == 409
+    assert blocked.get_json()['error_code'] == 'conflict'
+    assert 'safety limit' in blocked.get_json()['error'].lower()
+    rows = db_session.execute(
+        select(UserOwnedTitle).filter_by(user_id=user.id, store='steam')
+    ).scalars().all()
+    assert [row.external_app_id for row in rows] == [first_id]
 
 
 def test_import_gog_csv_matches_by_name(db_session, lib, user):
@@ -362,6 +439,87 @@ def test_ownership_gog_api_disabled(client, app, db_session, user):
     assert resp.status_code == 403
 
 
+def test_store_csv_title_limit_rejects_before_database_writes(app, monkeypatch):
+    monkeypatch.setattr(store_ownership, 'is_ownership_sync_enabled', lambda: True)
+    monkeypatch.setattr(
+        store_ownership,
+        'upsert_owned_title',
+        lambda *_args, **_kwargs: pytest.fail('over-limit CSV must be rejected before writes'),
+    )
+    csv_text = ''.join(f'{index},Title {index}\n' for index in range(store_ownership.MAX_TITLES + 1))
+
+    with app.app_context(), pytest.raises(ValueError, match='more than 50000 titles'):
+        store_ownership.import_store_csv(1, 'gog', csv_text)
+
+
+def test_store_csv_byte_limit_rejects_utf8_input_before_parsing(monkeypatch):
+    monkeypatch.setattr(store_ownership, 'is_ownership_sync_enabled', lambda: True)
+    monkeypatch.setattr(store_ownership, 'MAX_OWNERSHIP_CSV_BYTES', 8)
+    monkeypatch.setattr(
+        store_ownership.csv,
+        'reader',
+        lambda *_args, **_kwargs: pytest.fail('oversized CSV must be rejected before parsing'),
+    )
+
+    with pytest.raises(ValueError, match='16 MiB size limit'):
+        store_ownership.import_store_csv(1, 'gog', 'あ' * 3)
+
+
+def test_flask_ownership_csv_route_rejects_large_body_before_form_parse(monkeypatch):
+    from types import SimpleNamespace
+
+    from oneirodex.routes_apis import ownership as ownership_routes
+
+    monkeypatch.setattr(ownership_routes, 'MAX_OWNERSHIP_CSV_REQUEST_BYTES', 128)
+    monkeypatch.setattr(ownership_routes, 'is_ownership_sync_enabled', lambda: True)
+    monkeypatch.setattr(ownership_routes, 'get_ownership_summary', lambda _user_id: {})
+    app = Flask('ownership-csv-limit-test')
+    app.config['SECRET_KEY'] = 'test-secret'
+    login_manager = LoginManager(app)
+    login_manager.user_loader(lambda _user_id: SimpleNamespace(id=7))
+
+    with app.test_request_context(
+        '/api/ownership/steam/csv', method='POST', data={'csv': 'x' * 256},
+    ):
+        login_user(SimpleNamespace(
+            id=7, get_id=lambda: '7', is_active=True,
+            is_authenticated=True, is_anonymous=False,
+        ))
+        response = ownership_routes._csv_response(
+            lambda *_args: pytest.fail('oversized CSV must not reach the importer'),
+        )
+
+    response, status = response if isinstance(response, tuple) else (response, response.status_code)
+    assert status == 413
+    assert response.get_json()['error_code'] == 'payload_too_large'
+
+    with app.test_request_context(
+        '/api/ownership/steam/csv', method='POST', data={'csv': 'appid,name\n1,Title'},
+    ):
+        login_user(SimpleNamespace(
+            id=7, get_id=lambda: '7', is_active=True,
+            is_authenticated=True, is_anonymous=False,
+        ))
+        response = ownership_routes._csv_response(
+            lambda user_id, csv_text: {'imported': int(user_id == 7 and csv_text == 'appid,name\n1,Title')},
+        )
+
+    response, status = response if isinstance(response, tuple) else (response, response.status_code)
+    assert status == 200
+    assert response.get_json()['imported'] == 1
+
+
+def test_flask_ownership_csv_json_matches_native_invalid_shape_handling():
+    from oneirodex.routes_apis import ownership as ownership_routes
+
+    app = Flask('ownership-csv-json-shape-test')
+    for payload in (['csv'], {'csv': ['not a string']}, {'csv': {'nested': 'value'}}):
+        with app.test_request_context(
+            '/api/ownership/steam/csv', method='POST', json=payload,
+        ):
+            assert ownership_routes._read_csv_payload() == ''
+
+
 def test_browse_includes_owned_when_matched(client, app, db_session, lib, user):
     game_uuid = str(uuid4())
     app_id = _unique_steam_app_id()
@@ -499,7 +657,9 @@ def test_gog_live_sync_register_only(mock_out, db_session, user):
     account = db_session.execute(
         select(StoreAccount).filter_by(user_id=user.id, store='gog')
     ).scalars().one()
-    assert 'refresh_token' in account.credential
+    from oneirodex.utils.store_credentials import read_store_credential
+    assert 'refresh_token' in read_store_credential(account)
+    assert account.credential is None and account.credential_ciphertext.startswith('odsc:v1:')
     assert 'access_token' not in account.to_dict()
 
 
@@ -644,7 +804,9 @@ def test_amazon_live_sync_register_only(mock_out, db_session, user):
     account = db_session.execute(
         select(StoreAccount).filter_by(user_id=user.id, store='amazon')
     ).scalars().one()
-    assert 'refresh_token' in account.credential
+    from oneirodex.utils.store_credentials import read_store_credential
+    assert 'refresh_token' in read_store_credential(account)
+    assert account.credential is None and account.credential_ciphertext.startswith('odsc:v1:')
     assert 'access_token' not in account.to_dict()
 
 
@@ -746,7 +908,9 @@ def test_unofficial_stores_go_live_only_when_opted_in(db_session, user, monkeypa
     result = sync_xbox_owned_games(user.id)
     assert result == {'synced': 2, 'matched': 0, 'store': 'xbox'}
     account = db_session.execute(select(StoreAccount).filter_by(user_id=user.id, store='xbox')).scalars().one()
-    assert account.external_account_id == '2533274' and '"refresh_token": "y"' in account.credential
+    from oneirodex.utils.store_credentials import read_store_credential
+    assert account.external_account_id == '2533274' and '"refresh_token": "y"' in read_store_credential(account)
+    assert account.credential is None and account.credential_ciphertext.startswith('odsc:v1:')
     rows = db_session.execute(select(UserOwnedTitle).filter_by(user_id=user.id, store='xbox')).scalars().all()
     assert {r.external_app_id for r in rows} == {'1234ABCD', '5678EFGH'}
 

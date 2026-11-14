@@ -13,9 +13,15 @@ def test_asset_url_helpers_resolve_theme_and_versioned_dist_files(tmp_path):
     theme = root / 'static' / 'library' / 'themes' / 'afterglow' / 'css'
     theme.mkdir(parents=True)
     (theme / 'base.css').write_text('/* afterglow */', encoding='utf-8')
+    theme_js = theme.parent / 'js'
+    theme_js.mkdir()
+    (theme_js / 'preferences_modal.js').write_text('/* uploaded */', encoding='utf-8')
     default = root / 'static' / 'library' / 'themes' / 'default' / 'css'
     default.mkdir(parents=True)
     (default / 'base.css').write_text('/* default */', encoding='utf-8')
+    default_js = default.parent / 'js'
+    default_js.mkdir()
+    (default_js / 'preferences_modal.js').write_text('/* shipped */', encoding='utf-8')
     bundle = root / 'static' / 'dist' / 'member-app'
     bundle.mkdir(parents=True)
     (bundle / 'member-app.css').write_text('/* built */', encoding='utf-8')
@@ -25,11 +31,15 @@ def test_asset_url_helpers_resolve_theme_and_versioned_dist_files(tmp_path):
     app.config.update(SERVER_NAME='localhost', APPLICATION_ROOT='/', PREFERRED_URL_SCHEME='http')
     with app.app_context(), app.test_request_context('/'):
         theme_url = theme_asset_url('css/base.css', theme='afterglow')
+        theme_script_url = theme_asset_url(
+            'js/preferences_modal.js', theme='afterglow'
+        )
         fallback_url = theme_asset_url('css/base.css', theme='missing')
         css_url = dist_asset_url('member-app/member-app.css')
         js_url = dist_asset_url('member-app/member-app.js')
 
     assert 'library/themes/afterglow/css/base.css' in theme_url and 'v=' in theme_url
+    assert 'library/themes/default/js/preferences_modal.js' in theme_script_url
     assert 'library/themes/default/css/base.css' in fallback_url and 'v=' in fallback_url
     assert 'dist/member-app/member-app.css' in css_url and 'v=' in css_url
     assert js_url.endswith('dist/member-app/member-app.js') and '?' not in js_url

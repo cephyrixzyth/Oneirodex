@@ -5,7 +5,9 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 
 from oneirodex.runtime_native.scan_job_mutations import create_scan_job_mutation_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -29,10 +31,12 @@ class FakeScanJobs:
 
     def restart(self, job_id, *, queue_policy, app, database_scope):
         self.calls.append(('restart', job_id, queue_policy, app is not None, callable(database_scope)))
+        if job_id == 'missing':
+            return None
         return {'status': 'queued', 'message': 'Scan queued.'}
 
 
-def _client():
+def _client(*, role='admin'):
     app = Flask('native-scan-job-test')
     app.config.update(
         SECRET_KEY='native-scan-job-secret', CSP_ENABLED=False,
@@ -40,15 +44,15 @@ def _client():
     )
     app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
-        id=9, user_id='scan-admin', role='admin', is_active=True, state=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        id=9, user_id='scan-user', role=role, is_active=True, state=True,
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={}, login_message='Sign in',
         login_message_category='message', localize_callback=None,
         session_protection='basic',
     )
-    session = {'_user_id': '9:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(9), '_fresh': True}
     csrf = generate_csrf_token(session, app.config['SECRET_KEY'])
     data = FakeScanJobs()
     native = FastAPI()
@@ -75,9 +79,29 @@ def test_scan_job_cancel_requires_csrf_and_keeps_admin_redirect_flash():
 
     accepted = client.post('/cancel_scan_job/job-1', data={'csrf_token': csrf})
     assert accepted.status_code == 302
-    assert accepted.headers['location'] == '/admin/scan_management?active_tab=jobs'
+    assert accepted.headers['location'] == '/scan_management?active_tab=jobs'
+    expected = flask_redirect('/scan_management?active_tab=jobs', code=302)
+    assert accepted.headers['content-type'] == expected.headers['Content-Type']
+    assert accepted.content == expected.get_data()
     assert 'session=' in accepted.headers['set-cookie']
     assert data.calls == [('cancel', 'job-1')]
+
+
+def test_scan_job_mutations_redirect_non_admin_without_running_action():
+    client, data, csrf = _client(role='member')
+
+    cancel_response = client.post(
+        '/cancel_scan_job/job-1', data={'csrf_token': csrf},
+    )
+    delete_response = client.post(
+        '/delete_scan_job/job-1', data={'csrf_token': csrf},
+    )
+
+    for response in (cancel_response, delete_response):
+        assert response.status_code == 302
+        assert response.headers['location'] == '/login'
+        assert 'session=' in response.headers['set-cookie']
+    assert data.calls == []
 
 
 def test_scan_job_delete_and_clear_preserve_not_found_and_status_rules():
@@ -95,16 +119,41 @@ def test_scan_job_delete_and_clear_preserve_not_found_and_status_rules():
         '/restart_scan_job/job-1',
         data={'csrf_token': csrf, 'queue_policy': 'queue', 'force_parallel': '1'},
     )
+    missing_restart = client.post(
+        '/restart_scan_job/missing', data={'csrf_token': csrf},
+    )
+    missing_json = client.post(
+        '/delete_scan_job/missing', data={'csrf_token': csrf},
+        headers={'Accept': 'application/json'},
+    )
 
     assert deleted.status_code == 302
     assert missing.status_code == 404
+    from oneirodex.runtime_native.response_compat import flask_http_error_response
+    expected_not_found = flask_http_error_response(404)
+    for response in (missing, missing_restart):
+        assert response.headers['content-type'] == expected_not_found.headers['content-type']
+        assert response.content == expected_not_found.body
+    assert missing_restart.status_code == 404
+    assert missing_json.status_code == 404
+    assert missing_json.headers['content-type'].startswith('application/json')
     assert cleared_all.status_code == 302
     assert invalid_clear.status_code == 302
     assert cleared_status.status_code == 302
     assert restarted.status_code == 302
+    expected_jobs = flask_redirect('/scan_management?active_tab=jobs', code=302)
+    for response in (cleared_all, invalid_clear, cleared_status):
+        assert response.headers['location'] == expected_jobs.headers['Location']
+        assert response.headers['content-type'] == expected_jobs.headers['Content-Type']
+        assert response.content == expected_jobs.get_data()
+    for response in (deleted, restarted):
+        assert response.headers['location'] == expected_jobs.headers['Location']
+        assert response.headers['content-type'] == expected_jobs.headers['Content-Type']
+        assert response.content == expected_jobs.get_data()
     assert data.calls == [
         ('delete', 'job-1'), ('delete', 'missing'), ('clear', None), ('clear', 'Failed'),
-        ('restart', 'job-1', 'force', True, True),
+        ('restart', 'job-1', 'force', True, True), ('restart', 'missing', 'queue', True, True),
+        ('delete', 'missing'),
     ]
 
 

@@ -158,6 +158,7 @@ def list_icon_packs_api():
 
 @apis_bp.route('/check_username', methods=['POST'])
 @login_required
+@require_api_token_scope('read:social')
 @validate_body(CheckUsernameBody)
 def check_username(body: CheckUsernameBody):
     print(F"Route: /api/check_username - {current_user.name} - {current_user.role}")    
@@ -168,12 +169,13 @@ def check_username(body: CheckUsernameBody):
 
 @apis_bp.route('/check_favorite/<game_uuid>')
 @login_required
+@require_api_token_scope('read:library')
 def check_favorite(game_uuid):
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game:
         return api_error('Game not found', code='not_found')
     if not user_can_access_game(current_user, game):
-        return api_error('Forbidden', code='forbidden')
+        return api_error('Game not found', code='not_found')
     is_favorite = game in current_user.favorites
     return jsonify({'is_favorite': is_favorite})
 
@@ -185,7 +187,7 @@ def toggle_favorite(game_uuid):
     if not game:
         return api_error('Game not found', code='not_found')
     if not user_can_access_game(current_user, game):
-        return api_error('Forbidden', code='forbidden')
+        return api_error('Game not found', code='not_found')
     
     if game in current_user.favorites:
         current_user.favorites.remove(game)
@@ -200,6 +202,7 @@ def toggle_favorite(game_uuid):
 
 @apis_bp.route('/favorites', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def favorites():
     page = request.args.get('page', 1, type=int) or 1
     per_page = min(request.args.get('per_page', 20, type=int) or 20, 100)
@@ -299,6 +302,7 @@ def favorites():
 
 @apis_bp.route('/get_game_status/<game_uuid>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def get_game_status(game_uuid):
     """Get the current user's completion status for a game"""
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()

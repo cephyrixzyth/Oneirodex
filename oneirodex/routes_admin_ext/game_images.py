@@ -21,10 +21,13 @@ Route bodies moved verbatim; the nine ``print()`` calls become module-level
 ``logger.{info,warning,error}``.
 """
 
+import hashlib
 import logging
 import os
+import tempfile
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from flask import (
     abort, current_app, flash, jsonify, redirect, request,
@@ -32,8 +35,6 @@ from flask import (
 )
 from flask_login import current_user, login_required
 from sqlalchemy import select
-from werkzeug.utils import secure_filename
-from PIL import Image as PILImage
 
 from oneirodex import cache, db
 from oneirodex.models import Game, Image
@@ -48,6 +49,13 @@ from oneirodex.utils.image_kinds import (
     SINGULAR_IMAGE_KINDS,
     image_kinds_error_message,
     parse_image_kind,
+)
+from oneirodex.utils.image_paths import image_path_under_save_dir
+from oneirodex.utils.image_upload_limits import (
+    GAME_IMAGE_MAX_BYTES,
+    GAME_IMAGE_MAX_PIXELS,
+    ImageWorkBusy,
+    prepare_game_image,
 )
 from oneirodex.utils.scanning import refresh_images_in_background, is_scan_job_running
 from oneirodex.utils.validation import validate_body
@@ -70,12 +78,42 @@ def edit_game_images(game_uuid):
 # Per-upload ceiling for game artwork. The global MAX_CONTENT_LENGTH in config
 # is the outer bound that stops an unbounded body being buffered at all; this is
 # the one a user actually hits, and it is the number the error message quotes.
-MAX_IMAGE_UPLOAD_BYTES = 3 * 1024 * 1024
+MAX_IMAGE_UPLOAD_BYTES = GAME_IMAGE_MAX_BYTES
 
 # Decompression-bomb ceiling — roughly a 60-megapixel image, comfortably above
 # any real cover or screenshot. verify() does not decode pixel data, so without
 # this the resize below is where a 40000x40000 PNG would land.
-MAX_IMAGE_PIXELS = 60_000_000
+MAX_IMAGE_PIXELS = GAME_IMAGE_MAX_PIXELS
+
+
+def _game_filename_key(game_uuid: str) -> str:
+    """Return a fixed safe filename component independent of route syntax."""
+    return hashlib.sha256(str(game_uuid).encode('utf-8')).hexdigest()[:16]
+
+
+def _publish_image_bytes(save_dir: Path, filename: str, content: bytes) -> Path:
+    """Durably publish a new immutable image file before changing its DB row."""
+    save_dir.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix='.oneirodex-image-', suffix='.tmp', dir=save_dir,
+    )
+    temporary_path = Path(temporary_name)
+    destination = save_dir / filename
+    try:
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary_path, destination)
+        if os.name != 'nt' and hasattr(os, 'O_DIRECTORY'):
+            directory_fd = os.open(save_dir, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        return destination
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 @admin2_bp.route('/upload_image/<game_uuid>', methods=['POST'])
@@ -87,6 +125,12 @@ def upload_image(game_uuid):
         logger.warning(f"Attempt to upload image for game UUID: {game_uuid} while scan job is running")
         flash('A scan is running. Image uploads are available again as soon as it finishes.', 'error')
         return api_error('A scan is running. Image uploads are available again as soon as it finishes.', code='forbidden')
+
+    game_exists = db.session.execute(
+        select(Game.uuid).filter_by(uuid=game_uuid)
+    ).scalar_one_or_none()
+    if game_exists is None:
+        return api_error('Game not found', code='not_found', game_uuid=game_uuid)
 
     if 'file' not in request.files:
         return api_error('No file was included.', code='bad_request')
@@ -103,13 +147,8 @@ def upload_image(game_uuid):
     if file.filename == '':
         return api_error('No file was selected.', code='bad_request')
 
-    # Validate file extension and content type
-    allowed_extensions = {'jpg', 'jpeg', 'png', 'gif'}
-    filename = secure_filename(file.filename)
-    file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
-
-    if file_extension not in allowed_extensions:
-        return api_error('Upload a JPG, PNG, or GIF.', code='bad_request')
+    # Ignore the client suffix and select the stored suffix from the decoder so
+    # a mismatched filename cannot mislabel the saved content.
 
     # Size first, before anything decodes the file. The previous version read
     # `file.content_length`, which is 0 for an ordinary multipart upload, so the
@@ -122,68 +161,69 @@ def upload_image(game_uuid):
         limit_mb = MAX_IMAGE_UPLOAD_BYTES // (1024 * 1024)
         return api_error(f'File size exceeds the {limit_mb}MB limit', code='bad_request')
 
-    # Further validate the file's data to ensure it's a valid image
+    # Decode under the shared per-process work slot. The helper validates the
+    # actual format/dimensions and only materializes pixels for a cover resize.
     try:
-        img = PILImage.open(file)
-        img.verify()  # Verify that it is, in fact, an image
         file.seek(0)
-        img = PILImage.open(file)
-    except (IOError, SyntaxError, PILImage.DecompressionBombError):
-        return api_error('Invalid image data', code='bad_request')
+        image_content, file_extension = prepare_game_image(file.read(upload_bytes), image_type)
+    except ImageWorkBusy as exc:
+        return api_error(str(exc), code='unavailable')
+    except ValueError as exc:
+        return api_error(str(exc), code='bad_request')
 
-    # A few hundred KB of PNG can declare a 40000x40000 canvas; verify() does not
-    # decode it, but the resize below would.
-    if (img.width * img.height) > MAX_IMAGE_PIXELS:
-        return api_error(
-            f'That image is too big. The limit is {MAX_IMAGE_PIXELS // 1_000_000} megapixels.',
-            code='bad_request',
-        )
-
-    # Resized output has to be *saved*, which is what was missing: thumbnail()
-    # mutates `img` in place and the code then wrote the original bytes back
-    # out, so oversized covers were stored at full size and the resize was dead.
-    resized = None
-    source_format = img.format
-    max_width, max_height = 1200, 1600
-    if image_type == 'cover' and (img.width > max_width or img.height > max_height):
-        # LANCZOS, not ANTIALIAS: the latter was deprecated in Pillow 9.1
-        # and removed in 10, so this line raised AttributeError on every
-        # oversized cover upload. Same filter every other resize here uses.
-        img.thumbnail((max_width, max_height), PILImage.LANCZOS)
-        resized = img
-    file.seek(0)
-
-    # Singular kinds: replace existing primary of that kind
+    # Resolve old files before publication, but leave the current rows and
+    # bytes untouched until the replacement file is complete and durable.
+    existing_paths = []
     if image_type in SINGULAR_IMAGE_KINDS:
         existing_rows = db.session.execute(
             select(Image).filter_by(game_uuid=game_uuid, image_type=image_type)
         ).scalars().all()
         for existing in existing_rows:
-            old_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], existing.url)
-            if os.path.exists(old_path):
-                os.remove(old_path)
-            db.session.delete(existing)
-        db.session.commit()
+            old_path = image_path_under_save_dir(
+                existing.url, current_app.config['IMAGE_SAVE_PATH'],
+            )
+            if old_path is None:
+                return api_error('Stored image path is invalid', code='bad_request')
+            existing_paths.append((existing, old_path, existing.url))
     short_uuid = str(uuid.uuid4())[:8]
+    # game_uuid is a route parameter and must never become a filesystem path
+    # component directly. Hash it so encoded separators and Windows traversal
+    # syntax cannot escape IMAGE_SAVE_PATH.
+    game_file_key = _game_filename_key(game_uuid)
     if image_type in SINGULAR_IMAGE_KINDS:
         unique_identifier = str(uuid.uuid4())[:8]
-        filename = f"{game_uuid}_{image_type}_{unique_identifier}.{file_extension}"
+        filename = f"{game_file_key}_{image_type}_{unique_identifier}.{file_extension}"
     else:
         unique_identifier = datetime.now().strftime('%Y%m%d%H%M%S')
         short_uuid = str(uuid.uuid4())[:8]
-        filename = f"{game_uuid}_{unique_identifier}_{short_uuid}.{file_extension}"
-    save_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], filename)
-    if resized is not None:
-        # Keep the uploaded format so a .png stays a PNG — inferring it from the
-        # path would break RGBA on a .jpg and flatten nothing correctly.
-        resized.save(save_path, format=source_format or None)
-    else:
-        file.save(save_path)
-    logger.info(f"File saved to: {save_path}")
+        filename = f"{game_file_key}_{unique_identifier}_{short_uuid}.{file_extension}"
+    save_dir = Path(current_app.config['IMAGE_SAVE_PATH'])
+    _publish_image_bytes(save_dir, filename, image_content)
+    logger.info("Game image file published")
+    for existing, _old_path, _old_url in existing_paths:
+        db.session.delete(existing)
+    if existing_paths:
+        # PostgreSQL's partial unique index for singular image kinds checks
+        # uniqueness at statement time; flush the deletion inside this same
+        # transaction before inserting the replacement row.
+        db.session.flush()
     new_image = Image(game_uuid=game_uuid, image_type=image_type, url=filename)
     db.session.add(new_image)
     db.session.commit()
-    logger.info(f"File saved to DB with ID: {new_image.id}")
+    for _existing, old_path, old_url in existing_paths:
+        still_referenced = db.session.execute(
+            select(Image.id).where(Image.url == old_url).limit(1)
+        ).first()
+        if still_referenced is not None:
+            continue
+        try:
+            old_path.unlink(missing_ok=True)
+        except OSError:
+            # The DB already points at the replacement. Keep a harmless orphan
+            # for later operator cleanup rather than turning success into a
+            # misleading failure or risking another user's referenced file.
+            logger.warning("Obsolete game image cleanup failed after replacement")
+    logger.info("Game image row committed")
 
     return api_ok({
         'message': 'File uploaded successfully',
@@ -211,7 +251,11 @@ def delete_game_image(body: DeleteGameImageBody):
             return api_error('Image not found', code='not_found')
 
         # Delete image file from disk
-        image_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], image.url)
+        image_path = image_path_under_save_dir(
+            image.url, current_app.config['IMAGE_SAVE_PATH'],
+        )
+        if image_path is None:
+            raise ValueError('Invalid image path')
         if os.path.exists(image_path):
             logger.info(f"Deleting image file: {image_path}")
             os.remove(image_path)

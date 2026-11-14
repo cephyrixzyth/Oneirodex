@@ -96,6 +96,14 @@ def test_worker_never_caches_member_data():
     assert 'od-clear-caches' in SW
 
 
+def test_install_helper_clears_pwa_cache_for_link_or_button_logout():
+    install_helper = (STATIC / 'js' / 'od_pwa_install.js').read_text(encoding='utf-8')
+    assert 'a[href$="/logout"]' in install_helper
+    assert 'button[data-action="logout"]' in install_helper
+    assert "postMessage({ type: 'od-clear-caches' })" in install_helper
+    assert "removeItem('od.palette.recent')" in install_helper
+
+
 def test_worker_only_caches_versioned_static_assets():
     assert "'/static/dist/'" in SW
     assert "'/static/vendor/'" in SW
@@ -141,7 +149,7 @@ def test_worker_only_caches_urls_that_change_when_their_bytes_change():
     assert 'CACHEABLE_PREFIXES.some' in SW
     assert 'if (url.pathname.startsWith(THEME_PREFIX)) return true;' not in SW
     # Bumped so installs holding the unversioned copies drop them on activate.
-    assert "const VERSION = 'v2'" in SW
+    assert "const VERSION = 'v3'" in SW
 
 
 def test_worker_drops_superseded_caches_on_activate():
@@ -149,3 +157,15 @@ def test_worker_drops_superseded_caches_on_activate():
     assert 'caches.delete(name)' in SW
     assert "name.startsWith('oneirodex-')" in SW
     assert '!name.endsWith(VERSION)' in SW
+
+
+def test_vr_worker_retires_authenticated_cache_without_caching_requests():
+    worker = (STATIC / 'vr-sw.js').read_text(encoding='utf-8')
+    assert "caches.delete(RETIRED_CACHE)" in worker
+    assert "'oneirodex-vr-v1'" in worker
+    assert 'self.registration.unregister()' in worker
+    assert "event.data?.type === 'od-clear-caches'" in worker
+    # The retired worker must not intercept navigations or VR API reads.
+    assert "addEventListener('fetch'" not in worker
+    assert 'cache.put(' not in worker
+    assert 'caches.match(' not in worker

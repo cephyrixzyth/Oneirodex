@@ -4,6 +4,8 @@ What this does and, more importantly, does not do
 -------------------------------------------------
 This empties Oneirodex's *database* — the catalog it built, the accounts it
 holds, the settings it was given. It never touches a single file on disk.
+Already committed account-deletion cleanup jobs survive every reset scope;
+the separate cleanup worker still finishes those earlier file deletions.
 
 That distinction is the whole point. A game library is years of collecting; the
 rows describing it are a cache that a scan can rebuild in an afternoon. So the
@@ -59,6 +61,7 @@ from oneirodex.models.orm import ModelBase
 
 __all__ = [
     'RESET_SCOPES',
+    'PRESERVED_RESET_TABLES',
     'SCOPE_IMPLIES',
     'expand_scopes',
     'plan_reset',
@@ -66,7 +69,7 @@ __all__ = [
 ]
 
 
-# Every table, assigned to exactly one scope.
+# Every table belongs to one scope or the explicit preserved set below.
 #
 # `test_system_reset.py` asserts this covers the full model metadata: a new
 # table has to be placed here or the suite fails. That is deliberate — the
@@ -149,13 +152,17 @@ RESET_SCOPES: dict[str, tuple[str, ...]] = {
         'game_collection_items',
         'play_sessions',
         'emulator_saves',
+        'emulator_save_generations',
         'store_accounts',
         # Per-member store sync runs (LIB-04); meaningless without the account.
         'store_sync_jobs',
         'api_tokens',
+        'persistent_login_sessions',
         'client_devices',
         'invite_tokens',
         'support_tickets',
+        'support_delivery_attempts',
+        'support_delivery_check_budgets',
         'whitelist',
         'chat_channels',
         'chat_channel_members',
@@ -176,6 +183,12 @@ RESET_SCOPES: dict[str, tuple[str, ...]] = {
         'detail_layout_presets',
     ),
 }
+
+# These jobs record a deletion already committed before the reset. Erasing the
+# journal would cancel that deletion and strand personal files on disk. The
+# journal has no user/catalog foreign keys; plan_reset also guards its closure
+# so a future relationship cannot silently TRUNCATE it through CASCADE.
+PRESERVED_RESET_TABLES = frozenset({'user_deletion_file_jobs'})
 
 # Clearing library rows while their games still reference them would leave the
 # catalog pointing at nothing, so asking for one implies the other. Expressed as
@@ -247,6 +260,8 @@ def plan_reset(scopes: Iterable[str]) -> dict[str, Any]:
         requested.extend(RESET_SCOPES[scope])
 
     closure = _cascade_closure(requested)
+    if PRESERVED_RESET_TABLES.intersection(closure):
+        raise ValueError('Reset would erase preserved account-deletion cleanup jobs')
     return {
         'scopes': resolved,
         'tables': sorted(set(requested)),

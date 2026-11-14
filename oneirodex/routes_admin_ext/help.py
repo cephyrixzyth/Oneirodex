@@ -1,4 +1,3 @@
-from flask import redirect
 from flask_login import login_required
 
 from oneirodex.utils.auth import admin_required
@@ -11,8 +10,9 @@ from . import admin2_bp
 @admin_required
 def admin_help():
     """Display the administrator help page"""
-    # Keep admin and member Help on the same source of truth and presentation.
-    return redirect('/help', code=302)
+    # The admin shell supplies the dedicated React help page. Keep this fallback
+    # for deployments that have not enabled the native static-shell route.
+    return render_admin_spa(title='Admin help · Oneirodex Admin')
 
 
 @admin2_bp.route('/admin/plugins')

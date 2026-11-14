@@ -14,6 +14,24 @@ logs, the art stays plain text so the output remains readable.
 - Host path to games (mounted read-only at `/storage`)
 - Writable host path for library data (covers, themes)
 
+The app starts as non-root `PUID:PGID` (default `99:100`). Set those variables
+to match the owner of writable host mounts. On first start after upgrade or an
+identity change, the entrypoint transfers ownership of the configured library
+directory once per app identity and mounted library volume; its marker lives
+inside that persistent library mount, so replacement mounts are prepared as
+well. `/storage` is excluded and remains read-only.
+
+Image builds pin the Node and Python base indexes by digest, install Debian
+packages from a fixed Debian snapshot, and install Python runtime packages from
+the hash-locked `requirements.lock`. Npm uses the committed integrity-bearing
+root lockfile. Update direct runtime versions in `requirements.txt`, regenerate
+the Python lock with `pip-tools==7.6.2`, and review the full lock diff together.
+The EmulatorJS archive and font fallback assets also require their reviewed
+SHA-256 digests. Before publishing, the workflow checks required licence files,
+their pinned digests, and the third-party notice entries; it attaches BuildKit
+SBOM and provenance attestations and records the published image digest beside
+the source commit in its GitHub job summary.
+
 ## Isolated local staging
 
 Use `docker-compose.review.yml` with a distinct Compose project and an explicit
@@ -56,6 +74,8 @@ cp .env.docker.example .env          # local/NAS
 # Set LIBRARY_HOST_PATH = HOST library/appdata path (default ./data/library)
 # Optional BIOS: EMULATOR_BIOS_HOST_PATH + uncomment bios bind in compose
 #   (appdata only — never games share; never commit firmware binaries)
+# Optional store credential key ring: prepare the separate operator-managed JSON
+# file, then uncomment its read-only bind mount below.
 # Do NOT set DATABASE_URL=@localhost — Compose builds URL with host "db"
 docker compose up -d --build
 ```
@@ -125,9 +145,109 @@ Do **not** conflate games (scan root) with library/uploads. Compose header has a
 | **Optional BIOS / firmware** | `EMULATOR_BIOS_HOST_PATH` (uncomment bind in compose) | `/app/oneirodex/static/library/bios` | **rw** | Private host firmware under appdata — not games. Public stance remains Admin upload-only — [unraid-deploy.md § Local private BIOS](unraid-deploy.md#local-private-bios-mount-vs-public-upload) |
 | Optional WebRetro cores | `WEBRETRO_CORES_HOST_PATH` (uncomment in compose) | `/app/oneirodex/static/vendor/webretro/cores` | rw | Operator WASM cores — [webretro-cores.md](webretro-cores.md) |
 | Postgres | Compose volume `db_data` | `/var/lib/postgresql/data/pgdata` | rw | DB |
+| Store credential key ring | `ONEIRODEX_STORE_CREDENTIAL_KEYRING_HOST_PATH` (uncomment in compose) | `/run/secrets/oneirodex-store-credential-keyring.json` | **ro** | Dedicated key file; back it up separately from database/library data |
+| Emulator save key ring | `ONEIRODEX_SAVE_KEYRING_HOST_PATH` (uncomment in compose) | `/run/secrets/oneirodex-save-keyring.json` | **ro** | Separate from integration and cookie keys; protect and back it up separately |
 | pg_hba | `./docker/postgres/pg_hba.conf` | `/etc/oneirodex/pg_hba.conf` | ro | App↔db TCP without SSL (scram still required), private source ranges only |
 
 If app loops on `no pg_hba.conf entry … no encryption`, recreate `db` with current Compose or use the one-liner in [container-wont-start.md](container-wont-start.md#3b-postgres-up-but-pg_hba-rejects-app-no-encryption).
+
+### Credential key ring
+
+Store-provider and admin integration credentials use an authenticated key ring,
+separate from `SECRET_KEY` and database credentials. Create a JSON file outside the database
+and library backup payloads, restrict host access, then mount it read-only at
+`/run/secrets/oneirodex-store-credential-keyring.json`. Configure
+`ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE` to that in-container path. The old
+`ONEIRODEX_STORE_CREDENTIAL_KEYRING_FILE` name remains a compatibility alias. The JSON
+shape is `{ "active_key_id": "key-a", "keys": { "key-a": "<Fernet key>" } }`;
+keep prior key IDs in `keys` while data encrypted under them remains.
+On Linux, keep the containing directory private and set the key-ring file to
+mode `0600`; the app refuses to load a key ring with group or other permission
+bits. On Windows, set an NTFS ACL that grants read access only to the Oneirodex
+service account and administrators; Python cannot validate those ACLs with its
+portable POSIX-mode check.
+
+Back up the key ring separately under protected access. Database backups without
+the key ring cannot restore encrypted store sync or admin integrations; the key ring itself must not be
+placed in the database or library backup payload. Losing it leaves encrypted
+credentials unreadable.
+
+The key ring is optional at install time. Without it, saving member sign-in
+tokens and saving reusable admin integration credentials are unavailable;
+existing encrypted values cannot be used until their matching key is restored.
+Members can still save an account
+identifier without a token, import a list, or disconnect; existing links and
+title history are retained. Some operator household-token paths that do not
+persist refreshed credentials remain usable.
+
+### Save keyring
+
+Encrypted emulator saves use a distinct keyring configured with
+`ONEIRODEX_SAVE_KEYRING_FILE` and mounted read-only at
+`/run/secrets/oneirodex-save-keyring.json`. Create it with
+`python scripts/migrate_emulator_save_keys.py --initialize-keyring <protected-output>`
+while the existing `SECRET_KEY` is available. The generated ring retains the
+legacy derived key for reading `GTENC1` saves and writes new saves with a
+versioned key ID. Do not store key material in `.env`, the database, or a move
+bundle. Keep the ring and its protected backup outside database and library
+backup payloads. Linux keyring files must be mode `0600`; on Windows, restrict
+the NTFS ACL to the service account and administrators.
+
+To rotate keys, prepare a second file with
+`python scripts/migrate_emulator_save_keys.py --rotate-keyring-from <current-ring> --write-keyring <new-ring>`.
+Preserve both protected rings, point the app at the new one, stop save writers,
+then run `python scripts/migrate_emulator_save_keys.py --migrate --root <save-root>`
+for a report-only inventory. Repeat with `--apply` to re-encrypt current and
+retained generations. The migration stages a new immutable file, then commits
+its metadata path. It removes the old file only after checking that no current
+or retained generation still references it, including normalized path aliases.
+Uncertain references or an ambiguous commit preserve ciphertext for recovery.
+Applied migration uses the same owner lock as save writes and refreshes metadata
+after waiting; this defensive protection does not replace stopping all writers.
+The report-only command remains read-only. It keeps each save generation and
+never schedules history garbage collection. Retain old key IDs for encrypted
+backups that still need them. The command does not contact providers or load
+`.env`; set `DATABASE_URL`
+for an external database or use the embedded database environment described
+by the script.
+
+[R2039 evidence](../dev/parity-evidence/save-rotation-safety-r2039.json) covers
+synthetic shared-path, writer-overlap and abrupt process-exit recovery checks.
+It does not qualify your operator backup media or a fully online migration.
+
+#### Convert existing credentials after upgrading
+
+The schema upgrade must run once on the new image before the conversion command.
+Stop every old app instance first so no old version can write plaintext while
+conversion runs. Before conversion, take a protected database backup; a backup
+made before conversion can still contain plaintext provider credentials. With
+the new Compose image started once and its schema upgrade
+complete, stop the app and run:
+
+```bash
+docker compose stop app
+docker compose run --rm --no-deps --entrypoint python3 app /app/scripts/migrate_reusable_secrets.py
+docker compose run --rm --no-deps --entrypoint python3 app /app/scripts/migrate_store_credentials.py
+docker compose up -d app
+```
+
+The Compose service supplies `DATABASE_URL` and the mounted key-ring path to the
+converter. It requires that process-level `DATABASE_URL`; it does not read `.env`
+or fall back to `TEST_DATABASE_URL`. It verifies each ciphertext against the
+source before clearing legacy plaintext, commits one row at a time, is safe to
+rerun, prints counts only, and makes no provider calls. A missing or invalid key,
+database conflict, or row failure exits nonzero; investigate the redacted count
+and rerun after fixing the cause. Do not leave the app stopped until the
+conversion succeeds and new app is started.
+
+The reusable-secret converter handles scalar GlobalSettings values and the
+enumerated *arr, debrid, challenge-solver, lighting, and indexer JSON credentials.
+For key rotation, add a new key ID to `keys`, set `active_key_id` to it, then run
+both converters while the app is stopped. They re-encrypt values under the
+active key and verify before commit. Keep previous key IDs until both runs
+report `rotated=0` with no failures and no retained database backups require
+those keys. Never remove keys based only on the current database if older
+backups still contain ciphertext encrypted under them.
 
 ## Postgres exposure and password
 
@@ -139,10 +259,13 @@ over the Compose network.
 |---|---|---|
 | Published host port | `127.0.0.1:5432` — `POSTGRES_HOST_BIND` (default `127.0.0.1`) and `POSTGRES_HOST_PORT` (default `5432`) | Set `POSTGRES_HOST_BIND=<host LAN IP>` (or `0.0.0.0`) in `.env`; when an existing database volume is present, startup verifies the configured password through a private loopback-only connection before exposing the port. |
 | Client auth | `docker/postgres/pg_hba.conf`: scram-sha-256 from loopback, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` and `fc00::/7` only. There is no `0.0.0.0/0` rule. | Add a line for any other CIDR (a custom Docker address pool, Tailscale `100.64.0.0/10`, a global IPv6 prefix), then `docker compose up -d --force-recreate db`. |
-| Password | `POSTGRES_PASSWORD` in `.env`. The templates ship a `CHANGE_ME…` placeholder, and the app container refuses to start while it is still set. Compose falls back to `postgres` only when the variable is unset, so old stacks keep starting (with a warning in the log). | See below. |
+| Password | `POSTGRES_PASSWORD` in `.env`. The templates ship a `CHANGE_ME…` placeholder, and both app and database startup reject it. Compose retains the old `postgres` fallback for interpolation, but startup rejects it by default. | For an existing volume only, set `ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true` to regain service temporarily, rotate the DB credential below, then set it back to `false`. New volumes reject the default even with the compatibility flag. |
 
-The database entrypoint also checks the effective host bind before starting. An
-unset or legacy `postgres` password remains supported on loopback. Non-loopback
+The database entrypoint checks the password and effective host bind before
+starting. The legacy `postgres` password is blocked unless the explicit
+`ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true` compatibility flag is set and an
+existing `db_data` volume is detected. This flag is temporary: keep the host bind
+on loopback, rotate to a unique password, then turn the flag off. Non-loopback
 publication requires a non-default `POSTGRES_PASSWORD`. On an existing database
 volume, startup temporarily starts Postgres bound only to the container's
 loopback interface and authenticates with the configured password before the
@@ -162,14 +285,25 @@ python -c "import secrets; print(secrets.token_hex(24))"     # or: openssl rand 
 ### Upgrading an existing stack
 
 `git pull` then `docker compose up -d` recreates `db` with the new port mapping. The
-stack still starts with your current `.env` and the database is untouched, but two
-things change:
+database volume is untouched. If your `.env` has no password or still uses the
+legacy value `postgres`, enable temporary compatibility before starting:
+
+```dotenv
+ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true
+```
+
+Keep `POSTGRES_HOST_BIND=127.0.0.1`, rotate the password using the procedure below,
+then set `ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=false` and recreate the app and
+database containers. The database guard refuses the legacy default for fresh
+volumes even while the compatibility flag is enabled.
+
+The other change is:
 
 - **The host port is now loopback-only.** If something on another machine connects
   to this host's `5432` (pytest, a GUI client, a second app), set `POSTGRES_HOST_BIND`
   as above.
-- **If `.env` still has `POSTGRES_PASSWORD=postgres` (or none), the superuser password
-  is a known value.** It is no longer reachable from the LAN, but rotate it.
+- **A legacy `postgres` password is now an explicit, temporary compatibility choice.**
+  Rotate it as soon as the upgraded stack is running.
 - **Before enabling a non-loopback bind, rotate the password inside the database**
   using the steps below. The database entrypoint checks that the configured
   password authenticates against the existing volume before allowing the bind.
@@ -199,7 +333,7 @@ A fresh install (no `db_data` volume yet) just takes the value from `.env`.
 `ONEIRODEX_LIBRARY_WATCH` stays **off by default** (`0` / unset). Compose bind-mounts only forward filesystem events the kernel delivers on that mount:
 
 - **Direct host binds** (local disk path → `/storage:ro`) — events may work; still debounce + queue, never assume zero misses.
-- **Unraid `/mnt/user` FUSE / network remounts** — host-side renames and many writes **often never reach** inotify inside the container. Prefer scheduled/manual scan; details: [unraid-deploy.md § Library root watch](unraid-deploy.md#library-root-watch-gt_library_watch--unraid-honesty).
+- **Unraid `/mnt/user` FUSE / network remounts** — host-side renames and many writes **often never reach** inotify inside the container. Prefer scheduled/manual scan; details: [unraid-deploy.md § Library root watch](unraid-deploy.md#library-root-watch-oneirodex_library_watch--unraid-honesty).
 - When a watcher (or Admin) enqueues many paths while a scan is busy: use **Queue**, not force-parallel — [libraries-and-scans.md](../admin/libraries-and-scans.md#run-a-scan).
 
 ## After first start

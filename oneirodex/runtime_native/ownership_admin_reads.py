@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class OwnershipAdminReadData:
@@ -122,7 +123,7 @@ def create_ownership_admin_read_router(
                 )
                 response = JSONResponse(payload, status_code=status)
             else:
-                raw = request.query_params.get('after_id', '0')
+                raw = first_query_value(request.query_params, 'after_id', '0')
                 if (
                     not raw.isascii() or not raw.isdigit() or len(raw) > 10
                     or int(raw) > 2147483647
@@ -149,14 +150,14 @@ def create_ownership_admin_read_router(
             response.body = b''
         return response
 
-    @router.post('/api/admin/ownership/connections/{user_id}/{store}/sync')
+    @router.post('/api/admin/ownership/connections/{user_id:int}/{store}/sync')
     def retry_ownership_sync(user_id: int, store: str, request: Request):
         return _admin_ownership_mutation(request, flask_app, data, user_id, store,
                                          'sync', find_user, find_token,
                                          commit_token_touch, load_user_id,
                                          login_manager, database_scope)
 
-    @router.post('/api/admin/ownership/connections/{user_id}/{store}/cancel')
+    @router.post('/api/admin/ownership/connections/{user_id:int}/{store}/cancel')
     def cancel_ownership_sync(user_id: int, store: str, request: Request):
         return _admin_ownership_mutation(request, flask_app, data, user_id, store,
                                          'cancel', find_user, find_token,
@@ -172,8 +173,8 @@ def mount_ownership_admin_read_routes(app: FastAPI, flask_app, **kwargs):
 
 
 def _ownership_outcome_error(store, reason, job=None):
-    from oneirodex.utils.store_sync_errors import PROVIDER_NAMES, REASONS, reason_payload
-    from oneirodex.utils.store_sync_jobs import job_dict
+    from oneirodex.utils.store_sync_errors import REASONS, reason_payload
+    from oneirodex.utils.store_sync_jobs import PROVIDER_NAMES, job_dict
 
     entry = REASONS.get(reason) or REASONS['internal_error']
     info = reason_payload(reason, PROVIDER_NAMES.get(store, store))

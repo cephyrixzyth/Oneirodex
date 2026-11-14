@@ -7,8 +7,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+import pytest
+from werkzeug.exceptions import NotFound
+from werkzeug.utils import redirect
+
 from oneirodex.runtime_native.admin_whitelist import create_admin_whitelist_router
-from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+from oneirodex.runtime_native.session_compat import (
+    dump_session_cookie, generate_csrf_token,
+)
 
 
 class FakeWhitelist:
@@ -34,14 +41,14 @@ class FakeWhitelist:
         self.calls.append(('rollback',))
 
 
-def _client():
+def _client(shell_path=None):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-whitelist-secret', CSP_ENABLED=False)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=18, user_id='whitelist-admin', role='admin', is_active=True,
-        state=True, is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        state=True, is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
         name='Admin fixture',
     )
     manager = SimpleNamespace(
@@ -58,11 +65,12 @@ def _client():
         load_user_id=lambda value: user if value.split(':', 1)[0] == '18' else None,
         login_manager=manager, data_access=data,
         database_scope=lambda _app: nullcontext(),
+        shell_path=shell_path,
     )
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    session = {'_user_id': '18:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(18), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     client.cookies.set('session', dump_session_cookie(session, flask_app.config['SECRET_KEY']))
     return client, data, csrf
@@ -109,19 +117,130 @@ def test_whitelist_conflict_and_missing_delete_use_error_contracts():
         headers={'X-CSRFToken': csrf},
     )
     data.delete_error = ('Not found', 'not_found', 404)
-    missing = client.delete('/admin/whitelist/55', headers={'X-CSRFToken': csrf})
+    missing = client.delete(
+        '/admin/whitelist/55',
+        headers={'X-CSRFToken': csrf, 'Accept': 'application/json'},
+    )
     assert duplicate.status_code == 409 and duplicate.json()['error_code'] == 'conflict'
     assert missing.status_code == 404 and missing.json()['error_code'] == 'not_found'
+    assert missing.json()['error'] == NotFound().description
+    assert missing.json()['message'] == NotFound().description
+
+
+def test_whitelist_create_rejects_oversized_json_before_mutation():
+    client, data, csrf = _client()
+    response = client.post(
+        '/admin/api/whitelist', content=b' ' * (64 * 1024 + 1),
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
+
+
+def test_missing_whitelist_delete_keeps_legacy_html_for_browser_requests():
+    client, data, csrf = _client()
+    data.delete_error = ('Not found', 'not_found', 404)
+    response = client.delete('/admin/whitelist/55', headers={'X-CSRFToken': csrf})
+    expected = NotFound().get_response()
+
+    assert response.status_code == expected.status_code == 404
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.headers['content-length'] == expected.headers['Content-Length']
+    assert response.content == expected.get_data()
+
+
+@pytest.mark.parametrize(('extra_headers', 'expects_json'), [
+    ({'X-Requested-With': 'XMLHttpRequest'}, True),
+    ({'Accept': 'text/html, application/json;q=0.9'}, False),
+    ({'Accept': 'application/json, text/html;q=0.5'}, True),
+    ({'Accept': 'application/json;q=0, text/html'}, False),
+])
+def test_missing_whitelist_delete_matches_legacy_error_negotiation(extra_headers, expects_json):
+    client, data, csrf = _client()
+    data.delete_error = ('Not found', 'not_found', 404)
+    headers = {'X-CSRFToken': csrf, **extra_headers}
+    response = client.delete('/admin/whitelist/55', headers=headers)
+
+    assert response.status_code == 404
+    if expects_json:
+        assert response.headers['content-type'].startswith('application/json')
+        assert response.json()['error_code'] == 'not_found'
+        assert response.json()['error'] == NotFound().description
+        assert response.json()['message'] == NotFound().description
+    else:
+        assert response.headers['content-type'].startswith('text/html')
+        assert response.content == NotFound().get_response().get_data()
 
 
 def test_legacy_whitelist_form_uses_hidden_csrf_and_redirects():
     client, data, csrf = _client()
     response = client.post(
         '/admin/whitelist',
-        data={'csrf_token': csrf, 'email': ' Person@Example.org '},
+        data={'csrf_token': csrf, 'email': 'Person@Example.org'},
         follow_redirects=False,
     )
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/whitelist'
+    expected = redirect('/admin/whitelist')
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.headers['content-length'] == expected.headers['Content-Length']
+    assert response.content == expected.get_data()
     assert data.calls == [('add', 'person@example.org', 18)]
+
+
+@pytest.mark.parametrize('email', [' person@example.org ', 'person@example.org\n'])
+def test_legacy_whitelist_form_rejects_email_whitespace_before_normalization(email, tmp_path):
+    shell_path = tmp_path / 'admin.html'
+    shell_path.write_text('<!doctype html><div id="admin-app-root"></div>', encoding='utf-8')
+    client, data, csrf = _client(shell_path)
+    response = client.post(
+        '/admin/whitelist', data={'csrf_token': csrf, 'email': email},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    assert 'data-error="Invalid email address."' in response.text
+    assert data.calls == []
+
+
+@pytest.mark.parametrize(('email', 'message'), [
+    ('', 'This field is required.'),
+    ('not-an-email', 'Invalid email address.'),
+    ('person@' + 'a' * 60 + '.' + 'b' * 60 + '.com',
+     'Email address is too long (maximum 120 characters)'),
+])
+def test_legacy_whitelist_form_preserves_field_validation_messages(email, message, tmp_path):
+    shell_path = tmp_path / 'admin.html'
+    shell_path.write_text('<!doctype html><div id="admin-app-root"></div>', encoding='utf-8')
+    client, data, csrf = _client(shell_path)
+    response = client.post(
+        '/admin/whitelist', data={'csrf_token': csrf, 'email': email},
+        follow_redirects=False,
+    )
+    assert response.status_code == 200
+    assert f'data-error="{message}"' in response.text
+    assert f'data-email="{email}"' in response.text
+    assert data.calls == []
+
+
+def test_legacy_whitelist_form_escapes_invalid_value_in_react_shell(tmp_path):
+    shell_path = tmp_path / 'admin.html'
+    shell_path.write_text('<!doctype html><div id="admin-app-root"></div>', encoding='utf-8')
+    client, data, csrf = _client(shell_path)
+    malicious_value = '" autofocus onfocus="alert(1)'
+    response = client.post(
+        '/admin/whitelist',
+        data={'csrf_token': csrf, 'email': malicious_value},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    assert 'data-email="&quot; autofocus onfocus=&quot;alert(1)"' in response.text
+    assert 'data-email="" autofocus' not in response.text
+    assert response.headers['cache-control'] == 'no-store'
+    assert 'cookie' in {
+        value.strip().lower() for value in response.headers['vary'].split(',')
+    }
+    assert data.calls == []

@@ -8,7 +8,7 @@ import pytest
 
 from oneirodex import db
 from oneirodex.models import User
-from oneirodex.utils.security import is_safe_path_strict
+from oneirodex.utils.security import is_readable_game_path, is_safe_path_strict
 
 
 def _reset_user(token, issued_at):
@@ -68,6 +68,20 @@ class TestStrictPathCheck:
         with app.app_context():
             ok, _ = is_safe_path_strict(str(tmp_path.parent), [str(tmp_path)])
         assert ok is False
+
+
+class TestReadableGamePath:
+    def test_accepts_readable_regular_file_and_directory(self, tmp_path):
+        game_file = tmp_path / 'Game.rom'
+        game_file.write_bytes(b'rom-data')
+
+        assert is_readable_game_path(str(game_file)) is True
+        assert is_readable_game_path(str(tmp_path)) is True
+
+    def test_rejects_missing_non_string_and_blank_paths(self, tmp_path):
+        assert is_readable_game_path(str(tmp_path / 'missing.rom')) is False
+        assert is_readable_game_path('') is False
+        assert is_readable_game_path(None) is False
 
 
 @pytest.fixture

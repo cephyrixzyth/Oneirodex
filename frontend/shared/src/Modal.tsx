@@ -88,6 +88,24 @@ export function Modal({
     const target = initialFocusRef?.current ?? (panel ? (focusables(panel)[0] ?? panel) : null)
     target?.focus()
 
+    // Keep the rest of the document out of the accessibility tree while the
+    // modal is open. The dialog is portaled directly under body, so its siblings
+    // are the page roots and any other top-level interface surfaces.
+    const dialog = panel?.parentElement
+    const hiddenSiblings = Array.from(document.body.children)
+      .filter((child) => child !== dialog)
+      .map((child) => {
+        const element = child as HTMLElement
+        const previous = {
+          element,
+          hadInert: element.hasAttribute('inert'),
+          ariaHidden: element.getAttribute('aria-hidden'),
+        }
+        element.setAttribute('inert', '')
+        element.setAttribute('aria-hidden', 'true')
+        return previous
+      })
+
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (closeRef.current.closeOnEscape) {
@@ -120,6 +138,11 @@ export function Modal({
     return () => {
       document.removeEventListener('keydown', onKey)
       if (lockScroll) document.body.style.overflow = previousOverflow
+      hiddenSiblings.forEach(({ element, hadInert, ariaHidden }) => {
+        if (!hadInert) element.removeAttribute('inert')
+        if (ariaHidden === null) element.removeAttribute('aria-hidden')
+        else element.setAttribute('aria-hidden', ariaHidden)
+      })
       const back = restoreRef.current
       if (back && back.isConnected && typeof back.focus === 'function') back.focus()
     }
@@ -133,15 +156,17 @@ export function Modal({
   }
 
   return createPortal(
-    <div
-      className={className}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={labelledBy}
-      aria-label={labelledBy ? undefined : label}
-      onClick={onBackdrop}
-    >
-      <div data-panel={panelData} ref={panelRef} className={panelClassName} tabIndex={-1}>
+    <div className={className} onClick={onBackdrop}>
+      <div
+        data-panel={panelData}
+        ref={panelRef}
+        className={panelClassName}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={labelledBy}
+        aria-label={labelledBy ? undefined : label}
+        tabIndex={-1}
+      >
         {children}
       </div>
     </div>,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import nullcontext
 from types import SimpleNamespace
 
@@ -11,11 +12,14 @@ from oneirodex.runtime_native.admin_art_studio_actions import (
     create_admin_art_studio_action_router,
 )
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+from oneirodex.utils.persistent_sessions import issue_login_identity
+from tests.fixtures.native_auth import persistent_login_store
 
 
 class FakeActions:
     def __init__(self):
         self.calls = []
+        self.apply_had_running_loop = None
 
     def generate(self, body, package_root):
         self.calls.append(('generate', body.title, body.title_scale, package_root))
@@ -34,6 +38,12 @@ class FakeActions:
         return {'generated': 0, 'skipped': 1, 'errors': [], 'count': 1, 'results': []}
 
     def apply(self, app, pack_id, mode, game_uuid, library_uuid, filename):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self.apply_had_running_loop = False
+        else:
+            self.apply_had_running_loop = True
         self.calls.append(('apply', pack_id, mode, game_uuid, library_uuid, filename))
         return {'mode': mode, 'game_uuid': game_uuid, 'pack_id': pack_id}
 
@@ -45,12 +55,13 @@ class FakeActions:
 def _client():
     flask_app = Flask(__name__)
     flask_app.root_path = '/app/oneirodex'
+    flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     flask_app.config.update(
         SECRET_KEY='native-art-actions', CSP_ENABLED=False, WTF_CSRF_ENABLED=True,
     )
     user = SimpleNamespace(
         id=18, user_id='admin', role='admin', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -58,7 +69,7 @@ def _client():
         login_message_category='message', localize_callback=None,
         session_protection='basic',
     )
-    session = {'_user_id': '18:fingerprint', '_fresh': True}
+    session = {'_user_id': issue_login_identity(user), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     actions = FakeActions()
     events = []
@@ -100,10 +111,16 @@ def test_stock_pack_generation_normalizes_ids_and_format():
 def test_art_pack_download_is_an_attachment_and_validates_pack_id():
     client, actions, _events = _client()
     response = client.get('/admin/api/art-studio/download/abc123')
+    head = client.head('/admin/api/art-studio/download/abc123')
     assert response.status_code == 200 and response.content == b'zip-bytes'
     assert response.headers['content-type'] == 'application/zip'
-    assert response.headers['content-disposition'] == 'attachment; filename="oneirodex-art-abc123.zip"'
-    assert actions.calls[0][0:2] == ('download', 'abc123')
+    assert response.headers['content-disposition'] == 'attachment; filename=oneirodex-art-abc123.zip'
+    assert head.status_code == response.status_code and head.content == b''
+    assert head.headers['content-type'] == response.headers['content-type']
+    assert head.headers['content-disposition'] == response.headers['content-disposition']
+    assert [call[0:2] for call in actions.calls] == [
+        ('download', 'abc123'), ('download', 'abc123'),
+    ]
 
 
 def test_system_mark_generation_preserves_validation_and_uses_fake_adapter():
@@ -143,4 +160,16 @@ def test_art_studio_apply_and_batch_alias_keep_validations_and_results():
     assert batch.status_code == 200 and batch.json()['applied'] == 1
     assert alias.status_code == 200 and alias.json()['failed'] == 0
     assert [row[0] for row in actions.calls] == ['apply', 'batch-generate', 'batch-generate']
+    assert actions.apply_had_running_loop is False
     assert events
+
+
+def test_retired_identity_cannot_reach_art_generation():
+    client, actions, events = _client()
+    session = {'_user_id': '18:0123456789abcdef', '_fresh': True}
+    csrf = generate_csrf_token(session, 'native-art-actions')
+    client.cookies.set('session', dump_session_cookie(session, 'native-art-actions'))
+    response = client.post('/admin/api/art-studio/generate', json={'title': 'Denied'}, headers={'X-CSRFToken': csrf}, follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers['location'].startswith('/login')
+    assert actions.calls == [] and events == []

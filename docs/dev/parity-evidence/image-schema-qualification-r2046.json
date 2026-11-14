@@ -1,0 +1,87 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2046",
+  "scope": "Original OP-006/P0-01/P1-06 native schema/startup qualification; current-only runtime controls",
+  "source_head": "2e250493984ebdc8b33c763b73ac00d6799f4355",
+  "image_id": "sha256:bccf4d6f6dea15707eb30222462a9e4bc4d00d26d7a301f2ff2b384324ca154c",
+  "build": {
+    "seconds": 214.71,
+    "exit_code": 0,
+    "tracked_source_fixed": true,
+    "context": "Committed Git export under canonical staging directory; normal Docker CLI ignore filtering, no image overlays"
+  },
+  "qualification": {
+    "checked_source_paths": 12,
+    "exact_export_and_crlf_normalized_git_match": true,
+    "spa_targets": 5,
+    "files": {
+      "member": 65,
+      "auth": 3,
+      "admin": 3,
+      "pilot": 3,
+      "ops": 3
+    },
+    "native_asset_validator": 0,
+    "pip_check": 0,
+    "excluded_private_paths_verified": true,
+    "shipped_library_children": [
+      "stock",
+      "system-marks"
+    ],
+    "operator_data": false
+  },
+  "runtime": {
+    "passed": true,
+    "seconds": 29.43,
+    "actual_schema_head": "a4b5c6d7e8f9",
+    "declared_schema_head": "a4b5c6d7e8f9",
+    "nonroot_uid": 99,
+    "gid": 100,
+    "capabilities": 0,
+    "no_new_privileges": true,
+    "role_and_html_identity": true,
+    "remembered_session_survives_process_restart": true,
+    "logout_and_cookie_replay_denial": true,
+    "ownership_marker_reused": true,
+    "normal_stop_exit_code": 0,
+    "cleanup_and_database_absence": true
+  },
+  "failure_recovery": {
+    "passed": true,
+    "seconds": 32.21,
+    "malformed_revision_type": "text",
+    "startup_exit_code": 1,
+    "server_never_started": true,
+    "raw_migration_sql_withheld": true,
+    "explicit_synthetic_schema_repair": "Convert owned synthetic revision column back to integer; no stamp-head bypass",
+    "restart_reaches_head": true,
+    "revision_preserved": 7,
+    "history_count": 1,
+    "current_and_history_file_bytes_preserved": true,
+    "normal_stop_exit_code": 0,
+    "owned_cleanup_and_database_absence": true
+  },
+  "offline_sbom": {
+    "exit_code": 0,
+    "seconds": 182.83,
+    "format": "SPDX-2.3",
+    "packages": 384,
+    "files": 711,
+    "sha256": "779f7db88ce1d7a6614f0ff12f2a37bb627cb0a464dd388b9cfd70277c106f03",
+    "network": "Offline local inventory; no registry lookup or vulnerability scan"
+  },
+  "rework": [
+    "First failure/recovery harness stopped at the existing default-password guard before reaching schema setup. Preserve failed attempt; qualified synthetic-only rerun explicitly uses the same documented test compatibility flag as prior probes.",
+    "Earlier R2043 build/context/user/line-ending assumptions and R2044 request assumptions remain in R2045 precursor archive; none are silently counted as product fixes."
+  ],
+  "archive": {
+    "files": 32,
+    "bytes": 246919,
+    "sha256": "5bc492fb3eaf696657985ee5f6b749eba5dc1ab8bf347747e40c5edffe2e60b4"
+  },
+  "limits": [
+    "All test data synthetic; no operator credentials/media/backups or production deployment.",
+    "The exact-source full Python and core CI later failed one discovery fixture case, traced to stale config aliases in the new child-database test fixture. R2052 records correction; no full-program completion.",
+    "Not full route parity, legacy pinned-image equivalence, installed-platform or screen-reader acceptance."
+  ]
+}

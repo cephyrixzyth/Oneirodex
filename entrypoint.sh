@@ -48,15 +48,21 @@ if [[ "${EMBEDDED}" == "false" && -f /.dockerenv ]]; then
     export POSTGRES_DB="${POSTGRES_DB:-oneirodex}"
 
     # The env templates ship a placeholder, not a password. It is public (it is
-    # in this repo), so starting a database with it is refused outright. The
-    # old default `postgres` is only warned about: existing stacks rely on it.
+    # in this repo), so starting a database with it is refused outright. The old
+    # default `postgres` is allowed only when explicitly opted in for a legacy
+    # stack; the database container separately verifies that its volume exists.
     if [[ "${POSTGRES_PASSWORD}" == CHANGE_ME* || "${DATABASE_URL}" == *":CHANGE_ME"* ]]; then
         echo "❌ POSTGRES_PASSWORD is still the template placeholder. Set a strong password in .env"
         echo "   (e.g. openssl rand -hex 24) before the first start; see docs/runbooks/docker-compose-deploy.md."
         exit 1
     fi
     if [[ "${POSTGRES_PASSWORD}" == "postgres" ]]; then
-        echo "⚠️  POSTGRES_PASSWORD is the old default 'postgres'. Rotate it (docs/runbooks/docker-compose-deploy.md)."
+        if [[ "${ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD:-false}" != "true" ]]; then
+            echo "❌ POSTGRES_PASSWORD is the legacy default 'postgres'. Set a unique password or explicitly enable legacy compatibility for an existing database volume."
+            echo "   See docs/runbooks/docker-compose-deploy.md."
+            exit 1
+        fi
+        echo "⚠️  Legacy PostgreSQL password compatibility is enabled. Rotate POSTGRES_PASSWORD, then disable ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD."
     fi
 
     if [[ -z "${DATABASE_URL}" \
@@ -92,15 +98,15 @@ wait_for_postgres() {
     echo "🔄 Waiting for PostgreSQL at ${DB_HOST}:${DB_PORT}..."
     echo "   DATABASE_URL host hint: $(echo "${DATABASE_URL}" | sed -E 's#://[^:]+:[^@]+@#://***:***@#')"
 
-    until python3 -c "
+    until DB_HOST="$DB_HOST" DB_USER="$DB_USER" DB_PORT="$DB_PORT" python3 -c "
 import os
 import sys
 import psycopg2
 from urllib.parse import urlparse
 
-host = os.environ.get('DATABASE_HOST', '${DB_HOST}')
-port = int(os.environ.get('DATABASE_PORT', '${DB_PORT}') or 5432)
-user = os.environ.get('POSTGRES_USER', '${DB_USER}')
+host = os.environ.get('DATABASE_HOST') or os.environ.get('DB_HOST') or 'db'
+port = int(os.environ.get('DATABASE_PORT') or os.environ.get('DB_PORT') or 5432)
+user = os.environ.get('POSTGRES_USER') or os.environ.get('DB_USER') or 'postgres'
 password = os.environ.get('POSTGRES_PASSWORD', 'postgres')
 database = os.environ.get('POSTGRES_DB', 'oneirodex')
 
@@ -142,14 +148,72 @@ if [[ "${EMBEDDED}" == "false" ]]; then
     wait_for_postgres
 
     echo "🎮 Starting Oneirodex Docker container..."
-    exec /app/startweb-docker.sh "$@"
+else
+    echo "🎮 Starting Oneirodex Docker container..."
 fi
 
-# Embedded database: stay as the parent so SIGTERM (docker stop) stops the app
-# first and PostgreSQL second, cleanly, and so a dead database takes the
-# container down for the restart policy to bring back.
+# The database and startup checks are initialized above. Run all Python startup
+# work and ASGI workers as the configured data owner, never as container root.
+APP_UID="${PUID:-99}"
+APP_GID="${PGID:-100}"
+if [[ "${APP_UID}" == "0" ]]; then
+    if [[ "${EMBEDDED}" == "true" ]]; then
+        APP_UID="${EMBEDDED_UID}"
+        APP_GID="${EMBEDDED_GID}"
+    else
+        echo "❌ PUID=0 is not supported for the app process; choose a non-root PUID/PGID."
+        exit 1
+    fi
+fi
+if [[ ! "${APP_UID}" =~ ^[0-9]+$ || ! "${APP_GID}" =~ ^[0-9]+$ \
+    || "${APP_UID}" == "0" || "${APP_GID}" == "0" ]]; then
+    echo "❌ PUID and PGID must be numeric and non-root."
+    exit 1
+fi
+
+APP_LIBRARY_DIR="$(realpath -m "${ONEIRODEX_LIBRARY_DIR:-${UPLOAD_FOLDER:-/app/oneirodex/static/library}}")"
+case "${APP_LIBRARY_DIR}" in
+    /app/oneirodex/static/library|/config/library)
+        ;;
+    /|/app|/app/*|/config|/config/*|/storage|/storage/*|/bin|/boot|/dev|/dev/*|\
+    /etc|/etc/*|/home|/home/*|/lib|/lib64|/media|/mnt|/mnt/*|/opt|/opt/*|\
+    /proc|/proc/*|/root|/root/*|/run|/run/*|/sbin|/srv|/srv/*|/sys|/sys/*|\
+    /tmp|/tmp/*|/usr|/usr/*|/var|/var/*)
+        echo "❌ Refusing to prepare unsafe app library path: ${APP_LIBRARY_DIR}"
+        exit 1
+        ;;
+esac
+mkdir -p "${APP_LIBRARY_DIR}"
+APP_LIBRARY_ID="$(stat -c '%d-%i' "${APP_LIBRARY_DIR}")"
+OWNER_MARKER="${APP_LIBRARY_DIR}/.oneirodex-library-owner-${APP_UID}-${APP_GID}-${APP_LIBRARY_ID}-v1"
+if [[ ! -f "${OWNER_MARKER}" ]]; then
+    echo "🔐 Preparing app library ownership for ${APP_UID}:${APP_GID} (first start or user change)."
+    chown -R "${APP_UID}:${APP_GID}" "${APP_LIBRARY_DIR}"
+    mkdir -p "${CONFIG_DIR}"
+    touch "${OWNER_MARKER}"
+fi
+
+APP_START_COMMAND=(/app/startweb-docker.sh "$@")
+if [[ "${EMBEDDED}" == "false" ]]; then
+    if [[ "$(id -u)" == "${APP_UID}" && "$(id -g)" == "${APP_GID}" ]]; then
+        exec setpriv --no-new-privs --clear-groups "${APP_START_COMMAND[@]}"
+    fi
+    exec setpriv --no-new-privs --bounding-set=-all --inh-caps=-all --ambient-caps=-all \
+        --reuid="${APP_UID}" --regid="${APP_GID}" --clear-groups \
+        "${APP_START_COMMAND[@]}"
+fi
+
+# Embedded PostgreSQL stays supervised by the root entrypoint so SIGTERM stops
+# the unprivileged app first and then the database cleanly.
 echo "🎮 Starting Oneirodex Docker container..."
-/app/startweb-docker.sh "$@" &
+if [[ "$(id -u)" == "${APP_UID}" && "$(id -g)" == "${APP_GID}" ]]; then
+    setpriv --no-new-privs --bounding-set=-all --inh-caps=-all --ambient-caps=-all \
+        --clear-groups "${APP_START_COMMAND[@]}" &
+else
+    setpriv --no-new-privs --bounding-set=-all --inh-caps=-all --ambient-caps=-all \
+        --reuid="${APP_UID}" --regid="${APP_GID}" --clear-groups \
+        "${APP_START_COMMAND[@]}" &
+fi
 APP_PID=$!
 
 shutdown() {

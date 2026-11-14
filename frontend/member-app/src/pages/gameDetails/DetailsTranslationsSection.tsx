@@ -3,7 +3,7 @@ import { initiateGameDownload } from '../../api/downloads'
 import { seatCanUseCompanion } from '../../utils/seatMode'
 import { attachPatchCatalogGuide, searchPatchCatalog } from '../../api/patchCatalog'
 import { showToast } from '../../utils/toast'
-import { Button } from '@oneirodex/ui'
+import { Button, safeExternalUrl } from '@oneirodex/ui'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { useState } from 'react'
@@ -16,14 +16,17 @@ export function DetailsTranslationsSection({
   setBusyVersionKey,
   setVersionActionStatus,
   setRetryCount,
+  canDownload = true,
 }: {
   game: DetailsGame
   setRetryCount: (update: (n: number) => number) => void
+  canDownload?: boolean
 } & Pick<VersionActions, 'busyVersionKey' | 'setBusyVersionKey' | 'setVersionActionStatus'>) {
   const [catalogHits, setCatalogHits] = useState<CatalogHit[]>([])
   const [catalogBusy, setCatalogBusy] = useState(false)
   const [catalogStatus, setCatalogStatus] = useState<string | null>(null)
   const navigate = useNavigate()
+  const childActionDescriptionId = `translations-child-restriction-${game.uuid}`
 
   async function downloadPatch(patch: TranslationPatch) {
     const versionKey = `patch:${patch.uuid}`
@@ -55,13 +58,19 @@ export function DetailsTranslationsSection({
         <Link to="/help#translations">Help → Translations</Link> guide or{' '}
         <code>docs/user/translation-patches.md</code>.
       </p>
+      {!canDownload ? (
+        <p className="visually-hidden" id={childActionDescriptionId} role="note">
+          Downloads and companion patch actions are unavailable for child accounts.
+        </p>
+      ) : null}
       {Array.isArray(game.translation_patches) && game.translation_patches.length > 0 ? (
         <ul className="od-details-page__versions">
           {game.translation_patches.map((patch: TranslationPatch) => {
             const versionKey = `patch:${patch.uuid}`
             const applyBusy = busyVersionKey === versionKey
+            const guideUrl = safeExternalUrl(patch.source_url)
             // TC-3: a thin seat gets the Guide link, never a queue button.
-            const canApplyPatch =
+            const patchCompanionAvailable =
               seatCanUseCompanion() &&
               Boolean(game.client_connected) &&
               Boolean(game.rom_patch_apply_enabled)
@@ -79,26 +88,37 @@ export function DetailsTranslationsSection({
                   <div className="od-details-page__version-actions">
                     <Button
                       type="button"
-                      disabled={Boolean(busyVersionKey)}
-                      onClick={() => void downloadPatch(patch)}
+                      disabled={!canDownload || Boolean(busyVersionKey)}
+                      title={
+                        !canDownload
+                          ? 'Patch downloads are unavailable for child accounts'
+                          : undefined
+                      }
+                      aria-describedby={!canDownload ? childActionDescriptionId : undefined}
+                      onClick={() => {
+                        if (!canDownload) return
+                        void downloadPatch(patch)
+                      }}
                     >
                       {busyVersionKey === `patch:${patch.uuid}` ? 'Queuing…' : 'Download patch'}
                     </Button>
-                    {patch.source_url ? (
-                      <a
-                        className="od-btn"
-                        href={patch.source_url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
+                    {guideUrl ? (
+                      <a className="od-btn" href={guideUrl} target="_blank" rel="noreferrer">
                         Guide
                       </a>
                     ) : null}
-                    {canApplyPatch ? (
+                    {patchCompanionAvailable ? (
                       <Button
                         type="button"
-                        disabled={Boolean(busyVersionKey)}
+                        disabled={!canDownload || Boolean(busyVersionKey)}
+                        title={
+                          !canDownload
+                            ? 'Companion patch actions are unavailable for child accounts'
+                            : undefined
+                        }
+                        aria-describedby={!canDownload ? childActionDescriptionId : undefined}
                         onClick={() => {
+                          if (!canDownload) return
                           setBusyVersionKey(versionKey)
                           setVersionActionStatus(null)
                           void queueClientCommand(game.uuid, 'apply_patch', {
@@ -205,10 +225,10 @@ export function DetailsTranslationsSection({
                       {hit.notes ? <p className="od-details-page__muted">{hit.notes}</p> : null}
                     </div>
                     <div className="od-details-page__version-actions">
-                      {hit.source_url ? (
+                      {safeExternalUrl(hit.source_url) ? (
                         <a
                           className="od-btn"
-                          href={hit.source_url}
+                          href={safeExternalUrl(hit.source_url) || undefined}
                           target="_blank"
                           rel="noreferrer"
                         >
@@ -217,12 +237,14 @@ export function DetailsTranslationsSection({
                       ) : null}
                       <Button
                         type="button"
-                        disabled={catalogBusy}
+                        disabled={catalogBusy || !safeExternalUrl(hit.source_url)}
                         onClick={() => {
+                          const sourceUrl = safeExternalUrl(hit.source_url)
+                          if (!sourceUrl) return
                           setCatalogBusy(true)
                           void attachPatchCatalogGuide({
                             game_uuid: game.uuid,
-                            source_url: hit.source_url,
+                            source_url: sourceUrl,
                             notes: hit.notes,
                             target_language: hit.target_language,
                             patch_format: hit.patch_format,

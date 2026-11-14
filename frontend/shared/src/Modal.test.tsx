@@ -19,8 +19,9 @@ test('renders nothing while closed and a dialog under body while open', () => {
   )
   const dialog = screen.getByRole('dialog', { name: 'Thing' })
   expect(dialog).toHaveAttribute('aria-modal', 'true')
-  expect(dialog).toHaveClass('od-x')
-  expect(dialog.firstElementChild).toHaveClass('od-x__panel')
+  expect(dialog).toHaveClass('od-x__panel')
+  expect(dialog.parentElement).toHaveClass('od-x')
+  expect(dialog.parentElement).not.toHaveAttribute('role')
   // portal: the dialog is not inside the render container
   expect(container.contains(dialog)).toBe(false)
   expect(document.body.contains(dialog)).toBe(true)
@@ -44,7 +45,7 @@ test('Escape closes; backdrop click closes; panel click does not', () => {
   )
   fireEvent.click(screen.getByRole('button', { name: 'inside' }))
   expect(onClose).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('dialog'))
+  fireEvent.click(screen.getByRole('dialog').parentElement!)
   expect(onClose).toHaveBeenCalledTimes(1)
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(onClose).toHaveBeenCalledTimes(2)
@@ -78,6 +79,19 @@ test('focus moves to the first focusable on open, or to initialFocusRef', () => 
   unmount()
   render(<Host useRefTarget />)
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'second' }))
+})
+
+test('hides outside page roots from assistive technology and restores them on close', () => {
+  const { container, unmount } = render(
+    <Modal open label="T">
+      <button type="button">inside</button>
+    </Modal>,
+  )
+  expect(container).toHaveAttribute('aria-hidden', 'true')
+  expect(container).toHaveAttribute('inert')
+  unmount()
+  expect(container).not.toHaveAttribute('aria-hidden')
+  expect(container).not.toHaveAttribute('inert')
 })
 
 test('Tab wraps inside the panel in both directions', () => {

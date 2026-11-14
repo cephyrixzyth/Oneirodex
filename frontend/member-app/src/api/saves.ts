@@ -28,6 +28,8 @@ export async function fetchSavedStates(
   const body = await withMemberError(saves.list(gameUuid, signal), 'saved states')
   return {
     enabled: Boolean(body.enabled),
+    canWrite: Boolean(body.can_write_own_save),
+    canDelete: Boolean(body.can_delete_own_save),
     states: (body.saves || []).filter((row) => row.is_state),
   }
 }

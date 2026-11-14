@@ -14,11 +14,13 @@ from sqlalchemy import select
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
+from oneirodex.utils.http_safe import safe_request_limited
 from oneirodex.utils.security import validate_connector_http_url
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SEC = 20
+MAX_SOLVER_RESPONSE_BYTES = 16 * 1024 * 1024
 _LAST_ERROR: str | None = None
 
 _CHALLENGE_MARKERS = (
@@ -68,9 +70,10 @@ def _settings_row() -> GlobalSettings | None:
 
 
 def _arr_cfg() -> dict[str, Any]:
+    from oneirodex.utils.secret_store import read_arr_settings
+
     row = _settings_row()
-    cfg = getattr(row, 'arr_settings', None) if row else None
-    return dict(cfg) if isinstance(cfg, dict) else {}
+    return read_arr_settings(row)
 
 
 def _set_last_error(message: str | None) -> None:
@@ -156,6 +159,8 @@ def get_challenge_config(config=None) -> dict[str, Any]:
 
 
 def save_challenge_config(payload: dict[str, Any], config=None) -> dict[str, Any]:
+    from oneirodex.utils.secret_store import write_arr_settings
+
     row = _settings_row()
     if row is None:
         row = GlobalSettings()
@@ -203,7 +208,7 @@ def save_challenge_config(payload: dict[str, Any], config=None) -> dict[str, Any
         key = str(payload.get('token_api_key', payload.get('challenge_token_api_key')) or '').strip()
         if key and key != '***':
             current['challenge_token_api_key'] = key
-    row.arr_settings = current
+    write_arr_settings(row, current)
     db.session.commit()
     return get_challenge_config(config)
 
@@ -243,6 +248,26 @@ class ChallengeSolverClient:
         self.max_tier = max(1, int(max_tier))
         self._session = session or requests.Session()
 
+    def _post_json(self, endpoint: str, payload: dict[str, Any], timeout: float, label: str):
+        try:
+            response = safe_request_limited(
+                'POST',
+                endpoint,
+                validator=validate_connector_http_url,
+                max_response_bytes=MAX_SOLVER_RESPONSE_BYTES,
+                session=self._session,
+                max_redirects=0,
+                json=payload,
+                timeout=timeout,
+            )
+        except requests.TooManyRedirects as exc:
+            raise RuntimeError('Challenge solver redirect refused') from exc
+        if 300 <= response.status_code < 400:
+            raise RuntimeError('Challenge solver redirect refused')
+        if response.status_code >= 400:
+            raise RuntimeError(f'{label} HTTP {response.status_code}')
+        return response
+
     def request_get(self, url: str, *, max_timeout_ms: int | None = None) -> SolverSolution:
         if self.provider == 'trawl':
             try:
@@ -263,13 +288,7 @@ class ChallengeSolverClient:
             'maxTimeout': timeout,
         }
         http_timeout = (timeout / 1000.0) + 10.0
-        resp = self._session.post(
-            endpoint, json=payload, timeout=http_timeout, allow_redirects=False,
-        )
-        if 300 <= resp.status_code < 400:
-            raise RuntimeError('Challenge solver redirect refused')
-        if resp.status_code >= 400:
-            raise RuntimeError(f'Challenge solver HTTP {resp.status_code}')
+        resp = self._post_json(endpoint, payload, http_timeout, 'Challenge solver')
         data = resp.json() if resp.content else {}
         if data.get('status') != 'ok':
             message = str(data.get('message') or 'solver error')
@@ -286,13 +305,7 @@ class ChallengeSolverClient:
             'maxTier': min(self.max_tier, 4),
         }
         http_timeout = (timeout / 1000.0) + 10.0
-        resp = self._session.post(
-            endpoint, json=payload, timeout=http_timeout, allow_redirects=False,
-        )
-        if 300 <= resp.status_code < 400:
-            raise RuntimeError('Challenge solver redirect refused')
-        if resp.status_code >= 400:
-            raise RuntimeError(f'TRAWL scrape HTTP {resp.status_code}')
+        resp = self._post_json(endpoint, payload, http_timeout, 'TRAWL scrape')
         data = resp.json() if resp.content else {}
         tier = data.get('tier')
         timings = data.get('timings')
@@ -475,6 +488,7 @@ def fetch_with_challenge_retry(
     *,
     session: requests.Session | None = None,
     validator: Any = None,
+    max_response_bytes: int | None = None,
     _solver_used: bool = False,
     **kwargs: Any,
 ) -> requests.Response:
@@ -487,6 +501,29 @@ def fetch_with_challenge_retry(
     """
     http = session or requests
     timeout = kwargs.pop('timeout', DEFAULT_TIMEOUT_SEC)
+    if max_response_bytes is not None:
+        if max_response_bytes <= 0:
+            raise ValueError('max_response_bytes must be positive')
+        if not isinstance(session, requests.Session):
+            raise ValueError('A bounded response requires a caller-owned requests.Session')
+        # The challenge detector inspects response.text. Make that inspection
+        # safe by buffering only through the shared decoded-byte limit first.
+        kwargs['stream'] = True
+
+    def bound_response(response: requests.Response) -> requests.Response:
+        if max_response_bytes is None:
+            return response
+        from oneirodex.utils.http_safe import read_response_limited
+
+        try:
+            content = read_response_limited(response, max_response_bytes)
+        except Exception:
+            response.close()
+            raise
+        response._content = content  # type: ignore[attr-defined]
+        response._content_consumed = True  # type: ignore[attr-defined]
+        response.close()
+        return response
 
     if validator is not None:
         from oneirodex.utils.http_safe import safe_request
@@ -498,7 +535,7 @@ def fetch_with_challenge_retry(
     else:
         request_fn = getattr(http, method.lower())
 
-    resp = request_fn(url, timeout=timeout, **kwargs)
+    resp = bound_response(request_fn(url, timeout=timeout, **kwargs))
 
     if _solver_used or not is_challenge_response(resp):
         return resp
@@ -521,9 +558,16 @@ def fetch_with_challenge_retry(
         return resp
 
     retry_kwargs = _apply_solution_to_request_kwargs(kwargs, solution)
-    retry_resp = request_fn(url, timeout=timeout, **retry_kwargs)
+    retry_resp = bound_response(request_fn(url, timeout=timeout, **retry_kwargs))
     if is_challenge_response(retry_resp) and solution.body:
-        retry_resp._content = solution.body.encode('utf-8', errors='replace')  # type: ignore[attr-defined]
+        solved_body = solution.body.encode('utf-8', errors='replace')
+        if max_response_bytes is not None and len(solved_body) > max_response_bytes:
+            from oneirodex.utils.http_safe import ResponseTooLarge
+
+            raise ResponseTooLarge(
+                f'Response exceeds {max_response_bytes} bytes',
+            )
+        retry_resp._content = solved_body  # type: ignore[attr-defined]
         retry_resp.status_code = solution.status_code
     return retry_resp
 

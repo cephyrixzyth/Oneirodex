@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import httpx
 import pytest
 from fastapi import FastAPI
-from flask import Flask
+from flask import Flask, request as flask_request
+
+from tests.fixtures.native_auth import login_identity_for
 from flask_login import LoginManager
 from types import SimpleNamespace
 
@@ -13,7 +16,7 @@ from oneirodex.runtime_native.scan_unmatched_mutations import (
     ScanUnmatchedMutationData,
     create_scan_unmatched_mutations_router,
 )
-from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.runtime_native.session_compat import dump_session_cookie, load_session_cookie
 
 
 def test_explicit_actor_audit_helpers_do_not_require_flask_app_context(monkeypatch):
@@ -194,21 +197,24 @@ def runtime():
         SQLALCHEMY_DATABASE_URI='sqlite://', SQLALCHEMY_TRACK_MODIFICATIONS=False,
     )
     oneirodex.db.init_app(flask_app)
+    from oneirodex.models import PersistentLoginSession
+    engine = oneirodex.db._app_engines[flask_app][None]
+    PersistentLoginSession.__table__.create(engine)
     users = {
         'admin': SimpleNamespace(id=1, name='Admin Name', role='admin', state=True,
                                  is_active=True, is_authenticated=True,
-                                 session_fingerprint=lambda: 'fp'),
+                                 session_fingerprint=lambda: '0123456789abcdef'),
         'librarian': SimpleNamespace(id=2, name='Librarian', role='librarian', state=True,
                                      is_active=True, is_authenticated=True,
-                                     session_fingerprint=lambda: 'fp'),
+                                     session_fingerprint=lambda: '0123456789abcdef'),
         'member': SimpleNamespace(id=3, name='Member', role='user', state=True,
                                   is_active=True, is_authenticated=True,
-                                  session_fingerprint=lambda: 'fp'),
+                                  session_fingerprint=lambda: '0123456789abcdef'),
     }
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda identity: next(
-        (user for user in users.values() if identity == f'{user.id}:fp'), None,
+        (user for user in users.values() if identity.split(':', 1)[0] == str(user.id)), None,
     ))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     data = FakeMutationData()
@@ -222,11 +228,12 @@ def runtime():
         database_scope=lambda app: native_session_scope(app, oneirodex.db),
     ))
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
-    cookies = {
-        name: dump_session_cookie({'_user_id': f'{user.id}:fp', '_fresh': True},
-                                  'unmatched-mutation-secret')
-        for name, user in users.items()
-    }
+    with native_session_scope(flask_app, oneirodex.db):
+        cookies = {
+            name: dump_session_cookie({'_user_id': login_identity_for(user.id), '_fresh': True},
+                                      'unmatched-mutation-secret')
+            for name, user in users.items()
+        }
     yield app, flask_app, data, users, cookies
     oneirodex.db._app_engines[flask_app][None].dispose()
 
@@ -260,6 +267,25 @@ def test_auth_librarian_admin_and_csrf_order(runtime):
     assert not any(call[0] == 'clear' for call in data.calls)
 
 
+def test_legacy_unmatched_form_mutations_require_admin(runtime):
+    app, _flask_app, data, _users, cookies = runtime
+    requests = [
+        ('/clear_unmatched_entry/8', {}),
+        ('/update_unmatched_folder_status', {'folder_id': '8'}),
+        ('/toggle_ignore_status/8', {}),
+        ('/delete_all_unmatched_folders', {}),
+    ]
+
+    responses = [
+        _request(app, path, cookie=cookies['member'], method='POST', form=form)
+        for path, form in requests
+    ]
+
+    assert all(response.status_code == 302 for response in responses)
+    assert all(response.headers['location'] == '/login' for response in responses)
+    assert data.calls == []
+
+
 def test_name_alias_soft_amend_and_batch_clear_cap_dedupe(runtime):
     app, flask_app, data, _users, cookies = runtime
     flask_app.config['WTF_CSRF_ENABLED'] = False
@@ -283,12 +309,57 @@ def test_name_alias_soft_amend_and_batch_clear_cap_dedupe(runtime):
     assert too_many.status_code == 400 and too_many.json()['requested'] == 101
 
 
+def test_soft_name_accepts_vendor_json_like_flask(runtime):
+    app, _flask_app, data, _users, cookies = runtime
+    legacy = Flask('legacy-unmatched-soft-name')
+    with legacy.test_request_context(
+        '/api/unmatched_folders/8/name', method='PATCH',
+        content_type='application/vnd.oneirodex+json', json={'search_name': 'Vendor name'},
+    ):
+        assert flask_request.is_json is True
+        assert flask_request.get_json(silent=True) == {'search_name': 'Vendor name'}
+
+    response = _request(
+        app, '/api/unmatched_folders/8/name', cookie=cookies['librarian'], method='PATCH',
+        json={'search_name': 'Vendor name'},
+        headers={'Content-Type': 'application/vnd.oneirodex+json'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['search_name'] == 'Vendor name'
+    assert data.calls == [('amend_name', '8', {'search_name': 'Vendor name'})]
+
+
+def test_soft_name_options_matches_flask_auto_options_without_auth(runtime):
+    app, _flask_app, data, _users, _cookies = runtime
+
+    response = _request(app, '/api/unmatched_folders/8/name', method='OPTIONS')
+
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.headers['allow'] == 'OPTIONS, PATCH, POST'
+    assert response.content == b''
+    assert data.calls == []
+
+
+def test_place_update_options_matches_flask_auto_options_without_auth(runtime):
+    app, _flask_app, data, _users, _cookies = runtime
+
+    response = _request(app, '/api/unmatched_folders/8/place_update', method='OPTIONS')
+
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.headers['allow'] == 'POST, OPTIONS'
+    assert response.content == b''
+    assert data.calls == []
+
+
 def test_legacy_unmatched_forms_keep_redirects_ajax_shapes_and_hidden_csrf(runtime):
     from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
     app, flask_app, data, _users, _cookies = runtime
     flask_app.config['WTF_CSRF_ENABLED'] = True
-    session = {'_user_id': '1:fp', '_fresh': True}
+    session = {'_user_id': load_session_cookie(_cookies['admin'], 'unmatched-mutation-secret', max_age=3600)['_user_id'], '_fresh': True}
     csrf = generate_csrf_token(session, 'unmatched-mutation-secret')
     cookie = dump_session_cookie(session, 'unmatched-mutation-secret')
 
@@ -297,7 +368,7 @@ def test_legacy_unmatched_forms_keep_redirects_ajax_shapes_and_hidden_csrf(runti
         form={'csrf_token': csrf},
     )
     assert clear_all.status_code == 303
-    assert clear_all.headers['location'] == '/scan_management'
+    assert clear_all.headers['location'] == '/scan_management?active_tab=unmatched'
     assert ('clear_all_compat',) in data.calls
 
     toggled_ajax = _request(
@@ -315,12 +386,64 @@ def test_legacy_unmatched_forms_keep_redirects_ajax_shapes_and_hidden_csrf(runti
     assert cleared_ajax.status_code == 200
     assert cleared_ajax.json()['message'] == 'Entry cleared successfully'
 
+    cleared_form = _request(
+        app, '/clear_unmatched_entry/8', cookie=cookie, method='POST',
+        form={'csrf_token': csrf},
+    )
+    assert cleared_form.status_code == 303
+    assert cleared_form.headers['location'] == '/scan_management?active_tab=unmatched'
+
     update = _request(
         app, '/update_unmatched_folder_status', cookie=cookie, method='POST',
         form={'csrf_token': csrf, 'folder_id': '8'},
     )
     assert update.status_code == 303
     assert 'set-cookie' in update.headers
+
+
+def test_legacy_unmatched_form_csrf_errors_keep_html_while_json_callers_keep_envelopes(runtime):
+    app, flask_app, data, _users, _cookies = runtime
+    flask_app.config['WTF_CSRF_ENABLED'] = True
+    session = {'_user_id': load_session_cookie(_cookies['admin'], 'unmatched-mutation-secret', max_age=3600)['_user_id'], '_fresh': True}
+    cookie = dump_session_cookie(session, 'unmatched-mutation-secret')
+    form_requests = [
+        ('/delete_all_unmatched_folders', {}),
+        ('/clear_unmatched_entry/8', {}),
+        ('/toggle_ignore_status/8', {}),
+        ('/update_unmatched_folder_status', {'folder_id': '8'}),
+    ]
+
+    responses = [
+        _request(app, path, cookie=cookie, method='POST', form=form)
+        for path, form in form_requests
+    ]
+
+    assert all(response.status_code == 400 for response in responses)
+    assert all(response.headers['content-type'] == 'text/html; charset=utf-8' for response in responses)
+    assert all(response.text == (
+        '<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n'
+        '<h1>Bad Request</h1>\n<p>The CSRF token is missing.</p>\n'
+    ) for response in responses)
+    assert data.calls == []
+
+    json_response = _request(
+        app, '/toggle_ignore_status/8', cookie=cookie, method='POST', json={},
+    )
+    assert json_response.status_code == 400
+    assert json_response.headers['content-type'] == 'application/json'
+    assert json_response.json()['error_code'] == 'bad_request'
+
+    with Flask('legacy-csrf-media').test_request_context(
+        '/toggle_ignore_status/8', method='POST', content_type='text/plain+json',
+    ):
+        assert flask_request.is_json is False
+    wrong_json_media = _request(
+        app, '/toggle_ignore_status/8', cookie=cookie, method='POST', json={},
+        headers={'Content-Type': 'text/plain+json'},
+    )
+    assert wrong_json_media.status_code == 400
+    assert wrong_json_media.headers['content-type'] == 'text/html; charset=utf-8'
+    assert data.calls == []
 
 
 def test_batch_mark_kind_validation_alias_and_partial_results(runtime):
@@ -340,6 +463,21 @@ def test_batch_mark_kind_validation_alias_and_partial_results(runtime):
     assert valid.json()['disk_io'] is False
     assert ('mark_kind_one', '1', 'emulator', 'Emulator', 'Local') in data.calls
     assert invalid.status_code == 400 and 'item_kinds' in invalid.json()
+
+    vendor_body = {'ids': ['1'], 'kind': 'emu', 'name': 'Vendor emulator', 'summary': 'Vendor body'}
+    vendor_type = 'application/vnd.oneirodex+json'
+    with Flask('legacy-json-parser').test_request_context(
+        '/api/unmatched_folders/batch/mark_kind', method='POST',
+        data=json.dumps(vendor_body), content_type=vendor_type,
+    ):
+        legacy_body = flask_request.get_json(silent=True)
+    vendor = _request(
+        app, '/api/unmatched_folders/batch/mark_kind', cookie=cookies['librarian'],
+        method='POST', json=vendor_body, headers={'Content-Type': vendor_type},
+    )
+    assert legacy_body == vendor_body
+    assert vendor.status_code == 200 and vendor.json()['marked'] == 1
+    assert ('mark_kind_one', '1', 'emulator', 'Vendor emulator', 'Vendor body') in data.calls
 
 
 def test_batch_fix_audits_and_single_fix_response(runtime):

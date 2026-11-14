@@ -62,7 +62,9 @@ def _gog_tokens_for(account: StoreAccount) -> dict:
     the operator's. The household sign-in is used only when the member saved
     nothing of their own; a member's own (even incomplete) credential is never
     mixed with or silently replaced by the household one."""
-    data = _parse_credential_json(account.credential)
+    from oneirodex.utils.store_credentials import read_store_credential
+
+    data = _parse_credential_json(read_store_credential(account))
     env_access = (os.getenv('GOG_ACCESS_TOKEN') or '').strip()
     env_refresh = (os.getenv('GOG_REFRESH_TOKEN') or os.getenv('GOG_API_TOKEN') or '').strip()
     env_value = env_refresh or env_access
@@ -126,7 +128,9 @@ def _refresh_gog_access(account: StoreAccount, tokens: dict) -> str:
     if tokens.get('origin') == 'household':
         stored['origin'] = 'household'
         stored['household_fp'] = tokens.get('household_fp')
-    account.credential = json.dumps(stored)
+    from oneirodex.utils.store_credentials import write_store_credential
+
+    write_store_credential(account, json.dumps(stored))
     db.session.commit()
     return new_access
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from io import BytesIO
+import struct
 from uuid import uuid4
+import zlib
 
 from PIL import Image
 
@@ -28,6 +30,21 @@ def _login(client, user):
     with client.session_transaction() as session:
         session['_user_id'] = str(user.id)
         session['_fresh'] = True
+
+
+def _png_header(width, height):
+    header = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack('>I', len(data)) + body + struct.pack('>I', zlib.crc32(body))
+
+    return (
+        b'\x89PNG\r\n\x1a\n'
+        + chunk(b'IHDR', header)
+        + chunk(b'IDAT', zlib.compress(b''))
+        + chunk(b'IEND', b'')
+    )
 
 
 def test_admin_create_library_api_preserves_watch_depth_and_normalizes_image(
@@ -66,6 +83,70 @@ def test_admin_create_library_api_preserves_watch_depth_and_normalizes_image(
     with Image.open(image_path) as saved:
         assert saved.format == 'PNG'
         assert saved.size == (1024, 512)
+
+
+def test_admin_create_library_rejects_large_image_before_decode_or_file_creation(
+    client, db_session, tmp_path, monkeypatch,
+):
+    from PIL import Image
+
+    admin = _admin(db_session)
+    _login(client, admin)
+    client.application.config['UPLOAD_FOLDER'] = str(tmp_path)
+
+    def fail_if_decoded(*_args, **_kwargs):
+        raise AssertionError('oversized library image must be rejected before decode')
+
+    monkeypatch.setattr(Image.Image, 'convert', fail_if_decoded)
+    response = client.post(
+        '/api/admin/libraries',
+        data={
+            'name': 'Oversized image library',
+            'platform': 'NES',
+            'image': (BytesIO(_png_header(5000, 5000)), 'too-large.png'),
+        },
+        content_type='multipart/form-data',
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()['error_code'] == 'bad_request'
+    assert db_session.query(Library).filter_by(name='Oversized image library').count() == 0
+    assert not (tmp_path / 'images').exists()
+
+
+def test_admin_update_library_rejects_large_image_before_decode_or_file_creation(
+    client, db_session, tmp_path, monkeypatch,
+):
+    from PIL import Image
+
+    admin = _admin(db_session)
+    _login(client, admin)
+    client.application.config['UPLOAD_FOLDER'] = str(tmp_path)
+    library = Library(
+        uuid=str(uuid4()), name='Keep existing image', platform=LibraryPlatform.NES,
+        image_url='/static/old.png',
+    )
+    db_session.add(library)
+    db_session.commit()
+
+    def fail_if_decoded(*_args, **_kwargs):
+        raise AssertionError('oversized library image must be rejected before decode')
+
+    monkeypatch.setattr(Image.Image, 'convert', fail_if_decoded)
+    response = client.put(
+        f'/api/admin/libraries/{library.uuid}',
+        data={
+            'name': 'Should not be saved',
+            'platform': 'NES',
+            'image': (BytesIO(_png_header(5000, 5000)), 'too-large.png'),
+        },
+        content_type='multipart/form-data',
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()['error_code'] == 'bad_request'
+    assert db_session.get(Library, library.uuid).name == 'Keep existing image'
+    assert not (tmp_path / 'images').exists()
 
 
 def test_admin_create_library_api_rejects_invalid_watch_setting(client, db_session):
@@ -152,4 +233,3 @@ def test_admin_library_editor_rejects_bad_fields_and_missing_library(client, db_
     assert bad.status_code == 400
     assert db_session.get(Library, library.uuid).name == 'Keep'
     assert client.get('/api/admin/libraries/missing').status_code == 404
-

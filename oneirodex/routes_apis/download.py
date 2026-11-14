@@ -12,7 +12,7 @@ from sqlalchemy.orm import joinedload
 
 from oneirodex import db
 from oneirodex.models import DownloadRequest, Game, GlobalSettings, User
-from oneirodex.utils.api_tokens import require_api_scope
+from oneirodex.utils.api_tokens import require_api_scope, require_api_token_scope
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.event_bus import publish_download_event
 from oneirodex.utils.event_logging import log_system_event
@@ -300,6 +300,7 @@ def _serialize_download_request(download_request: DownloadRequest) -> dict:
 
 @apis_bp.route("/my_downloads", methods=["GET"])
 @login_required
+@require_api_token_scope('read:library')
 def api_my_downloads():
     """List the current user's download requests for the member SPA."""
     download_requests = db.session.execute(

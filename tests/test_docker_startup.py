@@ -64,4 +64,42 @@ def test_sigterm_reaches_server(tmp_path):
 
 
 def test_entrypoint_executes_startup():
-    assert 'exec /app/startweb-docker.sh "$@"' in (ROOT / 'entrypoint.sh').read_text(encoding='utf-8')
+    entrypoint = (ROOT / 'entrypoint.sh').read_text(encoding='utf-8')
+
+    assert 'APP_START_COMMAND=(/app/startweb-docker.sh "$@")' in entrypoint
+    assert 'exec setpriv --no-new-privs --bounding-set=-all' in entrypoint
+
+
+def test_entrypoint_migrates_library_ownership_and_rejects_root_app_identity():
+    entrypoint = (ROOT / 'entrypoint.sh').read_text(encoding='utf-8')
+
+    assert 'chown -R "${APP_UID}:${APP_GID}" "${APP_LIBRARY_DIR}"' in entrypoint
+    assert 'PUID=0 is not supported for the app process' in entrypoint
+    assert '--reuid="${APP_UID}" --regid="${APP_GID}" --clear-groups' in entrypoint
+    assert '/app/oneirodex/static/library|/config/library)' in entrypoint
+    assert '/app|/app/*|/config|/config/*|/storage|/storage/*' in entrypoint
+    assert 'APP_LIBRARY_ID="$(stat -c \'%d-%i\' "${APP_LIBRARY_DIR}")"' in entrypoint
+    assert 'OWNER_MARKER="${APP_LIBRARY_DIR}/.oneirodex-library-owner-${APP_UID}-${APP_GID}-${APP_LIBRARY_ID}-v1"' in entrypoint
+
+
+def test_entrypoint_passes_database_settings_as_environment_not_python_source():
+    entrypoint = (ROOT / 'entrypoint.sh').read_text(encoding='utf-8')
+
+    assert 'DB_HOST="$DB_HOST" DB_USER="$DB_USER" DB_PORT="$DB_PORT" python3 -c' in entrypoint
+    assert "os.environ.get('DATABASE_HOST', '${DB_HOST}')" not in entrypoint
+    assert "os.environ.get('DATABASE_PORT', '${DB_PORT}')" not in entrypoint
+    assert "os.environ.get('POSTGRES_USER', '${DB_USER}')" not in entrypoint
+
+
+def test_docker_build_inputs_are_digest_pinned_and_emit_image_evidence():
+    dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
+    workflow = (ROOT / '.github' / 'workflows' / 'docker-publish.yml').read_text(encoding='utf-8')
+
+    assert 'node:22-alpine@sha256:' in dockerfile
+    assert 'python:3.12-slim@sha256:' in dockerfile
+    assert 'snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}' in dockerfile
+    assert '--require-hashes -r requirements.lock' in dockerfile
+    assert 'sbom: true' in workflow
+    assert 'provenance: mode=max' in workflow
+    assert 'steps.image.outputs.digest' in workflow
+    assert 'scripts/check_release_license_files.py' in workflow

@@ -173,9 +173,16 @@ export function FavoritesApp({ initialConfig }: LooseProps = {}) {
         layout={layout}
         onToggleFavorite={(gameUuid: any, isFavorite: any) => {
           if (!isFavorite) {
-            setGames((currentGames: any) =>
-              currentGames.filter((game: any) => game.uuid !== gameUuid),
-            )
+            if (games.length === 1 && page > 1) {
+              // Removing the only row on a later page can make that page
+              // disappear. Reload the now-last page instead of presenting an
+              // empty-favorites message while earlier pages still have rows.
+              setPage(page - 1)
+            } else {
+              setGames((currentGames: any) =>
+                currentGames.filter((game: any) => game.uuid !== gameUuid),
+              )
+            }
             setTotal((n) => Math.max(0, n - 1))
           }
         }}

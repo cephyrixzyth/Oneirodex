@@ -76,6 +76,14 @@ def list_now_playing(
     viewer: User | None = None,
     friends_only: bool = False,
 ) -> list[dict[str, Any]]:
+    # Keep every projection of active-play data aligned with the child-account
+    # restriction enforced by the activity-feed routes. Callers such as the
+    # social status endpoint also use this helper directly.
+    if viewer is not None:
+        from oneirodex.utils.role_catalog import normalize_role
+
+        if normalize_role(getattr(viewer, 'role', None)) == 'child':
+            return []
     return [
         row
         for row in list_recent_activity(

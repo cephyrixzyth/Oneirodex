@@ -103,8 +103,21 @@ export function useRailState(): RailState {
         ),
       ).filter((element) => element.getClientRects().length > 0)
 
-    const first = focusable()[0]
-    first?.focus()
+    // The mobile rail transitions from `visibility: hidden`. Browsers ignore
+    // focus() while that transition is still hidden, even after React commits
+    // the open state, so retry briefly until the target is actually visible.
+    let focusFrame = 0
+    let focusAttempts = 0
+    function focusWhenVisible() {
+      focusAttempts += 1
+      const first = focusable()[0]
+      if (first && getComputedStyle(first).visibility !== 'hidden') {
+        first.focus()
+        if (railNode.contains(document.activeElement)) return
+      }
+      if (focusAttempts < 60) focusFrame = window.requestAnimationFrame(focusWhenVisible)
+    }
+    focusFrame = window.requestAnimationFrame(focusWhenVisible)
 
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') {
@@ -137,6 +150,7 @@ export function useRailState(): RailState {
     }
     document.addEventListener('keydown', onKey)
     return () => {
+      window.cancelAnimationFrame(focusFrame)
       document.removeEventListener('keydown', onKey)
       previousInert.forEach((wasInert, element) => {
         element.inert = wasInert

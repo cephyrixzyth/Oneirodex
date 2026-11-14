@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import gzip
+import io
 import os
+import struct
 import zipfile
 from pathlib import Path
 
@@ -21,7 +23,8 @@ from oneirodex.utils.rom_archive import (
     resolve_playable_rom_path,
 )
 from oneirodex.utils.rom_archive_types import RomExpansionBudget
-from oneirodex.utils.rom_archive_zip import extract_rom_from_gz
+from oneirodex.utils import rom_archive_zip
+from oneirodex.utils.rom_archive_zip import extract_rom_from_gz, open_bounded_zip
 
 
 def test_choose_prefers_platform_extension():
@@ -297,6 +300,59 @@ def test_empty_zip_clear_error(tmp_path):
     assert exc.value.to_dict()['error']
 
 
+def _zip64_end_records(payload: bytes) -> bytes:
+    eocd_offset = payload.rfind(b'PK\x05\x06')
+    eocd = payload[eocd_offset:]
+    _, disk, directory_disk, disk_entries, total_entries, directory_size, directory_offset, comment_size = struct.unpack(
+        '<4s4H2IH', eocd[:22],
+    )
+    assert disk == directory_disk == 0 and disk_entries == total_entries
+    assert comment_size == 0
+    prefix = payload[:eocd_offset]
+    zip64_offset = len(prefix)
+    zip64_eocd = struct.pack(
+        '<4sQ2H2I4Q', b'PK\x06\x06', 44, 45, 45, 0, 0,
+        total_entries, total_entries, directory_size, directory_offset,
+    )
+    locator = struct.pack('<4sIQI', b'PK\x06\x07', 0, zip64_offset, 1)
+    legacy_eocd = struct.pack(
+        '<4s4H2IH', b'PK\x05\x06', 0, 0, 0xFFFF, 0xFFFF,
+        0xFFFFFFFF, 0xFFFFFFFF, 0,
+    )
+    return prefix + zip64_eocd + locator + legacy_eocd
+
+
+def test_open_bounded_zip_preserves_zip64_and_rejects_excess_members_before_zipfile(
+    tmp_path, monkeypatch,
+):
+    import oneirodex.utils.rom_archive_zip as rom_zip
+
+    ordinary = io.BytesIO()
+    with zipfile.ZipFile(ordinary, 'w') as archive:
+        archive.writestr('Game.nes', b'rom')
+    zip64_path = tmp_path / 'one-member-zip64.zip'
+    zip64_path.write_bytes(b'bounded-sfx-prefix' + _zip64_end_records(ordinary.getvalue()))
+    with open_bounded_zip(zip64_path) as archive:
+        assert archive.namelist() == ['Game.nes']
+
+    crowded = tmp_path / 'crowded.zip'
+    with zipfile.ZipFile(crowded, 'w') as archive:
+        archive.writestr('A.nes', b'a')
+        archive.writestr('B.txt', b'b')
+    raw = bytearray(crowded.read_bytes())
+    eocd_offset = raw.rfind(b'PK\x05\x06')
+    struct.pack_into('<H', raw, eocd_offset + 10, 1)  # deliberately under-report the count
+    crowded.write_bytes(raw + b'appended-data')
+
+    monkeypatch.setattr(rom_zip, 'MAX_ROM_ZIP_MEMBERS', 1)
+    monkeypatch.setattr(rom_zip.zipfile, 'ZipFile', lambda *_a, **_k: pytest.fail('ZipFile must not parse an over-limit directory'))
+    with pytest.raises(ArchiveRomError) as caught:
+        with open_bounded_zip(crowded):
+            pass
+    assert caught.value.status_code == 413
+    assert caught.value.code == 'archive_too_large'
+
+
 def test_resolve_7z_with_py7zr(tmp_path):
     py7zr = pytest.importorskip('py7zr')
     seven = tmp_path / 'game.7z'
@@ -347,6 +403,30 @@ def test_bundle_cue_bin_zips_and_rewrites_paths(tmp_path):
         assert zf.read('Game (Disc 1).bin') == b'BINDATA' * 1000
 
 
+def test_cue_archive_and_bundle_share_output_budget(tmp_path):
+    archive_path = tmp_path / 'disc.zip'
+    cue_text = 'FILE "disc.bin" BINARY\n'
+    disc_bytes = b'D' * 32
+    with zipfile.ZipFile(archive_path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('disc.cue', cue_text)
+        archive.writestr('disc.bin', disc_bytes)
+
+    cache = tmp_path / 'cache'
+    # Extraction consumes the cue and disc bytes. The later play.zip would
+    # duplicate them, exceeding the same request-level limit.
+    budget = RomExpansionBudget(len(cue_text.encode('utf-8')) + len(disc_bytes) + 8)
+    resolved, _ = resolve_playable_rom_path(
+        str(archive_path), cache_dir=str(cache), platform='PSX', budget=budget,
+    )
+
+    with pytest.raises(ArchiveRomError) as exc:
+        bundle_playable_rom_zip(resolved, str(cache), budget=budget)
+
+    assert (exc.value.status_code, exc.value.code) == (413, 'archive_too_large')
+    assert not (cache / 'play.zip').exists()
+    assert not list(cache.glob('play.zip.tmp-*'))
+
+
 def test_bundle_reuses_fresh_zip(tmp_path):
     disc_dir = tmp_path / 'disc'
     disc_dir.mkdir()
@@ -361,6 +441,40 @@ def test_bundle_reuses_fresh_zip(tmp_path):
     zip_path_2, _ = bundle_playable_rom_zip(str(cue_path), str(cache))
     assert zip_path_2 == zip_path_1
     assert os.path.getmtime(zip_path_2) == first_mtime
+
+
+def test_bundle_cue_at_input_size_limit_succeeds(tmp_path, monkeypatch):
+    monkeypatch.setattr(rom_archive_zip, '_MAX_CUE_SHEET_BYTES', 32)
+    disc_dir = tmp_path / 'disc'
+    disc_dir.mkdir()
+    cue_path = disc_dir / 'disc.cue'
+    cue_text = 'FILE "disc.bin" BINARY\n'
+    cue_text += ' ' * (32 - len(cue_text.encode('utf-8')))
+    assert len(cue_text.encode('utf-8')) == 32
+    cue_path.write_bytes(cue_text.encode('utf-8'))
+    (disc_dir / 'disc.bin').write_bytes(b'DATA')
+
+    zip_path, _ = bundle_playable_rom_zip(str(cue_path), str(tmp_path / 'cache'))
+
+    with zipfile.ZipFile(zip_path) as zf:
+        assert zf.read('disc.cue').decode('utf-8') == cue_text
+
+
+def test_bundle_rejects_cue_above_input_size_limit_before_zip_write(tmp_path, monkeypatch):
+    monkeypatch.setattr(rom_archive_zip, '_MAX_CUE_SHEET_BYTES', 32)
+    disc_dir = tmp_path / 'disc'
+    disc_dir.mkdir()
+    cue_path = disc_dir / 'disc.cue'
+    cue_path.write_bytes(b'X' * 33)
+    (disc_dir / 'disc.bin').write_bytes(b'DATA')
+    cache = tmp_path / 'cache'
+
+    with pytest.raises(ArchiveRomError) as exc:
+        bundle_playable_rom_zip(str(cue_path), str(cache))
+
+    assert (exc.value.status_code, exc.value.code) == (413, 'archive_too_large')
+    assert not (cache / 'play.zip').exists()
+    assert not list(cache.glob('play.zip.tmp-*'))
 
 
 def test_bundle_single_iso_unchanged(tmp_path):

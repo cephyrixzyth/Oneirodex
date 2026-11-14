@@ -1,0 +1,120 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2078",
+  "observed_utc": "2026-11-14T03:30:32.267315+00:00",
+  "source_base": "68bdf03ed740628441cb03a476b42601ade62fee",
+  "classification": "Confirmed extraction-root executable discovery depth defect; local candidate correction, native Mac verification pending.",
+  "affected_calls": [
+    "archive extraction",
+    "retained install restoration",
+    "launch without a stored executable"
+  ],
+  "reproduction": {
+    "actual_source_function_sha256": "e765cc95c15f295348998fae1611bc389da6c4299a5642cfd3931f4900a51d5c",
+    "host": "Windows",
+    "method": "Compile exact selected discovery functions; inspect an owned .app/Contents/MacOS layout without executing any payload.",
+    "shallow_executable_found": true,
+    "extracted_bundle_main_found": false,
+    "same_bundle_root_found": true
+  },
+  "fix": "When the existing Mac search reaches an application bundle, resolve its top-level CFBundleExecutable declaration. Validate canonical bundle containment and launchability, preserve the supplied path prefix for staging promotion, and never search helpers inside an invalid bundle. Existing Windows/Linux generic search and final install-root/native identity checks remain intact.",
+  "metadata_contract": {
+    "formats": [
+      "XML",
+      "binary"
+    ],
+    "max_encoded_bytes": 1048576,
+    "max_collection_depth": 64,
+    "max_events": 16384,
+    "max_expanded_scalar_bytes": 2097152,
+    "parser": "Exact already-locked plist1.10.0, explicit stream API feature; no package versions or checksums changed."
+  },
+  "local_checks": {
+    "windows_rust_passed": 134,
+    "ignored": 6,
+    "clippy_all_targets": "passed with warnings denied",
+    "rustfmt": "passed",
+    "source_sha256": {
+      "clients/desktop/src-tauri/src/lib.rs": "527fa065b7711db02b18e9def1eb04aace492c9de406faf5229307c5936a36f1",
+      "clients/desktop/src-tauri/src/app_bundle.rs": "5b2cd0174c0d9df6dbee336586be05e411cd94bf1c87dd1aeab6da2791428c73",
+      "clients/desktop/src-tauri/Cargo.toml": "fe77e9cccd53a9a051e45ca79d586068ea810287c304a6d99082a98c577b4f20",
+      "clients/desktop/src-tauri/Cargo.lock": "cb11acd572e0a57a552a8206519e647e373aee28f847ec4ca23bbdcedb5218af"
+    },
+    "log_sha256": {
+      "bundle-windows-contract-final-r2078.log": "1fc15fe72035d2482a09f7543cbb1acdb304b3cf68ae3d9a9a76e93905906096",
+      "bundle-clippy-contract-final-r2078.log": "96c5ead2a003993de5f87bf0ece4f6c9a921e3b6b28278b9c7d1517ba354a081",
+      "bundle-contract-red-r2078.log": "57c7bff631524de8366de2f9ad8e2378c4b4e3178898fcb04b2cf4a9b74e4fe0",
+      "bundle-promotion-prefix-red-r2078.log": "5d37114aca8a88eed741cdf9efc2a0272a5d8986e629842c8f737b61f22b1971",
+      "bundle-metadata-bounds-red-r2078.log": "297fa2c38cadf0008efd3e867bc30850eec32674903f1e6b2d154a83b80ced6e"
+    },
+    "existing_lib_unicode": "preserved",
+    "git_normalized_source_sha256": {
+      "clients/desktop/src-tauri/src/lib.rs": "527fa065b7711db02b18e9def1eb04aace492c9de406faf5229307c5936a36f1",
+      "clients/desktop/src-tauri/src/app_bundle.rs": "5b2cd0174c0d9df6dbee336586be05e411cd94bf1c87dd1aeab6da2791428c73",
+      "clients/desktop/src-tauri/Cargo.toml": "9472ccd2aa41ffd894e7ebb6d79d885aafa1a09a660cb4d0b2a260236e2ccc60",
+      "clients/desktop/src-tauri/Cargo.lock": "cb11acd572e0a57a552a8206519e647e373aee28f847ec4ca23bbdcedb5218af"
+    }
+  },
+  "controls": [
+    "Declared main rather than helper for XML/binary",
+    "Missing, malformed, non-dictionary/non-string and unsafe declarations",
+    "Canonical Info/main containment; native Unix symlink tests pending CI",
+    "No missing/non-launchable-main helper fallback",
+    "Preserve lexical staging prefix",
+    "Reject excessive encoded bytes/depth/events and amplified binary scalar references",
+    "Accept ordinary nested metadata without a nested key overriding the main",
+    "Reject duplicate main keys, odd dictionaries and extra roots"
+  ],
+  "native_ci": "Pending candidate publication and its own normal exact-source native/main workflows; parent68bdf03e main/core and desktop are now terminal success.",
+  "limits": "Windows native component tests and an exact-source portable discovery probe only. Mac-only search and Unix filesystem contracts have not run locally. No Mach-O payload, installed GUI launch, app activation, auth/offline/revocation/reopen, update/rollback or whole-program acceptance is established.",
+  "rework": "Initial probe compared lexical slash spellings; corrected to Path comparisons and retained candidate. Expected missing-symbol scaffold RED is not a product finding. A candidate promotion-prefix regression had focused RED then GREEN. New metadata budget tests had two RED assertions then GREEN. An unused import was corrected. A preflight regex flag error was corrected without rerunning successful suites. Overlapping local runs are not additional unique outcomes.",
+  "primary_sources": [
+    "https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/BundleTypes/BundleTypes.html",
+    "https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html"
+  ],
+  "cleanup": "No discovery fixture payload or GUI application was executed. Rust temporary-directory tests completed. Small owned source-probe fixtures remain with private evidence; no retained app data removed.",
+  "capture": "Skipped: native discovery implementation/tests; no member/admin UI change.",
+  "archive": {
+    "filename": "macos-bundle-discovery-candidate-r2078.zip",
+    "sha256": "9b55cb383812c486b71327818ee823de64f15a3f9c2dbf514513df45723138f2",
+    "payload_files": 15,
+    "manifest_in_addition": true,
+    "bytes": 90396,
+    "storage": "Private canonical DT-006 artifacts; raw local paths and private briefs withheld."
+  },
+  "parent_baseline": {
+    "source": "68bdf03ed740628441cb03a476b42601ade62fee",
+    "checkout_commit": "a67f479a29a9ce5cfa17f9658ecf8472b7ebbdf2",
+    "checkout_tree": "df6c37208edaf2913c798e50b035b3792d93cf9f",
+    "whole_tree_identity_verified": true,
+    "main_run": 43549805060,
+    "main_jobs_passed": 9,
+    "core": {
+      "job_id": 132309380664,
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 2375.03,
+      "raw_log_sha256": "db2cf6e4efc01489bcd6cbc227bdbbb2cd669bdd386a820d8dec7661a12abad1"
+    },
+    "member": {
+      "job_id": 132309380647,
+      "files_passed": 131,
+      "methods_passed": 1266,
+      "full_types_passed": true,
+      "raw_log_sha256": "8e10072c21cd8129e147f90b0896041bad7894a389b782bfcc01691522f5cfb7"
+    },
+    "desktop": {
+      "run": 43549805049,
+      "active_jobs_passed": 8,
+      "installer_builds_passed": 6,
+      "release_attachment": "skipped",
+      "macos_methods_passed": 127,
+      "ignored": 6,
+      "macos_raw_log_sha256": "0fbb0384db9190e3ebcc9c05df95c34fb0107d59003f8305ca2f755038edb6a9"
+    },
+    "limits": "Exact repaired-source component/CI baseline only. R2078 candidate native checks and all original packaged/platform/route/operator/final-review/release gates remain open."
+  },
+  "evidence_selection": "Immutable candidate archive preserves local source bytes and the earlier report snapshot before the parent finished. Git-normalized hashes identify the staged source; later terminal parent receipts are separate canonical artifacts."
+}

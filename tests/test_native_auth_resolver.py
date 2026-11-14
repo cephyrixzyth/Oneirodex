@@ -136,6 +136,45 @@ def test_session_requires_active_user_and_constant_time_fingerprint_value():
     assert load_active_user_id(f"3:{user.session_fingerprint()}", find_user) is None
 
 
+def test_persistent_identity_keeps_fingerprint_prefix_for_user_resolution():
+    user = User(13)
+    find_user, *_ = _harness(user)
+    identity = f'13:{user.session_fingerprint()}:0123456789abcdef0123456789abcdef:secret'
+    assert load_active_user_id(identity, find_user) is user
+
+
+def test_persistent_identity_validator_controls_session_and_remember_paths():
+    user = User(14)
+    identity = f'14:{user.session_fingerprint()}:0123456789abcdef0123456789abcdef:secret'
+    find_user, find_token, commit_touch, _ = _harness(user)
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def resolve(*, session, cookies, valid):
+        return resolve_authentication(
+            session,
+            cookies=cookies,
+            headers={},
+            remote_addr='192.0.2.8',
+            user_agent='Agent/1',
+            secret_key='test-secret',
+            find_user=find_user,
+            find_token=find_token,
+            commit_token_touch=commit_touch,
+            now=now,
+            validate_session_identity=lambda candidate, resolved, _now: (
+                valid and candidate == identity and resolved is user
+            ),
+        )
+
+    from oneirodex.runtime_native.auth_resolver import encode_remember_cookie
+
+    cookie = encode_remember_cookie(identity, 'test-secret')
+    assert resolve(session={'_user_id': identity}, cookies={}, valid=True).user is user
+    assert resolve(session={'_user_id': identity}, cookies={}, valid=False).user is None
+    assert resolve(session={}, cookies={'remember_token': cookie}, valid=False).user is None
+    assert resolve(session={}, cookies={'remember_token': cookie}, valid=True).source == 'remember'
+
+
 def test_session_then_remember_then_bearer_precedence_and_clear_suppression():
     user = User(5)
     secret = "bearer-secret"
@@ -277,4 +316,3 @@ def test_child_scope_denylist_applies_even_when_token_has_scope():
     assert not token_has_scope(child, token, "admin")
     assert not token_has_scope(child, token, "write:library")
     assert token_has_scope(child, token, "read:library")
-

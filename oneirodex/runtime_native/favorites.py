@@ -10,7 +10,7 @@ from werkzeug.datastructures import MultiDict
 from .acquire_status import _login_redirect
 from .batch_favorite import _finish
 from .browse import _flask_json_response
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class FavoritesData:
@@ -23,6 +23,7 @@ class FavoritesData:
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game, Image, user_favorites, user_game_status
         from oneirodex.utils.browse_filters import apply_item_kind_filter, apply_name_filter
+        from oneirodex.utils.library_acl import apply_game_access_filters
         from oneirodex.utils.cover_url import resolve_game_cover_url
         from oneirodex.utils.game_details_payload import browse_trailer_fields
         from oneirodex.utils.lifecycle import web_lifecycle_fields
@@ -132,10 +133,12 @@ def create_favorites_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                args = MultiDict(request.query_params.multi_items())
-                response = _flask_json_response(flask_app, data.payload(auth.user, args))
-                if request.method == 'HEAD':
-                    response.body = b''
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    args = MultiDict(request.query_params.multi_items())
+                    response = _flask_json_response(flask_app, data.payload(auth.user, args))
+                    if request.method == 'HEAD':
+                        response.body = b''
             _finish(response, flask_app, auth)
             return response
 

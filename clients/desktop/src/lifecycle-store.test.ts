@@ -26,7 +26,27 @@ describe('lifecycle persistence helpers', () => {
     registry.apply('game-1', 'download')
     registry.apply('game-1', 'install')
 
-    expect(persisted.at(-1)).toEqual({ gameUuid: 'game-1', state: 'installed' })
+    await vi.waitFor(() => {
+      expect(persisted.at(-1)).toEqual({ gameUuid: 'game-1', state: 'installed' })
+    })
+  })
+
+  it('reports rejected durable writes instead of dropping the persistence failure', async () => {
+    const onPersistenceError = vi.fn()
+    const registry = createPersistedLifecycleRegistry({
+      persist: async () => {
+        throw new Error('disk full')
+      },
+      onPersistenceError,
+    })
+
+    registry.apply('game-1', 'download')
+
+    await vi.waitFor(() => {
+      expect(onPersistenceError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'disk full' }),
+      )
+    })
   })
 
   it('hydrates initial records into registry', () => {

@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import nullcontext
+from io import BytesIO
+from threading import Event
 from types import SimpleNamespace
+from flask import redirect as flask_redirect
+import pytest
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
-from oneirodex.runtime_native.chat_emoji_read import create_chat_emoji_router
+from oneirodex.runtime_native.chat_emoji_read import ChatEmojiData, create_chat_emoji_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
 
 def _client(*, role='admin', data=None):
     flask_app = Flask(__name__)
-    flask_app.config.update(SECRET_KEY='native-chat-emoji-secret', CSP_ENABLED=False)
+    flask_app.config.update(
+        TESTING=True, SECRET_KEY='native-chat-emoji-secret', CSP_ENABLED=False,
+    )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=71, user_id='emoji-user', role=role,
@@ -49,6 +56,16 @@ def _client(*, role='admin', data=None):
         'session', dump_session_cookie(session_data, flask_app.config['SECRET_KEY'])
     )
     return client
+
+
+def test_member_emoji_catalog_uses_shared_reactions(monkeypatch):
+    from oneirodex.utils import custom_emoji
+
+    monkeypatch.setattr(custom_emoji, 'list_custom_emoji', lambda: [])
+    result = ChatEmojiData().member_read()
+
+    assert result['fixed'] == ['❤️', '🎉', '👀', '👍', '😂']
+    assert result['custom'] == []
 
 
 def test_chat_emoji_read_keeps_envelope_no_store_and_head():
@@ -134,4 +151,77 @@ def test_legacy_admin_chat_emoji_delete_keeps_csrf_flash_and_redirect():
     assert rejected.status_code == 400
     assert accepted.status_code == 302
     assert accepted.headers['location'] == '/admin/chat_emoji'
+    expected = flask_redirect('/admin/chat_emoji', code=302)
+    assert accepted.headers['content-type'] == expected.headers['Content-Type']
+    assert accepted.content == expected.get_data()
     assert calls == [('cheer', None)]
+
+
+def test_cancelled_custom_emoji_upload_discards_committed_row_and_file():
+    from oneirodex.runtime_native.chat_emoji_read import _upload_custom_emoji_cancellable
+
+    worker_started = Event()
+    finish_upload = Event()
+    cleanup_calls = []
+
+    class Data:
+        def upload(self, **_kwargs):
+            worker_started.set()
+            assert finish_upload.wait(timeout=5)
+            return SimpleNamespace(id=314, file_name='opaque.webp')
+
+        def discard_upload(self, row, *, upload_folder):
+            cleanup_calls.append((row.id, row.file_name, upload_folder))
+
+    async def scenario():
+        task = asyncio.create_task(_upload_custom_emoji_cancellable(
+            Data(), slug='cancelled', label='Cancelled', file=object(), uploader=object(),
+            upload_folder='/temporary/uploads',
+        ))
+        try:
+            assert await asyncio.to_thread(worker_started.wait, 5)
+            task.cancel()
+            await asyncio.sleep(0)
+            assert not task.done()
+        finally:
+            finish_upload.set()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(scenario())
+    assert cleanup_calls == [(314, 'opaque.webp', '/temporary/uploads')]
+
+
+def test_native_emoji_upload_route_uses_cancellable_adapter(monkeypatch):
+    import oneirodex.runtime_native.chat_emoji_read as emoji_routes
+
+    calls = []
+
+    class Emoji:
+        def __init__(self, slug):
+            self.slug = slug
+
+        def to_dict(self):
+            return {'slug': self.slug, 'emoji': f':{self.slug}:'}
+
+        def reaction_key(self):
+            return f':{self.slug}:'
+
+    async def upload(data, **kwargs):
+        calls.append((data, kwargs['slug'], kwargs['file'].filename))
+        return Emoji(kwargs['slug'])
+
+    monkeypatch.setattr(emoji_routes, '_upload_custom_emoji_cancellable', upload)
+    client = _client()
+    api_response = client.post(
+        '/api/admin/chat-emoji',
+        data={'slug': 'apiemoji', 'label': 'API Emoji'},
+        files={'file': ('api.png', BytesIO(b'image'), 'image/png')},
+        headers={'X-CSRFToken': client.csrf_token},
+    )
+    assert api_response.status_code == 201
+    assert api_response.json()['emoji']['slug'] == 'apiemoji'
+    assert [(slug, filename) for _, slug, filename in calls] == [
+        ('apiemoji', 'api.png'),
+    ]

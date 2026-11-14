@@ -19,7 +19,9 @@ def event_visible_to(event, viewer_id: int | None) -> bool:
     if viewer_id is None:
         return False
     payload = getattr(event, 'payload', None) or {}
-    owner_id = payload.get('user_id')
+    owner_id = getattr(event, 'visibility_user_id', None)
+    if owner_id is None:
+        owner_id = payload.get('user_id')
     game_uuid = payload.get('game_uuid')
     if owner_id is None and not game_uuid:
         return True  # not about a member or a game: scan progress, ops, hello

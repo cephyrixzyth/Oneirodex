@@ -1,5 +1,7 @@
+import { useState, type DragEvent } from 'react'
 import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { Page } from '../components/Page'
+import { RailIcon } from '../components/railIcons'
 import { utcInput, useDiscoverySections } from './useDiscoverySections'
 import { postJson, putJson } from '../api/adminApi'
 import './DiscoverySectionsPage.css'
@@ -35,16 +37,37 @@ export function DiscoverySectionsPage() {
     search,
     saveShelf,
     move,
+    moveTo,
     remove,
     disabled,
     filterOptions,
     edit,
     API,
   } = useDiscoverySections()
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
+
+  function finishDrop(to: number, event: DragEvent<HTMLLIElement>) {
+    event.preventDefault()
+    const rawSource = event.dataTransfer.getData('text/plain')
+    const source = dragIndex ?? (rawSource ? Number(rawSource) : -1)
+    if (!disabled && Number.isInteger(source) && source >= 0 && source < sections.length) {
+      moveTo(source, to)
+    }
+    setDragIndex(null)
+    setDropIndex(null)
+  }
+
   return (
     <Page
+      className="od-discovery-sections"
       title="Discovery sections"
-      lede="Reorder shelves, choose visibility, and curate manual or filtered game selections."
+      lede="Drag to reorder, toggle visibility, or add a custom shelf (manual game list or library / platform / genre filter). Built-in shelves can be reordered and hidden but not deleted."
+      actions={
+        <Button variant="primary" disabled={disabled} onClick={() => openEditor()}>
+          Add shelf
+        </Button>
+      }
     >
       <PageStatus
         loading={loading}
@@ -61,92 +84,126 @@ export function DiscoverySectionsPage() {
           {message}
         </PageStatus>
       ) : null}
-      <Button variant="primary" disabled={disabled} onClick={() => openEditor()}>
-        Add shelf
-      </Button>
-      <p className="od-admin-hint">
-        Built-in shelves can be reordered, hidden, scheduled and pinned; their selection cannot be
-        edited or deleted.
-      </p>
-      <ol className="od-admin-list" aria-label="Discovery shelf order">
+      <ol className="od-admin-list od-discovery-shelves" aria-label="Discovery shelf order">
         {sections.map((row, index) => (
-          <li key={row.id} className="od-admin-panel">
-            <h2 className="od-discovery-shelf-heading">{row.name}</h2>
+          <li
+            key={row.id}
+            className={`od-admin-panel${dropIndex === index && dragIndex !== index ? ' is-drop-target' : ''}`}
+            onDragOver={(event) => {
+              if (dragIndex === null || disabled) return
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'move'
+              setDropIndex(index)
+            }}
+            onDrop={(event) => finishDrop(index, event)}
+          >
+            <div className="od-discovery-shelf__top">
+              <Button
+                size="sm"
+                className="od-discovery-shelf__drag-handle"
+                draggable={!disabled}
+                disabled={disabled}
+                aria-label={`Drag ${row.name} to reorder`}
+                title="Drag to reorder; Move up and Move down also work with a keyboard."
+                onDragStart={(event) => {
+                  setDragIndex(index)
+                  setDropIndex(index)
+                  event.dataTransfer.effectAllowed = 'move'
+                  event.dataTransfer.setData('text/plain', String(index))
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null)
+                  setDropIndex(null)
+                }}
+              >
+                <RailIcon name="grip" size={18} />
+              </Button>
+              <h2 className="od-discovery-shelf-heading">{row.name}</h2>
+            </div>
             <p className="od-admin-hint">
               {row.section_type === 'custom'
                 ? `${row.description} · ${row.count} items`
                 : row.count
                   ? `${row.count} items`
-                  : 'Empty'}{' '}
-              · {row.is_live ? 'Live' : 'Not live'} · {row.layout}
+                  : 'Empty'}
             </p>
-            <label className="od-admin-field">
-              <input
-                type="checkbox"
-                checked={row.is_visible}
-                disabled={disabled}
-                onChange={(event) => {
-                  const visible = event.target.checked
-                  void action(async () => {
-                    await postJson(`${API}/visibility`, { section_id: row.id, is_visible: visible })
-                    await refresh()
-                    setMessage('Shelf visibility saved.')
-                  })
-                }}
-              />{' '}
-              Visible {row.name}
-            </label>
-            <div className="od-admin-actions-row">
-              <Button
-                disabled={disabled || index === 0}
-                aria-label={`Move ${row.name} up`}
-                onClick={() => move(index, -1)}
-              >
-                Move up
-              </Button>
-              <Button
-                disabled={disabled || index === sections.length - 1}
-                aria-label={`Move ${row.name} down`}
-                onClick={() => move(index, 1)}
-              >
-                Move down
-              </Button>
-              <Button
-                disabled={disabled}
-                aria-label={`Schedule and pin ${row.name}`}
-                onClick={() => {
-                  setError('')
-                  setMessage('')
-                  setSchedule(row)
-                  setScheduleDraft({
-                    layout: row.layout,
-                    starts: utcInput(row.starts_at),
-                    ends: utcInput(row.ends_at),
-                    pin: row.pin_rank == null ? '' : String(row.pin_rank),
-                  })
-                }}
-              >
-                Schedule and pin
-              </Button>
-              {row.section_type === 'custom' ? (
-                <>
+            <div className="od-discovery-shelf__footer">
+              <label className="od-admin-field">
+                <input
+                  type="checkbox"
+                  className="od-discovery-shelf__visibility-toggle"
+                  checked={row.is_visible}
+                  aria-label={`Visible ${row.name}`}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const visible = event.target.checked
+                    void action(async () => {
+                      await postJson(`${API}/visibility`, {
+                        section_id: row.id,
+                        is_visible: visible,
+                      })
+                      await refresh()
+                      setMessage('Shelf visibility saved.')
+                    })
+                  }}
+                />{' '}
+                Visible
+              </label>
+              <details className="od-discovery-shelf__actions">
+                <summary aria-label={`More actions for ${row.name}`}>Actions</summary>
+                <div className="od-admin-actions-row">
                   <Button
-                    disabled={disabled}
-                    aria-label={`Edit ${row.name}`}
-                    onClick={() => openEditor(row)}
+                    disabled={disabled || index === 0}
+                    aria-label={`Move ${row.name} up`}
+                    onClick={() => move(index, -1)}
                   >
-                    Edit shelf
+                    Move up
                   </Button>
                   <Button
-                    variant="danger"
-                    disabled={disabled}
-                    aria-label={`Delete ${row.name}`}
-                    onClick={() => remove(row)}
+                    disabled={disabled || index === sections.length - 1}
+                    aria-label={`Move ${row.name} down`}
+                    onClick={() => move(index, 1)}
                   >
-                    Delete shelf
+                    Move down
                   </Button>
-                </>
-              ) : null}
+                  <Button
+                    disabled={disabled}
+                    aria-label={`Schedule and pin ${row.name}`}
+                    onClick={() => {
+                      setError('')
+                      setMessage('')
+                      setSchedule(row)
+                      setScheduleDraft({
+                        layout: row.layout,
+                        starts: utcInput(row.starts_at),
+                        ends: utcInput(row.ends_at),
+                        pin: row.pin_rank == null ? '' : String(row.pin_rank),
+                      })
+                    }}
+                  >
+                    Schedule and pin
+                  </Button>
+                  {row.section_type === 'custom' ? (
+                    <>
+                      <Button
+                        disabled={disabled}
+                        aria-label={`Edit ${row.name}`}
+                        onClick={() => openEditor(row)}
+                      >
+                        Edit shelf
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={disabled}
+                        aria-label={`Delete ${row.name}`}
+                        onClick={() => remove(row)}
+                      >
+                        Delete shelf
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              </details>
             </div>
           </li>
         ))}

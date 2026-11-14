@@ -4,16 +4,79 @@
   gap: var(--od-space-3);
 }
 
-.od-edit-game-images__game-name {
-  margin: 0 0 var(--od-space-3);
+.od-edit-game-images .od-admin-page__heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--od-space-4);
+  margin-block-end: var(--od-space-4);
+  padding: var(--od-space-4);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: linear-gradient(135deg, var(--od-surface-2), var(--od-surface));
+}
+
+.od-edit-game-images .od-admin-page__heading h1 {
+  display: grid;
+  gap: var(--od-space-2);
+  margin: 0 0 var(--od-space-2);
+  color: var(--od-text);
+  font-size: var(--od-font-xl);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.od-edit-game-images__eyebrow {
   color: var(--od-text-muted);
+  font-size: var(--od-font-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.od-edit-game-images__title {
+  font-size: var(--od-font-xl);
+}
+
+.od-edit-game-images .od-admin-page__heading .od-admin-lede {
+  display: grid;
+  gap: var(--od-space-2);
+  max-width: none;
+  margin: 0;
 }
 
 .od-edit-game-images__actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  margin-block-end: var(--od-space-4);
+  gap: var(--od-space-2);
+}
+
+.od-edit-game-images__section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--od-space-3);
+}
+
+.od-edit-game-images__section-heading .od-admin-panel-title {
+  margin: 0;
+}
+
+.od-edit-game-images__dropzone {
+  display: grid;
+  gap: var(--od-space-3);
+  padding: var(--od-space-3);
+  border: 1px dashed var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-surface-2);
+  color: var(--od-text-muted);
+}
+
+.od-edit-game-images__dropzone.is-active {
+  border-color: var(--od-accent);
+  background: color-mix(in srgb, var(--od-accent) 12%, var(--od-surface-2));
+  color: var(--od-text);
 }
 
 .od-edit-game-images__cover {
@@ -92,7 +155,19 @@
 }
 
 @media (max-width: 42rem) {
+  .od-edit-game-images .od-admin-page__heading {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .od-edit-game-images .od-admin-page__actions {
+    width: 100%;
+  }
+
   .od-edit-game-images__actions > * {
+    flex: 1 1 auto;
+  }
+
+  .od-edit-game-images__section-heading > * {
     flex: 1 1 auto;
   }
 

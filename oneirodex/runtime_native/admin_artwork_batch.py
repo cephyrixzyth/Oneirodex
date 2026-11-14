@@ -98,20 +98,30 @@ def create_admin_artwork_batch_router(
                     )
                     response = JSONResponse(payload, status_code=status)
                 else:
-                    try:
-                        body = await request.json()
-                    except Exception:
-                        body = {}
-                    try:
-                        result = data.generate(flask_app, body if isinstance(body, dict) else {})
-                    except ValueError as exc:
-                        payload, status = api_error_payload(str(exc), code='bad_request')
-                        response = JSONResponse(payload, status_code=status)
-                    except Exception:
-                        payload, status = api_error_payload('Artwork batch generation failed', code='internal')
+                    import json
+                    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+                    raw_body = await read_bounded_body(request, 64 * 1024)
+                    if raw_body is BODY_TOO_LARGE:
+                        payload, status = api_error_payload(
+                            'Request body is too large.', code='payload_too_large',
+                        )
                         response = JSONResponse(payload, status_code=status)
                     else:
-                        response = JSONResponse(api_ok_payload(result))
+                        try:
+                            body = json.loads(raw_body or b'null')
+                        except Exception:
+                            body = {}
+                        try:
+                            result = data.generate(flask_app, body if isinstance(body, dict) else {})
+                        except ValueError as exc:
+                            payload, status = api_error_payload(str(exc), code='bad_request')
+                            response = JSONResponse(payload, status_code=status)
+                        except Exception:
+                            payload, status = api_error_payload('Artwork batch generation failed', code='internal')
+                            response = JSONResponse(payload, status_code=status)
+                        else:
+                            response = JSONResponse(api_ok_payload(result))
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values

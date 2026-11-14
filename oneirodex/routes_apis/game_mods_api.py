@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.api_tokens import require_api_token_scope
 from flask import jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import select
@@ -73,6 +74,7 @@ def _require_game_read(game: Game | None):
 
 @apis_bp.route('/mods/summary', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def mods_summary():
     if not mods_enabled():
         return jsonify({'enabled': False, 'games': []})
@@ -91,6 +93,7 @@ def mods_summary():
 
 @apis_bp.route('/games/<game_uuid>/mods', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def get_game_mods(game_uuid: str):
     if not mods_enabled():
         return jsonify({'enabled': False, 'mods': []})
@@ -104,6 +107,7 @@ def get_game_mods(game_uuid: str):
 
 @apis_bp.route('/games/<game_uuid>/mods/catalog', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def get_game_mods_catalog(game_uuid: str):
     """Browse a community registry for this game (INSP-22, librarian).
 
@@ -225,6 +229,7 @@ def _librarian_gate(game_uuid: str):
 
 @apis_bp.route('/games/<game_uuid>/mods/profiles', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def get_game_mod_profiles(game_uuid: str):
     """Named mod sets (INSP-37) and which one is active."""
     if not mods_enabled():
@@ -277,6 +282,7 @@ def activate_game_mod_profile(game_uuid: str, profile_id: str):
 
 @apis_bp.route('/games/<game_uuid>/mods/profiles/<profile_id>/export', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def export_game_mod_profile(game_uuid: str, profile_id: str):
     """The shareable ``od-mod:`` code for a profile (any member who can read the game)."""
     if not mods_enabled():

@@ -5,6 +5,8 @@ import { MetricStrip } from '../components/opsWidgets'
 import { PageStatus, Button } from '@oneirodex/ui'
 import { Page } from '../components/Page'
 
+import { AdminLink } from '../components/AdminLink'
+
 interface StorageStatus {
   helpers_enabled: boolean
   allow_apply: boolean
@@ -282,9 +284,9 @@ export function StoragePage() {
           >
             Apply
           </Button>
-          <a className="od-btn" href="/admin/settings">
+          <AdminLink className="od-btn" to="/admin/settings">
             Back to settings
-          </a>
+          </AdminLink>
         </div>
         <PageStatus error={actionError} />
       </div>

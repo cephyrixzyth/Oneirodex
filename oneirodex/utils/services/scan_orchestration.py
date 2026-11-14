@@ -194,6 +194,26 @@ def scan_and_add_games(folder_path, scan_mode='folders', library_uuid=None, remo
 
         app = current_app._get_current_object()
 
+    # Revalidate at worker start as roots and symlinks may have changed since a
+    # job was queued, scheduled, or last-run. This also protects queue paths
+    # persisted by older code paths that did not validate before enqueueing.
+    from oneirodex.utils.security import get_allowed_base_directories, is_safe_path
+
+    try:
+        allowed_bases = get_allowed_base_directories(app)
+        safe, _path_error = is_safe_path(folder_path, allowed_bases)
+    except Exception:  # noqa: BLE001 — invalid root config must fail closed
+        logger.warning('Refusing scan because its configured roots are invalid.')
+        safe = False
+    if not safe:
+        logger.warning('Refusing scan because its location is no longer allowed.')
+        if existing_job is not None:
+            _fail_scan_job_and_drain(
+                existing_job, 'Scan location is no longer allowed.', app,
+                database_scope,
+            )
+        return
+
     scan_job_id = getattr(existing_job, 'id', None)
     try:
         body_job_id = _scan_and_add_games_body(
@@ -853,7 +873,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         if not remove_missing:
             continue
         try:
-            remove_from_lib(game.uuid)
+            remove_from_lib(game.uuid, config=app.config)
             scan_job_entry.removed_count += 1
             logger.info(
                 f"Removed game {game.name} as it no longer exists at {game.full_disk_path}"

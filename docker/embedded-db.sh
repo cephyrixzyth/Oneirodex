@@ -19,7 +19,7 @@
 #
 # The server listens on 127.0.0.1 inside the container only, over TCP, scram auth.
 # It runs as PUID:PGID (default 99:100 = Unraid nobody:users) because PostgreSQL
-# refuses to run as root; the app itself keeps running as it always has.
+# refuses to run as root. The app uses the same non-root identity after startup.
 
 EMBEDDED_PG_PORT="${ONEIRODEX_EMBEDDED_DB_PORT:-55432}"
 EMBEDDED_PG_USER="oneirodex"

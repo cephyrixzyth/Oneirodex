@@ -64,6 +64,12 @@ export function DiscoverShelf({
   const [hbar, setHbar] = useState({ max: 0, thumbPx: 0, leftPx: 0, scrollLeft: 0 })
   const abortRef = useRef<any>(null)
   const hbarDragRef = useRef<any>(null)
+  const loadMoreRef = useRef<(() => void) | null>(null)
+  const [wrapToEndRequested, setWrapToEndRequested] = useState(false)
+  const beginWrapToEnd = useCallback(() => {
+    setWrapToEndRequested(true)
+    loadMoreRef.current?.()
+  }, [])
   // Arrows + bottom slider. Vertical wheel on tiles/title scrolls the page;
   // horizontal / shift-wheel and wheel on the slider pan the track both ways.
   // The lane always mounts so spacing matches every row, even when the track
@@ -77,7 +83,7 @@ export function DiscoverShelf({
     scrollByPage,
     startEdgeScroll,
     stopEdgeScroll,
-  } = useRowScroll({ bindKey: games.length })
+  } = useRowScroll({ bindKey: games.length, wrapAround: true, onWrapToEnd: beginWrapToEnd })
 
   const syncHbar = useCallback(() => {
     const track = trackRef.current
@@ -116,6 +122,19 @@ export function DiscoverShelf({
   }, [games.length, loading, hbarRef, syncHbar, trackRef])
 
   const complete = games.length >= totalCount
+
+  // A wrap from the first tile follows the row's growing end. Moving to the
+  // current end triggers the next load-ahead request; once that page arrives,
+  // move to the new end and repeat until every tile is available.
+  useLayoutEffect(() => {
+    if (!wrapToEndRequested) return
+    const track = trackRef.current
+    if (track) {
+      track.scrollLeft = Math.max(0, track.scrollWidth - track.clientWidth)
+      syncHbar()
+    }
+    if (complete) setWrapToEndRequested(false)
+  }, [complete, games.length, syncHbar, trackRef, wrapToEndRequested])
 
   /* Mark which tiles are fully inside the track. Clipped edge tiles must not
      enlarge on hover — the scale would grow into (and be cut by) the scroll
@@ -178,6 +197,8 @@ export function DiscoverShelf({
         setLoading(false)
       })
   }, [complete, games.length, identifier, loadError, loading, section.feed_token])
+
+  loadMoreRef.current = loadMore
 
   const handleScroll = useCallback(() => {
     const track = trackRef.current
@@ -329,7 +350,7 @@ export function DiscoverShelf({
             type="button"
             className="od-shelf__arrow od-shelf__arrow--start"
             aria-label={`Scroll ${section.title} left`}
-            disabled={!overflow.start}
+            disabled={!overflow.start && !overflow.end}
             onClick={() => scrollByPage(-1)}
             onPointerEnter={() => {
               if (overflow.start) startEdgeScroll(-1)
@@ -384,7 +405,7 @@ export function DiscoverShelf({
             type="button"
             className="od-shelf__arrow od-shelf__arrow--end"
             aria-label={`Scroll ${section.title} right`}
-            disabled={!overflow.end}
+            disabled={!overflow.start && !overflow.end}
             onClick={() => scrollByPage(1)}
             onPointerEnter={() => {
               if (overflow.end) startEdgeScroll(1)

@@ -12,7 +12,7 @@ import stat
 import sys
 import unicodedata
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from requests.exceptions import RequestException
 from requests.models import PreparedRequest
@@ -38,6 +38,7 @@ def is_safe_path(user_path, allowed_bases, *, logger=None):
     """Securely validate that a user-provided path is within allowed directories."""
     if not user_path or not isinstance(user_path, str):
         return False, "Invalid path format"
+
 
     user_path = user_path.strip()
     if not user_path:
@@ -75,6 +76,20 @@ def is_safe_path(user_path, allowed_bases, *, logger=None):
         active_logger = _active_logger(logger)
         active_logger.warning(f"Path validation error for {sanitize_path_for_logging(user_path)}: {e}")
         return False, "Invalid path format"
+
+
+def is_readable_game_path(user_path):
+    """Return whether a game target is a readable regular file or directory.
+
+    Callers must first validate that the path stays within an allowed storage
+    root with :func:`is_safe_path`.
+    """
+    if not isinstance(user_path, str) or not user_path.strip() or '\x00' in user_path:
+        return False
+    return (
+        (os.path.isfile(user_path) or os.path.isdir(user_path))
+        and os.access(user_path, os.R_OK)
+    )
 
 
 def is_safe_path_strict(user_path, allowed_bases, *, logger=None):
@@ -635,6 +650,94 @@ def validate_connector_http_url(url: str) -> tuple[bool, str]:
 def validate_user_outbound_http_url(url: str) -> tuple[bool, str]:
     """User/indexer/metadata fetches — never LAN even if the homelab flag is on."""
     return validate_outbound_http_url(url, allow_http=True, allow_private_lan=False)
+
+
+def validate_download_client_url(url: str) -> tuple[bool, str]:
+    """Allow public HTTP(S) links and magnets without embedded fetch targets."""
+    if not isinstance(url, str) or not url.strip():
+        return False, 'Download URL is required'
+
+    candidate = url.strip()
+    try:
+        parsed = urlparse(candidate)
+    except ValueError:
+        return False, 'Download URL is invalid'
+    scheme = parsed.scheme.lower()
+    if scheme in {'http', 'https'}:
+        return validate_user_outbound_http_url(candidate)
+
+    if scheme == 'magnet' and not parsed.netloc:
+        # Tracker, web-seed, acceptable-source, exact-source, and explicit-peer
+        # fields make the configured download client perform requests to
+        # attacker-selected destinations. Since that client resolves and
+        # follows those targets independently, app-side hostname validation
+        # cannot pin its eventual connection. Keep only content identity and
+        # display/selection metadata; unknown fields are dropped as well.
+        if len(candidate) > 8192:
+            return False, 'Magnet URI is too long'
+        try:
+            # Treat literal semicolons as separators too, so alternate query
+            # parsing cannot hide a fetch-bearing field from this filter.
+            pairs = parse_qsl(
+                parsed.query.replace(';', '&'),
+                keep_blank_values=True,
+                max_num_fields=64,
+            )
+        except ValueError:
+            return False, 'Magnet URI has too many parameters'
+
+        def valid_topic(value: str) -> bool:
+            return (
+                value.startswith(('urn:btih:', 'urn:btmh:'))
+                and bool(value.partition(':')[2].partition(':')[2])
+            )
+
+        def inert_query_value(value: str) -> bool:
+            # Avoid parser differentials where a downstream client decodes a
+            # display value again and then interprets it as another query.
+            decoded = value
+            for _ in range(16):
+                if '&' in decoded or ';' in decoded:
+                    return False
+                next_value = unquote(decoded)
+                if next_value == decoded:
+                    return True
+                decoded = next_value
+            return False
+
+        safe_keys = {'xt', 'dn', 'xl', 'kt', 'so'}
+        topic_values = [
+            value
+            for key, value in pairs
+            if key.lower() == 'xt'
+            and valid_topic(value)
+            and inert_query_value(value)
+        ]
+        if not topic_values:
+            return False, 'Download URL scheme must be http, https, or a valid magnet URI'
+
+        safe_pairs = [
+            (key.lower(), value)
+            for key, value in pairs
+            if key.lower() in safe_keys
+            and (key.lower() != 'xt' or valid_topic(value))
+            and inert_query_value(value)
+        ]
+        if (
+            len(safe_pairs) == len(pairs)
+            and ';' not in parsed.query
+            and all(key == key.lower() for key, _value in pairs)
+            and not parsed.path
+            and not parsed.fragment
+        ):
+            return True, candidate
+
+        sanitized = urlunparse(
+            parsed._replace(path='', query=urlencode(safe_pairs), fragment='')
+        )
+        return True, sanitized
+
+    return False, 'Download URL scheme must be http, https, or a valid magnet URI'
 
 
 def validate_community_chat_url(url: str) -> tuple[bool, str]:

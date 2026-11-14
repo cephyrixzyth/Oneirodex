@@ -1,0 +1,96 @@
+{
+  "review_id": "R2021",
+  "doc_status": "Reference",
+  "title": "Delayed-provider and ambiguous-save acknowledgement fixtures",
+  "source_head_before_change": "cda2a546c140fe6b2c496854fdfa13192ee259e6",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "tests/fixtures/faults.py": "fbd44a1a7218d953547f26c2e5a1a8fbf36d5eeb555cf94c8a32ca423935a8ab",
+    "tests/test_delayed_store_provider_fixtures.py": "711a0f4cd87ad22d18ca88d0ab6c14f95300c1c1ca2727ac3e5b0aeb9891ae29",
+    "tests/test_native_save_fault_fixtures.py": "f9a78a675e19d56e873e141b6facbaaa6ae7ddd7fc93605869c2d8dc204255bd"
+  },
+  "classification": "Existing stale-sync fence and ambiguous-commit save preservation verified with real adapters; no production fix required for these cases.",
+  "plan_task": "P0-02 shared failure/identity fixtures; foundation and full acceptance remain partial.",
+  "checks": {
+    "delayed-provider-probe": {
+      "exit_code": 0,
+      "seconds": 20.92,
+      "counts": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 2
+      },
+      "owned_database_removed": true,
+      "log_sha256": "68fab41d2be1267620ef9a6b866dee1dfa7e96a57523eedebace7e5d9af3d403"
+    },
+    "delayed-provider-fenced": {
+      "exit_code": 0,
+      "seconds": 24.58,
+      "counts": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 3
+      },
+      "owned_database_removed": true,
+      "log_sha256": "3fb8c32901bf3dfccc086363590410b131a05fd31be830c8ecf3e5a7bdffdafb"
+    },
+    "shared-fault-seams-final": {
+      "exit_code": 0,
+      "seconds": 26.08,
+      "counts": {
+        "tests": 25,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 25
+      },
+      "owned_database_removed": true,
+      "log_sha256": "a2028c333564d644548c2dcbee14f1ff0ebffa088f53c207e0c41eb4830a0b3d"
+    },
+    "r1972-validator": {
+      "exit_code": 0,
+      "log_sha256": "fdd37736b91c104c8d8e5fd19a35da0cae2996cdd36a8196acf9405787f7944d"
+    }
+  },
+  "post_verification_formatting": {
+    "test_modules_semantically_unchanged_after_verification": true,
+    "method": "AST equality to exact reconstructed promoted source before whitespace formatting",
+    "helper_post_verification_change": "Module docstring only."
+  },
+  "verified_behavior": [
+    "A held synthetic provider response spans two real PostgreSQL sessions. Fresh in-flight sync rejects reconnect without changing credentials.",
+    "After persisted heartbeat expiry, disconnect or reconnect takes over the slot. Releasing the old response reaches and raises actual SyncSlotLost from the commit fence; old credentials/titles cannot overwrite newer state.",
+    "Native save commits real PostgreSQL rows/bytes and then receives a synthetic lost-acknowledgement error. Response is generic 500, separate session sees revision 2 and both committed generations remain readable.",
+    "Stale expected-revision retry returns 409 without a new blob. Reconciled retry writes revision 3 while preserving both older generations.",
+    "Household network guards block all non-database sockets; legacy collision bytes and unrelated file sentinel survive."
+  ],
+  "unrestricted_diagnostic": {
+    "source": "cda2a546c140fe6b2c496854fdfa13192ee259e6",
+    "status": "Interrupted after Docker engine API disappeared; no completed JUnit or suite outcome.",
+    "seconds": 344.07,
+    "tracked_source_unchanged": true,
+    "recovery": "Installed local Docker engine relaunched and dedicated loopback test database restarted; only the validated owned interrupted database removed, absence verified.",
+    "cause_of_engine_exit": "Unknown; no attribution to application code.",
+    "log_sha256": "412983720df40f64fc930f76b0fb417eddbe57bfd95f5c8bc044f0c427d13fbf",
+    "next": "A fresh named unrestricted run is required; completed focused checks are not being restarted."
+  },
+  "environment": {
+    "platform": "Windows",
+    "python": "3.12.16",
+    "database": "Owned loopback PostgreSQL 17.6 with real commits and separate sessions",
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "limits": [
+    "Provider transport alone is synthetic; no real provider account/revocation acceptance.",
+    "Heartbeat is advanced in persisted test data; this is not a ten-minute wall-clock or process crash drill.",
+    "Lost acknowledgement is injected after a real commit, without physically dropping the database network connection.",
+    "Focused 2/3-case probes overlap final 25 cases, not additional unique passes.",
+    "No route-coverage promotion; full CI/unrestricted, deployed/restore, installed-platform and product browser/headset acceptance remain open."
+  ],
+  "capture": "Not applicable: test-only fixtures; no UI change."
+}

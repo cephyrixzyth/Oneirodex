@@ -113,7 +113,9 @@ def _amazon_tokens_for(account: StoreAccount) -> dict:
     when the member saved nothing, and are never mixed into a member's own
     credential: a member token paired with the household device serial would
     be neither account."""
-    data = _flatten_amazon_credential(_parse_credential_json(account.credential))
+    from oneirodex.utils.store_credentials import read_store_credential
+
+    data = _flatten_amazon_credential(_parse_credential_json(read_store_credential(account)))
     env_raw, env_access, env_serial = _household_env()
     env_value = env_raw or env_access
     if stale_household_copy(data, env_value):
@@ -155,10 +157,14 @@ def connect_amazon_account(
     # A reconnect that adds one field (say, the serial) keeps the rest of the
     # member's saved sign-in instead of replacing it. A saved household copy is
     # not the member's, so it is not merged into their new credential.
+    from oneirodex.utils.store_credentials import read_store_credential
+
     current = db.session.execute(
-        select(StoreAccount.credential).filter_by(user_id=user_id, store='amazon')
-    ).scalar()
-    saved = _flatten_amazon_credential(_parse_credential_json(current))
+        select(StoreAccount).filter_by(user_id=user_id, store='amazon')
+    ).scalars().first()
+    saved = _flatten_amazon_credential(
+        _parse_credential_json(read_store_credential(current) if current else None)
+    )
     payload: dict = {} if saved.get('origin') == 'household' else strip_internal_keys(saved)
     if isinstance(credential, dict) and credential:
         payload = strip_internal_keys(_flatten_amazon_credential(credential))
@@ -226,14 +232,20 @@ def _refresh_amazon_access(account: StoreAccount, tokens: dict) -> tuple[str, st
     if not new_access:
         raise StoreSyncError('Amazon token refresh returned no access token', 'invalid_response')
     household = tokens.get('origin') == 'household'
-    stored = {} if household else _flatten_amazon_credential(_parse_credential_json(account.credential))
+    from oneirodex.utils.store_credentials import read_store_credential
+
+    stored = {} if household else _flatten_amazon_credential(
+        _parse_credential_json(read_store_credential(account))
+    )
     stored['refresh_token'] = refresh
     stored['access_token'] = new_access
     stored['device_serial'] = serial
     if household:
         stored['origin'] = 'household'
         stored['household_fp'] = tokens.get('household_fp')
-    account.credential = json.dumps(stored)
+    from oneirodex.utils.store_credentials import write_store_credential
+
+    write_store_credential(account, json.dumps(stored))
     user_id = (stored.get('user_id') or '').strip()
     if user_id and not account.external_account_id and not household:
         account.external_account_id = user_id[:64]

@@ -1,0 +1,104 @@
+{
+  "review_id": "R2022",
+  "doc_status": "Reference",
+  "title": "Authenticated current-image VR cache migration and revoked-library browser acceptance",
+  "classification": "FE-001 follow-up: current desktop Chromium application scenario verified; supported physical headset and fully offline upgrade acceptance remain open.",
+  "source_head": "e9d2cd20793efccabdf29f6c68e15faf61bad05b",
+  "image_id": "sha256:4e79bfc8c7fe73d02477fbe9181baf6bf7aa274a23f0ec235e52e57ae6894082",
+  "image_revision_label_verified": true,
+  "source_sha256": {
+    "oneirodex/static/js/od_pwa_install.js": "8aeb0160e9a9847ad0582a0e99abd1c91b5ea3995f977bafec39e464323be680",
+    "oneirodex/static/app-sw.js": "1630abe9ae3cb5c4b3c0c99a343fd5e33361955e99fd1f0691c3da3d4fb9bf21",
+    "oneirodex/static/vr-sw.js": "89525d2adc4126085b53892e5baa2a4fce38931a414cad2c11316897d504a2b7",
+    "frontend/member-app/src/api/vr.ts": "5321bf5ade21b07f55c6ad9d850a8aae6f71e32f03559a01c1bf0cedc779aace",
+    "frontend/member-app/src/api/vr.test.ts": "0e4e0c80eaa7c5653737c32b9302a54709b5b2677e739778098966e281ff1b05",
+    "frontend/member-app/src/pages/VrPage.tsx": "db46b7f487007a0c788be7d12271802a896dca4638a6acb4925f22169a0ecba3",
+    "frontend/member-app/src/pages/VrPage.test.tsx": "b602be7358e25f680b36cb76a5cb53fffe0dbf4b6bfe0e014f145101d2419772"
+  },
+  "image_build": {
+    "exit_code": 0,
+    "seconds": 191.26,
+    "all_five_server_spas_built": true,
+    "log_sha256": "f22797e909a63963c7d4897bb7816aededfd4f37891a79edca101e29e5a224f4"
+  },
+  "browser": {
+    "chromium": "156.0.8078.4",
+    "status": "passed",
+    "seconds": 113.38,
+    "completed_steps": [
+      {
+        "name": "adult_real_login_and_catalog",
+        "status": 200,
+        "names": [
+          "Synthetic Adult Private VR",
+          "Synthetic Shared VR"
+        ]
+      },
+      {
+        "name": "historical_worker_controls_actual_app_catalog",
+        "controller": "/vr/sw.js"
+      },
+      {
+        "name": "old_controller_offline_disclosure_precondition",
+        "server_child_names": [
+          "Synthetic Shared VR"
+        ],
+        "old_cache_included_adult_title": true
+      },
+      {
+        "name": "current_app_migrates_and_renders_child_only",
+        "privacy_ready": true,
+        "legacy_cache_absent": true,
+        "cache_names": [
+          "oneirodex-shell-v3"
+        ]
+      },
+      {
+        "name": "current_offline_private_reads_and_navigation_contain_no_titles",
+        "api_denied": {
+          "network_error": true
+        },
+        "body_sha256": "2172e256b21bada58bc06fc00358078e0a21b85863229d03bb59fdf52e064999"
+      },
+      {
+        "name": "revoked_child_library_not_restored_from_cache",
+        "catalog_empty": true
+      }
+    ],
+    "page_or_relay_errors": []
+  },
+  "environment": {
+    "server": "Native Docker app started by normal entrypoint/startweb path; dedicated PostgreSQL database, isolated volumes, game mount read-only, background workers disabled.",
+    "data": "Three synthetic users and two real VR games. Child initially granted only the shared library; no external provider credentials.",
+    "network": "App on owned Docker internal network with no external egress; browser private/auth/worker requests relayed to real app via Docker exec. Public static bundles and default theme copied from the exact image and served locally to avoid relay overhead.",
+    "root_env_loaded": false,
+    "first_boot_guard": "Initial synthetic PostgreSQL default-password refusal was expected. Explicit legacy compatibility used only for the pre-existing dedicated review database; production guard unchanged."
+  },
+  "captures": {
+    "online_sha256": "b2a30a94793464f6867b6e47b32711488c8c4767bde3e44237cc666038a759d7",
+    "offline_sha256": "49be4bc66b3df8c8fb2e6481cf4b8c71219aec763c0a40a06d09134487691c2d",
+    "visually_inspected": true,
+    "publication": "Captures retained privately, no screenshots committed."
+  },
+  "cleanup": {
+    "container_absent": true,
+    "network_absent": true,
+    "config_volume_absent": true,
+    "library_volume_absent": true,
+    "database_absent": true
+  },
+  "harness_rework": [
+    "Seed helper needed explicit installed psycopg2 driver; application driver compatibility already worked.",
+    "System Playwright expected missing newer headless-shell cache; used existing Chromium executable and recorded actual version.",
+    "Initial per-asset Docker relay exceeded the 20-second navigation bound. Public built assets copied from tested image, navigation bound raised to 60 seconds, and actual empty-state text used. Failed attempts retained privately."
+  ],
+  "limits": [
+    "This is desktop Chromium, not a physical supported-headset or packaged companion qualification.",
+    "Historical worker served only by an owned review proxy; old-client disclosure precondition is distinct from updated-current-app behavior.",
+    "Public assets use exact-image bytes through the review relay; this does not independently qualify all production static response headers or performance.",
+    "Fully offline clients cannot receive the retirement update.",
+    "Single current-image acceptance does not promote the immutable R1972 paired route coverage or establish whole-product parity.",
+    "Unrestricted current-source test run and current CI remain pending."
+  ],
+  "capture": "Private real populated synthetic-app online/offline captures inspected; no UI code/layout change."
+}

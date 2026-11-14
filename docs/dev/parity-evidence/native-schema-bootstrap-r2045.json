@@ -1,0 +1,72 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2045",
+  "finding": "OP-006 / P0-01 / P1-06; retained-save migration acceptance",
+  "classification": "Confirmed native bootstrap migration/readiness defect; focused correction verified. Rebuilt-image and new-head CI qualification pending.",
+  "source_base": "afd2f91b635c8b91601d7ac37b63f15f398f98b0",
+  "candidate_sha256": {
+    "alembic/versions/a42c7b10d8e1_preserve_emulator_save_generations.py": "3e9f20d9159f2933da2f7f81c8ecd35ba0a5b3150ca95eb28ebfcf2e54f49e25",
+    "oneirodex/init_manager.py": "78486f1b99c4d1f26f8bdc246e609885c05fd5da2afd5da2afd5ea7626f2e95d1812ccc",
+    "tests/test_native_schema_bootstrap.py": "ae5ad731636ab9c0c9ee6841ce0d5f0f8e106acc6b78acc8f405e5687acdfe1f",
+    "tests/test_runtime_import_boundary.py": "995e23ffef123a1d71d00b4d6b050bfb2b717128ec231f008aaf7573d0ee0337"
+  },
+  "source_identity_limits": "Fingerprints identify tested working bytes; Git may normalize line endings. No operator data.",
+  "reproduction": {
+    "evidence": "R2043 filtered image and R2044 native runtime controls",
+    "source": "afd2f91b635c8b91601d7ac37b63f15f398f98b0",
+    "image_id": "sha256:00b8b7acbbb60a282a25927f86bbde06804a9c7d61ab9be9bb79372836fccee6",
+    "declared_head": "a4b5c6d7e8f9",
+    "actual_journal": "b9ab856b09ff",
+    "readiness_http": 200,
+    "cause": "Metadata already created revision/history objects; a42 unconditionally added them. Alembic failed; initialization swallowed the error.",
+    "runner_seconds": 40.73,
+    "other_controls_passed": ["Nonroot process and writable library", "Adult/child/admin identity and role filtering", "Remembered session across actual process restart", "Logout and replayed-cookie redirect denial", "Ownership marker reuse"],
+    "owned_cleanup_verified": true
+  },
+  "correction": [
+    "Adopt compatible existing save revision/history objects; backfill NULL revisions without resetting nonnull values.",
+    "Validate history columns, types, widths, nullability, primary/foreign keys and normal save_id index. Repair missing index; reject incompatible shapes.",
+    "Do not drop retained rows/files or stamp head to bypass migrations.",
+    "Stop initialization on missing Alembic configuration or upgrade failure; withhold raw driver exception details.",
+    "Stop and join the lifecycle test's actual cleanup worker before disposing SQLite; retain framework isolation."
+  ],
+  "red": {"schema_failures": 8, "schema_pytest_seconds": 17.62, "expanded_failures": 5, "expanded_pytest_seconds": 13.28, "lifecycle_failures": 1, "lifecycle_deselected": 9},
+  "verification": {
+    "focused_passed": 23,
+    "focused_pytest_seconds": 54.65,
+    "adjacent_passed": 59,
+    "adjacent_pytest_seconds": 42.61,
+    "final_combined_passed": 82,
+    "final_combined_pytest_seconds": 88.23,
+    "final_combined_runner_seconds": 96.9,
+    "final_combined_warnings": 0,
+    "counts_overlap": true,
+    "source_fixed": true,
+    "postgresql": "Dedicated loopback 17.6; independently owned parent and per-case child test databases",
+    "owned_database_cleanup_and_absence_verified": true,
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true,
+    "cases": ["Fresh metadata startup", "Existing revision7/history1 and file bytes across two boots", "Legacy pre-a42 save backfill", "Partial NULL revision and missing index repair", "Seven malformed table/key/index shapes fail closed", "Forced upgrade failure without raw stdout/stderr detail", "Missing migration configuration", "Real worker stop/join and framework import boundary", "Save/keyring/quota, startup shell, background and resource controls"]
+  },
+  "ratchets": {"passed": true, "checks": ["API envelope", "Undefined names", "Print", "JSON reader", "Immutable R1972 bundle", "Diff whitespace"], "seconds": 27.98},
+  "prior_exact_source_baselines": {
+    "source": "afd2f91b635c8b91601d7ac37b63f15f398f98b0",
+    "local_full": {"passed": 8535, "skipped": 101, "warnings": 160, "pytest_seconds": 2218.26, "runner_seconds": 2241.91, "source_fixed": true, "database_absence_verified": true, "generated_files_hash_preserved": true},
+    "ci": {"run": 43162374911, "result": "failure", "core_failed": 1, "core_passed": 7897, "core_skipped": 14, "core_deselected": 548, "pytest_seconds": 2342.63, "other_jobs_passed": 8, "failure": "Real cleanup thread raced SQLite pool disposal in the existing framework lifecycle probe; no causal attribution to the image-worker correction."},
+    "desktop": {"run": 43162374904, "active_jobs_passed": 7}
+  },
+  "retained_rework": [
+    "Initial new test fixture:8 driver-import errors; explicitly use installed psycopg2.",
+    "Combined test:58 passed/24 setup errors because first config import cached child URL. Import before environment mutation; corrected combined82 pass. Database safety guard preserved.",
+    "Suppress only Alembic global logging reconfiguration inside the schema fixture to preserve pytest logging; actual image logging remains unmodified.",
+    "Earlier image harness:tar-stdin bypassed Docker ignore filtering; normal directory context verified only shipped library data. Incorrect configured-user, line-ending and missing synthetic-secret assumptions retained.",
+    "Earlier runtime harness:unsupported remember field and incorrect401 expectation corrected to actual302 redirect contract."
+  ],
+  "private_archive": {"files": 74, "bytes": 327286, "sha256": "66985a9d5afef41fbbd51c2d8252f2e5f5934b81b50d0db6d2f3bd58f0bed28c", "contents": "Failed and passing schema/lifecycle receipts, source/helper fingerprints, author review, R2043/R2044 precursors and prior full baseline evidence; no screenshots or operator credentials"},
+  "limits": [
+    "Author review is weaker than the pending fresh whole-original-program review.",
+    "New image, current full baseline and exact-head CI still need qualification; historical results do not transfer.",
+    "This is not a complete audit of already-head database corruption, operator-media conversion/restore, supported platforms, route parity, release or deployment.",
+    "Owner Docker cleanup explains removed historical images; new builds have distinct identities."
+  ]
+}

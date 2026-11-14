@@ -1,7 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { showToast } from '../utils/toast'
 import { GameCard } from './GameCard'
+
+vi.mock('../utils/toast', () => ({ showToast: vi.fn() }))
 
 // The tile menu links out to the report form, so the card now needs a router
 // the way every other surface rendering it already has one. Rendering it bare
@@ -33,12 +36,24 @@ function jsonResponse(body: any) {
   })
 }
 
+function failedJsonResponse(body: any, status = 500) {
+  const payload = JSON.stringify(body)
+  return Promise.resolve({
+    ok: false,
+    status,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(payload),
+  })
+}
+
 function requestHeaders(call: any) {
   return new Headers(call?.[1]?.headers)
 }
 
 beforeEach(() => {
   document.head.innerHTML = '<meta name="csrf-token" content="test-csrf">'
+  vi.clearAllMocks()
 })
 
 afterEach(() => {
@@ -93,6 +108,44 @@ test('status selection posts with CSRF and updates the status button', async () 
   expect(requestHeaders(statusCall).get('X-CSRFToken')).toBe('test-csrf')
 })
 
+test('favorite write failure keeps the current state and shows feedback', async () => {
+  const user = userEvent.setup()
+  const fetchMock = vi.fn(() =>
+    failedJsonResponse({ error: 'Internal error', error_code: 'internal' }),
+  )
+  vi.stubGlobal('fetch', fetchMock)
+
+  renderCard(<GameCard game={{ ...game, is_favorite: true }} />)
+  const favorite = screen.getByRole('button', { name: /remove archery kings vr from favorites/i })
+  await user.click(favorite)
+
+  await waitFor(() =>
+    expect(showToast).toHaveBeenCalledWith('Could not update favorite. Please try again.', 'error'),
+  )
+  expect(favorite).toHaveAttribute('aria-pressed', 'true')
+  expect(favorite).toBeEnabled()
+})
+
+test('status write failure keeps the current status and shows feedback', async () => {
+  const user = userEvent.setup()
+  const fetchMock = vi.fn(() =>
+    failedJsonResponse({ error: 'Internal error', error_code: 'internal' }),
+  )
+  vi.stubGlobal('fetch', fetchMock)
+
+  renderCard(<GameCard game={game} showPlayStatus />)
+  await user.click(screen.getByRole('button', { name: /game status: no status/i }))
+  await user.click(screen.getByRole('button', { name: /^Beaten$/i }))
+
+  await waitFor(() =>
+    expect(showToast).toHaveBeenCalledWith(
+      'Could not update game status. Please try again.',
+      'error',
+    ),
+  )
+  expect(screen.getByRole('button', { name: /game status: no status/i })).toBeInTheDocument()
+})
+
 test('popup exposes navigation actions and gates admin actions', async () => {
   const user = userEvent.setup()
   const { rerender } = renderCard(<GameCard game={game} isAdmin={false} />)
@@ -123,6 +176,20 @@ test('popup exposes navigation actions and gates admin actions', async () => {
   expect(screen.getByRole('button', { name: 'Remove Game from DB' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Delete Game on disk' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Move Library' })).toBeInTheDocument()
+})
+
+test('keyboard order puts Preview before the opened action menu contents', async () => {
+  const user = userEvent.setup()
+  renderCard(<GameCard game={game} isAdmin />)
+
+  await user.click(screen.getByRole('button', { name: /open actions for archery kings vr/i }))
+  await user.tab()
+  expect(document.activeElement).toBe(
+    screen.getByRole('button', { name: /preview archery kings vr/i }),
+  )
+
+  await user.tab()
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Download' }))
 })
 
 test('popup ignores javascript: IGDB urls', async () => {

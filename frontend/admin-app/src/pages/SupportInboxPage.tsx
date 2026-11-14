@@ -137,6 +137,8 @@ export function SupportInboxPage() {
                     <a href={t.github_issue_url} target="_blank" rel="noopener noreferrer">
                       #{t.github_issue_number}
                     </a>
+                  ) : t.github_sync === 'local_only' ? (
+                    'Local only'
                   ) : (
                     t.github_sync
                   ),

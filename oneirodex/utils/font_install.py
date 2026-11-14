@@ -23,10 +23,16 @@ redistributing them without the licence text is not permitted.
 
 from __future__ import annotations
 
+import logging
+import hashlib
 import os
 import shutil
-import urllib.error
-import urllib.request
+import tempfile
+
+import requests
+
+from oneirodex.utils.http_safe import read_response_limited, safe_get
+from oneirodex.utils.security import validate_user_outbound_http_url
 
 #: Tracked directory the faces ship in, resolved relative to the package rather
 #: than the process CWD — uvicorn and Docker do not agree on the latter.
@@ -40,6 +46,7 @@ BUNDLED_EXTRAS = ('OFL.txt',)
 RAW = 'https://raw.githubusercontent.com/google/fonts/main/ofl'
 
 USER_AGENT = 'Oneirodex-font-install/1.0 (+https://github.com/cephyrixzyth/oneirodex)'
+MAX_BUILTIN_FONT_BYTES = 8 * 1024 * 1024
 
 #: ``(filename, url)`` for every built-in face that ships as a file.
 #: Keep in step with ``BUILT_IN_FONTS`` in :mod:`oneirodex.utils.theme_fonts`;
@@ -51,6 +58,16 @@ FONT_SOURCES: dict[str, str] = {
     'VT323-Regular.ttf': f'{RAW}/vt323/VT323-Regular.ttf',
     'ShareTechMono-Regular.ttf': f'{RAW}/sharetechmono/ShareTechMono-Regular.ttf',
     'Orbitron-Variable.ttf': f'{RAW}/orbitron/Orbitron%5Bwght%5D.ttf',
+}
+
+# SHA-256 digests of the reviewed Google Fonts assets. Keep the startup
+# fallback pinned even though normal installs copy the bundled files above.
+FONT_SHA256: dict[str, str] = {
+    'PressStart2P-Regular.ttf': '034c77f1f05ec89421e4a63f0e3a4ca1ecf852cc6d2bf611f126f275728e017d',
+    'Silkscreen-Regular.ttf': 'c845473330b94c2079ce9af01c51ac8ba2d99c24f4d14c039843bbb8e642ebd8',
+    'VT323-Regular.ttf': 'cf4de751ada78ceac033dbe16a687742939995b77bc2a052ae17a4957958594d',
+    'ShareTechMono-Regular.ttf': '9ceab1f87414829af259c0f537573ae03ef7dd3147c0b27a36a1a0beb6732677',
+    'Orbitron-Variable.ttf': 'f42db2dd16e642258e35782916eceb1dcdbea06fb958d77ad71dc5963587e8fd',
 }
 
 #: TrueType, OpenType, and the two WOFF wrappers.
@@ -92,6 +109,17 @@ def seed_builtin_fonts(root: str, *, force: bool = False) -> int:
         dest = os.path.join(root, name)
         if not os.path.isfile(source):
             continue
+        if name in FONT_SHA256:
+            try:
+                with open(source, 'rb') as handle:
+                    source_digest = hashlib.file_digest(handle, 'sha256').hexdigest()
+            except OSError:
+                continue
+            if source_digest != FONT_SHA256[name]:
+                logging.getLogger(__name__).warning(
+                    'Skipping bundled font %s after SHA-256 verification failed', name,
+                )
+                continue
         if os.path.isfile(dest) and not force and name in BUNDLED_EXTRAS:
             continue
         try:
@@ -103,6 +131,22 @@ def seed_builtin_fonts(root: str, *, force: bool = False) -> int:
             written += 1
 
     return written
+
+
+def download_builtin_font(url: str) -> bytes:
+    """Fetch one built-in font through the validated, bounded outbound path."""
+    with requests.Session() as session:
+        response = safe_get(
+            url,
+            validator=validate_user_outbound_http_url,
+            session=session,
+            timeout=60,
+            stream=True,
+            headers={'User-Agent': USER_AGENT},
+        )
+        with response:
+            response.raise_for_status()
+            return read_response_limited(response, MAX_BUILTIN_FONT_BYTES)
 
 
 def install_builtin_fonts(root: str, *, force: bool = False) -> int:
@@ -125,9 +169,6 @@ def install_builtin_fonts(root: str, *, force: bool = False) -> int:
     if not remaining:
         return written
 
-    opener = urllib.request.build_opener()
-    opener.addheaders = [('User-Agent', USER_AGENT)]
-
     for name in remaining:
         url = FONT_SOURCES.get(name)
         if not url:
@@ -136,9 +177,8 @@ def install_builtin_fonts(root: str, *, force: bool = False) -> int:
             continue
         dest = os.path.join(root, name)
         try:
-            with opener.open(url, timeout=60) as response:
-                payload = response.read()
-        except (urllib.error.HTTPError, urllib.error.URLError, OSError):
+            payload = download_builtin_font(url)
+        except (requests.RequestException, OSError):
             continue
 
         # An HTML error page with a .ttf name is the usual failure, and writing
@@ -146,9 +186,35 @@ def install_builtin_fonts(root: str, *, force: bool = False) -> int:
         # function ever retrying.
         if not payload or not _looks_like_font(payload[:4]):
             continue
+        expected_sha256 = FONT_SHA256.get(name)
+        if not expected_sha256 or hashlib.sha256(payload).hexdigest() != expected_sha256:
+            logging.getLogger(__name__).warning(
+                'Skipping built-in font %s after SHA-256 verification failed', name,
+            )
+            continue
 
-        with open(dest, 'wb') as handle:
-            handle.write(payload)
+        temporary_path = None
+        try:
+            # Publish atomically so a short write or full volume cannot leave a
+            # partial file that the next boot mistakes for an installed face.
+            with tempfile.NamedTemporaryFile(
+                mode='wb', dir=root, prefix=f'.{name}.', suffix='.tmp', delete=False
+            ) as handle:
+                temporary_path = handle.name
+                handle.write(payload)
+            os.replace(temporary_path, dest)
+        except OSError as exc:
+            # One unwritable face must not abort the remaining fallbacks or boot.
+            if temporary_path:
+                try:
+                    os.unlink(temporary_path)
+                except OSError:
+                    pass
+            logging.getLogger(__name__).warning(
+                'Skipping built-in font %s after filesystem write failure (%s)',
+                name, type(exc).__name__,
+            )
+            continue
         written += 1
 
     return written

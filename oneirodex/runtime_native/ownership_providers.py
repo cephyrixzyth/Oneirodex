@@ -9,7 +9,14 @@ from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+from .query_compat import first_query_value
+
+_OWNERSHIP_DECISION_BODY_MAX_BYTES = 64 * 1024
+
+
+class _OwnershipDecisionBodyTooLarge(Exception):
+    pass
 
 
 class OwnershipProviderData:
@@ -142,11 +149,13 @@ def create_ownership_provider_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                from oneirodex.utils.api_contract import api_ok_payload
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    from oneirodex.utils.api_contract import api_ok_payload
 
-                response = JSONResponse(api_ok_payload(data.connections(auth.user)))
-                if auth.should_set_session_cookie:
-                    _set_session_cookie(response, flask_app, auth)
+                    response = JSONResponse(api_ok_payload(data.connections(auth.user)))
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values
 
             for key, value in security_header_values(flask_app.config).items():
@@ -170,11 +179,13 @@ def create_ownership_provider_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                from oneirodex.utils.api_contract import api_ok_payload
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    from oneirodex.utils.api_contract import api_ok_payload
 
-                response = JSONResponse(api_ok_payload(data.summary(auth.user)))
-                if auth.should_set_session_cookie:
-                    _set_session_cookie(response, flask_app, auth)
+                    response = JSONResponse(api_ok_payload(data.summary(auth.user)))
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values
 
             for key, value in security_header_values(flask_app.config).items():
@@ -195,11 +206,13 @@ def create_ownership_provider_router(
                 load_user_id=load_user_id,
                 login_manager=login_manager,
             )
-            if auth.user is None:
-                response = _login_redirect(flask_app, request, login_manager, auth)
-            else:
-                raw = request.query_params.get('after_id', '0')
-                status = request.query_params.get('status') or None
+            response = (
+                _login_redirect(flask_app, request, login_manager, auth)
+                if auth.user is None else require_bearer_scope(auth, 'read:library')
+            )
+            if response is None:
+                raw = first_query_value(request.query_params, 'after_id', '0')
+                status = first_query_value(request.query_params, 'status') or None
                 if (
                     not raw.isascii() or not raw.isdigit() or len(raw) > 10
                     or int(raw) > 2147483647
@@ -237,9 +250,11 @@ def create_ownership_provider_router(
                 load_user_id=load_user_id,
                 login_manager=login_manager,
             )
-            if auth.user is None:
-                response = _login_redirect(flask_app, request, login_manager, auth)
-            else:
+            response = (
+                _login_redirect(flask_app, request, login_manager, auth)
+                if auth.user is None else require_bearer_scope(auth, 'read:library')
+            )
+            if response is None:
                 from oneirodex.utils.ownership_review import ReviewError
 
                 try:
@@ -290,9 +305,11 @@ def create_ownership_provider_router(
             )
             from .csrf_compat import csrf_error_response
 
-            if auth.token is not None and not auth.has_scope('write:library'):
+            if auth.user is not None and not auth.has_scope('write:library'):
                 response = _error_response(
-                    403, 'forbidden', 'Bearer token requires write:library scope',
+                    403, 'forbidden',
+                    'Bearer token requires write:library scope'
+                    if auth.token is not None else 'Missing scope: write:library',
                 )
             else:
                 response = (
@@ -363,9 +380,11 @@ async def _decide_match(
         )
         from .csrf_compat import csrf_error_response
 
-        if auth.token is not None and not auth.has_scope('write:library'):
+        if auth.user is not None and not auth.has_scope('write:library'):
             response = _error_response(
-                403, 'forbidden', 'Bearer token requires write:library scope',
+                403, 'forbidden',
+                'Bearer token requires write:library scope'
+                if auth.token is not None else 'Missing scope: write:library',
             )
         else:
             response = (
@@ -375,41 +394,51 @@ async def _decide_match(
         if response is None and auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
         elif response is None:
-            payload = await _json_object(request)
-            if not isinstance(payload, dict) or (not undo and 'game_uuid' not in payload):
+            try:
+                payload = await _json_object(request)
+            except _OwnershipDecisionBodyTooLarge:
                 response = _error_response(
-                    400, 'bad_request',
-                    'A JSON decision with game_uuid (or null) is required',
+                    413, 'payload_too_large', 'Request body is too large.',
                 )
             else:
-                from oneirodex.utils.ownership_review import ReviewError
-
-                try:
-                    result = data.decide(
-                        auth.user, title_id, payload.get('expected_revision'),
-                        payload.get('game_uuid'), undo=undo,
+                if not isinstance(payload, dict) or (not undo and 'game_uuid' not in payload):
+                    response = _error_response(
+                        400, 'bad_request',
+                        'A JSON decision with game_uuid (or null) is required',
                     )
-                except ReviewError as exc:
-                    data.rollback()
-                    status = {'bad_request': 400, 'not_found': 404, 'conflict': 409}.get(
-                        exc.code, 400,
-                    )
-                    response = _error_response(status, exc.code, str(exc))
                 else:
-                    from oneirodex.utils.api_contract import api_ok_payload
+                    from oneirodex.utils.ownership_review import ReviewError
 
-                    response = JSONResponse(api_ok_payload(result))
-                if auth.should_set_session_cookie:
-                    _set_session_cookie(response, flask_app, auth)
+                    try:
+                        result = data.decide(
+                            auth.user, title_id, payload.get('expected_revision'),
+                            payload.get('game_uuid'), undo=undo,
+                        )
+                    except ReviewError as exc:
+                        data.rollback()
+                        status = {'bad_request': 400, 'not_found': 404, 'conflict': 409}.get(
+                            exc.code, 400,
+                        )
+                        response = _error_response(status, exc.code, str(exc))
+                    else:
+                        from oneirodex.utils.api_contract import api_ok_payload
+
+                        response = JSONResponse(api_ok_payload(result))
+                    if auth.should_set_session_cookie:
+                        _set_session_cookie(response, flask_app, auth)
         _finish(response, flask_app, request)
         return response
 
 
 async def _json_object(request):
     import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
     try:
-        payload = json.loads(await request.body() or b'{}')
+        raw_body = await read_bounded_body(request, _OWNERSHIP_DECISION_BODY_MAX_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            raise _OwnershipDecisionBodyTooLarge
+        payload = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         return {}
     return payload if isinstance(payload, dict) else None

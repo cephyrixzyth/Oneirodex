@@ -107,17 +107,17 @@
     function actionsCellFor(image) {
         const status = image.status || (image.is_downloaded ? 'downloaded' : 'pending');
         const retryOrDownload = status === 'failed'
-            ? `<button type="button" class="btn btn-sm btn-warning me-1" data-od-click="downloadSingle" data-od-arg="${image.id}" title="Retry download">
+            ? `<button type="button" class="btn btn-sm btn-warning me-1" data-od-click="downloadSingle" data-od-arg="${escapeHtml(image.id)}" title="Retry download">
                     ${ICON_DOWNLOAD_SVG} Retry
                </button>`
             : (status === 'pending'
-                ? `<button type="button" class="btn btn-sm btn-success me-1" data-od-click="downloadSingle" data-od-arg="${image.id}" title="Download">
+                ? `<button type="button" class="btn btn-sm btn-success me-1" data-od-click="downloadSingle" data-od-arg="${escapeHtml(image.id)}" title="Download">
                         ${ICON_DOWNLOAD_SVG}
                    </button>`
                 : '');
         return `
             ${retryOrDownload}
-            <button type="button" class="btn btn-sm btn-danger" data-od-click="deleteSingle" data-od-arg="${image.id}" title="Delete">
+            <button type="button" class="btn btn-sm btn-danger" data-od-click="deleteSingle" data-od-arg="${escapeHtml(image.id)}" title="Delete">
                 ${ICON_TRASH_SVG}
             </button>
         `;

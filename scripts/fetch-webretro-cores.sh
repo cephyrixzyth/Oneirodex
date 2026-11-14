@@ -6,7 +6,8 @@
 #   ./scripts/fetch-webretro-cores.sh --from-dir /path/to/built/cores
 #   ./scripts/fetch-webretro-cores.sh --defaults --from-dir /path/to/built/cores
 #
-# --defaults pulls the 24 shipped core IDs from BinBashBanana/webretro@6.5 (jsDelivr).
+# --defaults pulls the 24 shipped core IDs from BinBashBanana/webretro@6.5 (jsDelivr)
+# and verifies every file against scripts/webretro-cores.sha256 before replacing it.
 # Deferred PCE / VICE / DOS cores are NOT on that CDN — place them with --from-dir.
 # You are responsible for core license compliance.
 
@@ -15,6 +16,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CORES_DIR="${WEBRETR_CORES_DIR:-$ROOT/oneirodex/static/vendor/webretro/cores}"
 CDN="https://cdn.jsdelivr.net/gh/BinBashBanana/webretro@6.5/cores"
+HASHES_FILE="$ROOT/scripts/webretro-cores.sha256"
 
 DEFAULT_CORES=(
   a5200 freechaf freeintv gearcoleco genesis_plus_gx handy
@@ -52,9 +54,44 @@ mkdir -p "$CORES_DIR"
 download_pair() {
   local id="$1"
   local base="$CDN/${id}_libretro"
+  local js_name="${id}_libretro.js"
+  local wasm_name="${id}_libretro.wasm"
+  local js_tmp wasm_tmp js_expected wasm_expected js_actual wasm_actual
   echo "Fetching $id ..."
-  curl -fsSL -o "$CORES_DIR/${id}_libretro.js" "${base}.js"
-  curl -fsSL -o "$CORES_DIR/${id}_libretro.wasm" "${base}.wasm"
+  js_expected="$(awk -v name="$js_name" '$2 == name {print $1}' "$HASHES_FILE")"
+  wasm_expected="$(awk -v name="$wasm_name" '$2 == name {print $1}' "$HASHES_FILE")"
+  if [[ ! "$js_expected" =~ ^[0-9a-f]{64}$ || ! "$wasm_expected" =~ ^[0-9a-f]{64}$ ]]; then
+    echo "No valid SHA-256 lock found for $id" >&2
+    return 1
+  fi
+
+  js_tmp="$(mktemp "$CORES_DIR/.${js_name}.XXXXXX.part")"
+  wasm_tmp="$(mktemp "$CORES_DIR/.${wasm_name}.XXXXXX.part")"
+  if ! curl -fsSL -o "$js_tmp" "${base}.js" || ! curl -fsSL -o "$wasm_tmp" "${base}.wasm"; then
+    rm -f -- "$js_tmp" "$wasm_tmp"
+    return 1
+  fi
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    js_actual="$(sha256sum "$js_tmp" | awk '{print $1}')"
+    wasm_actual="$(sha256sum "$wasm_tmp" | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    js_actual="$(shasum -a 256 "$js_tmp" | awk '{print $1}')"
+    wasm_actual="$(shasum -a 256 "$wasm_tmp" | awk '{print $1}')"
+  else
+    echo "sha256sum or shasum is required to verify downloaded cores" >&2
+    rm -f -- "$js_tmp" "$wasm_tmp"
+    return 1
+  fi
+
+  if [[ "$js_actual" != "$js_expected" || "$wasm_actual" != "$wasm_expected" ]]; then
+    echo "SHA-256 integrity check failed for $id; existing files were preserved" >&2
+    rm -f -- "$js_tmp" "$wasm_tmp"
+    return 1
+  fi
+
+  mv -f -- "$js_tmp" "$CORES_DIR/$js_name"
+  mv -f -- "$wasm_tmp" "$CORES_DIR/$wasm_name"
 }
 
 if [[ "$DO_DEFAULTS" -eq 1 ]]; then

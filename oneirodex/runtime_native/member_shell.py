@@ -17,6 +17,7 @@ from fastapi import APIRouter, Request
 from starlette.responses import RedirectResponse, Response
 
 from oneirodex.runtime_native.request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 STATIC_MEMBER_TITLES = {
@@ -39,6 +40,7 @@ STATIC_MEMBER_TITLES = {
     '/chat': 'Chat',
     '/notifications': 'Notifications',
     '/tokens': 'Tokens',
+    '/user/invites': 'Invites',
     '/report': 'Report issue',
     '/big-picture': 'Big Picture',
     '/ownership': 'Store Ownership',
@@ -59,6 +61,7 @@ def member_shell_route(path: str) -> bool:
         or re.fullmatch(r'/discover/(?:zone/[^/]+|hub/genre/.+|[^/]+)', path) is not None
         or re.fullmatch(r'/collections/[^/]+', path) is not None
         or re.fullmatch(r'/members/[0-9]+', path) is not None
+        or path == '/user/invites'
     )
 
 
@@ -189,6 +192,7 @@ def _member_root(user, settings: dict, app_config, extra: dict, static_url_path:
         'is-librarian': str(role in ('admin', 'librarian')).lower(),
         'role': role,
         'user-id': user_id,
+        'account-id': getattr(user, 'user_id', None) or '',
         'show-trailers': str(bool(settings.get('show_trailers', True))).lower(),
         'show-help': str(bool(settings.get('show_help_button', True))).lower(),
         'enable-vr': str(bool(app_config.get('ENABLE_VR_BROWSE'))).lower(),
@@ -201,7 +205,7 @@ def _member_root(user, settings: dict, app_config, extra: dict, static_url_path:
         'username': getattr(user, 'name', None) or '',
         'avatar': avatar,
         'locale': (getattr(prefs, 'locale', None) if prefs else None) or 'en',
-        'per-page': configured_or_preference('user_per_page', 'items_per_page', 20),
+        'per-page': configured_or_preference('user_per_page', 'items_per_page', 50),
         'default-sort': configured_or_preference('user_default_sort', 'default_sort', 'name'),
         'default-sort-order': configured_or_preference('user_default_sort_order', 'default_sort_order', 'asc'),
         'library-count': extra.get('library_count', 0),
@@ -301,6 +305,21 @@ def create_member_shell_router(flask_app, *, database_scope):
 
         scope = database_scope(flask_app)
         with scope:
+            from oneirodex.utils.setup import (
+                get_setup_redirect_url, should_redirect_to_setup,
+            )
+
+            if should_redirect_to_setup():
+                target = get_setup_redirect_url()
+                if path != target:
+                    from oneirodex.runtime_native.response_compat import flask_redirect_response
+                    from oneirodex.utils.security_headers import security_header_values
+
+                    response = flask_redirect_response(target, status_code=302)
+                    for key, value in security_header_values(flask_app.config).items():
+                        response.headers.setdefault(key, value)
+                    return response
+
             auth = request_auth_context(
                 request, flask_app.config, find_user=find_user, find_token=find_token,
                 commit_token_touch=commit_token_touch, login_manager=login_manager,
@@ -310,8 +329,13 @@ def create_member_shell_router(flask_app, *, database_scope):
 
                 response = _login_redirect(flask_app, request, login_manager, auth)
                 return response
+            if path == '/user/invites' and auth.token is not None:
+                from starlette.responses import PlainTextResponse
+
+                return PlainTextResponse('A browser session is required.', status_code=403)
             game_details = re.fullmatch(r'/game_details/([^/]+)', path)
             if game_details:
+                from oneirodex.runtime_native.response_compat import flask_http_error_response
                 from sqlalchemy import select
                 from oneirodex.models import Game
                 from oneirodex.runtime_native.db_session import native_db
@@ -321,14 +345,14 @@ def create_member_shell_router(flask_app, *, database_scope):
                 try:
                     valid_uuid = str(uuid.UUID(raw_uuid, version=4))
                 except (TypeError, ValueError, AttributeError):
-                    return Response(status_code=404)
+                    return flask_http_error_response(404, head=request.method == 'HEAD')
                 game = native_db.session.execute(
                     select(Game).filter_by(uuid=valid_uuid)
                 ).scalars().first()
                 if game is None:
-                    return Response(status_code=404)
+                    return flask_http_error_response(404, head=request.method == 'HEAD')
                 if not user_can_access_game(auth.user, game):
-                    return Response(status_code=403)
+                    return flask_http_error_response(403, head=request.method == 'HEAD')
             if path == '/activity' and not _legacy_feature_enabled(
                 flask_app.config, 'ENABLE_ACTIVITY_FEED', 'true',
             ):
@@ -369,7 +393,14 @@ def create_member_shell_router(flask_app, *, database_scope):
                 )
 
                 preferences = getattr(auth.user, 'preferences', None)
-                if preferences is None:
+                # Opening Preferences through the compatibility URL should be
+                # a read-only first visit, as it was in v1.1.8. Ordinary
+                # library entry still establishes its persisted 50-item
+                # default.
+                opens_preferences = first_query_value(
+                    request.query_params, 'preferences',
+                ) == '1'
+                if preferences is None and not opens_preferences:
                     preferences = UserPreference(user_id=auth.user.id)
                     native_db.session.add(preferences)
                     native_db.session.commit()
@@ -386,8 +417,8 @@ def create_member_shell_router(flask_app, *, database_scope):
                         saved_filters = {}
 
                 query = request.query_params
-                library_uuid = query.get('library_uuid') or saved_filters.get('library_uuid')
-                library_name = query.get('library_name')
+                library_uuid = first_query_value(query, 'library_uuid') or saved_filters.get('library_uuid')
+                library_name = first_query_value(query, 'library_name')
                 if library_name:
                     library = native_db.session.execute(
                         select(Library).filter_by(name=library_name)
@@ -406,12 +437,12 @@ def create_member_shell_router(flask_app, *, database_scope):
                     library_uuid = library.uuid
 
                 per_page = getattr(preferences, 'items_per_page', None) or 50
-                raw_per_page = query.get('per_page')
+                raw_per_page = first_query_value(query, 'per_page')
                 try:
                     per_page = int(raw_per_page) or per_page if raw_per_page else per_page
                 except (TypeError, ValueError):
                     pass
-                raw_rating = query.get('rating')
+                raw_rating = first_query_value(query, 'rating')
                 try:
                     rating = int(raw_rating) if raw_rating else None
                 except (TypeError, ValueError):
@@ -422,11 +453,11 @@ def create_member_shell_router(flask_app, *, database_scope):
 
                 filters = {
                     'library_uuid': library_uuid,
-                    'genre': query.get('genre') or saved_filters.get('genre'),
+                    'genre': first_query_value(query, 'genre') or saved_filters.get('genre'),
                     'rating': rating,
-                    'game_mode': query.get('game_mode') or saved_filters.get('game_mode'),
-                    'player_perspective': query.get('player_perspective') or saved_filters.get('player_perspective'),
-                    'theme': query.get('theme') or saved_filters.get('theme'),
+                    'game_mode': first_query_value(query, 'game_mode') or saved_filters.get('game_mode'),
+                    'player_perspective': first_query_value(query, 'player_perspective') or saved_filters.get('player_perspective'),
+                    'theme': first_query_value(query, 'theme') or saved_filters.get('theme'),
                 }
                 first_run = get_first_run_state()
                 extra = {
@@ -436,8 +467,8 @@ def create_member_shell_router(flask_app, *, database_scope):
                     'scan_has_run': first_run['scan_has_run'],
                     'unmatched_count': first_run['unmatched_count'],
                     'user_per_page': per_page,
-                    'user_default_sort': query.get('sort_by') or preferences.default_sort or 'name',
-                    'user_default_sort_order': query.get('sort_order') or preferences.default_sort_order or 'asc',
+                    'user_default_sort': first_query_value(query, 'sort_by') or getattr(preferences, 'default_sort', None) or 'name',
+                    'user_default_sort_order': first_query_value(query, 'sort_order') or getattr(preferences, 'default_sort_order', None) or 'asc',
                     'filters': {key: value for key, value in filters.items() if value is not None},
                 }
 

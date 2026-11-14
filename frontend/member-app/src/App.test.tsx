@@ -68,6 +68,14 @@ test('applies tile size CSS vars from shell config', () => {
   expect(screen.getByText('DiscoverPage')).toBeInTheDocument()
 })
 
+test('keeps the retired playromtest URL inside the member shell', () => {
+  renderAt('/playromtest', { tileSize: 'M', isAdmin: false })
+  expect(screen.getByText('DiscoverPage')).toBeInTheDocument()
+  expect(screen.getByText('SideRail')).toBeInTheDocument()
+  expect(screen.getByText('TopBar')).toBeInTheDocument()
+  expect(document.getElementById('main-content')).toBeTruthy()
+})
+
 test('renders favorites route with tile size', () => {
   renderAt('/favorites', { tileSize: 'S', isAdmin: false })
   expect(screen.getByText('FavoritesPage')).toBeInTheDocument()

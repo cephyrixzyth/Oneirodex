@@ -23,20 +23,68 @@ class SmtpSettingsData:
         from oneirodex.utils.cache import cache
         from oneirodex.utils.global_settings import global_settings_row, global_settings_row_or_create
         from oneirodex.utils.smtp_settings import smtp_public_state, validate_smtp_data
+        from oneirodex.utils.secret_store import write_global_secret
 
         settings = global_settings_row()
         values = validate_smtp_data(payload, settings)
         settings = settings or global_settings_row_or_create()
         for key, value in values.items():
-            if key != 'smtp_password' or value:
+            if key == 'smtp_password':
+                if value:
+                    write_global_secret(settings, key, value)
+            else:
                 setattr(settings, key, value)
         db.session.commit()
         cache.delete('global_settings')
         return {'settings': smtp_public_state(settings)}
 
+    def save_legacy(self, payload):
+        """Preserve v1.1.8 POST semantics for the legacy admin endpoint.
+
+        The current JSON API uses ``save`` and its stricter validation. The
+        compatibility POST historically required the full SMTP fields only
+        when enabled, did not validate disabled settings, and left the stored
+        port untouched while disabled.
+        """
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.global_settings import global_settings_row_or_create
+        from oneirodex.utils.secret_store import has_global_secret, write_global_secret
+
+        values = payload or {}
+        settings = global_settings_row_or_create()
+        if values.get('smtp_enabled'):
+            for key, message in (
+                ('smtp_server', 'SMTP server is required when SMTP is enabled'),
+                ('smtp_port', 'SMTP port is required when SMTP is enabled'),
+                ('smtp_username', 'SMTP username is required when SMTP is enabled'),
+            ):
+                if not values.get(key):
+                    raise ValueError(message)
+            if not values.get('smtp_password') and not has_global_secret(settings, 'smtp_password'):
+                raise ValueError('SMTP password is required when SMTP is enabled')
+            if not values.get('smtp_default_sender'):
+                raise ValueError('Default sender email is required when SMTP is enabled')
+            try:
+                port = int(values.get('smtp_port', 587))
+            except ValueError:
+                raise ValueError('SMTP port must be a valid number') from None
+            if port <= 0 or port > 65535:
+                raise ValueError('Invalid port number. Must be between 1 and 65535')
+            settings.smtp_port = port
+
+        settings.smtp_enabled = values.get('smtp_enabled', False)
+        settings.smtp_server = values.get('smtp_server')
+        settings.smtp_username = values.get('smtp_username')
+        if values.get('smtp_password'):
+            write_global_secret(settings, 'smtp_password', values.get('smtp_password'))
+        settings.smtp_use_tls = values.get('smtp_use_tls', True)
+        settings.smtp_default_sender = values.get('smtp_default_sender')
+        db.session.commit()
+
     def test_connection(self) -> bool | None:
         from oneirodex.utils.global_settings import global_settings_row
         from oneirodex.utils.smtp_test import SMTPTester
+        from oneirodex.utils.secret_store import read_global_secret
 
         settings = global_settings_row()
         if not settings or not settings.smtp_enabled:
@@ -45,11 +93,44 @@ class SmtpSettingsData:
             host=settings.smtp_server,
             port=settings.smtp_port,
             username=settings.smtp_username,
-            password=settings.smtp_password,
+            password=read_global_secret(settings, 'smtp_password'),
             use_tls=settings.smtp_use_tls,
             timeout=10,
         )
         return bool(success)
+
+    def test_connection_legacy(self):
+        """Preserve the v1.1.8 SMTP form test result while redacting secrets."""
+        from oneirodex.utils.global_settings import global_settings_row
+        from oneirodex.utils.smtp_test import SMTPTester
+        from oneirodex.utils.secret_store import read_global_secret
+
+        settings = global_settings_row()
+        if not settings:
+            return None
+        success, result = SMTPTester(debug=False).test_connection(
+            host=settings.smtp_server,
+            port=settings.smtp_port,
+            username=settings.smtp_username,
+            password=read_global_secret(settings, 'smtp_password'),
+            use_tls=settings.smtp_use_tls,
+            timeout=10,
+        )
+        return bool(success), _redact_smtp_result(result, read_global_secret(settings, 'smtp_password'))
+
+
+def _redact_smtp_result(value, secret):
+    if not secret:
+        return value
+    if isinstance(value, str):
+        return value.replace(secret, '[redacted]')
+    if isinstance(value, dict):
+        return {key: _redact_smtp_result(item, secret) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_smtp_result(item, secret) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_smtp_result(item, secret) for item in value)
+    return value
 
 
 def create_smtp_settings_router(
@@ -130,43 +211,65 @@ def create_smtp_settings_router(
                     response = JSONResponse(payload, status_code=status)
                 elif request.method == 'POST':
                     if request.url.path == '/admin/smtp_settings':
-                        try:
-                            body = await _json_body(request)
-                            saved = data.save(body)
-                        except ValueError as exc:
-                            payload, status = api_error_payload(str(exc), code='bad_request')
-                            response = JSONResponse(payload, status_code=status)
-                        except Exception:
-                            from oneirodex.runtime_native.db_session import native_db as db
-                            import logging
+                        from .legacy_json_compat import (
+                            LegacyJSONError,
+                            legacy_json_error_response,
+                            legacy_unexpected_error_response,
+                            parse_legacy_json,
+                        )
 
-                            db.session.rollback()
-                            logging.getLogger(__name__).warning('SMTP settings form save failed')
-                            payload, status = api_error_payload('Could not save SMTP settings', code='internal')
-                            response = JSONResponse(payload, status_code=status)
+                        try:
+                            body = await parse_legacy_json(request)
+                        except LegacyJSONError as exc:
+                            response = legacy_json_error_response(request, exc)
                         else:
-                            response = JSONResponse(api_ok_payload({
-                                'status': 'success',
-                                'message': 'SMTP settings updated successfully',
-                                **saved,
-                            }))
-                            if auth.should_set_session_cookie:
-                                from .oidc_status import _set_session_cookie
-                                _set_session_cookie(response, flask_app, auth)
+                            if not isinstance(body, dict):
+                                response = legacy_unexpected_error_response(request)
+                            else:
+                                try:
+                                    legacy_save = getattr(data, 'save_legacy', None)
+                                    if legacy_save is None:
+                                        data.save(body)
+                                    else:
+                                        legacy_save(body)
+                                except ValueError as exc:
+                                    payload, status = api_error_payload(str(exc), code='bad_request')
+                                    response = JSONResponse(payload, status_code=status)
+                                except Exception:
+                                    from oneirodex.runtime_native.db_session import native_db as db
+                                    import logging
+
+                                    db.session.rollback()
+                                    logging.getLogger(__name__).warning('SMTP settings form save failed')
+                                    payload, status = api_error_payload('Could not save SMTP settings', code='internal')
+                                    response = JSONResponse(payload, status_code=status)
+                                else:
+                                    response = JSONResponse(api_ok_payload({
+                                        'status': 'success',
+                                        'message': 'SMTP settings updated successfully',
+                                    }))
+                                    if auth.should_set_session_cookie:
+                                        from .oidc_status import _set_session_cookie
+                                        _set_session_cookie(response, flask_app, auth)
                     else:
                         try:
-                            result = data.test_connection()
-                            if request.url.path == '/admin/smtp_test':
+                            legacy_test = request.url.path == '/admin/smtp_test'
+                            test_connection = (
+                                getattr(data, 'test_connection_legacy', data.test_connection)
+                                if legacy_test else data.test_connection
+                            )
+                            result = test_connection()
+                            if legacy_test:
                                 if result is None:
                                     payload, status = api_error_payload(
                                         'SMTP settings not configured', code='bad_request',
                                     )
                                     response = JSONResponse(payload, status_code=status)
-                                elif result:
-                                    response = JSONResponse(api_ok_payload({'result': 'SMTP connection successful'}))
+                                elif result[0]:
+                                    response = JSONResponse(api_ok_payload({'result': result[1]}))
                                 else:
                                     payload, status = api_error_payload(
-                                        'SMTP connection failed. Check the saved settings and provider access.',
+                                        str(result[1] or 'SMTP connection failed'),
                                         code='bad_request', status=200,
                                     )
                                     response = JSONResponse(payload, status_code=status)
@@ -192,7 +295,8 @@ def create_smtp_settings_router(
                             logging.getLogger(__name__).warning('SMTP connection test failed')
                             if request.url.path == '/admin/smtp_test':
                                 payload, status = api_error_payload(
-                                    'SMTP connection failed', code='bad_request', status=200,
+                                    'Something went wrong on our end. The error has been logged.',
+                                    code='internal', status=500,
                                 )
                             else:
                                 payload, status = api_error_payload(

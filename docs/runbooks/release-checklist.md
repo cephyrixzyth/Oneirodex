@@ -19,19 +19,19 @@ Use before tagging a release; read the intended version from the root [`VERSION`
 
 GitHub Actions [`.github/workflows/ci-tests.yml`](../../.github/workflows/ci-tests.yml) runs on PRs and pushes to `main` / `master` / `feature/**` (and similar). Toolchain is pinned: Python **3.12** (`.python-version`) and Node **22** (`.nvmrc`, `engines: ">=22 <23"` in every `package.json`).
 
-- **Pytest core** (Python 3.12 + Postgres service): builds the member, auth-pilot, and admin React shells, then runs `tests/ -m "not integration"` minus the named exceptions in `ci-tests.yml`, with coverage at a 65% floor and the API-envelope, print, and get-json ratchets. The gate has a 35-minute timeout; inspect the current workflow result rather than relying on historical test counts. See [`ci-gates.md`](../dev/ci-gates.md).
+- **Pytest core** (Python 3.12 + Postgres service): builds the member, auth-pilot, and admin React shells, then runs `tests/ -m "not integration"` minus the named exceptions in `ci-tests.yml`, with coverage at a 65% floor and the API-envelope, print, and get-json ratchets. The gate has a 90-minute timeout; inspect the current workflow result rather than relying on historical test counts. See [`ci-gates.md`](../dev/ci-gates.md).
 - **Alembic (upgrade + check)** (Python 3.12 + Postgres service, independent of pytest-core): `pip install -r requirements-dev.txt`, then `python -m alembic upgrade head` and `python -m alembic check`. `check` fails hard on any diff — the baseline is kept clean by the `include_object` allow-list in `alembic/env.py` ([`alembic-baseline-notes.md`](../dev/alembic-baseline-notes.md)), so a new operation means a migration is missing.
 - **Lint & format** (repo root, Node 22): root `npm ci`, then `npm run lint` (ESLint flat config `eslint.config.js`) + `npm run format:check` (Prettier over `frontend/**`).
 - **Member-app vitest** (`frontend/member-app`): `npm test -- --run` + `npm run typecheck`.
 - **Admin-app vitest** (`frontend/admin-app`): `npm test -- --run` + `npm run typecheck`, plus classic theme JS harnesses and CSS token lint.
 - **Ops-glance vitest** (`frontend/ops-glance`): `npm test -- --run` + `npm run typecheck` **and `npm run build`** — the glance ships in the Docker image, so a broken bundle fails the gate.
 - **API client vitest** (`frontend/api-client`): typecheck (`npm run build`) + `npm test`.
-- **Shared vitest** (`frontend/shared`, `@oneirodex/ui`): `npm test` — the 11 `src/*.test.*` contract files (csrf, envelopeError, pageStatus, confirmDialog, toastStack, libraryScanNotify, loadingStatusText, useResource, Button, ViewerContext). Since Phase 3.3 the package ships TypeScript (`strict: true`) with a `typecheck` script (`tsc --noEmit -p tsconfig.json`); adding that step to the CI job is a pending workflow change.
-- **Desktop vitest** (`clients/desktop`): fast slice — `keychain` / `config-store` / `connection-ux`.
+- **Shared vitest** (`frontend/shared`, `@oneirodex/ui`): `npm test` and `npm run typecheck` (`tsc --noEmit -p tsconfig.json`), including shared component, authentication-boundary and API contract checks. Both steps run in CI.
+- **Desktop vitest** (`clients/desktop`): six-file slice — `keychain`, `config-store`, `connection-ux`, `connect`, `launch` and `playtime-session`. The full desktop suite remains a separate local check.
 
 The repo is an npm-workspaces monorepo: the single root [`package-lock.json`](../../package-lock.json) is the only lockfile. Every JS job (`Lint & format`, the five SPA/package vitest jobs, `Desktop vitest`) caches on that root lock and installs with one repo-root `npm ci` — for the jobs that set `defaults.run.working-directory` to an app dir, that step carries an explicit `working-directory: .`. That single install reifies the whole workspace graph (every `frontend/*` app, `@oneirodex/ui`, `clients/desktop`, and the shared `typescript` / `eslint` / `prettier` toolchain); the per-job test / typecheck / build steps then run from the app dir and npm resolves up to the workspace root.
 
-Dependency bumps arrive weekly via Dependabot ([`.github/dependabot.yml`](../../.github/dependabot.yml)) — `pip`, `npm` per app, and `github-actions`. Grouped so each `directory` produces at most one PR per run: minor, patch **and major** bumps are bundled together (npm entries split only production vs development deps). A grouped PR can carry a breaking major, so review it carefully before merging.
+Dependency bumps arrive weekly via Dependabot ([`.github/dependabot.yml`](../../.github/dependabot.yml)) for Python, the root npm workspace, Rust desktop dependencies and GitHub Actions. Python and Actions group minor, patch and major updates. npm updates are grouped by production/development dependencies for minor and patch releases; npm major updates are explicitly ignored. Rust minor/patch updates are grouped; Rust major updates remain separate for compatibility review.
 
 The CI marker set is the pull-request gate. Follow [local-postgres-pytest.md](local-postgres-pytest.md) for any additional local verification requested by the release plan. Confirm every required check is green on the exact merged commit before tagging.
 
@@ -45,6 +45,16 @@ pytest tests/test_ops_followons.py tests/test_hardlinks_ai_vr_layouts.py tests/t
 
 - [ ] CI `ci-tests` workflow green on the release PR / commit
 - [ ] CI `desktop-build` green — six unsigned artifacts (full + thin × Windows / macOS / Linux); the upload fails the job if bundling produced nothing
+
+The Linux Rust job also runs the opt-in real archive disk-full check through
+[`test-real-game-archive-enospc.sh`](../../scripts/ci/test-real-game-archive-enospc.sh).
+It requires an isolated Linux GitHub runner and creates one owned 16 MiB tmpfs;
+it must report exactly one passing test, real kernel ENOSPC after a partial
+staged write, old-install preservation, retry after freeing space and
+`REAL_ENOSPC_CLEANUP unmounted=true removed=true`. Ordinary `cargo test` skips
+this fixture. Do not treat compilation, the unsupported-host refusal, or the
+existing simulated-full test as its positive result. This bounded native check
+does not qualify packaged game launches or other platforms/filesystems.
 - [ ] Docker build: `docker compose build`
 - [ ] Fresh `.env` from `.env.docker.example` starts (`SECRET_KEY` set)
 - [ ] Schema: `python -m alembic upgrade head` runs clean on a fresh DB and `python -m alembic check` reports no new operations (allow-list in [`docs/dev/alembic-baseline-notes.md`](../dev/alembic-baseline-notes.md))
@@ -68,6 +78,8 @@ and startup initialization checks pass.
 ## Publish
 
 - [ ] Commit + push release branch / PR to `main`
-- [ ] Git tag `vX.Y.Z` and GitHub Release notes from CHANGELOG. Pushing the tag runs six OS/flavor builds and attaches eight assets (`.exe`, `.dmg`, `.deb` and `.AppImage` for both the full and thin clients; `desktop-build.yml`, `release` job). To add them to an existing release instead, run **Desktop build** manually with `release_tag` set. Confirm all eight files before announcing
-- [ ] Push Docker image tags `:X.Y.Z` and `:latest` (when publishing images)
+- [ ] Git tag `vX.Y.Z` matching `VERSION` and GitHub Release notes from CHANGELOG. Pushing the tag runs six OS/flavor builds and attaches eight assets (`.exe`, `.dmg`, `.deb` and `.AppImage` for both the full and thin clients; `desktop-build.yml`, `release` job). To attach builds manually, dispatch from the default branch or the matching tag, set `release_tag` to that tag, and ensure it points to the exact build commit reachable from the default branch and an existing GitHub Release. Confirm all eight files before announcing
+- [ ] Push Docker image tags `:X.Y.Z` and `:latest` (when publishing images). The Docker workflow requires the version tag to match `VERSION` and its commit to be reachable from the default branch.
 - [ ] Unraid / docs note if env vars changed
+
+The bounded Linux/tmpfs check passed at `44da3162` in [R2058](../dev/parity-evidence/desktop-real-enospc-r2058.json), including actual partial-write ENOSPC, old-install preservation, staging cleanup, retry and fixture unmount/removal. This is not installed-app or other filesystem/platform qualification.

@@ -134,7 +134,7 @@ def _open_path_allowed_bases() -> list[str]:
     return bases
 
 
-def _validate_open_path(path: str | None) -> str:
+def validate_open_path_target(path: str | None) -> str:
     """Require an absolute path under configured library roots. Raises ValueError."""
     cleaned = str(path or '').strip()
     if not cleaned:
@@ -311,7 +311,7 @@ def enqueue_client_command(
     cleaned_path: str | None = None
     cleaned_select: bool | None = None
     if cleaned_action == 'open_path':
-        cleaned_path = _validate_open_path(path)
+        cleaned_path = validate_open_path_target(path)
         cleaned_select = True if select is None else bool(select)
         # game_uuid optional for unmatched folders / admin scanjobs.
     else:

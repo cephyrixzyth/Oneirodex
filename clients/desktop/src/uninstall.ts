@@ -210,10 +210,9 @@ export async function kickoffUpdate(
     extractPath: existing.extractPath,
     ...(existing.retainedPath ? { retainedPath: existing.retainedPath } : {}),
   }
-  await saveInstallsToDisk({
-    ...(await loadInstallsFromDisk()),
-    [gameUuid]: { ...extracted, superseded },
-  })
+  const updatedInstalls = await loadInstallsFromDisk()
+  updatedInstalls[gameUuid] = { ...extracted, superseded }
+  await saveInstallsToDisk(updatedInstalls)
   await removeSupersededBestEffort(existing.superseded, [
     extracted.extractPath,
     extracted.archivePath,

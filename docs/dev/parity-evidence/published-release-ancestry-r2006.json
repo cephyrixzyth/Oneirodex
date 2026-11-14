@@ -1,0 +1,19 @@
+{
+  "recorded_utc": "2026-11-08T22:49:00.380790+00:00",
+  "review_head_before": "9b43044e9e2c3bf53571b0f11dbf1cce44e8b528",
+  "main": "fd2683e5aeeba97794895e4158d59c55ec147a2a",
+  "identical_published_snapshot_ancestor": "b255444b2bd77fc2f5ef8a5557ecf38c8e3663a0",
+  "published_tree": "bd608428bdecf3bb1e7ec567bd91340faf217d14",
+  "review_tree_before": "08a6957e49328742e01e7e77720b2e412f8dd145",
+  "ruling": "The published main snapshot is byte-identical to an ancestor tree already in review-branch history. Record its commit ancestry using the ours merge strategy while preserving the current descendant tree. This is a merge into the review branch, not publication to main or deployment.",
+  "risk_if_wrong": "An unverified upstream difference could be discarded; both complete-tree equality and ancestor reachability are asserted before merging.",
+  "merge_commit": "f048be20d745bc6f060a7cbc1977d18b74ad491b",
+  "review_tree_after": "08a6957e49328742e01e7e77720b2e412f8dd145",
+  "tracked_tree_unchanged": true,
+  "main_ancestor_after_merge": true,
+  "review_id": "R2006",
+  "review_pr": "https://github.com/cephyrixzyth/Oneirodex/pull/281",
+  "merge_diff_file_count": 0,
+  "scope": "Published main ancestry integrated into the review branch; this is not a merge of the review branch into main or a deployment.",
+  "verification": "Full published-tree equality to a reachable review ancestor, clean tracked index/worktree before merging, identical before/after review trees, empty first-parent file diff, and main ancestor reachability after merging were checked."
+}

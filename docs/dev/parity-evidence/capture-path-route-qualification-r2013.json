@@ -1,0 +1,70 @@
+{
+  "review_id": "R2013",
+  "doc_status": "Reference",
+  "title": "Capture helper dependency boundary and current public path/route guards",
+  "classification": "Confirmed optional-tool import coupling and obsolete test contracts repaired; no member/admin UI behavior changed",
+  "source_head_before_change": "46471f3730e1789fdaeeec16c7444c351bd2255d",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "scripts/capture_docs_media.py": "34a6c8104ba113c43457e2e587a3690a0bb63672272f9318e9c82559084cd09e",
+    "tests/test_capture_setup.py": "1926c3a1e3b34a54c9ebe9151421943425b44065269dfdca6c6b664749f23af6",
+    "tests/test_checkout_paths.py": "0a3ec805500ebcae1de5b176b993e475612488c97626b3ef7c5d06e1439b6961",
+    "tests/test_chrome_parity.py": "1244024531cc47fe0d72345e6addabe8e98f672bbf703be9723d55994bb1d77c"
+  },
+  "checks": {
+    "remaining-after-scope-repair": {
+      "status": "failed",
+      "exit_code": 1,
+      "seconds": 205.41,
+      "source_head_at_start": "46471f3730e1789fdaeeec16c7444c351bd2255d",
+      "disposable_database_removed": true,
+      "log_sha256": "5e6336d3c098036de07e2b91ee2ec3e0d5ded779346d8adc03412b3284a2ace9"
+    },
+    "capture-path-routes-green": {
+      "status": "failed",
+      "exit_code": 1,
+      "seconds": 4.26,
+      "source_head_at_start": "46471f3730e1789fdaeeec16c7444c351bd2255d",
+      "disposable_database_removed": null,
+      "log_sha256": "7a0e9c695d08a878cf7a12b90494660a8fa7b95146aae30b349169290c1e18be"
+    },
+    "capture-path-routes-verified": {
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 3.95,
+      "source_head_at_start": "46471f3730e1789fdaeeec16c7444c351bd2255d",
+      "disposable_database_removed": null,
+      "log_sha256": "20f7ac642be2e399ce55385576ded65ecbb858b3675ade4e4b1d2e6cbfdf9659"
+    },
+    "capture-list-without-browser": {
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 1.31,
+      "source_head_at_start": "46471f3730e1789fdaeeec16c7444c351bd2255d",
+      "disposable_database_removed": null,
+      "log_sha256": "f2b457ef3d10b691ae3926e21ec49221940980f62eaa618c086c3e0403652633"
+    }
+  },
+  "root_causes": [
+    "Capture module imported Playwright eagerly, preventing real atomic-write unit checks from importing pure helpers when browser tooling was absent. Load it only when actual capture starts.",
+    "Checkout guard required ignored editor files and listed the canonical Oneirodex folder itself as stale; inspect tracked public text examples and reject noncanonical checkout folders instead.",
+    "Structural UI guards expected Scan Jobs inside ScanControls, old Manual scan copy and an unparameterized LibrariesPanel. Current approved/documented UI has a separate jobs page, Manual identify section and management-action slot."
+  ],
+  "verification": {
+    "python": "3.12.16",
+    "focused_cases_passed": 37,
+    "capture_list_exit_code": 0,
+    "browser_tooling_in_test_environment": "Playwright absent, as demonstrated by the initial import failures; no browser is needed for file-only helpers/listing. Actual capture still imports/requires Playwright.",
+    "canonical_examples_observed": 26,
+    "baseline_before_repair": "729 passed, 1 skipped, 32 warnings, 5 failures; owned PostgreSQL database removed",
+    "capture": "No screenshots generated or replaced"
+  },
+  "rework": [
+    "The first focused run exposed four additional stale heading/parameterized-panel/route source assertions; updated them to current contracts, then passed the complete selection."
+  ],
+  "limitations": [
+    "Structural source assertions do not establish runtime behavior parity; existing component evidence remains separate.",
+    "Browser old-worker control/migration fixture and full application/headset privacy acceptance remain open.",
+    "Final unrestricted Python/coverage and current-head CI qualification remain required."
+  ]
+}

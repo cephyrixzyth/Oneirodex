@@ -7,6 +7,15 @@ from uuid import uuid4
 from oneirodex.models.orm import db
 from oneirodex.models._base import JSONEncodedDict
 
+
+def _utc_isoformat(value):
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
 class ReleaseGroup(db.Model):
     __tablename__ = 'filters'
 
@@ -31,6 +40,33 @@ class Newsletter(db.Model):
     error_message = db.Column(db.Text, nullable=True)
     
     sender = db.relationship('User', backref='sent_newsletters')
+
+
+class UserDeletionFileJob(db.Model):
+    """Retryable post-commit purge of one file under a managed storage root."""
+
+    __tablename__ = 'user_deletion_file_jobs'
+    __table_args__ = (
+        db.UniqueConstraint('path_key', name='uq_user_delete_file_job_path'),
+        db.Index('ix_user_deletion_file_jobs_state', 'state', 'updated_at'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    path_key = db.Column(db.String(64), nullable=False)
+    root_path = db.Column(db.String(1024), nullable=False)
+    relative_path = db.Column(db.String(1024), nullable=False)
+    state = db.Column(
+        db.String(16), nullable=False, default='pending', server_default='pending',
+    )
+    attempts = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    last_error_code = db.Column(db.String(64), nullable=True)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
 
 class GlobalSettings(db.Model):
     __tablename__ = 'global_settings'
@@ -58,7 +94,7 @@ class GlobalSettings(db.Model):
     smtp_server = db.Column(db.String(255), nullable=True)
     smtp_port = db.Column(db.Integer, nullable=True)
     smtp_username = db.Column(db.String(255), nullable=True)
-    smtp_password = db.Column(db.String(255), nullable=True)
+    smtp_password = db.Column(db.Text, nullable=True)
     smtp_use_tls = db.Column(db.Boolean, default=True)
     smtp_default_sender = db.Column(db.String(255), nullable=True)
     smtp_last_tested = db.Column(db.DateTime, nullable=True)
@@ -66,7 +102,7 @@ class GlobalSettings(db.Model):
     enable_delete_game_on_disk = db.Column(db.Boolean, default=True)
     # IGDB Settings
     igdb_client_id = db.Column(db.String(255), nullable=True)
-    igdb_client_secret = db.Column(db.String(255), nullable=True)
+    igdb_client_secret = db.Column(db.Text, nullable=True)
     igdb_last_tested = db.Column(db.DateTime, nullable=True)
     enable_game_updates = db.Column(db.Boolean, default=True)
     update_folder_name = db.Column(db.String(255), default='updates')
@@ -101,7 +137,7 @@ class GlobalSettings(db.Model):
     oidc_enabled = db.Column(db.Boolean, default=False)
     oidc_issuer_url = db.Column(db.String(512), nullable=True)
     oidc_client_id = db.Column(db.String(255), nullable=True)
-    oidc_client_secret = db.Column(db.String(512), nullable=True)
+    oidc_client_secret = db.Column(db.Text, nullable=True)
     oidc_redirect_uri = db.Column(db.String(512), nullable=True)
     oidc_scopes = db.Column(db.String(255), default='openid email profile')
     oidc_role_claim = db.Column(db.String(64), default='groups')
@@ -109,8 +145,8 @@ class GlobalSettings(db.Model):
     oidc_display_name = db.Column(db.String(120), default='Sign in with SSO')
     # Store ownership sync (register-only; never downloads from stores)
     enable_store_ownership_sync = db.Column(db.Boolean, default=True)
-    steam_web_api_key = db.Column(db.String(255), nullable=True)
-    steamgriddb_api_key = db.Column(db.String(255), nullable=True)
+    steam_web_api_key = db.Column(db.Text, nullable=True)
+    steamgriddb_api_key = db.Column(db.Text, nullable=True)
     # Emulator profiles: { "NES": "nestopia", ... } preferred WebRetro cores
     emulator_profiles = db.Column(JSONEncodedDict, nullable=True)
     # Optional *arr automation module (feature-flagged)
@@ -124,14 +160,14 @@ class GlobalSettings(db.Model):
     allow_children_in_household_lobby = db.Column(db.Boolean, default=False)
     encrypt_emulator_saves = db.Column(db.Boolean, default=False)
     # GiantBomb metadata key (optional)
-    giantbomb_api_key = db.Column(db.String(255), nullable=True)
+    giantbomb_api_key = db.Column(db.Text, nullable=True)
     # MobyGames identify search key (optional — empty search when unset)
-    mobygames_api_key = db.Column(db.String(255), nullable=True)
+    mobygames_api_key = db.Column(db.Text, nullable=True)
     # TheGamesDB identify search key (optional — empty search when unset)
-    thegamesdb_api_key = db.Column(db.String(255), nullable=True)
+    thegamesdb_api_key = db.Column(db.Text, nullable=True)
     # RetroAchievements household account used for set matching / member progress
     retroachievements_username = db.Column(db.String(64), nullable=True)
-    retroachievements_api_key = db.Column(db.String(512), nullable=True)
+    retroachievements_api_key = db.Column(db.Text, nullable=True)
     # Preferred release groups / size bands for *arr scoring
     quality_profiles = db.Column(JSONEncodedDict, nullable=True)
     # Game details section order/visibility
@@ -169,7 +205,7 @@ class GameCollection(db.Model):
     uuid = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid4()))
     name = db.Column(db.String(120), nullable=False)
     description = db.Column(db.Text, nullable=True)
-    owner_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=True)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     is_public = db.Column(db.Boolean, default=True, nullable=False)
     is_system = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -302,8 +338,8 @@ class GameRequest(db.Model):
             'title': self.title,
             'notes': self.notes,
             'status': self.status,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
+            'created_at': _utc_isoformat(self.created_at),
+            'resolved_at': _utc_isoformat(self.resolved_at),
             'resolved_by_user_id': self.resolved_by_user_id,
             'linked_game_uuid': self.linked_game_uuid,
         }
@@ -312,10 +348,17 @@ class SupportTicket(db.Model):
     """In-app teammate support reports → GitHub Issues (no external chat SaaS)."""
 
     __tablename__ = 'support_tickets'
+    __table_args__ = (db.UniqueConstraint('user_id', 'request_id', name='uq_support_ticket_user_request'),)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
     title = db.Column(db.String(200), nullable=False)
+    request_id = db.Column(db.String(36), nullable=True)
+    request_hash = db.Column(db.String(64), nullable=True)
+    github_attempt_id = db.Column(db.String(36), nullable=True)
+    github_repository = db.Column(db.String(140), nullable=True)
+    github_last_status = db.Column(db.Integer, nullable=True)
+    github_retry_after_at = db.Column(db.DateTime(timezone=True), nullable=True)
     body = db.Column(db.Text, nullable=False)
     area = db.Column(db.String(64), nullable=True)
     # What kind of report this is. "Report issue" collected both bug reports and
@@ -332,7 +375,7 @@ class SupportTicket(db.Model):
     status = db.Column(db.String(32), default='open', nullable=False)  # open|resolved|closed
     github_issue_number = db.Column(db.Integer, nullable=True)
     github_issue_url = db.Column(db.String(512), nullable=True)
-    github_sync = db.Column(db.String(32), default='pending', nullable=False)  # pending|synced|skipped|error
+    github_sync = db.Column(db.String(32), default='pending', nullable=False)  # pending|sending|synced|skipped|rejected|unknown|error|local_only
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     resolved_at = db.Column(db.DateTime, nullable=True)
     resolved_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
@@ -342,6 +385,11 @@ class SupportTicket(db.Model):
         logs = self.logs or ''
         payload = {
             'id': self.id,
+            'request_id': self.request_id,
+            'github_attempt_id': self.github_attempt_id,
+            'github_repository': self.github_repository,
+            'github_last_status': self.github_last_status,
+            'github_retry_after_at': _utc_isoformat(self.github_retry_after_at),
             'user_id': self.user_id,
             'kind': self.kind or 'issue',
             'title': self.title,
@@ -358,8 +406,8 @@ class SupportTicket(db.Model):
             'github_issue_number': self.github_issue_number,
             'github_issue_url': self.github_issue_url,
             'github_sync': self.github_sync,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
+            'created_at': _utc_isoformat(self.created_at),
+            'resolved_at': _utc_isoformat(self.resolved_at),
             'resolved_by_user_id': self.resolved_by_user_id,
         }
         if compact:
@@ -369,6 +417,30 @@ class SupportTicket(db.Model):
             payload['body_preview'] = payload['body']
             payload['logs'] = None
         return payload
+
+class SupportDeliveryAttempt(db.Model):
+    """Account-owned delivery metadata; report bodies and credentials stay out."""
+    __tablename__ = 'support_delivery_attempts'
+    __table_args__ = (db.Index('ix_support_delivery_attempts_user_created', 'user_id', 'created_at'),)
+    id = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('support_tickets.id', ondelete='CASCADE'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    repository = db.Column(db.String(140), nullable=False)
+    payload_sha256 = db.Column(db.String(64), nullable=False)
+    outcome = db.Column(db.String(16), nullable=False, default='sending')
+    http_status = db.Column(db.Integer, nullable=True)
+    retry_after_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    issue_number = db.Column(db.Integer, nullable=True)
+    issue_url = db.Column(db.String(512), nullable=True)
+
+
+class SupportDeliveryCheckBudget(db.Model):
+    __tablename__ = 'support_delivery_check_budgets'
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    window_started_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    count = db.Column(db.Integer, nullable=False, default=0)
+
 
 class AllowedFileType(db.Model):
     __tablename__ = 'allowed_file_types'
@@ -414,7 +486,10 @@ __all__ = [
     "FreeGameOffer",
     "GameRequest",
     "SupportTicket",
+    "SupportDeliveryAttempt",
+    "SupportDeliveryCheckBudget",
     "AllowedFileType",
     "IgnoredFileType",
     "SystemEvents",
+    "UserDeletionFileJob",
 ]

@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 from oneirodex.runtime_native.theme_fonts_read import (
     ThemeFontsData,
@@ -23,7 +25,6 @@ class FakeFonts:
         return {
             'fonts': [{'id': 'system-ui', 'label': 'System UI', 'installed': True}],
             'platform_hints': {'NES': 'press-start'},
-            'fonts_dir': '/fonts',
             'note': 'Operator fonts are supported.',
         }
 
@@ -35,7 +36,7 @@ def _client(*, role='user'):
     user = SimpleNamespace(
         id=95, user_id='font-user', role=role, is_active=True,
         state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -58,7 +59,7 @@ def _client(*, role='user'):
     app.include_router(router)
     client = TestClient(app)
     client.cookies.set('session', dump_session_cookie(
-        {'_user_id': '95:fingerprint', '_fresh': True}, flask_app.config['SECRET_KEY'],
+        {'_user_id': login_identity_for(95), '_fresh': True}, flask_app.config['SECRET_KEY'],
     ))
     return client, data
 
@@ -75,7 +76,7 @@ def test_theme_font_catalogue_preserves_member_payload_and_head_contract():
         {'id': 'system-ui', 'label': 'System UI', 'installed': True},
     ]
     assert payload['platform_hints'] == {'NES': 'press-start'}
-    assert payload['fonts_dir'] == '/fonts'
+    assert 'fonts_dir' not in payload
     assert head.status_code == 200 and head.content == b''
     assert head.headers['content-length'] == str(len(get.content))
     assert data.calls == 2
@@ -97,4 +98,5 @@ def test_theme_font_catalogue_data_uses_explicit_path_without_flask_context(monk
     assert payload['fonts'] == [
         {'id': 'system-ui', 'label': 'System UI', 'stack': 'sans-serif'},
     ]
-    assert payload['fonts_dir'] == str(tmp_path)
+    assert 'fonts_dir' not in payload
+    assert str(tmp_path) not in repr(payload)

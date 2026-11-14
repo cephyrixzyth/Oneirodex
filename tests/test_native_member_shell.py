@@ -13,6 +13,7 @@ from oneirodex.runtime_native import admin_pilot, db_session, member_shell
 
 class Member:
     id = 14
+    user_id = '11111111-1111-4111-8111-111111111111'
     name = 'Home <Player>'
     role = 'librarian'
     avatarpath = 'newstyle/avatars/controller.svg'
@@ -50,7 +51,10 @@ def _app_config(**overrides):
     )
 
 
-def _native_client(monkeypatch, *, config=None, query_result=None, user=None, native_session=None):
+def _native_client(
+    monkeypatch, *, config=None, query_result=None, user=None, native_session=None,
+    setup_redirect=None,
+):
     user = user or Member()
     session_data = {
         '_user_id': '14:fingerprint',
@@ -64,6 +68,14 @@ def _native_client(monkeypatch, *, config=None, query_result=None, user=None, na
     monkeypatch.setattr(member_shell, 'request_auth_context', lambda *_args, **_kwargs: SimpleNamespace(
         user=user, session_data=session_data, should_set_session_cookie=True, token=None,
     ))
+    from oneirodex.utils import setup as setup_utils
+
+    monkeypatch.setattr(
+        setup_utils, 'should_redirect_to_setup', lambda: setup_redirect is not None,
+    )
+    monkeypatch.setattr(
+        setup_utils, 'get_setup_redirect_url', lambda: setup_redirect,
+    )
 
     @contextmanager
     def database_scope(_app):
@@ -98,6 +110,7 @@ def test_member_shell_preserves_authenticated_spa_bootstrap_and_session(monkeypa
     assert response.headers['content-security-policy']
     assert response.cookies.get('session')
     assert 'data-user-id="14"' in response.text
+    assert 'data-account-id="11111111-1111-4111-8111-111111111111"' in response.text
     assert 'data-is-librarian="true"' in response.text
     assert 'data-show-tile-titles="false"' in response.text
     assert 'data-username="Home &lt;Player&gt;"' in response.text
@@ -109,6 +122,41 @@ def test_member_shell_preserves_authenticated_spa_bootstrap_and_session(monkeypa
     assert 'member-app/member-app.js' in response.text
     assert '_flashes' not in session_data
     assert 'image_refresh_game_uuid' not in session_data
+
+
+def test_member_bootstrap_keeps_account_identity_in_one_escaped_attribute(monkeypatch):
+    from html.parser import HTMLParser
+
+    class RootAttributes(HTMLParser):
+        attributes = None
+
+        def handle_starttag(self, tag, attrs):
+            values = dict(attrs)
+            if values.get('id') == 'member-app-root':
+                self.attributes = values
+
+    user = Member()
+    user.user_id = 'synthetic" data-untrusted="injected'
+    client, _session_data = _native_client(monkeypatch, user=user)
+    with client:
+        response = client.get('/systems')
+    assert response.status_code == 200
+    parser = RootAttributes()
+    parser.feed(response.text)
+    assert parser.attributes['data-account-id'] == 'synthetic" data-untrusted="injected'
+    assert parser.attributes['data-user-id'] == '14'
+    assert 'data-untrusted' not in parser.attributes
+
+
+def test_favorites_shell_uses_legacy_page_size_when_preference_is_missing(monkeypatch):
+    user = Member()
+    user.preferences = None
+    client, _session_data = _native_client(monkeypatch, user=user)
+
+    response = client.get('/favorites')
+
+    assert response.status_code == 200
+    assert 'data-per-page="50"' in response.text
 
 
 def test_member_shell_head_feature_redirect_and_route_selector(monkeypatch):
@@ -133,11 +181,40 @@ def test_member_shell_head_feature_redirect_and_route_selector(monkeypatch):
         '/discover', '/discover/row', '/discover/zone/popular',
         '/discover/hub/genre/role-playing', '/collections/collection-1',
         '/members/12', '/systems/completion', '/trailers', '/downloads',
-        '/playromtest',
+        '/playromtest', '/user/invites',
     ):
         assert member_shell.member_shell_route(path)
     assert member_shell.member_shell_route('/game_details/not-a-uuid')
     assert not member_shell.member_shell_route('/api/auth/runtime-bootstrap')
+
+
+def test_invites_route_renders_member_shell_without_duplicate_site_url_flash(monkeypatch):
+    client, session_data = _native_client(monkeypatch, user=SimpleNamespace(
+        id=14, name='Home <Player>', role='admin', avatarpath=None,
+        preferences=SimpleNamespace(theme='default', icon_pack='outline'),
+    ))
+    session_data['_flashes'] = []
+
+    response = client.get('/user/invites')
+
+    assert response.status_code == 200
+    assert 'data-user-id="14"' in response.text
+    assert 'Set a public Site URL' not in response.text
+    assert not session_data.get('_flashes')
+
+
+def test_member_shell_redirects_to_active_setup_step_while_setup_is_incomplete(monkeypatch):
+    client, _session_data = _native_client(
+        monkeypatch, setup_redirect='/setup/integrations',
+    )
+
+    response = client.get('/discover', follow_redirects=False)
+    head = client.head('/library', follow_redirects=False)
+
+    assert response.status_code == head.status_code == 302
+    assert response.headers['location'] == head.headers['location'] == '/setup/integrations'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.headers['content-security-policy']
 
 
 def test_game_details_shell_keeps_uuid_existence_and_library_acl(monkeypatch):
@@ -158,6 +235,23 @@ def test_game_details_shell_keeps_uuid_existence_and_library_acl(monkeypatch):
     monkeypatch.setattr(library_acl, 'user_can_access_game', lambda *_args: False)
     denied, _ = _native_client(monkeypatch, query_result=game)
     assert denied.get(f'/game_details/{valid_uuid}').status_code == 403
+
+
+def test_game_details_missing_resource_keeps_legacy_html_error_for_get_and_head(monkeypatch):
+    from werkzeug.exceptions import NotFound
+
+    valid_uuid = '7de1040c-42d9-4f42-904b-f469e68a9673'
+    client, _ = _native_client(monkeypatch, query_result=None)
+
+    get_response = client.get(f'/game_details/{valid_uuid}')
+    head_response = client.head(f'/game_details/{valid_uuid}')
+
+    assert get_response.status_code == head_response.status_code == 404
+    assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert head_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert get_response.content == NotFound().get_response().get_data()
+    assert head_response.content == b''
+    assert head_response.headers['content-length'] == str(len(get_response.content))
 
 
 def test_library_shell_preserves_filters_preferences_and_empty_state(monkeypatch):
@@ -213,6 +307,28 @@ def test_library_shell_creates_missing_preferences_in_native_session(monkeypatch
     assert session.added[0].user_id == user.id
     assert session.commits == 1
     assert user.preferences is session.added[0]
+    assert 'data-per-page="50"' in response.text
+
+
+def test_opening_preferences_does_not_create_missing_library_preferences(monkeypatch):
+    from oneirodex.utils.helpers import counts
+
+    monkeypatch.setattr(counts, 'get_library_count', lambda: 0)
+    monkeypatch.setattr(counts, 'get_games_count', lambda: 0)
+    monkeypatch.setattr(counts, 'get_first_run_state', lambda: {
+        'scan_has_run': False, 'unmatched_count': 0,
+    })
+    user = Member()
+    user.preferences = None
+    session = SimpleNamespace(added=[], commits=0)
+    client, _ = _native_client(monkeypatch, user=user, native_session=session)
+
+    response = client.get('/library?preferences=1')
+
+    assert response.status_code == 200
+    assert session.added == []
+    assert session.commits == 0
+    assert user.preferences is None
 
 
 def test_member_shell_dispatches_from_the_outer_asgi_app(monkeypatch):
@@ -224,6 +340,7 @@ def test_member_shell_dispatches_from_the_outer_asgi_app(monkeypatch):
     client, _session_data = _native_client(monkeypatch)
     runtime = asgi.LazyASGIApp()
     runtime._native_member_shell_app = client.app
+    runtime._flask_app = _app_config()
 
     async def initialized():
         return None
@@ -240,6 +357,30 @@ def test_member_shell_dispatches_from_the_outer_asgi_app(monkeypatch):
     response = asyncio.run(request())
     assert response.status_code == 200
     assert 'id="member-app-root"' in response.text
+
+    async def unsupported_member_page_method_requests():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime),
+            base_url='http://localhost',
+        ) as http:
+            return [
+                await http.post('/favorites'),
+                await http.post('/discover/zone/popular'),
+                await http.post('/game_details/7de1040c-42d9-4f42-904b-f469e68a9673'),
+            ]
+
+    unsupported_member_page_methods = asyncio.run(unsupported_member_page_method_requests())
+    expected_405_body = (
+        b'<!doctype html>\n<html lang=en>\n'
+        b'<title>405 Method Not Allowed</title>\n'
+        b'<h1>Method Not Allowed</h1>\n'
+        b'<p>The method is not allowed for the requested URL.</p>\n'
+    )
+    for unsupported_method in unsupported_member_page_methods:
+        assert unsupported_method.status_code == 405
+        assert sorted(method.strip() for method in unsupported_method.headers['allow'].split(',')) == ['GET', 'HEAD', 'OPTIONS']
+        assert unsupported_method.headers['content-type'] == 'text/html; charset=utf-8'
+        assert unsupported_method.content == expected_405_body
 
     async def downloads_request():
         async with httpx.AsyncClient(
@@ -262,3 +403,15 @@ def test_member_shell_dispatches_from_the_outer_asgi_app(monkeypatch):
     playromtest_response = asyncio.run(playromtest_request())
     assert playromtest_response.status_code == 200
     assert 'Use Play from a game details page for browser emulation.' in playromtest_response.text
+
+    async def options_request():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime),
+            base_url='http://localhost',
+        ) as http:
+            return await http.options('/discover/zone/popular')
+
+    options_response = asyncio.run(options_request())
+    assert options_response.status_code == 200
+    assert set(options_response.headers['allow'].split(', ')) == {'OPTIONS', 'HEAD', 'GET'}
+    assert options_response.content == b''

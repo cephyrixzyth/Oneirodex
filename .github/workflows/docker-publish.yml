@@ -27,12 +27,42 @@ jobs:
     needs: tests
     # Manual publishes are release operations and must build the default branch.
     # Version tags remain the normal immutable release path.
-    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     environment: DOCKERHUB
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check out source and tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Check release licence inventory
+        run: python3 scripts/check_release_license_files.py
+
+      - name: Validate release tag source commit
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+          SOURCE_SHA: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if ! git show-ref --verify --quiet "refs/tags/$RELEASE_REF"; then
+            git fetch --no-tags origin "refs/tags/$RELEASE_REF:refs/tags/$RELEASE_REF"
+          fi
+          tag_commit="$(git rev-parse "refs/tags/$RELEASE_REF^{commit}")"
+          if [[ "$tag_commit" != "$SOURCE_SHA" ]]; then
+            echo "::error::Release tag must point to the commit used to build this image."
+            exit 1
+          fi
+          git fetch --no-tags origin "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+          if ! git merge-base --is-ancestor "$tag_commit" "refs/remotes/origin/$DEFAULT_BRANCH"; then
+            echo "::error::Release source must be reachable from the default branch."
+            exit 1
+          fi
 
       - name: Validate release tag before publishing
         if: startsWith(github.ref, 'refs/tags/v')
@@ -90,11 +120,14 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
 
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - id: image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          sbom: true
+          provenance: mode=max
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -102,6 +135,14 @@ jobs:
             ONEIRODEX_BUILT_AT=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Record published image digest
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          echo "Published image digest: \`${IMAGE_DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source commit: \`${SOURCE_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stamp Docker Hub overview version
         if: steps.hub.outputs.enabled == 'true'

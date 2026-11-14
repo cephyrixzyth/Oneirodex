@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.product import RESET_CONFIRM_PHRASE
 from oneirodex.runtime_native.admin_system_reset import create_admin_system_reset_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
@@ -38,7 +40,7 @@ def _client(*, role='admin'):
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=7, user_id='admin', role=role, state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -46,7 +48,7 @@ def _client(*, role='admin'):
         login_message_category='message', localize_callback=None,
         session_protection='basic',
     )
-    session = {'_user_id': '7:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(7), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     reset = FakeReset()
     events = []
@@ -87,6 +89,32 @@ def test_reset_requires_valid_scopes_and_exact_confirmation_phrase():
     assert invalid_scope.status_code == 400
     assert invalid_scope.json()['detail']['valid_scopes'] == ['catalog', 'users']
     assert invalid_phrase.status_code == 422
+    assert reset.calls == [] and events == []
+
+
+def test_reset_rejects_excessive_or_non_string_scopes_without_echoing_input():
+    client, reset, events = _client()
+    too_many = client.post(
+        '/admin/api/system/reset', json={'scopes': ['unknown'] * 17},
+    )
+    invalid_type = client.post(
+        '/admin/api/system/reset', json={'scopes': [{'untrusted': 'object'}]},
+    )
+    assert too_many.status_code == 400
+    assert too_many.json()['error'] == 'Too many reset scopes were supplied.'
+    assert invalid_type.status_code == 400
+    assert invalid_type.json()['error'] == 'Reset scopes must be short strings.'
+    assert reset.calls == [] and events == []
+
+
+def test_reset_rejects_oversized_json_before_reset_service():
+    client, reset, events = _client()
+    response = client.post(
+        '/admin/api/system/reset', content=b' ' * (16 * 1024 + 1),
+        headers={'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
     assert reset.calls == [] and events == []
 
 

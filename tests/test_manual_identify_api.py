@@ -26,6 +26,9 @@ def _login(client, user):
 
 def test_options_requires_admin_and_returns_legacy_form_choices(client, db_session):
     _login(client, _admin(db_session))
+    library = Library(name=f'Manual Identify {uuid4().hex[:8]}', platform=LibraryPlatform.PCWIN)
+    db_session.add(library)
+    db_session.commit()
     response = client.get('/api/admin/manual-identify/options')
     body = response.get_json()
     assert response.status_code == 200, response.location
@@ -35,6 +38,9 @@ def test_options_requires_admin_and_returns_legacy_form_choices(client, db_sessi
         'genres', 'game_modes', 'themes', 'platforms', 'player_perspectives',
     }
     assert body['categories'] and body['statuses']
+    assert '.rom' in body['file_extensions']
+    assert '.nes' in body['file_extensions']
+    assert {'uuid': library.uuid, 'name': library.name, 'platform_name': 'PC Windows'} in body['libraries']
     assert response.headers['Cache-Control'] == 'no-store'
 
 
@@ -114,5 +120,45 @@ def test_save_creates_game_and_clears_matching_unmatched_row(client, app, db_ses
         'aggregated_rating': 90,
     })
     assert updated.status_code == 200
-    assert updated.get_json()['redirect_url'] == '/libraries'
+    assert updated.get_json()['redirect_url'] == '/library'
     assert db_session.execute(select(Game).filter_by(uuid=payload['game_uuid'])).scalar_one().name == 'Renamed Game'
+
+
+def test_save_creates_and_updates_game_for_a_readable_file_path(client, app, db_session, tmp_path, monkeypatch):
+    import oneirodex.routes_apis.manual_identify as route
+
+    user = _admin(db_session)
+    _login(client, user)
+    game_file = tmp_path / 'Standalone Game.rom'
+    game_file.write_bytes(b'fixture-rom')
+    app.config['DATA_FOLDER_GAMES'] = str(tmp_path)
+    library = Library(name=f'Identify File Library {uuid4().hex[:8]}', platform=LibraryPlatform.PCWIN)
+    db_session.add(library)
+    db_session.commit()
+    monkeypatch.setattr(route, 'check_existing_game_by_igdb_id', lambda _igdb_id: None)
+    monkeypatch.setattr(route, 'ensure_manual_identify_taxonomy', lambda *_args: None)
+    monkeypatch.setattr(route, 'log_system_event', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr('oneirodex.utils.background.run_in_background', lambda *_args, **_kwargs: None)
+
+    response = client.post('/api/admin/manual-identify', json={
+        'igdb_id': 7654322,
+        'name': 'Standalone Game',
+        'full_disk_path': str(game_file),
+        'library_uuid': library.uuid,
+    })
+    assert response.status_code == 201
+    payload = response.get_json()
+    game = db_session.execute(select(Game).filter_by(uuid=payload['game_uuid'])).scalar_one()
+    assert game.full_disk_path == str(game_file)
+
+    updated = client.put(f"/api/admin/manual-identify/{payload['game_uuid']}", json={
+        'igdb_id': 7654322,
+        'name': 'Renamed Standalone Game',
+        'full_disk_path': str(game_file),
+        'library_uuid': library.uuid,
+    })
+    assert updated.status_code == 200
+    refreshed = db_session.execute(select(Game).filter_by(uuid=payload['game_uuid'])).scalar_one()
+    assert refreshed.name == 'Renamed Standalone Game'
+    assert refreshed.full_disk_path == str(game_file)
+    assert refreshed.size == len(b'fixture-rom')

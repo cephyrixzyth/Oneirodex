@@ -1,5 +1,12 @@
 """JSON setup state transitions preserve first-run admin/session gates."""
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _keyring(reusable_secret_keyring):
+    return reusable_secret_keyring
+
 
 def test_first_run_setup_advances_with_existing_session_without_returning_secrets(client, db_session):
     state = client.get('/api/setup/state')
@@ -94,3 +101,110 @@ def test_setup_api_requires_admin_for_wizard_state(client, db_session):
     response = client.get('/api/setup/state')
     assert response.status_code == 401
     assert response.get_json()['error_code'] == 'unauthorized'
+
+
+def test_integrations_json_transition_respects_provider_configure_checkboxes(client, db_session):
+    from sqlalchemy import select
+
+    from oneirodex.models import GlobalSettings
+    from oneirodex.utils.secret_store import read_global_secret
+
+    created = client.post('/api/setup/step', json={
+        'step': 1, 'username': 'provider_admin', 'email': 'provider@example.com',
+        'password': 'correct horse battery', 'confirm_password': 'correct horse battery',
+    })
+    assert created.status_code == 200
+    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 3}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).status_code == 200
+
+    settings = db_session.execute(select(GlobalSettings)).scalars().first()
+    settings.steam_web_api_key = 'existing-steam-key'
+    settings.steamgriddb_api_key = 'existing-grid-key'
+    settings.giantbomb_api_key = 'existing-giantbomb-key'
+    db_session.commit()
+
+    response = client.post('/api/setup/step', json={
+        'step': 5,
+        'steam_web_api_key': 'unchecked-replacement',
+        'configure_steam_web_api_key': False,
+        'steamgriddb_api_key': 'selected-replacement',
+        'configure_steamgriddb_api_key': True,
+        'giantbomb_api_key': '',
+        'configure_giantbomb_api_key': True,
+    })
+
+    assert response.status_code == 200
+    assert response.get_json()['step'] == 6
+    db_session.refresh(settings)
+    assert read_global_secret(settings, 'steam_web_api_key') == 'existing-steam-key'
+    assert read_global_secret(settings, 'steamgriddb_api_key') == 'selected-replacement'
+    assert read_global_secret(settings, 'giantbomb_api_key') == 'existing-giantbomb-key'
+
+
+@pytest.mark.parametrize('key_field', (
+    'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
+    'mobygames_api_key', 'thegamesdb_api_key',
+))
+def test_integrations_reject_provider_key_larger_than_storage_column(client, db_session, key_field):
+    from sqlalchemy import select
+
+    from oneirodex.models import GlobalSettings
+
+    created = client.post('/api/setup/step', json={
+        'step': 1, 'username': 'provider_limit_admin',
+        'email': 'provider-limit@example.com',
+        'password': 'correct horse battery',
+        'confirm_password': 'correct horse battery',
+    })
+    assert created.status_code == 200
+    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 3}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).status_code == 200
+
+    response = client.post('/api/setup/step', json={
+        'step': 5,
+        f'configure_{key_field}': True,
+        key_field: 'k' * 256,
+    })
+
+    assert response.status_code == 422
+    assert response.get_json()['error_code'] == 'unprocessable'
+    assert '255 characters' in str(response.get_json()['detail'])
+    settings = db_session.execute(select(GlobalSettings)).scalars().first()
+    assert getattr(settings, key_field) is None
+    assert settings.setup_current_step == 5
+
+
+@pytest.mark.parametrize('key_field', (
+    'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
+    'mobygames_api_key', 'thegamesdb_api_key',
+))
+def test_integrations_accept_provider_key_at_storage_column_limit(client, db_session, key_field):
+    from sqlalchemy import select
+
+    from oneirodex.models import GlobalSettings
+    from oneirodex.utils.secret_store import read_global_secret
+
+    created = client.post('/api/setup/step', json={
+        'step': 1, 'username': 'provider_boundary_admin',
+        'email': 'provider-boundary@example.com',
+        'password': 'correct horse battery',
+        'confirm_password': 'correct horse battery',
+    })
+    assert created.status_code == 200
+    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 3}).status_code == 200
+    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).status_code == 200
+
+    key = 'k' * 255
+    response = client.post('/api/setup/step', json={
+        'step': 5,
+        f'configure_{key_field}': True,
+        key_field: key,
+    })
+
+    assert response.status_code == 200
+    settings = db_session.execute(select(GlobalSettings)).scalars().first()
+    assert read_global_secret(settings, key_field) == key
+    assert settings.setup_current_step == 6

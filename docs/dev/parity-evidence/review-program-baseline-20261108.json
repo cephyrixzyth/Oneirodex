@@ -1,0 +1,259 @@
+{
+  "record_id": "review-program-baseline-20261108",
+  "recorded_utc": "2026-11-08T22:15:38.598685+00:00",
+  "task_ids": [
+    "independent-review:P0-01",
+    "independent-review:P0-02"
+  ],
+  "task_status": "partial; first baseline repair slice verified",
+  "source_head": "daa5e00be6422a75869d0cf096ef51b69f71bfa1",
+  "uncommitted_changes": true,
+  "changed_source_sha256": {
+    "frontend/shared/src/safeExternalUrl.ts": "fa9f37f611b355b89ea72230d944ad55e3735d71cab1b3784a8ef8d2d0dd5677",
+    "frontend/member-app/src/utils/detailsMedia.ts": "a92caacb55236bd2838041df58a77e1b4d4fc664c968ee7cbe3683d234f85756",
+    "frontend/member-app/src/components/GameCard.test.tsx": "4e781f0d9406e2083360789e38e3af70ee2b904fe43bf4ec5f14edcf4774ac05",
+    "frontend/admin-app/src/pages/OpsPage.test.tsx": "dedc938b83c1cb75a639198732f93ebc6e708228b02ff340a320590cb3044144",
+    "tests/test_asgi_download_auth.py": "f943350efef34caf966b8f116e3aaff9c4085644e2a63461c8196249d22b97e1"
+  },
+  "environment": {
+    "host": "Windows",
+    "python": "3.12.16",
+    "node": "22.23.4",
+    "postgresql": "17.6",
+    "dependencies": "Reused local environments with committed requirement inputs; not a clean install."
+  },
+  "checks": [
+    {
+      "id": "db-guard",
+      "started_utc": "2026-11-08T21:58:10.621926+00:00",
+      "elapsed_seconds": 4.0,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": 27,
+      "collection_only": false,
+      "raw_log_sha256": "f4c796d6dc3f01ad49216dc5b1dcacf33afa5fd6201c12e433562446aee86040"
+    },
+    {
+      "id": "schema",
+      "started_utc": "2026-11-08T21:58:21.625796+00:00",
+      "elapsed_seconds": 5.04,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": null,
+      "collection_only": false,
+      "raw_log_sha256": "3fec536107d4d6033b0b35b2a14aba611437ce8d3bcfbee3dd755043fbf94cd8"
+    },
+    {
+      "id": "collect",
+      "started_utc": "2026-11-08T21:58:35.542769+00:00",
+      "elapsed_seconds": 34.67,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": null,
+      "collection_only": true,
+      "raw_log_sha256": "94059c8c46a1f1f5830748ddb9842a0baacaeae7ff3286da6ba8171def0421ae"
+    },
+    {
+      "id": "desktop-tests",
+      "started_utc": "2026-11-08T21:58:21.625778+00:00",
+      "elapsed_seconds": 7.39,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": 288,
+      "collection_only": false,
+      "raw_log_sha256": "3b7624dc153364e79d6a53ebbadb6704920520e047855c724e3d06cbb1669d7c"
+    },
+    {
+      "id": "desktop-full",
+      "started_utc": "2026-11-08T21:58:35.601401+00:00",
+      "elapsed_seconds": 5.71,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": null,
+      "collection_only": false,
+      "raw_log_sha256": "eeae63407283f735cee0aac2dffbd899095609e8a1432e54c3c6cd71f29c9160"
+    },
+    {
+      "id": "desktop-thin",
+      "started_utc": "2026-11-08T21:58:55.038637+00:00",
+      "elapsed_seconds": 4.91,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": null,
+      "collection_only": false,
+      "raw_log_sha256": "a55b99b6fa0ea87890c78e1788d5ee7d9f2704a62ea6e2d7d6254a1068344fd6"
+    },
+    {
+      "id": "native-tests",
+      "started_utc": "2026-11-08T21:58:35.623186+00:00",
+      "elapsed_seconds": 2.69,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": 98,
+      "collection_only": false,
+      "raw_log_sha256": "d105ab44ee510bf5a1381bebbe0a281b473d9c6e2157bea14e3a0b369a57d240"
+    },
+    {
+      "id": "member-tests",
+      "started_utc": "2026-11-08T22:07:37.201029+00:00",
+      "elapsed_seconds": 224.68,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": 1237,
+      "collection_only": false,
+      "raw_log_sha256": "4376af39c5e0f27e845cc56e6f15a130b2544868f76de3a3892708172a3b7c3a"
+    },
+    {
+      "id": "admin-tests",
+      "started_utc": "2026-11-08T22:07:37.100139+00:00",
+      "elapsed_seconds": 204.07,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": 714,
+      "collection_only": false,
+      "raw_log_sha256": "392e3583fd7e6a84da84477b57cbb8d1e9bb28b9638f103913263f3b5cf6142c"
+    },
+    {
+      "id": "shared-tests",
+      "started_utc": "2026-11-08T22:02:35.433701+00:00",
+      "elapsed_seconds": 40.63,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": 172,
+      "collection_only": false,
+      "raw_log_sha256": "f74df914d9a35b2f02af908b85064c6520ebe409040348cf22b2baaeac61627b"
+    },
+    {
+      "id": "api-tests",
+      "started_utc": "2026-11-08T22:03:16.397760+00:00",
+      "elapsed_seconds": 9.29,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": 110,
+      "collection_only": false,
+      "raw_log_sha256": "aa105d61c59dc5f8becfa23da33085a957e25d20c0b1c99b3f54f5cbb1e7cc67"
+    },
+    {
+      "id": "native-spas",
+      "started_utc": "2026-11-08T22:00:43.890691+00:00",
+      "elapsed_seconds": 84.5,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": null,
+      "collection_only": false,
+      "raw_log_sha256": "a17fbcb738204c9b4c39842c7c5a57ae4c3b5fdfbac9f5c0888205026c5c038e"
+    },
+    {
+      "id": "native-manifest",
+      "started_utc": "2026-11-08T22:12:22.345709+00:00",
+      "elapsed_seconds": 1.8,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": null,
+      "collection_only": false,
+      "raw_log_sha256": "75e9a423022fc46b801edeaabdc66d5309138b54797c00facc7c78d96f2eee64"
+    },
+    {
+      "id": "native-contract-tests",
+      "started_utc": "2026-11-08T22:12:24.455826+00:00",
+      "elapsed_seconds": 3.22,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": 12,
+      "collection_only": false,
+      "raw_log_sha256": "c0325435f895a788922abbe87773cd358c3d4a901ea9fc3c83ad9b52111d900d"
+    },
+    {
+      "id": "typecheck-member",
+      "started_utc": "2026-11-08T22:07:37.250446+00:00",
+      "elapsed_seconds": 15.19,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": null,
+      "collection_only": false,
+      "raw_log_sha256": "25d5ecc6b6b5009b339e3e88739e15ef55546604ce6cb8ee6a164c53b1a9fc20"
+    },
+    {
+      "id": "typecheck-admin",
+      "started_utc": "2026-11-08T22:07:52.836163+00:00",
+      "elapsed_seconds": 14.52,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": null,
+      "collection_only": false,
+      "raw_log_sha256": "fbc73478586c35c7d12b99dd852a71697c5d29c69cfeebfbee46872fd2018e50"
+    },
+    {
+      "id": "typecheck-shared",
+      "started_utc": "2026-11-08T22:08:07.704464+00:00",
+      "elapsed_seconds": 5.0,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": null,
+      "collection_only": false,
+      "raw_log_sha256": "999664fb7b034ea944324ba8e66e85a06e6e50f9ff8e0ec822e97c160d9d6bba"
+    },
+    {
+      "id": "auth-integration",
+      "started_utc": "2026-11-08T22:09:03.914300+00:00",
+      "elapsed_seconds": 15.14,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": 34,
+      "collection_only": false,
+      "raw_log_sha256": "e61f865f04fffccb3902f065930bffa07361591b6d78396ccc111b25ccfd941b"
+    },
+    {
+      "id": "lint",
+      "started_utc": "2026-11-08T22:02:35.306762+00:00",
+      "elapsed_seconds": 30.94,
+      "exit_code": 0,
+      "outcome": "passed",
+      "passed_cases": null,
+      "collection_only": false,
+      "raw_log_sha256": "22d1a5c66d67c68137632316e214e862797fd1831cd326219b3aeb0d71ce6864"
+    },
+    {
+      "id": "core-tests",
+      "started_utc": "2026-11-08T21:59:41.674617+00:00",
+      "elapsed_seconds": 900.03,
+      "exit_code": 124,
+      "outcome": "incomplete: elapsed-time bound",
+      "passed_cases": null,
+      "collection_only": false,
+      "raw_log_sha256": "08e7caef5cf6bcef2331add69d8ea126f8c36ca61725ff4be0c9ef23106c110d"
+    }
+  ],
+  "python_test_inventory": 8390,
+  "current_ci_named_deselections": 22,
+  "core_baseline_limits": [
+    "Initial run selected the current CI marker/deselection set and coverage flags, plus --maxfail=3 and a 900-second bound.",
+    "Initial collection preceded fixture repairs; that incomplete run is not post-repair full-core verification.",
+    "The two retired-cookie fixture failures were reproduced separately and repaired; the focused 34-test selection passed.",
+    "No full pytest, complete core coverage, clean install, packaged desktop, macOS/Linux/device, or release acceptance claimed."
+  ],
+  "repairs": [
+    "Explain intentional control-byte rejection to ESLint at the two expressions; keep validation and global lint policy unchanged.",
+    "Assert the preserved Preview-then-Download keyboard sequence.",
+    "Reset the Ops scenario URL so a previous full-log deep link cannot reopen its modal.",
+    "Use real persistent-session issuance/validation/revocation in the SQLite download-auth fixture; explicitly reject retired identities and disabled users."
+  ],
+  "preservation": {
+    "saved_human_responses_unchanged": true,
+    "root_dotenv_overwritten": false,
+    "production_changes": false,
+    "commit_or_remote_action": false
+  },
+  "cleanup": {
+    "review_database_container_preserved": true,
+    "disposable_test_databases_removed": true,
+    "remaining_owned_core_processes": 0,
+    "timed_out_descendants_terminated": 1
+  },
+  "review": "Author self-review; no delegation authorized for this task.",
+  "remaining": [
+    "Finish P0-01 core/full Python baseline and retain all failing/skipped/blocked outcomes.",
+    "Finish remaining P0-02 role/scope, filesystem fault and real old-worker browser fixtures.",
+    "Keep original review proposals and future acceptance statuses unchanged."
+  ]
+}
