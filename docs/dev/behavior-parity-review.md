@@ -10,7 +10,9 @@ Work in risk-ranked route-family batches. Reuse evidence only when exact image i
 
 ## Current evidence status - 2026-11-14
 
-[R2088](parity-evidence/windows-observer-prefix-controls-r2088.json) narrows the failed observer to its initial script prefix, before either subscription marker. Harmless local prefix controls do not reproduce the stall. A bounded CI-only prefix/environment/input comparison now runs before any package attempt; local checks pass 30 methods with that native method deliberately skipped. App initialization and UI/IPC acceptance remain open.
+[R2089](parity-evidence/windows-observer-module-path-r2089.json) records a native environment difference before any installer/app attempt: inherited prefix succeeds, while sanitized prefix stalls with either input mode. The candidate preserves only the configured PowerShell module path for the trusted observer, keeping CI credentials excluded and the app environment unchanged. Local verification passes 31 methods with the native comparison deliberately skipped; actual native confirmation and installed UI/IPC acceptance remain pending.
+
+[R2088](parity-evidence/windows-observer-prefix-controls-r2088.json) narrows the failed observer to its initial script prefix, before either subscription marker. Harmless local prefix controls do not reproduce the stall. A bounded CI-only prefix/environment/input comparison now runs before any package attempt; local checks pass 30 methods with that native method deliberately skipped. The actual failed comparison is retained in R2089; app initialization and UI/IPC acceptance remain open.
 
 [R2087](parity-evidence/windows-startup-observer-setup-r2087.json) records that the R2086 observer never became ready; no lifecycle trace was produced. The followup reports a whitelisted setup stage and blocks an observer spawn that leaked from a mocked unit fixture under real CI variables. All 30 local methods and source checks pass. Its actual script_started result is retained in R2088; installed UI/IPC acceptance remains pending.
 

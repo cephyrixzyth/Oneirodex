@@ -160,6 +160,13 @@ def runtime_environment(env):
 
 
 
+def observer_environment(env):
+    # Only the trusted PowerShell observer needs its configured module path.
+    selected = runtime_environment(env)
+    selected.update({key: value for key, value in env.items() if key.upper() == 'PSMODULEPATH'})
+    return selected
+
+
 def windows_environment_block(env):
     """Create an unambiguous, explicit Unicode block; never inherit CI secrets."""
     seen = set()
@@ -635,7 +642,7 @@ class _StartupProcessTrace:
             script = script.replace(key, "'" + str(value).replace("'", "''") + "'")
         self.process = subprocess.Popen(
             ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
-            env=runtime_environment(os.environ), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            env=observer_environment(os.environ), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
 
         def ready():

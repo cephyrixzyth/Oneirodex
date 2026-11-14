@@ -3,7 +3,7 @@
   "evidence_id": "R2088",
   "observed_utc": "2026-11-14T20:39:38.896272+00:00",
   "base_commit": "cc339540b5c9091901d269153745d53be50ce7c7",
-  "classification": "Native CI prefix comparison pending; stall not reproduced in harmless local controls.",
+  "classification": "Native inherited-environment prefix succeeds; sanitized prefix stalls with either inherited or closed input. Missing environment prerequisite confirmed, exact variable still unproven.",
   "preceding_native_result": {
     "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43637165722",
     "job_id": 132576386140,
@@ -157,8 +157,38 @@
     "scripts/ci/test_windows_packaged_probe.py": "04f639da3b1ef2cfe790caab5307f6387efe0ab07cf03fbb1e790b4e99e6808a"
   },
   "limits": "Local pure CLI collection/timer tests do not reproduce the CI stall and do not qualify the app. Native prefix controls do not subscribe to CIM or execute the package. Inherited environment is a diagnostic control for trusted fixed CLI code only, not an app/observer credential-forwarding change. Original package, security, timeouts, assertions and full goal remain unchanged.",
-  "runtime_retry": "pending explicit package-only workflow dispatch; its guard stage runs the new prefix control first",
+  "runtime_retry": "terminal guard-stage failure; no installer/app attempt",
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
-  "capture": "Skipped: native CI preflight test only."
+  "capture": "Skipped: native CI preflight test only.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43638729967",
+    "job_id": 132581242265,
+    "harness_source": "3a0a74ac1c0a8504fefb828caf08509caa85cd14",
+    "raw_log_sha256": "bccdc757fbce225d23a030a0fa7aac88b3fdf637c44929b7cf045c43ed820e0f",
+    "guard_methods": 31,
+    "controls_passed": 30,
+    "native_prefix_method_failed": 1,
+    "native_prefix_controls": [
+      {
+        "context": "sanitized",
+        "timed_out": true,
+        "stage": "script_started",
+        "ready": false
+      },
+      {
+        "context": "inherited",
+        "timed_out": false,
+        "stage": "script_started",
+        "ready": true
+      },
+      {
+        "context": "sanitized_closed_input",
+        "timed_out": true,
+        "stage": "script_started",
+        "ready": false
+      }
+    ],
+    "installer_or_app_executed": false
+  }
 }

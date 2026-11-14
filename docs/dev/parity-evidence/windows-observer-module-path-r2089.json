@@ -1,0 +1,57 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2089",
+  "observed_utc": "2026-11-14T20:44:57.216150+00:00",
+  "base_commit": "3a0a74ac1c0a8504fefb828caf08509caa85cd14",
+  "classification": "Single-variable PowerShell observer-environment candidate; native outcome pending.",
+  "preceding_native_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43638729967",
+    "job_id": 132581242265,
+    "harness_source": "3a0a74ac1c0a8504fefb828caf08509caa85cd14",
+    "raw_log_sha256": "bccdc757fbce225d23a030a0fa7aac88b3fdf637c44929b7cf045c43ed820e0f",
+    "guard_methods": 31,
+    "controls_passed": 30,
+    "native_prefix_method_failed": 1,
+    "native_prefix_controls": [
+      {
+        "context": "sanitized",
+        "timed_out": true,
+        "stage": "script_started",
+        "ready": false
+      },
+      {
+        "context": "inherited",
+        "timed_out": false,
+        "stage": "script_started",
+        "ready": true
+      },
+      {
+        "context": "sanitized_closed_input",
+        "timed_out": true,
+        "stage": "script_started",
+        "ready": false
+      }
+    ],
+    "installer_or_app_executed": false
+  },
+  "change": "Only the trusted CI PowerShell observer retains the parent configured PSModulePath in addition to the existing OS allowlist. CI authentication variables stay excluded; the app/installer environment remains unchanged. The native prefix test adds the selected observer environment as a required positive alongside the inherited control. Previously disproven sanitized contexts remain recorded diagnostic negatives, not required successful environments.",
+  "ruling": "R2088 established that the prior all-context prefix assertion included two failing comparison baselines. Require the actual selected observer context and healthy inherited control; preserve negative results for causal comparison. No app, token, listener, timeout, native IPC or acceptance assertion is weakened.",
+  "hypothesis": "Preserving configured PowerShell module discovery resolves the observer bootstrap stall. The specific variable is not confirmed until the same native prefix comparison passes with only this addition.",
+  "verification": {
+    "red": "Missing observer-environment function fails one new credential-isolation contract; native method deliberately skipped locally.",
+    "local_methods_loaded": 32,
+    "local_passed": 31,
+    "native_prefix_skipped": 1,
+    "python_compile": "passed",
+    "pyflakes": "passed"
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "ab569ba4ebb587493a37787e936ef144d03688b2937d39a26d3c59709aca3b51",
+    "scripts/ci/test_windows_packaged_probe.py": "d917a725a4bef6381ecca76868cf1b21450c7e4312b99f46f70e7c105da9c589"
+  },
+  "runtime_retry": "pending explicit package-only dispatch; guard-stage native comparison first",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "No module path or environment value is logged. The inherited diagnostic control runs trusted fixed prefix code only. Package remains pinned and unchanged; no local GUI/installer execution or new build. All original acceptance gates remain open.",
+  "capture": "Skipped: CI observer environment only."
+}

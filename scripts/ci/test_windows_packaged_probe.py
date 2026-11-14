@@ -322,7 +322,8 @@ class PackageGuardTests(unittest.TestCase):
         probe.require_ci_execution(probe.os.name, probe.os.environ)
         import json
         results = []
-        for label, env, child_input in [('sanitized', probe.runtime_environment(probe.os.environ), None),
+        for label, env, child_input in [('observer', probe.observer_environment(probe.os.environ), None),
+                                       ('sanitized', probe.runtime_environment(probe.os.environ), None),
                                        ('inherited', dict(probe.os.environ), None),
                                        ('sanitized_closed_input', probe.runtime_environment(probe.os.environ), subprocess.DEVNULL)]:
             with tempfile.TemporaryDirectory() as tmp:
@@ -354,8 +355,21 @@ class PackageGuardTests(unittest.TestCase):
                         child.terminate()
                     child.wait(timeout=10)
         print('Native CLI prefix controls: ' + json.dumps(results))
-        self.assertTrue(all(result['ready'] and not result['timed_out'] for result in results),
+        required = [result for result in results if result['context'] in ('observer', 'inherited')]
+        self.assertEqual(len(required), 2)
+        self.assertTrue(all(result['ready'] and not result['timed_out'] for result in required),
                         json.dumps(results))
+
+
+
+
+    def test_observer_environment_preserves_module_discovery_without_ci_credentials(self):
+        self.assertTrue(callable(getattr(probe, 'observer_environment', None)))
+        env = {'SystemRoot': 'system', 'PSModulePath': 'configured-modules',
+               'GH_TOKEN': 'PRIVATE', 'ACTIONS_RUNTIME_TOKEN': 'PRIVATE'}
+        self.assertEqual(probe.observer_environment(env),
+                         {'SystemRoot': 'system', 'PSModulePath': 'configured-modules'})
+        self.assertNotIn('PSModulePath', probe.runtime_environment(env))
 
 
 
