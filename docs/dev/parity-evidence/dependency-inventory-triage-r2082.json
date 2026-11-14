@@ -1,0 +1,519 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2082",
+  "observed_utc": "2026-11-14T19:16:27.085152+00:00",
+  "review_revision": "a7fb6c1fabc1a6f9cbef5a99c0555b474758ef26",
+  "inventory": {
+    "observed_utc": "2026-11-14T18:48:04.063897+00:00",
+    "sha256": "51a98eb4277d4718e8711970521819ad838667935e59a71e95280026d42e95d3",
+    "record_count": 113,
+    "input_order_preserved": true
+  },
+  "severity": {
+    "medium": 43,
+    "high": 56,
+    "critical": 13,
+    "low": 1
+  },
+  "records_reviewed": 113,
+  "verdict_counts": {
+    "not_actionable": 113
+  },
+  "version_comparisons": 113,
+  "groups": [
+    {
+      "ecosystem": "pip",
+      "package": "pillow",
+      "manifest": "requirements-dev.txt",
+      "review_versions": [
+        "13.0.0"
+      ],
+      "alert_numbers": [
+        132,
+        131,
+        128,
+        73,
+        72,
+        71,
+        70,
+        69,
+        68,
+        67,
+        66,
+        65,
+        64,
+        63,
+        62,
+        61,
+        59,
+        58,
+        57,
+        56,
+        55,
+        54,
+        53,
+        52,
+        51,
+        50,
+        49,
+        48,
+        47,
+        46,
+        45,
+        44,
+        43,
+        42,
+        41,
+        40,
+        39,
+        38,
+        37,
+        36,
+        35,
+        34,
+        33
+      ],
+      "affected_ranges_checked": [
+        {
+          "affected": "<= 12.3.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 5.4.0, <= 12.3.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 11.2.1, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 11.1.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 9.4.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": "< 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 11.0.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 5.1.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 9.1.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 2.0.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 11.3.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 8.1.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 4.1.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 5.4.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 7.2.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 9.2.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 12.0.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 10.0.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 2.6.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 2.3.0, <= 12.3.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 5.3.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 8.2.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        }
+      ],
+      "classification": "already_resolved_in_review_manifest"
+    },
+    {
+      "ecosystem": "pip",
+      "package": "pillow",
+      "manifest": "requirements.txt",
+      "review_versions": [
+        "13.0.0"
+      ],
+      "alert_numbers": [
+        130,
+        129,
+        126,
+        105,
+        104,
+        103,
+        102,
+        101,
+        100,
+        99,
+        98,
+        97,
+        96,
+        95,
+        94,
+        93,
+        91,
+        90,
+        89,
+        88,
+        87,
+        86,
+        85,
+        84,
+        83,
+        82,
+        81,
+        80,
+        79,
+        78,
+        77,
+        76,
+        75,
+        74,
+        24,
+        23,
+        22,
+        21,
+        20,
+        19,
+        18,
+        17,
+        16
+      ],
+      "affected_ranges_checked": [
+        {
+          "affected": "<= 12.3.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 5.4.0, <= 12.3.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 11.2.1, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 11.1.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 9.4.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": "< 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 11.0.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 5.1.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 9.1.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 2.0.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 11.3.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 8.1.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 4.1.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 5.4.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 7.2.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 9.2.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 12.0.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 10.0.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 2.6.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 2.3.0, <= 12.3.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 5.3.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        },
+        {
+          "affected": ">= 8.2.0, < 13.0.0",
+          "first_patched": "13.0.0"
+        }
+      ],
+      "classification": "already_resolved_in_review_manifest"
+    },
+    {
+      "ecosystem": "npm",
+      "package": "minimatch",
+      "manifest": "package-lock.json",
+      "review_versions": [
+        "11.0.1"
+      ],
+      "alert_numbers": [
+        127
+      ],
+      "affected_ranges_checked": [
+        {
+          "affected": ">= 7.0.0, < 11.0.1",
+          "first_patched": "11.0.1"
+        }
+      ],
+      "classification": "already_resolved_in_review_manifest"
+    },
+    {
+      "ecosystem": "pip",
+      "package": "authlib",
+      "manifest": "requirements.txt",
+      "review_versions": [
+        "1.9.1"
+      ],
+      "alert_numbers": [
+        125,
+        124,
+        123,
+        122,
+        121,
+        120,
+        119,
+        118
+      ],
+      "affected_ranges_checked": [
+        {
+          "affected": ">= 0.15, <= 1.9.0",
+          "first_patched": "1.9.1"
+        },
+        {
+          "affected": "< 1.9.1",
+          "first_patched": "1.9.1"
+        },
+        {
+          "affected": ">= 1.6.0, < 1.9.0",
+          "first_patched": "1.9.0"
+        },
+        {
+          "affected": "<= 1.8.0",
+          "first_patched": "1.9.0"
+        },
+        {
+          "affected": "< 1.9.0",
+          "first_patched": "1.9.0"
+        },
+        {
+          "affected": ">= 1.3.1, <= 1.8.0",
+          "first_patched": "1.9.0"
+        }
+      ],
+      "classification": "already_resolved_in_review_manifest"
+    },
+    {
+      "ecosystem": "pip",
+      "package": "authlib",
+      "manifest": "requirements-dev.txt",
+      "review_versions": [
+        "1.9.1"
+      ],
+      "alert_numbers": [
+        117,
+        116,
+        115,
+        114,
+        113,
+        112,
+        111,
+        110
+      ],
+      "affected_ranges_checked": [
+        {
+          "affected": ">= 0.15, <= 1.9.0",
+          "first_patched": "1.9.1"
+        },
+        {
+          "affected": "< 1.9.1",
+          "first_patched": "1.9.1"
+        },
+        {
+          "affected": ">= 1.6.0, < 1.9.0",
+          "first_patched": "1.9.0"
+        },
+        {
+          "affected": "<= 1.8.0",
+          "first_patched": "1.9.0"
+        },
+        {
+          "affected": "< 1.9.0",
+          "first_patched": "1.9.0"
+        },
+        {
+          "affected": ">= 1.3.1, <= 1.8.0",
+          "first_patched": "1.9.0"
+        }
+      ],
+      "classification": "already_resolved_in_review_manifest"
+    },
+    {
+      "ecosystem": "rust",
+      "package": "zip",
+      "manifest": "clients/desktop/src-tauri/Cargo.lock",
+      "review_versions": [
+        "9.1.2"
+      ],
+      "alert_numbers": [
+        108,
+        107,
+        106
+      ],
+      "affected_ranges_checked": [
+        {
+          "affected": ">= 0.6.0, < 9.0.0",
+          "first_patched": "9.0.0"
+        },
+        {
+          "affected": ">= 1.3.0, < 9.0.0",
+          "first_patched": "9.0.0"
+        },
+        {
+          "affected": "<= 9.0.4",
+          "first_patched": "9.0.5"
+        }
+      ],
+      "classification": "already_resolved_in_review_manifest"
+    },
+    {
+      "ecosystem": "npm",
+      "package": "@vitest/mocker",
+      "manifest": "package-lock.json",
+      "review_versions": [
+        "4.1.12"
+      ],
+      "alert_numbers": [
+        31,
+        30
+      ],
+      "affected_ranges_checked": [
+        {
+          "affected": ">= 2.1.0-beta.7, < 4.1.12",
+          "first_patched": "4.1.12"
+        },
+        {
+          "affected": ">= 4.1.11, < 4.1.12",
+          "first_patched": "4.1.12"
+        }
+      ],
+      "classification": "already_resolved_in_review_manifest"
+    },
+    {
+      "ecosystem": "npm",
+      "package": "vite",
+      "manifest": "package-lock.json",
+      "review_versions": [
+        "6.4.5"
+      ],
+      "alert_numbers": [
+        29,
+        28,
+        27,
+        26,
+        25
+      ],
+      "affected_ranges_checked": [
+        {
+          "affected": "<= 6.4.3",
+          "first_patched": "6.4.4"
+        }
+      ],
+      "classification": "already_resolved_in_review_manifest"
+    }
+  ],
+  "dependency_source_sha256_git_normalized": {
+    "requirements.txt": "161263b5def9771663b787f77757be241bb21deb39619df32dd6cf54421c42d4",
+    "requirements-dev.txt": "f92c058fbd7c7b2676c90126b95d3802f5618fec3a123ac7ee3079ddd0f52737",
+    "requirements.lock": "0df0dbf283d21f16c35703afc3ac90f928e43a4afcb098d9ab7f6f59fc34d1bd",
+    "package-lock.json": "4d8d3b5f62b5f7b6bd35b4de194e501cb5e9217a9fc17bd2cad6e77d70cb6b59",
+    "package.json": "a752a59a56c6f5681d8ceb4ac3479dc815f6b490b179bee2a7f724429ec820f2",
+    "clients/desktop/src-tauri/Cargo.lock": "cb11acd572e0a57a552a8206519e647e373aee28f847ec4ca23bbdcedb5218af",
+    "Dockerfile": "a9f441f5cefda8b57574fef37df01c4dab7455ec1c4f0719f7483d84b8653162",
+    ".github/workflows/desktop-build.yml": "668a6a35b6ee4aca95e4d5e1463131f0c22b74eae62635db47dac85ac56b9afd"
+  },
+  "private_triage_sha256": "a1d9bff936397e9d01fd257f05cf61de8bda5c2bb6ea504c9523b8bad815f246",
+  "parser_details": {
+    "pip": "packaging.specifiers.SpecifierSet",
+    "rust": "packaging parser used only for the supplied simple stable numeric comma-comparison ranges",
+    "npm": "npm SemVer6.3.1; includePrerelease true; checks all package-lock entries"
+  },
+  "scope": "Static affected-version assessment of every record in the retained113-alert snapshot; preserves one result per input in original order, including repeated advisories/manifests.",
+  "classification": "already_resolved_in_review_manifest",
+  "version_prerequisite_verdict": "not_actionable for all113 supplied affected-version claims on the review source",
+  "resolution_evidence": "Authlib1.9.1/Pillow13.0.0 match both requirements.txt and the hash-locked runtime requirements.lock; development requirements include runtime with no overriding pins. Dockerfile installs that lock with --require-hashes. All Rust zip lock entries resolve9.1.2. Every npm lock entry for the reported packages resolves Vite6.4.5, @vitest/mocker4.1.12 and minimatch11.0.1; root npm ci consumes that lock. All113 versions exclude their supplied affected ranges and meet first-patched versions.",
+  "policy_resolution": "No nonempty SECURITY.md returned for the affected manifest/lock scopes; package/build configuration supplies the version prerequisite evidence.",
+  "limits": "No dependency or product changes. No exploit reproduction, installed/deployed inventory, new pip/npm/RustSec scan, future-advisory guarantee or default-alert closure. The inventory was observed at the retained timestamp; this is not a fresh GitHub alert-count query. Original image/SBOM, merge/release/deployment and whole-program gates remain open.",
+  "next_action": "Resume Task2b6 non-elevated CI launch/observation for the exact existing Windows package, retaining R2081 pins and safety requirements. No new build or CI dispatch in R2082.",
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: static triage and documentation only."
+}
