@@ -139,7 +139,7 @@ struct ManagedLaunchIdentity {
 }
 
 impl ManagedProcessRegistry {
-    #[cfg(any(test, not(any(windows, target_os = "linux"))))]
+    #[cfg(any(test, not(any(windows, target_os = "linux", target_os = "macos"))))]
     fn track(&self, child: Child) -> Result<ManagedLaunchIdentity, String> {
         let pid = child.id();
         let launch_id = uuid::Uuid::new_v4().to_string();
@@ -1540,13 +1540,13 @@ async fn launch_game(
 
         ensure_path_under_root(&resolved, &installs)?;
 
-        #[cfg(not(any(windows, target_os = "linux")))]
+        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
         let working_dir = resolved
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| extract.clone());
 
-        #[cfg(any(windows, target_os = "linux"))]
+        #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
         let identity = {
             let launch = launch_supervisor::start(
                 &app_data_dir(&app)?.join("launches"),
@@ -1558,12 +1558,12 @@ async fn launch_game(
             .map_err(|error| error.to_string())?;
             processes.track_identity(launch.child, launch.pid, launch.launch_id)?
         };
-        #[cfg(not(any(windows, target_os = "linux")))]
+        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
         let child = std::process::Command::new(&resolved)
             .current_dir(working_dir)
             .spawn()
             .map_err(|error| error.to_string())?;
-        #[cfg(not(any(windows, target_os = "linux")))]
+        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
         let identity = {
             let _ = (game_uuid, profile_binding);
             processes.track(child)?
@@ -1591,20 +1591,24 @@ fn is_process_running(
     pid: u32,
     launch_id: Option<String>,
 ) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    let _ = &processes;
+    #[cfg(not(target_os = "macos"))]
     if process_running_in_registry(processes.inner(), pid, launch_id.as_deref())? {
         return Ok(true);
     }
-    #[cfg(any(windows, target_os = "linux"))]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     return launch_supervisor::status(
         &app_data_dir(&_app)?.join("launches"),
         pid,
         launch_id.as_deref(),
     )
     .map_err(|_| "Launch tracking is unavailable; running game state is unverified".to_string());
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     Ok(false)
 }
 
+#[cfg(any(test, not(target_os = "macos")))]
 fn process_running_in_registry(
     processes: &ManagedProcessRegistry,
     pid: u32,
@@ -1630,14 +1634,14 @@ fn list_launches(
     profile_binding: String,
 ) -> Result<launch_tracking::LaunchInventory, String> {
     let base = app_data_dir(&app)?.join("launches");
-    #[cfg(any(windows, target_os = "linux"))]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     let result = launch_tracking::list(
         &base,
         &profile_binding,
-        true,
+        launch_supervisor::recovery_supported(),
         launch_supervisor::live_record,
     );
-    #[cfg(not(any(windows, target_os = "linux")))]
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
     let result = launch_tracking::list(&base, &profile_binding, false, |_, _| Ok(None));
     result.map_err(|_| "Verified launch recovery is unavailable".to_string())
 }
@@ -2411,7 +2415,7 @@ fn reveal_path_in_os(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    #[cfg(any(windows, target_os = "linux"))]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     if let Some(code) = launch_supervisor::run_from_args() {
         std::process::exit(code);
     }

@@ -1,0 +1,67 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2074",
+  "observed_utc": "2026-11-14T01:58:58.785635+00:00",
+  "source_base": "369c1b3e1664b5d72d8f8ca9f85b224faf244697",
+  "implementation": "Mac GUI launchd jobs, boot/UUID/coalition receipts, inherited family counting, broker-aware handshake, kernel-backed status and existing profile recovery wiring. Windows/Linux continue using their existing family owners.",
+  "confirmed_followups": [
+    "Existing exclusive status-reader probes could mistake another reader for a guardian: focused RED before shared-lock fix.",
+    "New plist serializer normalized carriage returns instead of preserving the POSIX path: focused RED before numeric XML entity fix."
+  ],
+  "local_checks": {
+    "observed_utc": "2026-11-14T02:05:46.919104+00:00",
+    "passed": true,
+    "platform": "Windows",
+    "native_methods_passed": 122,
+    "ignored": 6,
+    "full_native_log_sha256": "e8198810beb9b9115194d9d9a3580d532037b1653ced03d25167c7bf84b740b6",
+    "clippy_log_sha256": "ee6bc7fd4f4dd609e87354228da0982307255b3d5428e450929f0f111ddad326",
+    "checks": [
+      {
+        "name": "rustfmt",
+        "exit_code": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "workflow",
+        "exit_code": 0,
+        "log_sha256": "f788081a635f6438c8c6d89799fa5f9920253df6c16bbe3e871a623e185ebe97"
+      }
+    ],
+    "source_sha256": {
+      "clients/desktop/src-tauri/src/lib.rs": "7860ed0ad08dc1fe74894ce014771e244f9e04db12a848746ac0ea94f070a7fd",
+      "clients/desktop/src-tauri/src/launch_supervisor.rs": "a2ac1de2a36961737da49f92b208fce00aa15626d1fbea87cd1b71d09fd1993e",
+      "clients/desktop/src-tauri/src/launch_supervisor/macos.rs": "55a8fdc1a07209fa0771ffd3898c673f38e1edfaef2f46d79248f0a5e622f6b5",
+      ".github/workflows/desktop-build.yml": "db033b42c2af4d393dff4b4a4781194b83d57d5ccb316566f4f0d8c3b64771ef"
+    },
+    "native_macos": "pending actual CI; Windows does not compile/execute Mac cfg",
+    "source_base": "369c1b3e1664b5d72d8f8ca9f85b224faf244697",
+    "family_recovery_acceptance": false,
+    "git_normalized_source_sha256": {
+      "clients/desktop/src-tauri/src/lib.rs": "7860ed0ad08dc1fe74894ce014771e244f9e04db12a848746ac0ea94f070a7fd",
+      "clients/desktop/src-tauri/src/launch_supervisor.rs": "a2ac1de2a36961737da49f92b208fce00aa15626d1fbea87cd1b71d09fd1993e",
+      "clients/desktop/src-tauri/src/launch_supervisor/macos.rs": "55a8fdc1a07209fa0771ffd3898c673f38e1edfaef2f46d79248f0a5e622f6b5",
+      ".github/workflows/desktop-build.yml": "47bf524e138adb2b50ae6a107fcc6eb213fb21f1826d2424323a77fa7d77f66d"
+    },
+    "unicode_baseline_preserved": true
+  },
+  "native_ci": {
+    "status": "pending normal exact-source main and desktop matrix"
+  },
+  "family_recovery_acceptance": false,
+  "archive": {
+    "filename": "macos-rust-integration-git-ready-r2074.zip",
+    "sha256": "a6c73ec585306e713b3d4cf5aadb9c96b9244a42fcef0e76e9ec8d29a6ed3050",
+    "payload_files": 15,
+    "manifest_in_addition": true,
+    "bytes": 85627,
+    "storage": "Private canonical DT-006 artifacts; raw host paths/private brief withheld from Git."
+  },
+  "primary_sources": [
+    "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_sysctl.c#L2735",
+    "https://github.com/apple-oss-distributions/dyld/blob/main/include/dlfcn.h#L91"
+  ],
+  "limits": "Windows test/Clippy and neutral contracts only at publication. Actual Mac Rust FFI, GUI-job helper tests, native Linux regression and installers remain pending. Real packaged/account/offline/revocation/other-platform and full original gates remain separate. No parity promotion, merge or deployment.",
+  "rework": "New contract scaffold had expected missing-symbol errors. One UTF-8 source edit helper used the Windows default codepage and stopped after the parent edit; resumed explicitly as UTF-8 and verified final source. A failed patch context was corrected without reverting others. A literal-wildcard docs lookup was corrected to scoped rg files. All failures retained as verification/workflow rework, not extra product vulnerabilities. Final diff additionally caught silent CP1252 mojibake in lib.rs from the same helper. Original Unicode was recovered while retaining intended Mac edits; all122 Windows tests, Clippy and fmt were repeated. Original candidate archive retained; selected Git-ready archive records normalized Git source hashes.",
+  "capture": "Skipped: native Rust/CI only; no member/admin UI change."
+}

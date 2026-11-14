@@ -1,8 +1,9 @@
 //! A separate process owns a launch family; closing the UI must not kill games.
-#![cfg(any(windows, target_os = "linux"))]
+#![cfg(any(windows, target_os = "linux", target_os = "macos"))]
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File, OpenOptions};
+use std::fs::File;
+use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -12,10 +13,14 @@ use std::time::{Duration, Instant};
 const MODE: &str = "--oneirodex-launch-supervisor";
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(any(target_os = "macos", test))]
+mod macos;
 #[cfg(windows)]
 mod windows;
 #[cfg(target_os = "linux")]
 use linux::Family;
+#[cfg(target_os = "macos")]
+use macos::Family;
 #[cfg(windows)]
 use windows::Family;
 
@@ -40,7 +45,7 @@ enum Phase {
     Failed,
 }
 
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 pub(super) struct Launch {
     pub child: Child,
     pub pid: u32,
@@ -88,36 +93,51 @@ pub(super) fn status(base: &Path, pid: u32, launch_id: Option<&str>) -> io::Resu
         Phase::Started { pid: recorded_pid } if recorded_pid != pid => return Ok(false),
         Phase::Started { .. } => {}
     }
-    let lease_path = root.join("alive.lock");
-    let metadata = fs::symlink_metadata(&lease_path)?;
+    #[cfg(target_os = "macos")]
+    return macos::status(&root, pid);
+    #[cfg(not(target_os = "macos"))]
+    if guardian_lease_held(&root)? {
+        Ok(true)
+    } else if matches!(read_phase(&root)?, Phase::Finished { .. } | Phase::Failed) {
+        Ok(false)
+    } else {
+        Err(io::Error::other(
+            "Launch tracking is unavailable; running game state is unverified",
+        ))
+    }
+}
+
+fn guardian_lease_held(root: &Path) -> io::Result<bool> {
+    let path = root.join("alive.lock");
+    let metadata = fs::symlink_metadata(&path)?;
     if !metadata.is_file() || metadata.file_type().is_symlink() {
         return Err(io::Error::other("Invalid launch lease"));
     }
-    let lease = File::open(lease_path)?;
-    match lease.try_lock_exclusive() {
+    let lease = File::open(path)?;
+    // All observers share compatible read locks. Only the exclusive guardian
+    // can block this probe; a different observer must never count as a guardian.
+    match FileExt::try_lock_shared(&lease) {
+        Ok(()) => Ok(false),
         Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => {
             Ok(true)
         }
         Err(error) => Err(error),
-        Ok(()) => {
-            // The guardian may have completed between our phase read and lock.
-            if matches!(read_phase(&root)?, Phase::Finished { .. } | Phase::Failed) {
-                Ok(false)
-            } else {
-                Err(io::Error::other(
-                    "Launch tracking is unavailable; running game state is unverified",
-                ))
-            }
-        }
     }
 }
 
-#[cfg(any(windows, target_os = "linux", test))]
+pub(super) fn recovery_supported() -> bool {
+    #[cfg(target_os = "macos")]
+    return macos::is_available();
+    #[cfg(not(target_os = "macos"))]
+    true
+}
+
+#[cfg(any(windows, target_os = "linux", target_os = "macos", test))]
 fn write_phase(root: &Path, phase: &Phase) -> io::Result<()> {
     super::install_recovery::atomic_write(&root.join("phase.json"), &serde_json::to_vec(phase)?)
 }
 
-#[cfg(any(windows, target_os = "linux", test))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos", test))]
 fn read_phase(root: &Path) -> io::Result<Phase> {
     let path = root.join("phase.json");
     let metadata = fs::symlink_metadata(&path)?;
@@ -157,7 +177,7 @@ fn validate_executable(request: &Request) -> io::Result<()> {
         .map_err(|_| io::Error::other("Executable is outside the install root"))
 }
 
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 fn supervise(root: &Path) -> io::Result<()> {
     let request = read_request(root)?;
     validate_executable(&request)?;
@@ -172,7 +192,11 @@ fn supervise(root: &Path) -> io::Result<()> {
     // guardian holds the lease; no stale file/PID implies a living launch.
     let lease = options.open(root.join("alive.lock"))?;
     lease.lock_exclusive()?;
-    let family = match Family::new() {
+    #[cfg(target_os = "macos")]
+    let family_result = Family::new(root);
+    #[cfg(not(target_os = "macos"))]
+    let family_result = Family::new();
+    let family = match family_result {
         Ok(family) => family,
         Err(error) => {
             let _ = write_phase(root, &Phase::Failed);
@@ -212,10 +236,12 @@ fn supervise(root: &Path) -> io::Result<()> {
     // A failed receipt write must not kill or abandon a possible running game.
     family.wait(&mut child)?;
     write_phase(root, &Phase::Finished { pid })?;
+    #[cfg(target_os = "macos")]
+    let _ = macos::cleanup(root);
     started
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 fn supervise(root: &Path) -> io::Result<()> {
     let _ = read_request(root)?;
     Err(io::Error::other(
@@ -223,7 +249,7 @@ fn supervise(root: &Path) -> io::Result<()> {
     ))
 }
 
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 pub(super) fn start(
     base: &Path,
     installs: &Path,
@@ -282,10 +308,14 @@ pub(super) fn run_from_args() -> Option<i32> {
     Some(if result.is_ok() { 0 } else { 1 })
 }
 
-#[cfg(any(windows, target_os = "linux"))]
-fn start_with_command(root: &Path, mut command: Command) -> io::Result<Launch> {
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+fn start_with_command(root: &Path, command: Command) -> io::Result<Launch> {
     let request = read_request(root)?;
     validate_executable(&request)?;
+    #[cfg(target_os = "macos")]
+    let mut command = macos::bootstrap_command(root, &command)?;
+    #[cfg(not(target_os = "macos"))]
+    let mut command = command;
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -295,7 +325,29 @@ fn start_with_command(root: &Path, mut command: Command) -> io::Result<Launch> {
         let deadline = Instant::now() + Duration::from_secs(8);
         loop {
             match read_phase(root) {
-                Ok(Phase::Prepared) => break,
+                Ok(Phase::Prepared) => {
+                    #[cfg(target_os = "macos")]
+                    {
+                        match child.try_wait()? {
+                            Some(exit) if exit.success() => macos::prepared(root)?,
+                            Some(_) => {
+                                return Err(io::Error::other(
+                                    "Supervisor preparation failed; no game was started",
+                                ))
+                            }
+                            None if Instant::now() < deadline => {
+                                thread::sleep(Duration::from_millis(10));
+                                continue;
+                            }
+                            None => {
+                                return Err(io::Error::other(
+                                    "Supervisor preparation failed; no game was started",
+                                ))
+                            }
+                        }
+                    }
+                    break;
+                }
                 Ok(_) => {
                     return Err(io::Error::other(
                         "Supervisor preparation failed; no game was started",
@@ -304,7 +356,11 @@ fn start_with_command(root: &Path, mut command: Command) -> io::Result<Launch> {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {}
                 Err(error) => return Err(error),
             }
-            if child.try_wait()?.is_some() || Instant::now() >= deadline {
+            #[cfg(target_os = "macos")]
+            let failed = child.try_wait()?.is_some_and(|exit| !exit.success());
+            #[cfg(not(target_os = "macos"))]
+            let failed = child.try_wait()?.is_some();
+            if failed || Instant::now() >= deadline {
                 return Err(io::Error::other(
                     "Supervisor preparation failed; no game was started",
                 ));
@@ -319,7 +375,11 @@ fn start_with_command(root: &Path, mut command: Command) -> io::Result<Launch> {
                 Ok(Phase::Failed) => return Err(io::Error::other("Game could not be started")),
                 _ => {}
             }
-            if child.try_wait()?.is_some() || Instant::now() >= deadline {
+            #[cfg(target_os = "macos")]
+            let failed = child.try_wait()?.is_some_and(|exit| !exit.success());
+            #[cfg(not(target_os = "macos"))]
+            let failed = child.try_wait()?.is_some();
+            if failed || Instant::now() >= deadline {
                 return Err(io::Error::other(
                     "Launch status is uncertain. Check the game before retrying.",
                 ));
@@ -334,6 +394,11 @@ fn start_with_command(root: &Path, mut command: Command) -> io::Result<Launch> {
             launch_id: request.launch_id,
         }),
         Err(error) => {
+            #[cfg(target_os = "macos")]
+            if !root.join("start").try_exists().unwrap_or(true) {
+                let _ = macos::cleanup(root);
+                let _ = write_phase(root, &Phase::Failed);
+            }
             // Never kill a possible game on an ambiguous reply or UI close.
             thread::spawn(move || {
                 let _ = child.wait();
@@ -421,7 +486,7 @@ mod tests {
             use std::os::windows::process::CommandExt;
             command.creation_flags(0x0900_0000); // Includes explicit breakaway.
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             use std::os::unix::process::CommandExt;
             // A new session escapes both the guardian's group and session.
@@ -484,6 +549,10 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::write(self.root.join("release-leaf"), b"release");
             let _ = self.launch.child.wait(); // Fixture leaf has its own 15-second deadman.
+            #[cfg(target_os = "macos")]
+            {
+                let _ = macos::cleanup(&self.root);
+            }
         }
     }
     fn launch_fixture(root: &Path) -> RunningFixture {
@@ -518,11 +587,31 @@ mod tests {
         .unwrap();
         (root, request)
     }
-    fn await_finished(launch: &mut Launch) {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while launch.child.try_wait().unwrap().is_none() {
-            assert!(Instant::now() < deadline);
-            thread::sleep(Duration::from_millis(10));
+    fn guardian_alive(launch: &mut RunningFixture) -> bool {
+        #[cfg(target_os = "macos")]
+        return macos::lease_held(&launch.root).unwrap();
+        #[cfg(not(target_os = "macos"))]
+        launch.child.try_wait().unwrap().is_none()
+    }
+    fn await_finished(launch: &mut RunningFixture) {
+        #[cfg(target_os = "macos")]
+        {
+            let deadline = Instant::now() + Duration::from_secs(8);
+            while !matches!(read_phase(&launch.root), Ok(Phase::Finished { .. }))
+                || macos::lease_held(&launch.root).unwrap()
+                || macos::fixture_loaded(&launch.root).unwrap()
+            {
+                assert!(Instant::now() < deadline);
+                thread::sleep(Duration::from_millis(10));
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while launch.child.try_wait().unwrap().is_none() {
+                assert!(Instant::now() < deadline);
+                thread::sleep(Duration::from_millis(10));
+            }
         }
         assert!(launch.child.wait().unwrap().success());
     }
@@ -551,7 +640,7 @@ mod tests {
         assert_ne!(a.launch_id, b.launch_id);
         fs::write(root_a.join("release-leaf"), b"release").unwrap();
         await_finished(&mut a);
-        assert!(b.child.try_wait().unwrap().is_none());
+        assert!(guardian_alive(&mut b));
         assert!(unrelated.try_wait().unwrap().is_none());
         fs::write(root_b.join("release-leaf"), b"release").unwrap();
         await_finished(&mut b);
@@ -601,6 +690,38 @@ mod tests {
         fs::write(root.join("phase.json"), b"{ broken").unwrap();
         assert!(status(container.path(), pid, Some(&request.launch_id)).is_err());
     }
+
+    #[test]
+    #[cfg(not(target_os = "macos"))]
+    fn another_status_reader_is_not_evidence_of_a_living_guardian() {
+        let container = tempfile::tempdir().unwrap();
+        let (root, request) = prepare_fixture(container.path());
+        fs::write(root.join("alive.lock"), b"").unwrap();
+        write_phase(&root, &Phase::Started { pid: 123 }).unwrap();
+        let other_reader = File::open(root.join("alive.lock")).unwrap();
+        FileExt::lock_shared(&other_reader).unwrap();
+        assert!(
+            status(container.path(), 123, Some(&request.launch_id)).is_err(),
+            "a compatible observer lock cannot impersonate the exclusive guardian"
+        );
+    }
+    #[test]
+    fn shared_observers_do_not_block_each_other_but_guardian_does() {
+        let container = tempfile::tempdir().unwrap();
+        let (root, _) = prepare_fixture(container.path());
+        fs::write(root.join("alive.lock"), b"").unwrap();
+        let reader = File::open(root.join("alive.lock")).unwrap();
+        FileExt::lock_shared(&reader).unwrap();
+        assert!(!guardian_lease_held(&root).unwrap());
+        drop(reader);
+        let guardian = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join("alive.lock"))
+            .unwrap();
+        FileExt::lock_exclusive(&guardian).unwrap();
+        assert!(guardian_lease_held(&root).unwrap());
+    }
     #[test]
     fn profile_bound_family_can_be_recovered_without_old_registry() {
         let container = tempfile::tempdir().unwrap();
@@ -627,7 +748,7 @@ mod tests {
         .unwrap();
         assert!(denied.launches.is_empty());
         super::super::launch_tracking::forget(container.path()).unwrap();
-        assert!(launch.child.try_wait().unwrap().is_none());
+        assert!(guardian_alive(&mut launch));
         assert!(status(container.path(), launch.pid, Some(&launch.launch_id)).unwrap());
         let forgotten =
             super::super::launch_tracking::list(container.path(), &profile, true, live_record)
@@ -640,7 +761,12 @@ mod tests {
     fn prepared_supervisor_requires_its_exact_start_authorization() {
         let container = tempfile::tempdir().unwrap();
         let (root, _) = prepare_fixture(container.path());
-        let mut child = fixture_command(&root, "guardian_fixture")
+        let command = fixture_command(&root, "guardian_fixture");
+        #[cfg(target_os = "macos")]
+        let mut command = macos::bootstrap_command(&root, &command).unwrap();
+        #[cfg(not(target_os = "macos"))]
+        let mut command = command;
+        let mut child = command
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -653,11 +779,26 @@ mod tests {
             thread::sleep(Duration::from_millis(100));
             assert_eq!(read_phase(&root).unwrap(), Phase::Prepared);
             assert!(!root.join("leaf-pid").exists());
+            #[cfg(not(target_os = "macos"))]
             assert!(child.try_wait().unwrap().is_none());
+            #[cfg(target_os = "macos")]
+            assert!(macos::lease_held(&root).unwrap());
         }));
         // This owned guardian has never been authorized to create a game.
+        #[cfg(not(target_os = "macos"))]
         child.kill().unwrap();
+        #[cfg(target_os = "macos")]
+        macos::kill_fixture(&root).unwrap();
         child.wait().unwrap();
+        #[cfg(target_os = "macos")]
+        {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while macos::lease_held(&root).unwrap() {
+                assert!(Instant::now() < deadline);
+                thread::sleep(Duration::from_millis(10));
+            }
+            macos::cleanup(&root).unwrap();
+        }
         let lease = File::open(root.join("alive.lock")).unwrap();
         lease
             .try_lock_exclusive()
@@ -667,7 +808,7 @@ mod tests {
         }
     }
     #[test]
-    #[cfg(any(windows, target_os = "linux"))]
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     fn fast_wrapper_retains_detached_child_until_it_exits() {
         let container = tempfile::tempdir().unwrap();
         let id = uuid::Uuid::new_v4().to_string();
@@ -708,7 +849,7 @@ mod tests {
         assert!(!status(container.path(), launch.pid + 1, Some(&launch.launch_id)).unwrap());
         assert!(!status(container.path(), launch.pid, None).unwrap());
         assert!(
-            launch.child.try_wait().unwrap().is_none(),
+            guardian_alive(&mut launch),
             "guardian must outlive the wrapper while its child lives"
         );
         assert!(matches!(read_phase(root).unwrap(), Phase::Started { .. }));
@@ -719,12 +860,7 @@ mod tests {
         );
         fs::write(root.join("release-leaf"), b"release").unwrap();
         await_file(&root.join("leaf-exited"));
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while launch.child.try_wait().unwrap().is_none() {
-            assert!(Instant::now() < deadline);
-            thread::sleep(Duration::from_millis(10));
-        }
-        assert!(launch.child.wait().unwrap().success());
+        await_finished(&mut launch);
         assert_eq!(
             read_phase(root).unwrap(),
             Phase::Finished { pid: launch.pid }
@@ -734,5 +870,56 @@ mod tests {
             .expect("completed launch no longer holds the live lease");
         drop(lease);
         assert!(!status(container.path(), launch.pid, Some(&launch.launch_id)).unwrap());
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn macos_guardian_loss_keeps_detached_game_and_exact_profile_recovery() {
+        let container = tempfile::tempdir().unwrap();
+        let (root, _) = prepare_fixture(container.path());
+        let profile = "a".repeat(64);
+        super::super::launch_tracking::bind(&root, Some(&profile)).unwrap();
+        let mut launch = launch_fixture(&root);
+        await_file(&root.join("leaf-ready"));
+        await_file(&root.join("wrapper-reaped"));
+        let receipt = fs::read(root.join("macos-family.json")).unwrap();
+        let mut wrong_boot: serde_json::Value = serde_json::from_slice(&receipt).unwrap();
+        wrong_boot["boot"] = serde_json::Value::String(uuid::Uuid::new_v4().to_string());
+        fs::write(
+            root.join("macos-family.json"),
+            serde_json::to_vec(&wrong_boot).unwrap(),
+        )
+        .unwrap();
+        assert!(status(container.path(), launch.pid, Some(&launch.launch_id)).is_err());
+        fs::write(root.join("macos-family.json"), &receipt).unwrap();
+        assert!(status(container.path(), launch.pid, Some(&launch.launch_id)).unwrap());
+        macos::kill_fixture(&root).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while macos::lease_held(&root).unwrap() {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(status(container.path(), launch.pid, Some(&launch.launch_id)).unwrap());
+        let recovered =
+            super::super::launch_tracking::list(container.path(), &profile, true, live_record)
+                .unwrap();
+        assert_eq!(recovered.launches.len(), 1);
+        assert_eq!(recovered.launches[0].launch_id, launch.launch_id);
+        let other = "b".repeat(64);
+        assert!(super::super::launch_tracking::list(
+            container.path(),
+            &other,
+            true,
+            |_, _| panic!("another profile reached the kernel")
+        )
+        .unwrap()
+        .launches
+        .is_empty());
+        fs::write(root.join("release-leaf"), b"release").unwrap();
+        while status(container.path(), launch.pid, Some(&launch.launch_id)).unwrap() {
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(10));
+        }
+        await_finished(&mut launch);
     }
 }
