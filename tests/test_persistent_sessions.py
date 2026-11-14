@@ -61,7 +61,8 @@ def test_all_device_revocation_is_user_scoped(app, db_session):
     other.set_password('another correct horse battery staple')
     db_session.add_all([owner, other])
     db_session.commit()
-    now = datetime(2026, 11, 7, tzinfo=timezone.utc)
+    # Session listing uses the current clock; keep these user-scope fixtures active.
+    now = datetime.now(timezone.utc)
 
     with app.app_context():
         own = [issue_login_identity(owner, now=now) for _ in range(2)]

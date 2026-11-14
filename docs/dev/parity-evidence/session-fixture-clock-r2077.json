@@ -1,0 +1,54 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2077",
+  "observed_utc": "2026-11-14T03:04:42.521354+00:00",
+  "source_base": "471efe12be1c1ec5925012f381385c9cdf664edd",
+  "test_sha256": "1f30e5f48300c6259cdeb0c04f528e94e154084a15fb5fae24002899c02d5e59",
+  "classification": "Confirmed date-aging test-fixture defect; locally corrected with unchanged production policy.",
+  "original_ci": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43544629215",
+    "job_id": 132292929766,
+    "passed": 7948,
+    "failed": 1,
+    "raw_log_sha256": "43a9bbac8d5816ab62bb9901caf310ab271a7fef61d8a4883d262af2157596cc"
+  },
+  "cause": "The user-scoping fixture issued at Nov7 2026 UTC, but session listing uses wall-clock time. On Nov14 its sessions correctly exceed the seven-day idle limit before the ownership assertion.",
+  "fix": "Only the user-scoping fixture now issues at datetime.now(timezone.utc), matching the listing clock. Existing age/idle boundary, secret hash, forgery, password change, account disable, remember-cookie logout and other-user assertions remain intact.",
+  "local_red": {
+    "failed": 1,
+    "passed": 3,
+    "exit_code": 1,
+    "seconds": 12.17,
+    "log_sha256": "1051e96a5ff71348b7e634a83ff4ae2b1710a3d9b5b37d4d46fef5a77910fa71"
+  },
+  "local_green": {
+    "passed": 4,
+    "exit_code": 0,
+    "seconds": 10.54,
+    "log_sha256": "61e88cdc2ff46a3b5a47b2ab479c4648ac528ca14c94b349edbeb362e34c3f5e"
+  },
+  "database_safety": {
+    "original_review_database": "preserved; original loopback bind still unavailable",
+    "temporary_peer": "Same existing local postgres17.6 image, independently owned tmpfs-only instance; loopback15432; no retained volumes mounted.",
+    "guarded_schema_upgrade": "passed before tests",
+    "dotenv_disabled": true,
+    "external_network_blocked": true,
+    "cleanup": "Exact ownership label/image/mount/bind checked, peer stopped and automatic removal verified."
+  },
+  "production_session_policy": {
+    "maximum_days": 30,
+    "inactivity_days": 7,
+    "changed": false
+  },
+  "full_main_ci": "Pending exact repaired source publication. Old e97 failure retained; local focused checks do not establish full CI or parity.",
+  "limits": "Four local PostgreSQL-backed methods only. Original route/platform/packaged/account/operator/final-review/release gates remain open.",
+  "capture": "Skipped: test-only correction and evidence documentation.",
+  "archive": {
+    "filename": "session-fixture-clock-r2077.zip",
+    "sha256": "9af072310d7f7cd1cfa939daa1952a71ce26f411c5d64e8b56892d0aeb7c6b00",
+    "payload_files": 10,
+    "manifest_in_addition": true,
+    "bytes": 9175,
+    "storage": "Private canonical CI-CORE artifacts; host paths and raw logs withheld from Git."
+  }
+}

@@ -2,6 +2,8 @@
 
 > **Doc status:** Active
 
+Session test fixtures that call `active_login_sessions` must issue against its current clock; fixed issuance dates eventually cross the seven-day inactivity limit. R2077 reproduces that fixture failure and passes all four session tests after correcting the issuance clock, preserving the separate explicit age/idle boundary assertions. A temporary owned, loopback-only, tmpfs database peer may be used when the existing review container cannot bind; verify its isolation and removal, and leave retained review volumes and host port settings unchanged.
+
 The R2038 fixture follow-up preserves client disposal for every real app, including exceptional teardown and retained tracebacks. Configuration-only database-guard probes inject `db=None` and have no clients to dispose. Those stubs skip resource cleanup; URL validation and real database teardown stay enforced. The previous full/CI baselines each exposed three stub-close failures; 29 focused guard/resource checks now pass. The subsequent fixed `01d3f463` baseline finished **8,513 passed, 101 skipped**, with source and owned-database absence verified; its CI core finished **7,876 passed, 14 skipped, 548 deselected**. Overall CI failed the separate member TypeScript step. [R2040 evidence](../dev/parity-evidence/bootstrap-full-types-r2040.json) preserves these exact-source results and the focused type correction. The full Python baseline does not qualify later migration edits.
 
 Native Windows, with Docker Desktop running.

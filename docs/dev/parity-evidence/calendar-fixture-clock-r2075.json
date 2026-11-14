@@ -71,6 +71,7 @@
     "raw_log_sha256": "43a9bbac8d5816ab62bb9901caf310ab271a7fef61d8a4883d262af2157596cc",
     "cause": "The fixture issues at Nov7 2026 UTC but active_login_sessions uses wall clock. On Nov14 the seven-day idle limit correctly excludes both sessions. No product expiry change is warranted.",
     "local_verification": "Blocked: existing review DB is stopped; restarting it fails binding loopback port5432 with Windows access-permissions error. No replacement DB, port change, or root env change performed.",
-    "next_step": "Anchor this user-scoping fixture issuance to its observation clock, preserve age/idle boundary assertions in the adjacent test, then run the entire persistent-session file against a validated isolated test DB. No test repair has been applied in this checkpoint."
+    "next_step": "Anchor this user-scoping fixture issuance to its observation clock, preserve age/idle boundary assertions in the adjacent test, then run the entire persistent-session file against a validated isolated test DB. No test repair has been applied in this checkpoint.",
+    "followup": "R2077 locally reproduces and corrects this fixture; four PostgreSQL-backed checks pass; exact-head full CI remains pending."
   }
 }
