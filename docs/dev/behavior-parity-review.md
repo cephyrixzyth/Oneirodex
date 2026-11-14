@@ -10,7 +10,9 @@ Work in risk-ranked route-family batches. Reuse evidence only when exact image i
 
 ## Current evidence status - 2026-11-14
 
-[R2086](parity-evidence/windows-startup-lifecycle-r2086.json) prepares a read-only process-start/stop observer for runtime children that may disappear before the final snapshot. All 29 local guard/fault methods and source checks pass. The R2085 native run remains a failure at the browser/CDP prerequisite: it completed one owned-window query without selected error text/codes, while the event query was empty or unavailable. Cleanup and uninstall passed. The cause remains unknown; actual lifecycle observations and all installed UI/IPC acceptance remain pending.
+[R2087](parity-evidence/windows-startup-observer-setup-r2087.json) records that the R2086 observer never became ready; no lifecycle trace was produced. The followup reports a whitelisted setup stage and blocks an observer spawn that leaked from a mocked unit fixture under real CI variables. All 30 local methods and source checks pass. Native setup observation and installed UI/IPC acceptance remain pending.
+
+[R2086](parity-evidence/windows-startup-lifecycle-r2086.json) prepares a read-only process-start/stop observer for runtime children that may disappear before the final snapshot. All 29 local guard/fault methods and source checks pass. The R2085 native run remains a failure at the browser/CDP prerequisite: it completed one owned-window query without selected error text/codes, while the event query was empty or unavailable. Cleanup and uninstall passed. The cause remains unknown; its actual observer-readiness failure is retained in R2087, and all installed UI/IPC acceptance remains pending.
 
 [R2085](parity-evidence/windows-native-initialization-r2085.json) prepares bounded failure diagnostics for the remaining native initialization prerequisite. Only owned-window static categories/numeric codes and explicitly weak name/time event associations are retained. All 24 local guard methods, compile/pyflakes and a read-only PowerShell AST parse pass. Its actual negative diagnostics are preserved in R2086; no installed UI/IPC or route acceptance changes.
 

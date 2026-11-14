@@ -159,6 +159,10 @@ class PackageGuardTests(unittest.TestCase):
         process = mock.Mock(pid=123, security={'elevated': False, 'integrity_rid': 8192})
         process.poll.return_value = None
         with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.dict(probe.os.environ, {'GITHUB_ACTIONS': 'true', 'RUNNER_OS': 'Windows',
+                 'GITHUB_REPOSITORY': 'cephyrixzyth/Oneirodex', 'GITHUB_RUN_ID': '123'}), \
+             mock.patch.object(probe.subprocess, 'Popen', side_effect=AssertionError('unit must not spawn observer')) as observer_start, \
+             mock.patch.object(probe, 'begin_startup_trace', return_value=None), \
              mock.patch.dict('sys.modules', {'playwright': mock.Mock(), 'playwright.sync_api': module}), \
              mock.patch.object(probe, 'start_standard_user', return_value=process), \
              mock.patch.object(probe, '_wait'), \
@@ -170,6 +174,7 @@ class PackageGuardTests(unittest.TestCase):
         process.terminate.assert_called_once_with()
         process.wait.assert_called_once_with(timeout=20)
         process.close.assert_called_once_with()
+        observer_start.assert_not_called()
 
 
 
@@ -288,6 +293,26 @@ class PackageGuardTests(unittest.TestCase):
                     self.assertNotIn('PRIVATE', repr(selected))
                     trace.process.terminate.assert_not_called()
                     self.assertIn(mock.call(timeout=10), trace.process.wait.call_args_list)
+
+
+
+    def test_startup_trace_timeout_reports_only_an_allowed_setup_stage(self):
+        for raw, stage in [('start_subscription', 'start_subscription'), ('PRIVATE-STAGE', 'unknown')]:
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as tmp:
+                observer = mock.Mock()
+                observer.poll.return_value = None
+                def fail_ready(*args):
+                    (Path(tmp) / 'trace-stage-owned').write_text(raw, encoding='utf-8')
+                    raise ProbeFailure('startup_trace_observer_not_ready')
+                from types import SimpleNamespace
+                with mock.patch.object(probe, 'require_ci_execution'), \
+                     mock.patch.object(probe.uuid, 'uuid4', return_value=SimpleNamespace(hex='owned')), \
+                     mock.patch.object(probe.subprocess, 'Popen', return_value=observer), \
+                     mock.patch.object(probe, '_wait', side_effect=fail_ready):
+                    with self.assertRaisesRegex(ProbeFailure, 'stage_' + stage):
+                        probe._StartupProcessTrace(Path(tmp))
+                observer.terminate.assert_called_once_with()
+
 
 
 class StandardUserLaunchTests(unittest.TestCase):

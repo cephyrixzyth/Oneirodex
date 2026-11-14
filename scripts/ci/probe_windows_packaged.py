@@ -571,15 +571,21 @@ def safe_startup_trace(record, root_pid, cleanup_time):
 
 _STARTUP_TRACE_SCRIPT = r'''
 $ErrorActionPreference='Stop'
-$ready=READY_FILE;$stop=STOP_FILE;$output=OUTPUT_FILE;$nonce=NONCE_VALUE
+$ready=READY_FILE;$stop=STOP_FILE;$output=OUTPUT_FILE;$nonce=NONCE_VALUE;$stage=STAGE_FILE
+function Write-TraceStage([string]$value){[IO.File]::WriteAllText($stage,$value)}
+Write-TraceStage 'script_started'
 $startId='oneirodex-start-'+$nonce;$stopId='oneirodex-stop-'+$nonce
 $records=New-Object System.Collections.Generic.List[object]
 $dropped=0;$status='complete';$watch=[Diagnostics.Stopwatch]::StartNew();$stopAt=$null
 try {
     $where=" WHERE ProcessName='oneirodex-desktop.exe' OR ProcessName='msedgewebview2.exe'"
+    Write-TraceStage 'start_subscription'
     Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStartTrace'+$where) -SourceIdentifier $startId -OperationTimeoutSec 10 | Out-Null
+    Write-TraceStage 'stop_subscription'
     Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStopTrace'+$where) -SourceIdentifier $stopId -OperationTimeoutSec 10 | Out-Null
+    Write-TraceStage 'ready_file'
     [IO.File]::WriteAllText($ready,$nonce)
+    Write-TraceStage 'collecting'
     while($watch.Elapsed.TotalSeconds -lt 180) {
         foreach($kind in @('start','stop')) {
             $sourceId=if($kind -eq 'start'){$startId}else{$stopId}
@@ -596,6 +602,7 @@ try {
             }
         }
         if((Test-Path -LiteralPath $stop) -and [IO.File]::ReadAllText($stop) -eq $nonce) {
+            Write-TraceStage 'draining'
             if($null -eq $stopAt){$stopAt=$watch.Elapsed.TotalMilliseconds}
             if($watch.Elapsed.TotalMilliseconds-$stopAt -ge 500){break}
         }
@@ -621,9 +628,10 @@ class _StartupProcessTrace:
         self.ready = work / ('trace-ready-' + self.nonce)
         self.stop = work / ('trace-stop-' + self.nonce)
         self.output = work / ('trace-output-' + self.nonce + '.json')
+        self.stage = work / ('trace-stage-' + self.nonce)
         script = _STARTUP_TRACE_SCRIPT
         for key, value in [('READY_FILE', self.ready), ('STOP_FILE', self.stop),
-                           ('OUTPUT_FILE', self.output), ('NONCE_VALUE', self.nonce)]:
+                           ('OUTPUT_FILE', self.output), ('NONCE_VALUE', self.nonce), ('STAGE_FILE', self.stage)]:
             script = script.replace(key, "'" + str(value).replace("'", "''") + "'")
         self.process = subprocess.Popen(
             ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
@@ -636,8 +644,16 @@ class _StartupProcessTrace:
             return self.ready.is_file() and self.ready.read_text(encoding='utf-8-sig') == self.nonce
         try:
             _wait(ready, 20, 'startup_trace_observer_not_ready')
-        except BaseException:
+        except BaseException as error:
             self._stop_process()
+            if isinstance(error, ProbeFailure):
+                stage = 'unknown'
+                if self.stage.is_file() and self.stage.stat().st_size <= 100:
+                    value = self.stage.read_text(encoding='utf-8-sig')
+                    if value in ('script_started', 'start_subscription', 'stop_subscription',
+                                 'ready_file', 'collecting', 'draining'):
+                        stage = value
+                raise ProbeFailure(str(error) + '_stage_' + stage) from None
             raise
 
     def _stop_process(self):
