@@ -279,6 +279,36 @@ class StandardUserLaunchTests(unittest.TestCase):
                 probe.start_standard_user(Path('never-executed.exe'), {})
             native.assert_not_called()
 
+
+    def test_native_launch_uses_same_user_restricted_token_api_without_handle_inheritance(self):
+        import ctypes as c
+        class Startup(c.Structure):
+            _fields_ = [('cb', c.c_uint32)]
+        class Info(c.Structure):
+            _fields_ = [('hProcess', c.c_void_p), ('hThread', c.c_void_p),
+                        ('dwProcessId', c.c_uint32)]
+        api = object.__new__(probe._WindowsStandardAPI)
+        api.c, api.STARTUPINFO, api.PROCESSINFO = c, Startup, Info
+        with tempfile.TemporaryDirectory() as tmp:
+            executable = Path(tmp) / 'owned fixture with spaces.exe'
+            executable.write_bytes(b'not executable; binding contract only')
+            def create(*args):
+                self.assertEqual(len(args), 11, 'Use CreateProcessAsUserW for our restricted primary token')
+                self.assertEqual(args[0], 'owned_token')
+                self.assertEqual(args[1], str(executable.resolve()))
+                self.assertTrue(args[2].value.startswith('"'))
+                self.assertEqual(args[3:6], (None, None, False))
+                self.assertEqual(args[6], 0x404)
+                self.assertEqual(''.join(args[7]).rstrip('\0'), 'APPDATA=owned-profile')
+                self.assertEqual(args[8], str(executable.resolve().parent))
+                info = args[10]._obj
+                info.hProcess, info.hThread, info.dwProcessId = 111, 112, 113
+                return True
+            api._create = create
+            self.assertEqual(api.create_suspended('owned_token', executable, {'APPDATA': 'owned-profile'}),
+                             (111, 112, 113))
+
+
     def test_unicode_environment_has_a_double_terminator_and_no_ambiguous_keys(self):
         block = probe.windows_environment_block({'z': 'last', 'APPDATA': 'owned-é'})
         self.assertEqual(block, 'APPDATA=owned-é\0z=last\0\0')

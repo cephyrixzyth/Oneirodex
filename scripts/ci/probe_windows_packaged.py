@@ -217,8 +217,8 @@ class _WindowsStandardAPI:
                               [H, c.c_int, P, D, c.POINTER(D)])
         self._sid_count = bind(self.advapi, 'GetSidSubAuthorityCount', c.POINTER(w.BYTE), [P])
         self._sid_part = bind(self.advapi, 'GetSidSubAuthority', c.POINTER(D), [P, D])
-        self._create = bind(self.advapi, 'CreateProcessWithTokenW', w.BOOL,
-                            [H, D, w.LPCWSTR, w.LPWSTR, D, P, w.LPCWSTR,
+        self._create = bind(self.advapi, 'CreateProcessAsUserW', w.BOOL,
+                            [H, w.LPCWSTR, w.LPWSTR, P, P, w.BOOL, D, P, w.LPCWSTR,
                              c.POINTER(STARTUPINFO), c.POINTER(PROCESSINFO)])
         self._resume = bind(self.kernel, 'ResumeThread', D, [H])
         self._wait = bind(self.kernel, 'WaitForSingleObject', D, [H, D])
@@ -268,8 +268,8 @@ class _WindowsStandardAPI:
         # Inherit the runner's interactive desktop; do not edit desktop ACLs.
         block = c.create_unicode_buffer(windows_environment_block(env))
         # CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT, no inherited environment.
-        self.check(self._create(token, 0, str(executable), c.create_unicode_buffer(command),
-                                0x404, block, str(executable.parent), c.byref(startup),
+        self.check(self._create(token, str(executable), c.create_unicode_buffer(command),
+                                None, None, False, 0x404, block, str(executable.parent), c.byref(startup),
                                 c.byref(info)), 'create_standard_child')
         return info.hProcess, info.hThread, int(info.dwProcessId)
 
@@ -446,6 +446,7 @@ def _cold_start(executable, work, round_number, progress):
     )
     env['WEBVIEW2_USER_DATA_FOLDER'] = str(work / 'webview-profile')
     progress['phase'] = f'cold_{round_number}_standard_user_launch'
+    progress['suspended_creation_api'] = 'CreateProcessAsUserW'
     process = start_standard_user(executable, env)
     progress.setdefault('app_launch_security', []).append({'round': round_number, **process.security})
     browser = None

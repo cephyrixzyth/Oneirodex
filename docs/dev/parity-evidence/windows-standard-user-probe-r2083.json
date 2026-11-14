@@ -3,7 +3,7 @@
   "evidence_id": "R2083",
   "observed_utc": "2026-11-14T19:29:04.071833+00:00",
   "base_commit": "39fdbb81eaf3ed950e56b5cfa3d27a1b3927763c",
-  "classification": "CI-only non-elevated package observer candidate; native Windows execution pending.",
+  "classification": "CreateProcessWithTokenW observer attempt failed before app execution; owned uninstall succeeded. R2084 tests the documented same-user restricted-primary-token API.",
   "product_package": {
     "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
     "source_run": 43553756754,
@@ -41,9 +41,37 @@
     "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithtokenw",
     "https://learn.microsoft.com/en-us/windows/win32/secauthz/mandatory-integrity-control"
   ],
-  "runtime_retry": "pending explicit package-only CI dispatch after publication",
+  "runtime_retry": "terminal failure at suspended child creation: Windows error5; app code never resumed",
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
   "limits": "Mocks verify launch sequencing/failure cleanup; actual Win32 ABI, token reduction, WebView2/CDP, genuine UI/IPC/reopen and marker retention still require native CI. Same-account restricted CI process does not qualify ordinary non-admin installation or a separately provisioned user. No product, package, registry, desktop ACL, browser security or workflow changes. Account/offline/game/restart/platform/route/operator/final-review/release gates remain open.",
-  "capture": "Skipped: no local GUI or product UI change."
+  "capture": "Skipped: no local GUI or product UI change.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43632448301",
+    "job_id": 132561849482,
+    "harness_source": "f6234cf94be515db217e5e595e5078cfa5bb9c16",
+    "raw_log_sha256": "539a0e79e8f1596d1f703c81808a8c91b8fc35375971b6faefa9689431f8b5fe",
+    "receipt": {
+      "observed_utc": "2026-11-14T19:30:54.337039+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_standard_user_launch",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "owned_application_uninstalled": true,
+      "code": "create_standard_child_winerror_5"
+    }
+  }
 }
