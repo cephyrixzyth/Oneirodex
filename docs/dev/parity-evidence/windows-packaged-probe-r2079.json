@@ -1,0 +1,82 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2079",
+  "observed_utc": "2026-11-14T18:18:02.353539+00:00",
+  "classification": "Packaged-runtime verification harness ready locally; actual Windows CI execution pending.",
+  "artifact_inspection": {
+    "observed_utc": "2026-11-14T17:52:38.002203+00:00",
+    "status": "inspected",
+    "installed_runtime_acceptance": false,
+    "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+    "source_run": 43553756754,
+    "artifact_id": 14097212804,
+    "artifact_name": "oneirodex-full-windows",
+    "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+    "archive_bytes": 2354380,
+    "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+    "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+    "source_and_digest_verified": true,
+    "installer_executed": false
+  },
+  "local_preflight": {
+    "observed_utc": "2026-11-14T18:18:02.353539+00:00",
+    "guard_methods_passed": 12,
+    "workflow_truth_cases": 12,
+    "powershell_steps_parsed_without_execution": 2,
+    "python_compile": "passed",
+    "local_ui_execution": "refused with exit2 before any workspace/installer activity",
+    "source_sha256": {
+      ".github/workflows/desktop-build.yml": "84c4017789516be2dd03986c0bba140173c3252eb3979227ea5c8626a73c1143",
+      "scripts/ci/probe_windows_packaged.py": "cdedc44fbcfaa787a5556e26579b24d4f4aeb3518f95a1d7c0b4c76174e85579",
+      "scripts/ci/test_windows_packaged_probe.py": "b82b80396ecd0075ed87b63fb0a3ca9fd25ccb56d9474778a159eef2247b910f"
+    },
+    "git_normalized_source_sha256": {
+      ".github/workflows/desktop-build.yml": "668a6a35b6ee4aca95e4d5e1463131f0c22b74eae62635db47dac85ac56b9afd",
+      "scripts/ci/probe_windows_packaged.py": "cdedc44fbcfaa787a5556e26579b24d4f4aeb3518f95a1d7c0b4c76174e85579",
+      "scripts/ci/test_windows_packaged_probe.py": "b82b80396ecd0075ed87b63fb0a3ca9fd25ccb56d9474778a159eef2247b910f"
+    },
+    "selection": "Git-ready revision adds bounded actual WebView-target readiness before the exact-one-window assertion; original readiness archive/preflight retained."
+  },
+  "local_execution_refusal": {
+    "status": "unsupported",
+    "exit_code": 2,
+    "workspace_created": false,
+    "installer_executed": false
+  },
+  "planned_ci_controls": [
+    "Verify successful review-branch source run, artifact identity, actual ZIP digest and sole NSIS payload",
+    "Silent install into a fresh owned runner prefix; record installed executable hash",
+    "Attach to the installed binary actual WebView2 at an owned loopback listener",
+    "Visible bundled full-companion form; genuine load_config/get_app_subdir success and parent-directory denial",
+    "Cold reopen with the same profile and an owned physical retention marker",
+    "Stop owned app process handles and CDP listeners, uninstall, verify marker retention, remove only the probe marker"
+  ],
+  "ci_security": "Explicit manual mode in the existing registered workflow. No build, coalition experiment or release in package-only mode. Job has contents/read and actions/read. Installer/app receive an OS-environment allowlist without CI credentials. No registry or browser-security changes. Only sanitized receipt JSON is uploaded.",
+  "installed_runtime_acceptance": false,
+  "runtime_outcome": "not yet observed",
+  "limits": "Cold-start/IPC/physical-marker foundation only. Real ASGI/PostgreSQL identity, tokens/revocation/denial/offline/installed-game Play, exact-launch recovery, update/rollback, actual saves and other original gates remain required. No local GUI/installer execution occurred.",
+  "rework": "Initial missing-module and environment-function scaffolds were expected REDs. ZIP backslash normalization admitted a nested filename in the first candidate; strict flat installer selection fixed two assertions. A simulated runtime failure reproduced an inspected-versus-failed receipt bug before correction. The first PowerShell parse observer passed its file argument incorrectly; the corrected observer parsed both steps without executing them. Optional npm metadata lookup was stopped; existing Python Playwright1.65.1 is pinned instead. These are harness/workflow rework, not additional product vulnerabilities.",
+  "primary_sources": [
+    "https://playwright.dev/docs/webview2",
+    "https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/debug-visual-studio-code",
+    "https://v2.tauri.app/develop/tests/webdriver/"
+  ],
+  "capture": "Skipped: installed GUI probe has not run; no synthetic screenshot is presented as acceptance.",
+  "archive": {
+    "filename": "windows-packaged-probe-git-ready-r2079.zip",
+    "sha256": "7ce3bf9a0bd446a92ffa96b8a827e212e2d9ad7a5f7961cc92d2c2361df5c5a1",
+    "payload_files": 14,
+    "manifest_in_addition": true,
+    "bytes": 2377837,
+    "storage": "Private canonical Windows package artifacts; original candidate retained."
+  },
+  "previous_candidate_archive": {
+    "filename": "windows-packaged-probe-readiness-r2079.zip",
+    "sha256": "99941f4c6ea4c5e06845417d9043ad634be555b84d82161c2589e1b008f00517",
+    "payload_files": 12,
+    "manifest_in_addition": true,
+    "bytes": 2376837,
+    "storage": "Private canonical Windows package artifacts; actual installer ZIP retained, no operator content."
+  },
+  "evidence_selection": "Selected Git-ready archive pins current code and window-readiness wait. Original readiness snapshot and actual artifact ZIP retained; installed outcome remains pending. The archive keeps the earlier public-report snapshot alongside the explicitly selected Git-ready preflight; current source hashes identify the selected implementation."
+}

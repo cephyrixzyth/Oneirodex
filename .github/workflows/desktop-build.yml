@@ -22,6 +22,23 @@ on:
         required: false
         type: boolean
         default: false
+      packaged_smoke_only:
+        description: 'Only install and inspect a pinned Windows companion artifact on a disposable runner; no build or release.'
+        required: false
+        type: boolean
+        default: false
+      package_source_run:
+        description: 'Successful review-branch push run that produced the Windows package.'
+        required: false
+        default: ''
+      package_source_commit:
+        description: 'Exact 40-character source commit expected for that artifact.'
+        required: false
+        default: ''
+      package_archive_digest:
+        description: 'Pinned 64-character SHA256 of the uploaded Windows artifact ZIP.'
+        required: false
+        default: ''
       probe_domain:
         description: 'Own-user domain for an explicit probe-only experiment; GUI mode also records a user-domain control.'
         required: false
@@ -77,6 +94,7 @@ permissions:
 
 jobs:
   macos-coalition-probe:
+    if: github.event_name != 'workflow_dispatch' || inputs.packaged_smoke_only != true
     name: macOS coalition API/isolation probe
     runs-on: macos-latest
     timeout-minutes: 5
@@ -124,7 +142,7 @@ jobs:
           if-no-files-found: error
 
   rust-checks:
-    if: github.event_name != 'workflow_dispatch' || inputs.probe_only != true
+    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true)
     name: rust · fmt + clippy + test
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -195,7 +213,7 @@ jobs:
         run: bash ../../../scripts/ci/test-real-game-archive-enospc.sh
 
   build:
-    if: github.event_name != 'workflow_dispatch' || inputs.probe_only != true
+    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true)
     name: ${{ matrix.label }} · ${{ matrix.flavor }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -337,6 +355,72 @@ jobs:
           # not to mean while bundle.active was false.
           if-no-files-found: error
 
+  windows-packaged-probe:
+    name: Windows installed companion cold-start probe
+    if: github.event_name == 'workflow_dispatch' && inputs.packaged_smoke_only == true
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Validate package-only selection
+        shell: pwsh
+        env:
+          PROBE_ONLY: ${{ inputs.probe_only }}
+          PROBE_FAMILY: ${{ inputs.probe_family }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          PACKAGE_SOURCE_RUN: ${{ inputs.package_source_run }}
+          PACKAGE_SOURCE_COMMIT: ${{ inputs.package_source_commit }}
+          PACKAGE_ARCHIVE_DIGEST: ${{ inputs.package_archive_digest }}
+        run: |
+          if ($env:PROBE_ONLY -eq 'true' -or $env:PROBE_FAMILY -eq 'true' -or $env:RELEASE_TAG) {
+            throw 'Package-only mode cannot select a coalition experiment or release.'
+          }
+          if ($env:PACKAGE_SOURCE_RUN -notmatch '^[1-9][0-9]*$' -or
+              $env:PACKAGE_SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$' -or
+              $env:PACKAGE_ARCHIVE_DIGEST -notmatch '^[a-f0-9]{64}$') {
+            throw 'Package-only mode requires explicit source and archive identity pins.'
+          }
+
+      - name: Probe guard contracts
+        run: python -m unittest discover -s scripts/ci -p test_windows_packaged_probe.py
+
+      - name: Install pinned CDP client
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: python -m pip install --disable-pip-version-check playwright==1.65.1
+
+      - name: Install and exercise the actual companion package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_SOURCE_RUN: ${{ inputs.package_source_run }}
+          PACKAGE_SOURCE_COMMIT: ${{ inputs.package_source_commit }}
+          PACKAGE_ARCHIVE_DIGEST: ${{ inputs.package_archive_digest }}
+        run: |
+          $probeRoot = Join-Path $env:RUNNER_TEMP 'oneirodex-packaged-probe'
+          $probeOutput = & python scripts/ci/probe_windows_packaged.py --execute --source-run $env:PACKAGE_SOURCE_RUN --expected-source $env:PACKAGE_SOURCE_COMMIT --artifact-digest $env:PACKAGE_ARCHIVE_DIGEST --work-dir $probeRoot
+          $probeExit = $LASTEXITCODE
+          $probeOutput | Out-File -LiteralPath (Join-Path $env:RUNNER_TEMP 'oneirodex-packaged-probe-status.json') -Encoding utf8
+          Write-Output $probeOutput
+          exit $probeExit
+
+      - name: Retain sanitized package probe receipt
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: oneirodex-windows-packaged-probe
+          path: ${{ runner.temp }}/oneirodex-packaged-probe-status.json
+          if-no-files-found: warn
+          retention-days: 7
+
   release:
     name: attach installers to the GitHub release
     needs: build
@@ -345,6 +429,7 @@ jobs:
     # the tag version and commit match the source that produced these files.
     if: >-
       (github.event_name != 'workflow_dispatch' || inputs.probe_only != true) &&
+      (github.event_name != 'workflow_dispatch' || inputs.packaged_smoke_only != true) &&
       ((github.event_name == 'push' && github.ref_type == 'tag') ||
        (github.event_name == 'workflow_dispatch' && inputs.release_tag != '' &&
          (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||

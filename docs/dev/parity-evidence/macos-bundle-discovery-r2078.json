@@ -65,8 +65,58 @@
     "Accept ordinary nested metadata without a nested key overriding the main",
     "Reject duplicate main keys, odd dictionaries and extra roots"
   ],
-  "native_ci": "Pending candidate publication and its own normal exact-source native/main workflows; parent68bdf03e main/core and desktop are now terminal success.",
-  "limits": "Windows native component tests and an exact-source portable discovery probe only. Mac-only search and Unix filesystem contracts have not run locally. No Mach-O payload, installed GUI launch, app activation, auth/offline/revocation/reopen, update/rollback or whole-program acceptance is established.",
+  "native_ci": {
+    "tested_source": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+    "matrices": {
+      "push_run": 43553756754,
+      "PR_run": 43553761439,
+      "each_active_jobs_passed": 8,
+      "each_installer_builds_passed": 6,
+      "release_attachment": "skipped"
+    },
+    "platform_methods": [
+      {
+        "platform": "macos",
+        "checkout": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+        "passed": 143,
+        "ignored": 6,
+        "raw_log_sha256": "74d2cd519b16eb9a64a0851f086c957e04ac68b7981a8eabadee944d5cf71f74"
+      },
+      {
+        "platform": "linux",
+        "checkout": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+        "passed": 140,
+        "ignored": 6,
+        "raw_log_sha256": "77ff50f40e47953970f254ae348fd281c6b5581d9a898e68fcc627059a887fb5"
+      },
+      {
+        "platform": "windows",
+        "checkout": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+        "passed": 134,
+        "ignored": 6,
+        "raw_log_sha256": "d7f128d3ed184bc66c23fccbfd77a1c498909900d834e879dc8110fa938d3ffa"
+      }
+    ],
+    "mac_new_controls_observed": 16,
+    "linux_new_controls_observed": 14,
+    "main": {
+      "head": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "checkout": "020e2e683451c6891b0c56ea7627d7c5ba70124a",
+      "checkout_tree": "023dbf1481c1d6467758c5531a8a2a0efd90371c",
+      "head_tree": "023dbf1481c1d6467758c5531a8a2a0efd90371c",
+      "whole_tree_identity_verified": true,
+      "main_run": 43553761328,
+      "main_jobs_passed": 9,
+      "core_job": 132321851424,
+      "core_passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1519.32,
+      "raw_log_sha256": "01e062f9b03cc8573dbe997ba2b79c40518d0b1d49439fd908e3353a2f2b875c"
+    }
+  },
+  "limits": "Native Windows/Linux/Mac component checks and exact-tree main CI pass at6a03c6fb. The new Mac search and Unix filesystem cases passed natively. No Mach-O payload inside a shipped game bundle, installed GUI/account/offline/revocation/reopen, update/rollback, physical hardware or whole-program acceptance is established. R2079 begins actual Windows installed cold-start verification; its runtime outcome is pending.",
   "rework": "Initial probe compared lexical slash spellings; corrected to Path comparisons and retained candidate. Expected missing-symbol scaffold RED is not a product finding. A candidate promotion-prefix regression had focused RED then GREEN. New metadata budget tests had two RED assertions then GREEN. An unused import was corrected. A preflight regex flag error was corrected without rerunning successful suites. Overlapping local runs are not additional unique outcomes.",
   "primary_sources": [
     "https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/BundleTypes/BundleTypes.html",

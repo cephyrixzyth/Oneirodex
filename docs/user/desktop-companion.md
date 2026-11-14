@@ -64,7 +64,7 @@ The Friends webview is least-privilege (browse only); install/launch ACLs stay o
 
 ## Lifecycle
 
-The review source improves macOS executable discovery for extracted application bundles. When the search reaches an `.app`, it reads the declared main executable instead of searching its helpers. Missing, invalid, oversized or excessively complex bundle metadata is not guessed around. Native Mac and real packaged-game qualification are still pending for this discovery change.
+The review source improves macOS executable discovery for extracted application bundles. When the search reaches an `.app`, it reads the declared main executable instead of searching its helpers. Missing, invalid, oversized or excessively complex bundle metadata is not guessed around. Native Mac discovery checks pass; real packaged-game launch and account journeys remain separate requirements.
 
 Cancel, Escape or clicking outside the version picker stops the download without
 changing the game's local state. Choosing the base version explicitly still
@@ -204,3 +204,7 @@ On a domain PC where Windows Folder Redirection puts Documents, AppData or the p
 | Game download fails with a redirect error | The configured server redirected an authenticated archive request | Serve the archive from the configured server URL without redirects. Redirects are rejected before archive bytes are read or written |
 
 Related: [downloads.md](downloads.md) · [browser-play.md](browser-play.md) · [translation-patches.md](translation-patches.md) · [social-and-voice.md](social-and-voice.md) — Friends window section mirrors web dock / pop-out / Big Picture **Y**
+
+## Packaged-runtime verification
+
+The review workflow has an explicit Windows package-only test mode. It verifies a pinned installer on a disposable CI runner and checks the installed companion’s startup, native bridge, reopen and an owned file’s retention. Its current harness has local safety checks; actual CI results are still pending. It does not run an installer on the operator computer or establish standalone-server, connected-account, real-game or other-platform acceptance.
