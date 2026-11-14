@@ -22,6 +22,7 @@ import zipfile
 
 REPOSITORY = 'cephyrixzyth/Oneirodex'
 MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
+TRACE_OPERATION_TIMEOUT_SECONDS = 10
 
 
 class ProbeFailure(RuntimeError):
@@ -587,9 +588,9 @@ $dropped=0;$status='complete';$watch=[Diagnostics.Stopwatch]::StartNew();$stopAt
 try {
     $where=" WHERE ProcessName='oneirodex-desktop.exe' OR ProcessName='msedgewebview2.exe'"
     Write-TraceStage 'start_subscription'
-    Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStartTrace'+$where) -SourceIdentifier $startId -OperationTimeoutSec 10 | Out-Null
+    Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStartTrace'+$where) -SourceIdentifier $startId -OperationTimeoutSec TRACE_OPERATION_TIMEOUT | Out-Null
     Write-TraceStage 'stop_subscription'
-    Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStopTrace'+$where) -SourceIdentifier $stopId -OperationTimeoutSec 10 | Out-Null
+    Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStopTrace'+$where) -SourceIdentifier $stopId -OperationTimeoutSec TRACE_OPERATION_TIMEOUT | Out-Null
     Write-TraceStage 'ready_file'
     [IO.File]::WriteAllText($ready,$nonce)
     Write-TraceStage 'collecting'
@@ -636,7 +637,7 @@ class _StartupProcessTrace:
         self.stop = work / ('trace-stop-' + self.nonce)
         self.output = work / ('trace-output-' + self.nonce + '.json')
         self.stage = work / ('trace-stage-' + self.nonce)
-        script = _STARTUP_TRACE_SCRIPT
+        script = _STARTUP_TRACE_SCRIPT.replace('TRACE_OPERATION_TIMEOUT', str(TRACE_OPERATION_TIMEOUT_SECONDS))
         for key, value in [('READY_FILE', self.ready), ('STOP_FILE', self.stop),
                            ('OUTPUT_FILE', self.output), ('NONCE_VALUE', self.nonce), ('STAGE_FILE', self.stage)]:
             script = script.replace(key, "'" + str(value).replace("'", "''") + "'")

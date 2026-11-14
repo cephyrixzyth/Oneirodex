@@ -1,0 +1,33 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2090",
+  "observed_utc": "2026-11-14T23:49:26.191184+00:00",
+  "base_commit": "e48242bac87f8c60a5580ff5382a0b3b6a192ac3",
+  "classification": "Native stop-provider control pending; no exit-delivery fix claimed.",
+  "preceding_verified_result": "R2089 native module-path-only comparison succeeds and observer captures root plus four runtime starts, but no stop events. App/CDP failure remains; root/listener cleanup and uninstall pass.",
+  "control": "Disposable Windows CI only: subscribe to current start/stop policy, default-timeout name-filtered stop events, and default-timeout unfiltered stop events. Launch original Python and a byte-identical renamed copy with a long fixture basename, each sleeping12seconds then exiting37/38. Hold process handles through event collection, compare only those PIDs and classify exact/prefix/empty event names. Report bounded counts/codes only. Dispose/terminate owned fixtures before subscription cleanup.",
+  "purpose": "Distinguish a short server operation timeout from stop-name filtering behavior, including long names. No assumption that either is the cause until native results. The existing ten-second setting is only factored into a shared constant, preserving current behavior for the first native comparison.",
+  "verification": {
+    "local_methods_loaded": 33,
+    "local_passed": 31,
+    "native_methods_skipped": 2,
+    "python_compile": "passed",
+    "pyflakes": "passed",
+    "control_powershell_ast": "parsed as data; no local subscriptions or native fixture launch"
+  },
+  "cleanup_bounds": "The CI-only control has a90second outer CLI bound covering setup checks, two bounded child waits, retained-handle fixture cleanup and subscription disposal. Original app/CDP60second and observer-ready20second bounds are unchanged.",
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "61ec01aa3bc6257c8060d90ca3c3cdd7eae0390cc3fe466740f69726d85b93a2",
+    "scripts/ci/test_windows_packaged_probe.py": "05636098f0ea2fc9676c7b97ae03dd3688e0c9938fa2135fcd72861919708d4f"
+  },
+  "primary_sources": [
+    "https://learn.microsoft.com/en-us/powershell/module/cimcmdlets/register-cimindicationevent?view=powershell-5.1",
+    "https://learn.microsoft.com/en-us/previous-versions/windows/desktop/krnlprov/win32-processstoptrace"
+  ],
+  "ruling": "Retire the two already-proven, deliberately failing OS-only prefix comparison cases from repeated CI execution; R2088/R2089 raw evidence remains. Keep selected-observer and inherited-positive native checks plus all credential/isolation regression contracts. No app acceptance assertion changes.",
+  "runtime_retry": "pending explicit existing package-only CI dispatch; native provider control runs before any installer/app attempt",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Synthetic CLI provider controls are not packaged-game, native app, account, offline, restart or parity acceptance. No product/package rebuild, registry/ACL/security changes or local GUI/installer execution. All original goal gates remain open.",
+  "capture": "Skipped: native CI metadata control only."
+}

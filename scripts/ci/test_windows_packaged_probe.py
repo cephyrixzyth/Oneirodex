@@ -323,9 +323,7 @@ class PackageGuardTests(unittest.TestCase):
         import json
         results = []
         for label, env, child_input in [('observer', probe.observer_environment(probe.os.environ), None),
-                                       ('sanitized', probe.runtime_environment(probe.os.environ), None),
-                                       ('inherited', dict(probe.os.environ), None),
-                                       ('sanitized_closed_input', probe.runtime_environment(probe.os.environ), subprocess.DEVNULL)]:
+                                       ('inherited', dict(probe.os.environ), None)]:
             with tempfile.TemporaryDirectory() as tmp:
                 work = Path(tmp)
                 nonce = 'owned-prefix-control'
@@ -370,6 +368,134 @@ class PackageGuardTests(unittest.TestCase):
         self.assertEqual(probe.observer_environment(env),
                          {'SystemRoot': 'system', 'PSModulePath': 'configured-modules'})
         self.assertNotIn('PSModulePath', probe.runtime_environment(env))
+
+
+
+
+    @unittest.skipUnless(probe.os.name == 'nt' and probe.os.environ.get('GITHUB_ACTIONS') == 'true',
+                         'Explicit disposable Windows CI provider control')
+    def test_native_stop_delivery_for_short_and_long_lived_fixture_names(self):
+        probe.require_ci_execution(probe.os.name, probe.os.environ)
+        import json
+        import shutil
+        import sys
+        script = r'''
+$ErrorActionPreference='Stop'
+$nonce=NONCE_VALUE;$original=ORIGINAL_EXE;$longFixture=LONG_EXE;$pythonHome=PYTHON_HOME
+$currentTimeout=CURRENT_TIMEOUT
+$where=" WHERE ProcessName='SHORT_NAME' OR ProcessName='oneirodex-trace-control.exe'"
+$specs=@(
+    @{label='start_current';class='Win32_ProcessStartTrace';suffix=$where;timeout=$currentTimeout;kind='start'},
+    @{label='stop_current';class='Win32_ProcessStopTrace';suffix=$where;timeout=$currentTimeout;kind='stop'},
+    @{label='stop_default';class='Win32_ProcessStopTrace';suffix=$where;timeout=$null;kind='stop'},
+    @{label='stop_unfiltered';class='Win32_ProcessStopTrace';suffix='';timeout=$null;kind='stop'})
+$result=@{error='none';fixture_exits=@{};sources=@{}}
+$children=@();$watch=[Diagnostics.Stopwatch]::StartNew()
+try {
+    foreach($spec in $specs) {
+        $settings=@{Namespace='root/cimv2';Query=('SELECT * FROM '+$spec.class+$spec.suffix);
+            SourceIdentifier=($nonce+'-'+$spec.label);ErrorAction='Stop'}
+        if($null -ne $spec.timeout){$settings.OperationTimeoutSec=[uint32]$spec.timeout}
+        Register-CimIndicationEvent @settings | Out-Null
+        $result.sources[$spec.label]=@{short=@{count=0;exact=0;prefix=0;empty=0;other=0;exit_codes=@()};
+            long=@{count=0;exact=0;prefix=0;empty=0;other=0;exit_codes=@()};
+            exception_events=0;query_hresult_codes=@();truncated=$false}
+    }
+    if($watch.Elapsed.TotalSeconds -gt 15){throw 'fixture_setup_deadline'}
+    foreach($fixture in @(@{label='short';path=$original;exit=37},
+                          @{label='long';path=$longFixture;exit=38})) {
+        $info=[Diagnostics.ProcessStartInfo]::new()
+        $info.FileName=$fixture.path
+        $info.Arguments=('-c "import time;time.sleep(12);raise SystemExit('+[string]$fixture.exit+')"')
+        $info.UseShellExecute=$false;$info.CreateNoWindow=$true
+        $info.RedirectStandardOutput=$true;$info.RedirectStandardError=$true
+        $info.EnvironmentVariables['PYTHONHOME']=$pythonHome
+        $info.EnvironmentVariables['PATH']=$pythonHome+';'+$env:PATH
+        $child=[Diagnostics.Process]::new();$child.StartInfo=$info
+        $child.Start()>$null
+        $heldHandle=$child.Handle
+        $children+=@(@{label=$fixture.label;process=$child;pid=$child.Id;
+            expected_name=[IO.Path]::GetFileName($fixture.path).ToLowerInvariant()})
+    }
+    foreach($item in $children) {
+        if(-not $item.process.WaitForExit(25000)){throw 'fixture_exit_deadline'}
+        $result.fixture_exits[$item.label]=$item.process.ExitCode
+    }
+    $drain=[Diagnostics.Stopwatch]::StartNew()
+    while($drain.Elapsed.TotalSeconds -lt 5) {
+        foreach($spec in $specs) {
+            $frames=@(Get-Event -SourceIdentifier ($nonce+'-'+$spec.label) -ErrorAction SilentlyContinue)
+            if($frames.Count -gt 128){$result.sources[$spec.label].truncated=$true}
+            foreach($frame in @($frames|Select-Object -First 128)) {
+                $native=$frame.SourceEventArgs.NewEvent
+                if($null -ne $native) {
+                    foreach($item in $children) {
+                        if([int]$native.ProcessID -ne $item.pid){continue}
+                        $summary=$result.sources[$spec.label][$item.label]
+                        $summary.count++
+                        $name=([string]$native.ProcessName).ToLowerInvariant()
+                        if($name -eq $item.expected_name){$summary.exact++}
+                        elseif(-not $name){$summary.empty++}
+                        elseif($item.expected_name.StartsWith($name)){$summary.prefix++}
+                        else{$summary.other++}
+                        if($spec.kind -eq 'stop' -and $null -ne $native.ExitStatus) {
+                            $summary.exit_codes+=@(('0x{0:x8}' -f [uint32]$native.ExitStatus))
+                        }
+                    }
+                } elseif($null -ne $frame.SourceEventArgs.Exception) {
+                    $result.sources[$spec.label].exception_events++
+                    $result.sources[$spec.label].query_hresult_codes+=@(
+                        ('0x{0:x8}' -f $frame.SourceEventArgs.Exception.HResult))
+                }
+                Remove-Event -EventIdentifier $frame.EventIdentifier
+            }
+        }
+        Start-Sleep -Milliseconds 100
+    }
+} catch {$result.error='provider_control_failed';$result.query_hresult=('0x{0:x8}' -f $_.Exception.HResult)}
+finally {
+    foreach($item in $children) {
+        try {
+            if(-not $item.process.HasExited){$item.process.Kill()}
+            if(-not $item.process.WaitForExit(5000)){$result.fixture_cleanup_failed=$true}
+        } catch {$result.fixture_cleanup_failed=$true}
+        finally {$item.process.Dispose()}
+    }
+    foreach($spec in $specs) {
+        Unregister-Event -SourceIdentifier ($nonce+'-'+$spec.label) -ErrorAction SilentlyContinue
+        Remove-Event -SourceIdentifier ($nonce+'-'+$spec.label) -ErrorAction SilentlyContinue
+    }
+}
+[Console]::WriteLine(($result|ConvertTo-Json -Depth 6 -Compress))
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            original = Path(sys.executable).resolve()
+            long_fixture = Path(tmp) / 'oneirodex-trace-control.exe'
+            shutil.copyfile(original, long_fixture)
+            self.assertEqual(long_fixture.read_bytes(), original.read_bytes())
+            short_name = original.name.lower()
+            self.assertRegex(short_name, r'^[a-z0-9_.-]{1,80}$')
+            script = script.replace('SHORT_NAME', short_name)
+            script = script.replace('CURRENT_TIMEOUT', str(probe.TRACE_OPERATION_TIMEOUT_SECONDS))
+            for key, value in [('NONCE_VALUE', 'provider-' + probe.uuid.uuid4().hex),
+                               ('ORIGINAL_EXE', original), ('LONG_EXE', long_fixture),
+                               ('PYTHON_HOME', sys.prefix)]:
+                script = script.replace(key, "'" + str(value).replace("'", "''") + "'")
+            completed = subprocess.run(
+                ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
+                env=probe.observer_environment(probe.os.environ), capture_output=True,
+                encoding='utf-8', timeout=90, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            self.assertEqual(completed.returncode, 0, 'Native provider control did not complete')
+            result = json.loads(completed.stdout)
+        print('Native stop provider control: ' + json.dumps(result))
+        self.assertEqual(result['error'], 'none', json.dumps(result))
+        self.assertFalse(result.get('fixture_cleanup_failed', False), json.dumps(result))
+        self.assertEqual(result['fixture_exits'], {'short': 37, 'long': 38})
+        for label, status in [('short', '0x00000025'), ('long', '0x00000026')]:
+            self.assertGreater(result['sources']['start_current'][label]['count'], 0, json.dumps(result))
+            self.assertIn(status, result['sources']['stop_current'][label]['exit_codes'], json.dumps(result))
+            self.assertIn(status, result['sources']['stop_default'][label]['exit_codes'], json.dumps(result))
+            self.assertIn(status, result['sources']['stop_unfiltered'][label]['exit_codes'], json.dumps(result))
 
 
 
