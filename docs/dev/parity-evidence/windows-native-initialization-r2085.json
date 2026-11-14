@@ -3,10 +3,10 @@
   "evidence_id": "R2085",
   "observed_utc": "2026-11-14T19:49:34.245880+00:00",
   "base_commit": "530099059b2f20d4780fb813b4831c9ce22c8fbc",
-  "classification": "Failure-only native initialization diagnostics candidate; actual observation pending.",
+  "classification": "Native window query completed for one owned window without selected text/codes; cause of missing browser/CDP remains unknown.",
   "preceding_native_result": "R2084 verified the actual package process non-elevated at medium integrity8192 but failed the embedded-browser/CDP prerequisite. Root/listener cleanup and uninstall succeeded; no product UI/IPC acceptance.",
   "change": "Inspect at most12 top-level windows owned by the retained app PID, including the window name and bounded descendants. Emit only static categories and numeric HRESULTs. Inspect at most20 recent Application log records for IDs1000/1001/1026 and exact app/runtime basenames; emit only IDs/basenames/numeric codes and name_and_time_only association. Window-query HRESULTs are separate from observed window codes. Python revalidates, strips and bounds every new field.",
-  "limits": "Event matches establish name/time coincidence only, not owned-process causality or a product vulnerability. No raw window/event text, paths, commands or credentials are emitted. No registry, ACL, browser-security, timeout, source-package, native IPC or acceptance-assertion changes. Existing same-account restricted-token and full original acceptance limits remain.",
+  "limits": "Event matches establish name/time coincidence only, not owned-process causality or a product vulnerability. No raw window/event text, paths, commands or credentials are emitted. No registry, ACL, browser-security, timeout, source-package, native IPC or acceptance-assertion changes. Existing same-account restricted-token and full original acceptance limits remain. Actual event query was empty_or_unavailable; this is not proof that no error event or runtime child occurred. No matching browser child survived to the final process snapshot.",
   "local_verification": {
     "red": "22 controls pass;2 new privacy/bounds contracts fail on missing sanitizer",
     "final_guard_methods_passed": 24,
@@ -21,8 +21,78 @@
     "scripts/ci/test_windows_packaged_probe.py": "85b4c62b48841a21245d988141278986d3dca8a5dc648629af7fe9530438197a"
   },
   "diagnostic_ps_sha256": "75193d8488457dd101f95768721c7482bc53516cc34ceeb96a5cc923a1177212",
-  "runtime_retry": "pending explicit package-only CI dispatch after publication",
+  "runtime_retry": "terminal failure at embedded-browser/CDP prerequisite; negative bounded diagnostics",
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
-  "capture": "Skipped: CI diagnostics only."
+  "capture": "Skipped: CI diagnostics only.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43634273204",
+    "job_id": 132567524123,
+    "harness_source": "997c39217733236907cf4d7fbee189ea47051a9b",
+    "raw_log_sha256": "ef9d45ab5720df0a36d7bb16abec3babe7bac535f5a7580d080f68b62650bdce",
+    "ci_guard_methods_passed": 24,
+    "receipt": {
+      "observed_utc": "2026-11-14T19:51:07.733075+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_webview_startup",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "suspended_creation_api": "CreateProcessAsUserW",
+      "app_launch_security": [
+        {
+          "round": 1,
+          "elevated": false,
+          "integrity_rid": 8192
+        }
+      ],
+      "startup_diagnostics": {
+        "product_window_title": false,
+        "visible_text_keywords": [],
+        "listeners": [],
+        "processes": [
+          {
+            "pid": 9808,
+            "parent": 9716,
+            "name": "oneirodex-desktop.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": false
+          }
+        ],
+        "devtools_policy_values": [],
+        "session_id": 2,
+        "root_alive": true,
+        "runtime_versions": [
+          "156.0.4314.58"
+        ],
+        "native_initialization": {
+          "window_count": 1,
+          "window_observation": "complete",
+          "keywords": [],
+          "hresult_codes": [],
+          "query_hresult_codes": [],
+          "event_observation": "empty_or_unavailable",
+          "events": []
+        },
+        "has_main_window": true,
+        "probe_webview_profile_created": true,
+        "parent_has_browser_folder_override": false
+      },
+      "last_owned_root_and_listener_cleanup_verified": true,
+      "owned_application_uninstalled": true,
+      "code": "webview_endpoint_not_ready"
+    }
+  }
 }

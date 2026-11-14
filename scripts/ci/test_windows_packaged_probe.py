@@ -214,6 +214,82 @@ class PackageGuardTests(unittest.TestCase):
                             for e in selected['events']))
 
 
+
+    def test_startup_trace_pairs_early_runtime_exit_and_does_not_reuse_an_old_pid(self):
+        self.assertTrue(callable(getattr(probe, 'safe_startup_trace', None)))
+        def event(kind, pid, parent, stamp, name='msedgewebview2.exe', exit_status=None):
+            return {'kind': kind, 'pid': pid, 'parent': parent, 'time_created': str(stamp),
+                    'name': name, 'exit_status': exit_status, 'command': 'PRIVATE-COMMAND'}
+        raw = {'status': 'complete', 'dropped': 0, 'events': [
+            event('start', 10, 1, 100, 'oneirodex-desktop.exe'),
+            event('start', 11, 10, 110), event('stop', 11, 10, 120, exit_status='0xc0000142'),
+            event('start', 11, 999, 130), event('stop', 11, 999, 140, exit_status='0x00000000'),
+            event('stop', 10, 1, 210, 'oneirodex-desktop.exe', '0x00000001')]}
+        selected = probe.safe_startup_trace(raw, 10, 200)
+        self.assertTrue(selected['root_start_seen'])
+        self.assertEqual(len(selected['parent_chain_events']), 4)
+        self.assertEqual(len(selected['unattributed_events']), 2)
+        stops = [e for e in selected['parent_chain_events'] if e['kind'] == 'stop']
+        self.assertEqual(stops[0]['exit_status'], '0xc0000142')
+        self.assertTrue(stops[0]['before_controller_cleanup'])
+        self.assertFalse(stops[1]['before_controller_cleanup'])
+        self.assertNotIn('PRIVATE', repr(selected))
+        self.assertNotIn('command', repr(selected))
+
+    def test_startup_trace_rejects_foreign_fields_and_does_not_promote_incomplete_capture(self):
+        self.assertTrue(callable(getattr(probe, 'safe_startup_trace', None)))
+        good = {'kind': 'start', 'pid': 10, 'parent': 1, 'time_created': '100',
+                'name': 'oneirodex-desktop.exe', 'sid': 'PRIVATE', 'path': 'PRIVATE'}
+        raw = {'status': 'deadline', 'dropped': 1, 'events': [
+            {'kind': 'start', 'pid': 44, 'parent': 10, 'time_created': '90', 'name': 'foreign.exe'},
+            good]}
+        selected = probe.safe_startup_trace(raw, 10, 200)
+        self.assertFalse(selected['capture_complete'])
+        self.assertEqual(len(selected['parent_chain_events']), 1)
+        self.assertNotIn('PRIVATE', repr(selected))
+        self.assertTrue(all(isinstance(e['time_created'], str) for e in selected['parent_chain_events']))
+
+    def test_startup_trace_constructor_refuses_local_execution(self):
+        self.assertTrue(callable(getattr(probe, '_StartupProcessTrace', None)))
+        with mock.patch.dict(probe.os.environ, {}, clear=True), mock.patch.object(probe.subprocess, 'Popen') as start:
+            with self.assertRaisesRegex(ProbeFailure, 'execution_requires_disposable_windows_ci'):
+                probe._StartupProcessTrace(Path('never-created'))
+            start.assert_not_called()
+
+    def test_startup_trace_setup_failure_reaps_only_its_observer_and_excludes_credentials(self):
+        self.assertTrue(callable(getattr(probe, '_StartupProcessTrace', None)))
+        observer = mock.Mock()
+        observer.poll.return_value = None
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(probe, 'require_ci_execution'), \
+             mock.patch.dict(probe.os.environ, {'GH_TOKEN': 'PRIVATE-CREDENTIAL'}), \
+             mock.patch.object(probe.subprocess, 'Popen', return_value=observer) as start, \
+             mock.patch.object(probe, '_wait', side_effect=ProbeFailure('synthetic_ready_failure')):
+            with self.assertRaisesRegex(ProbeFailure, 'synthetic_ready_failure'):
+                probe._StartupProcessTrace(Path(tmp))
+        observer.terminate.assert_called_once_with()
+        observer.wait.assert_called_once_with(timeout=10)
+        self.assertNotIn('GH_TOKEN', start.call_args.kwargs['env'])
+
+    def test_startup_trace_foreign_nonce_and_oversized_payload_are_not_reported(self):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            for content in [json.dumps({'nonce': 'wrong', 'message': 'PRIVATE'}), 'x' * 65537]:
+                with self.subTest(size=len(content)):
+                    trace = object.__new__(probe._StartupProcessTrace)
+                    trace.nonce = 'owned'
+                    trace.stop = Path(tmp) / 'stop'
+                    trace.output = Path(tmp) / 'result.json'
+                    trace.output.write_text(content, encoding='utf-8')
+                    trace.process = mock.Mock()
+                    trace.process.poll.return_value = 0
+                    selected = trace.finish(10, 200)
+                    self.assertEqual(selected['observation'], 'failed')
+                    self.assertNotIn('PRIVATE', repr(selected))
+                    trace.process.terminate.assert_not_called()
+                    self.assertIn(mock.call(timeout=10), trace.process.wait.call_args_list)
+
+
 class StandardUserLaunchTests(unittest.TestCase):
     """No Win32 calls: verify suspended launch policy and owned-handle lifetime."""
     class API:

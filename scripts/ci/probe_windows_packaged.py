@@ -524,6 +524,162 @@ $nativeInitialization=@{window_count=$windowCount;window_observation=$windowObse
     return raw
 
 
+
+def safe_startup_trace(record, root_pid, cleanup_time):
+    """Diagnostic lifecycles only; never adopt a numeric PID after its stop/reuse."""
+    raw_events = record.get('events', []) if isinstance(record, dict) else []
+    events = []
+    for event in raw_events[:128] if isinstance(raw_events, list) else []:
+        if not isinstance(event, dict):
+            continue
+        name, stamp = event.get('name'), event.get('time_created')
+        if (name not in ('oneirodex-desktop.exe', 'msedgewebview2.exe')
+                or event.get('kind') not in ('start', 'stop')
+                or type(event.get('pid')) is not int or not 0 < event['pid'] <= 0xFFFFFFFF
+                or type(event.get('parent')) is not int or not 0 <= event['parent'] <= 0xFFFFFFFF
+                or not isinstance(stamp, str) or not re.fullmatch(r'[1-9][0-9]{0,19}', stamp)):
+            continue
+        selected = {key: event[key] for key in ('kind', 'pid', 'parent', 'name', 'time_created')}
+        if event['kind'] == 'stop':
+            status = event.get('exit_status')
+            selected['exit_status'] = status.lower() if isinstance(status, str) and re.fullmatch(
+                r'0x[0-9a-fA-F]{8}', status) else None
+            selected['before_controller_cleanup'] = int(stamp) < cleanup_time if cleanup_time is not None else None
+        events.append(selected)
+    active, related, unrelated = {}, [], []
+    root_seen = False
+    for event in sorted(events, key=lambda e: int(e['time_created'])):
+        pid = event['pid']
+        if event['kind'] == 'start':
+            active.pop(pid, None)  # New start invalidates the earlier lifetime.
+            related_now = ((pid == root_pid and event['name'] == 'oneirodex-desktop.exe')
+                           or event['parent'] in active)
+            if related_now:
+                active[pid] = (event['parent'], event['name'])
+                root_seen |= pid == root_pid
+        else:
+            related_now = active.pop(pid, None) == (event['parent'], event['name'])
+        event['association'] = 'parent_chain_trace' if related_now else 'name_and_time_only'
+        (related if related_now else unrelated).append(event)
+    dropped = record.get('dropped', 0)
+    return {'observation': record.get('status') if record.get('status') in ('complete', 'deadline', 'failed') else 'unknown',
+            'capture_complete': record.get('status') == 'complete' and type(dropped) is int and dropped == 0,
+            'root_start_seen': root_seen, 'parent_chain_events': related,
+            'unattributed_events': unrelated, 'dropped': dropped if type(dropped) is int and dropped >= 0 else None,
+            'limits': 'Read-only name/parent/time diagnostics, not product launch identity. Completion describes local collection only; provider delivery is not exhaustive. Root stop after controller cleanup is intentional.'}
+
+
+_STARTUP_TRACE_SCRIPT = r'''
+$ErrorActionPreference='Stop'
+$ready=READY_FILE;$stop=STOP_FILE;$output=OUTPUT_FILE;$nonce=NONCE_VALUE
+$startId='oneirodex-start-'+$nonce;$stopId='oneirodex-stop-'+$nonce
+$records=New-Object System.Collections.Generic.List[object]
+$dropped=0;$status='complete';$watch=[Diagnostics.Stopwatch]::StartNew();$stopAt=$null
+try {
+    $where=" WHERE ProcessName='oneirodex-desktop.exe' OR ProcessName='msedgewebview2.exe'"
+    Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStartTrace'+$where) -SourceIdentifier $startId -OperationTimeoutSec 10 | Out-Null
+    Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStopTrace'+$where) -SourceIdentifier $stopId -OperationTimeoutSec 10 | Out-Null
+    [IO.File]::WriteAllText($ready,$nonce)
+    while($watch.Elapsed.TotalSeconds -lt 180) {
+        foreach($kind in @('start','stop')) {
+            $sourceId=if($kind -eq 'start'){$startId}else{$stopId}
+            foreach($entry in @(Get-Event -SourceIdentifier $sourceId -ErrorAction SilentlyContinue)) {
+                $native=$entry.SourceEventArgs.NewEvent
+                if($records.Count -lt 128) {
+                    $item=@{kind=$kind;pid=[int]$native.ProcessID;parent=[int]$native.ParentProcessID;
+                        name=([string]$native.ProcessName).ToLowerInvariant();
+                        time_created=([string]$native.TIME_CREATED)}
+                    if($kind -eq 'stop'){$item.exit_status=('0x{0:x8}' -f [uint32]$native.ExitStatus)}
+                    $records.Add($item)
+                } else {$dropped++}
+                Remove-Event -EventIdentifier $entry.EventIdentifier
+            }
+        }
+        if((Test-Path -LiteralPath $stop) -and [IO.File]::ReadAllText($stop) -eq $nonce) {
+            if($null -eq $stopAt){$stopAt=$watch.Elapsed.TotalMilliseconds}
+            if($watch.Elapsed.TotalMilliseconds-$stopAt -ge 500){break}
+        }
+        Start-Sleep -Milliseconds 50
+    }
+    if($watch.Elapsed.TotalSeconds -ge 180){$status='deadline'}
+} catch {$status='failed'}
+finally {
+    foreach($sourceId in @($startId,$stopId)) {
+        Unregister-Event -SourceIdentifier $sourceId -ErrorAction SilentlyContinue
+        Remove-Event -SourceIdentifier $sourceId -ErrorAction SilentlyContinue
+    }
+    $result=@{nonce=$nonce;status=$status;dropped=$dropped;events=@($records.ToArray())}
+    [IO.File]::WriteAllText($output,($result|ConvertTo-Json -Depth 5 -Compress))
+}
+'''
+
+
+class _StartupProcessTrace:
+    def __init__(self, work):
+        require_ci_execution(os.name, os.environ)
+        self.nonce = uuid.uuid4().hex
+        self.ready = work / ('trace-ready-' + self.nonce)
+        self.stop = work / ('trace-stop-' + self.nonce)
+        self.output = work / ('trace-output-' + self.nonce + '.json')
+        script = _STARTUP_TRACE_SCRIPT
+        for key, value in [('READY_FILE', self.ready), ('STOP_FILE', self.stop),
+                           ('OUTPUT_FILE', self.output), ('NONCE_VALUE', self.nonce)]:
+            script = script.replace(key, "'" + str(value).replace("'", "''") + "'")
+        self.process = subprocess.Popen(
+            ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
+            env=runtime_environment(os.environ), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+
+        def ready():
+            if self.process.poll() is not None:
+                raise ProbeFailure('startup_trace_observer_exited')
+            return self.ready.is_file() and self.ready.read_text(encoding='utf-8-sig') == self.nonce
+        try:
+            _wait(ready, 20, 'startup_trace_observer_not_ready')
+        except BaseException:
+            self._stop_process()
+            raise
+
+    def _stop_process(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+        self.process.wait(timeout=10)
+
+    def finish(self, root_pid, cleanup_time):
+        try:
+            self.stop.write_text(self.nonce, encoding='utf-8')
+            self.process.wait(timeout=15)
+            if not self.output.is_file() or self.output.stat().st_size > 65536:
+                raise ProbeFailure('startup_trace_result_missing_or_oversized')
+            record = json.loads(self.output.read_text(encoding='utf-8-sig'))
+            if record.get('nonce') != self.nonce:
+                raise ProbeFailure('startup_trace_nonce_mismatch')
+            return safe_startup_trace(record, root_pid, cleanup_time)
+        except Exception as error:
+            code = str(error) if isinstance(error, ProbeFailure) else ''
+            return {'observation': 'failed', 'error_class': type(error).__name__,
+                    'code': code if re.fullmatch(r'startup_trace_[a-z0-9_]{1,100}', code)
+                    else 'startup_trace_observation_failed'}
+        finally:
+            self._stop_process()
+
+
+def begin_startup_trace(work, progress, round_number):
+    try:
+        return _StartupProcessTrace(work)
+    except Exception as error:
+        code = str(error) if isinstance(error, ProbeFailure) else ''
+        progress.setdefault('startup_trace_setup', []).append(
+            {'round': round_number, 'observation': 'unavailable', 'error_class': type(error).__name__,
+             'code': code if re.fullmatch(r'startup_trace_[a-z0-9_]{1,100}', code)
+             else 'startup_trace_setup_failed'})
+        return None
+
+
+def filetime_now():
+    return 116444736000000000 + time.time_ns() // 100
+
+
 def _cold_start(executable, work, round_number, progress):
     from playwright.sync_api import sync_playwright
 
@@ -537,10 +693,18 @@ def _cold_start(executable, work, round_number, progress):
     env['WEBVIEW2_USER_DATA_FOLDER'] = str(work / 'webview-profile')
     progress['phase'] = f'cold_{round_number}_standard_user_launch'
     progress['suspended_creation_api'] = 'CreateProcessAsUserW'
-    process = start_standard_user(executable, env)
+    trace = begin_startup_trace(work, progress, round_number)
+    try:
+        process = start_standard_user(executable, env)
+    except BaseException:
+        if trace:
+            progress.setdefault('startup_process_traces', []).append(
+                {'round': round_number, **trace.finish(0, filetime_now())})
+        raise
     progress.setdefault('app_launch_security', []).append({'round': round_number, **process.security})
     browser = None
     client = None
+    cleanup_time = None
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def endpoint_ready():
@@ -611,13 +775,19 @@ def _cold_start(executable, work, round_number, progress):
                     client.stop()
             finally:
                 try:
+                    cleanup_time = filetime_now()
                     if process.poll() is None:
                         process.terminate()
                     process.wait(timeout=20)
                     _wait(lambda: _port_closed(port), 15, 'owned_webview_listener_not_closed')
                     progress['last_owned_root_and_listener_cleanup_verified'] = True
                 finally:
-                    process.close()
+                    try:
+                        if trace:
+                            progress.setdefault('startup_process_traces', []).append(
+                                {'round': round_number, **trace.finish(process.pid, cleanup_time)})
+                    finally:
+                        process.close()
 
 
 def execute_cold_probe(installer, work, progress):
