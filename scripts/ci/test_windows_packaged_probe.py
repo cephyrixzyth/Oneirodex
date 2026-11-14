@@ -315,6 +315,50 @@ class PackageGuardTests(unittest.TestCase):
 
 
 
+
+    @unittest.skipUnless(probe.os.name == 'nt' and probe.os.environ.get('GITHUB_ACTIONS') == 'true',
+                         'Explicit disposable Windows CI prefix control')
+    def test_native_observer_prefix_in_ci_without_subscribing_or_launching_the_app(self):
+        probe.require_ci_execution(probe.os.name, probe.os.environ)
+        import json
+        results = []
+        for label, env, child_input in [('sanitized', probe.runtime_environment(probe.os.environ), None),
+                                       ('inherited', dict(probe.os.environ), None),
+                                       ('sanitized_closed_input', probe.runtime_environment(probe.os.environ), subprocess.DEVNULL)]:
+            with tempfile.TemporaryDirectory() as tmp:
+                work = Path(tmp)
+                nonce = 'owned-prefix-control'
+                script = probe._STARTUP_TRACE_SCRIPT.split('try {', 1)[0]
+                script += '\n[IO.File]::WriteAllText($ready,$nonce)\n'
+                for key, value in [('READY_FILE', work / 'ready'), ('STOP_FILE', work / 'stop'),
+                                   ('OUTPUT_FILE', work / 'output'), ('NONCE_VALUE', nonce),
+                                   ('STAGE_FILE', work / 'stage')]:
+                    script = script.replace(key, "'" + str(value).replace("'", "''") + "'")
+                child = subprocess.Popen(
+                    ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
+                    env=env, stdin=child_input, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                timed_out = False
+                try:
+                    try:
+                        child.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        timed_out = True
+                    stage = (work / 'stage').read_text(encoding='utf-8-sig') if (work / 'stage').exists() else 'not_started'
+                    results.append({'context': label, 'timed_out': timed_out,
+                                    'stage': stage if stage in ('script_started', 'not_started') else 'unknown',
+                                    'ready': (work / 'ready').exists()
+                                    and (work / 'ready').read_text(encoding='utf-8-sig') == nonce})
+                finally:
+                    if child.poll() is None:
+                        child.terminate()
+                    child.wait(timeout=10)
+        print('Native CLI prefix controls: ' + json.dumps(results))
+        self.assertTrue(all(result['ready'] and not result['timed_out'] for result in results),
+                        json.dumps(results))
+
+
+
 class StandardUserLaunchTests(unittest.TestCase):
     """No Win32 calls: verify suspended launch policy and owned-handle lifetime."""
     class API:
