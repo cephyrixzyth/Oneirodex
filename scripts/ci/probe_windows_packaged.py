@@ -381,6 +381,49 @@ def safe_process_diagnostic(record, expected_port):
             'probe_profile_flag': 'webview-profile' in command}
 
 
+
+def safe_native_initialization(record):
+    """Only bounded static categories and numeric error codes can leave CI."""
+    if not isinstance(record, dict):
+        record = {}
+    allowed_words = {'Oneirodex Desktop', 'Connection', 'Server URL', 'WebView2',
+                     'user data', 'access', 'error', 'failed', 'initialization', 'Application Error'}
+
+    def entries(value, key):
+        result = value.get(key)
+        return result if isinstance(result, list) else []
+
+    def codes(value, key):
+        return sorted({item.lower() for item in entries(value, key)[:128]
+                       if isinstance(item, str) and re.fullmatch(r'0x[0-9a-fA-F]{8}', item)})[:12]
+
+    count = record.get('window_count', 0)
+    observation = record.get('window_observation')
+    events = []
+    for event in entries(record, 'events')[:64]:
+        if not isinstance(event, dict):
+            continue
+        application = event.get('application', '')
+        if (type(event.get('event_id')) is not int or event['event_id'] not in (1000, 1001, 1026)
+                or not isinstance(application, str)
+                or application.lower() not in ('oneirodex-desktop.exe', 'msedgewebview2.exe')):
+            continue
+        events.append({'event_id': event['event_id'], 'application': application.lower(),
+                       'hresult_codes': codes(event, 'hresult_codes'),
+                       'association': 'name_and_time_only'})
+        if len(events) == 12:
+            break
+    return {'window_count': max(0, min(count, 12)) if type(count) is int else 0,
+            'window_observation': observation if observation in ('complete', 'failed', 'not_attempted') else 'unknown',
+            'keywords': sorted({item for item in entries(record, 'keywords')[:128]
+                                if isinstance(item, str) and item in allowed_words}),
+            'hresult_codes': codes(record, 'hresult_codes'),
+            'query_hresult_codes': codes(record, 'query_hresult_codes'),
+            'event_observation': record.get('event_observation') if record.get('event_observation')
+            in ('complete', 'empty_or_unavailable', 'failed') else 'unknown',
+            'events': events}
+
+
 def _startup_diagnostics(process, port, work):
     script = r'''
 $root=Get-Process -Id ROOTPID -ErrorAction SilentlyContinue
@@ -405,22 +448,68 @@ foreach($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOFTWARE\Polic
     if($null -ne $value){$policies+=@([int]$value)}
 }
 $keywords=@()
-if($root -and $root.MainWindowHandle.ToInt64() -ne 0) {
+$windowCount=0;$windowObservation='not_attempted';$windowCodes=@();$queryCodes=@()
+if($root) {
     try {
         Add-Type -AssemblyName UIAutomationClient
-        $element=[System.Windows.Automation.AutomationElement]::FromHandle($root.MainWindowHandle)
-        $nodes=$element.FindAll([System.Windows.Automation.TreeScope]::Descendants,
-            [System.Windows.Automation.Condition]::TrueCondition)
-        $text=@($nodes|Select-Object -First 100|ForEach-Object {$_.Current.Name}) -join ' '
-        foreach($word in @('Oneirodex Desktop','Connection','Server URL','WebView2','user data','access','error')) {
+        $condition=New-Object System.Windows.Automation.PropertyCondition(
+            [System.Windows.Automation.AutomationElement]::ProcessIdProperty,[int]ROOTPID)
+        $windows=[System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+            [System.Windows.Automation.TreeScope]::Children,$condition)
+        $names=@()
+        foreach($element in @($windows|Select-Object -First 12)) {
+            $windowCount++
+            $names+=@($element.Current.Name)
+            $nodes=$element.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.Condition]::TrueCondition)
+            $names+=@($nodes|Select-Object -First 100|ForEach-Object {$_.Current.Name})
+        }
+        $text=@($names|ForEach-Object {if($_.Length -gt 4096){$_.Substring(0,4096)}else{$_}}) -join ' '
+        foreach($word in @('Oneirodex Desktop','Connection','Server URL','WebView2','user data',
+            'access','error','failed','initialization','Application Error')) {
             if($text -match [regex]::Escape($word)){$keywords+=@($word)}
         }
-    } catch {}
+        $windowCodes=@([regex]::Matches($text,'\b0x[0-9a-fA-F]{8}\b')|
+            ForEach-Object {$_.Value.ToLowerInvariant()}|Select-Object -Unique -First 12)
+        $windowObservation='complete'
+    } catch {
+        $windowObservation='failed'
+        $queryCodes+=@(('0x{0:x8}' -f $_.Exception.HResult))
+    }
 }
+$nativeEvents=@();$eventObservation='complete'
+try {
+    $events=Get-WinEvent -FilterHashtable @{LogName='Application';Id=@(1000,1001,1026);
+        StartTime=(Get-Date).AddMinutes(-3)} -MaxEvents 20 -ErrorAction Stop
+    foreach($event in $events) {
+        $xml=[xml]$event.ToXml();$fields=@{}
+        foreach($node in $xml.Event.EventData.Data) {
+            $fields[$node.GetAttribute('Name')]=[string]$node.InnerText
+        }
+        $app=$null
+        foreach($value in $fields.Values) {
+            try {$name=[IO.Path]::GetFileName([string]$value).ToLowerInvariant()}catch{continue}
+            if($name -in @('oneirodex-desktop.exe','msedgewebview2.exe')){$app=$name;break}
+        }
+        if(-not $app){continue}
+        $codes=@()
+        foreach($key in @('ExceptionCode','ExceptionStatus','HResult','ErrorCode')) {
+            if($fields.ContainsKey($key) -and $fields[$key].Trim() -match '^(?:0x)?([0-9a-fA-F]{8})$') {
+                $codes+=@('0x'+$Matches[1].ToLowerInvariant())
+            }
+        }
+        $nativeEvents+=@(@{event_id=[int]$event.Id;application=$app;hresult_codes=$codes;
+            association='name_and_time_only'})
+    }
+} catch {$eventObservation='empty_or_unavailable'}
+$nativeInitialization=@{window_count=$windowCount;window_observation=$windowObservation;
+    keywords=$keywords;hresult_codes=$windowCodes;query_hresult_codes=$queryCodes;
+    event_observation=$eventObservation;events=$nativeEvents}
 @{root_alive=[bool]$root;has_main_window=[bool]($root -and $root.MainWindowHandle.ToInt64() -ne 0);
     product_window_title=[bool]($root -and $root.MainWindowTitle -match 'Oneirodex');
     session_id=$(if($root){$root.SessionId}else{-1});visible_text_keywords=$keywords;
-    processes=$processes;listeners=$listeners;runtime_versions=$versions;devtools_policy_values=$policies} |
+    processes=$processes;listeners=$listeners;runtime_versions=$versions;devtools_policy_values=$policies;
+    native_initialization=$nativeInitialization} |
     ConvertTo-Json -Depth 5 -Compress
 '''.replace('ROOTPID', str(int(process.pid)))
     result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
@@ -429,6 +518,7 @@ if($root -and $root.MainWindowHandle.ToInt64() -ne 0) {
         return {'observation': 'failed', 'code': 'startup_metadata_query_failed'}
     raw = json.loads(result.stdout)
     raw['processes'] = [safe_process_diagnostic(p, port) for p in raw['processes']]
+    raw['native_initialization'] = safe_native_initialization(raw.get('native_initialization'))
     raw['probe_webview_profile_created'] = (work / 'webview-profile').exists()
     raw['parent_has_browser_folder_override'] = bool(os.environ.get('WEBVIEW2_BROWSER_EXECUTABLE_FOLDER'))
     return raw

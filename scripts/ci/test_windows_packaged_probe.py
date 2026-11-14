@@ -174,6 +174,46 @@ class PackageGuardTests(unittest.TestCase):
 
 
 
+
+    def test_native_initialization_summary_discards_raw_window_and_event_text(self):
+        self.assertTrue(callable(getattr(probe, 'safe_native_initialization', None)))
+        raw = {'window_count': 2, 'window_observation': 'complete',
+               'keywords': ['WebView2', 'access', 'PRIVATE-UNKNOWN'],
+               'hresult_codes': ['0x80070005', 'private/path', '0xABCDEF12'],
+               'window_text': 'PRIVATE-TOKEN and private/path',
+               'events': [{'event_id': 1000, 'application': 'msedgewebview2.exe',
+                           'hresult_codes': ['0xc0000142'], 'message': 'PRIVATE-TOKEN',
+                           'association': 'unproven-product-cause'}]}
+        selected = probe.safe_native_initialization(raw)
+        self.assertEqual(selected['keywords'], ['WebView2', 'access'])
+        self.assertEqual(selected['hresult_codes'], ['0x80070005', '0xabcdef12'])
+        self.assertEqual(selected['events'][0]['association'], 'name_and_time_only')
+        self.assertNotIn('PRIVATE', repr(selected))
+        self.assertNotIn('private/path', repr(selected))
+        self.assertNotIn('message', repr(selected))
+        self.assertNotIn('window_text', selected)
+
+    def test_native_initialization_summary_is_bounded_and_rejects_foreign_records(self):
+        self.assertTrue(callable(getattr(probe, 'safe_native_initialization', None)))
+        valid = {'event_id': 1000, 'application': 'oneirodex-desktop.exe',
+                 'hresult_codes': ['0x80070005'] * 100}
+        raw = {'window_count': 999, 'window_observation': 'PRIVATE-VALUE',
+               'keywords': ['error'] * 1000,
+               'hresult_codes': ['0x80070005'] * 100,
+               'events': [{'event_id': 9999, 'application': 'oneirodex-desktop.exe'},
+                          {'event_id': 1000, 'application': 'foreign.exe'},
+                          {'event_id': True, 'application': 'oneirodex-desktop.exe'},
+                          *[valid] * 100]}
+        selected = probe.safe_native_initialization(raw)
+        self.assertEqual(selected['window_count'], 12)
+        self.assertEqual(selected['window_observation'], 'unknown')
+        self.assertEqual(selected['keywords'], ['error'])
+        self.assertEqual(selected['hresult_codes'], ['0x80070005'])
+        self.assertEqual(len(selected['events']), 12)
+        self.assertTrue(all(e['event_id'] == 1000 and e['application'] == 'oneirodex-desktop.exe'
+                            for e in selected['events']))
+
+
 class StandardUserLaunchTests(unittest.TestCase):
     """No Win32 calls: verify suspended launch policy and owned-handle lifetime."""
     class API:

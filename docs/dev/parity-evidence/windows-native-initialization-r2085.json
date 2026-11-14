@@ -1,0 +1,28 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2085",
+  "observed_utc": "2026-11-14T19:49:34.245880+00:00",
+  "base_commit": "530099059b2f20d4780fb813b4831c9ce22c8fbc",
+  "classification": "Failure-only native initialization diagnostics candidate; actual observation pending.",
+  "preceding_native_result": "R2084 verified the actual package process non-elevated at medium integrity8192 but failed the embedded-browser/CDP prerequisite. Root/listener cleanup and uninstall succeeded; no product UI/IPC acceptance.",
+  "change": "Inspect at most12 top-level windows owned by the retained app PID, including the window name and bounded descendants. Emit only static categories and numeric HRESULTs. Inspect at most20 recent Application log records for IDs1000/1001/1026 and exact app/runtime basenames; emit only IDs/basenames/numeric codes and name_and_time_only association. Window-query HRESULTs are separate from observed window codes. Python revalidates, strips and bounds every new field.",
+  "limits": "Event matches establish name/time coincidence only, not owned-process causality or a product vulnerability. No raw window/event text, paths, commands or credentials are emitted. No registry, ACL, browser-security, timeout, source-package, native IPC or acceptance-assertion changes. Existing same-account restricted-token and full original acceptance limits remain.",
+  "local_verification": {
+    "red": "22 controls pass;2 new privacy/bounds contracts fail on missing sanitizer",
+    "final_guard_methods_passed": 24,
+    "python_compile": "passed",
+    "pyflakes": "passed",
+    "diagnostic_powershell": "AST parsed directly as data; no native query executed locally",
+    "native_or_gui_execution_locally": false
+  },
+  "rework": "The parse-only file launcher was refused by the host script policy. The diagnostic source was then parsed directly through the AST API as data; neither file was executed and no policy was changed.",
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "c790ca0059541950e7f915848656e75cc584c4905c7d0e188b071546bcf240e5",
+    "scripts/ci/test_windows_packaged_probe.py": "85b4c62b48841a21245d988141278986d3dca8a5dc648629af7fe9530438197a"
+  },
+  "diagnostic_ps_sha256": "75193d8488457dd101f95768721c7482bc53516cc34ceeb96a5cc923a1177212",
+  "runtime_retry": "pending explicit package-only CI dispatch after publication",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: CI diagnostics only."
+}
