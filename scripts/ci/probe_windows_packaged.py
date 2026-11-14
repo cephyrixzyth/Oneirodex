@@ -159,6 +159,218 @@ def runtime_environment(env):
     return {key: value for key, value in env.items() if key.upper() in allowed}
 
 
+
+def windows_environment_block(env):
+    """Create an unambiguous, explicit Unicode block; never inherit CI secrets."""
+    seen = set()
+    for key, value in env.items():
+        if (not isinstance(key, str) or not key or '=' in key or '\0' in key
+                or not isinstance(value, str) or '\0' in value or key.upper() in seen):
+            raise ProbeFailure('invalid_child_environment')
+        seen.add(key.upper())
+    return '\0'.join(f'{key}={env[key]}' for key in sorted(env, key=str.upper)) + '\0\0'
+
+
+class _WindowsStandardAPI:
+    """Win32 calls remain unreachable outside the explicit disposable CI fence."""
+    def __init__(self):
+        require_ci_execution(os.name, os.environ)
+        import ctypes as c
+        from ctypes import wintypes as w
+
+        self.c, self.w = c, w
+        self.kernel = c.WinDLL('kernel32', use_last_error=True)
+        self.advapi = c.WinDLL('advapi32', use_last_error=True)
+
+        class SID_ATTRIBUTES(c.Structure):
+            _fields_ = [('Sid', c.c_void_p), ('Attributes', w.DWORD)]
+
+        class STARTUPINFO(c.Structure):
+            _fields_ = [('cb', w.DWORD), ('lpReserved', w.LPWSTR), ('lpDesktop', w.LPWSTR),
+                        ('lpTitle', w.LPWSTR), ('dwX', w.DWORD), ('dwY', w.DWORD),
+                        ('dwXSize', w.DWORD), ('dwYSize', w.DWORD),
+                        ('dwXCountChars', w.DWORD), ('dwYCountChars', w.DWORD),
+                        ('dwFillAttribute', w.DWORD), ('dwFlags', w.DWORD),
+                        ('wShowWindow', w.WORD), ('cbReserved2', w.WORD),
+                        ('lpReserved2', c.POINTER(w.BYTE)), ('hStdInput', w.HANDLE),
+                        ('hStdOutput', w.HANDLE), ('hStdError', w.HANDLE)]
+
+        class PROCESSINFO(c.Structure):
+            _fields_ = [('hProcess', w.HANDLE), ('hThread', w.HANDLE),
+                        ('dwProcessId', w.DWORD), ('dwThreadId', w.DWORD)]
+
+        self.SID_ATTRIBUTES, self.STARTUPINFO, self.PROCESSINFO = SID_ATTRIBUTES, STARTUPINFO, PROCESSINFO
+        def bind(library, name, result, args):
+            fn = getattr(library, name)
+            fn.restype, fn.argtypes = result, args
+            return fn
+
+        H, D, P = w.HANDLE, w.DWORD, c.c_void_p
+        self._current = bind(self.kernel, 'GetCurrentProcess', H, [])
+        self._open_token = bind(self.advapi, 'OpenProcessToken', w.BOOL, [H, D, c.POINTER(H)])
+        self._restrict = bind(self.advapi, 'CreateRestrictedToken', w.BOOL,
+                              [H, D, D, P, D, P, D, P, c.POINTER(H)])
+        self._sid = bind(self.advapi, 'ConvertStringSidToSidW', w.BOOL, [w.LPCWSTR, c.POINTER(P)])
+        self._sid_length = bind(self.advapi, 'GetLengthSid', D, [P])
+        self._set_token = bind(self.advapi, 'SetTokenInformation', w.BOOL, [H, c.c_int, P, D])
+        self._get_token = bind(self.advapi, 'GetTokenInformation', w.BOOL,
+                              [H, c.c_int, P, D, c.POINTER(D)])
+        self._sid_count = bind(self.advapi, 'GetSidSubAuthorityCount', c.POINTER(w.BYTE), [P])
+        self._sid_part = bind(self.advapi, 'GetSidSubAuthority', c.POINTER(D), [P, D])
+        self._create = bind(self.advapi, 'CreateProcessWithTokenW', w.BOOL,
+                            [H, D, w.LPCWSTR, w.LPWSTR, D, P, w.LPCWSTR,
+                             c.POINTER(STARTUPINFO), c.POINTER(PROCESSINFO)])
+        self._resume = bind(self.kernel, 'ResumeThread', D, [H])
+        self._wait = bind(self.kernel, 'WaitForSingleObject', D, [H, D])
+        self._exit_code = bind(self.kernel, 'GetExitCodeProcess', w.BOOL, [H, c.POINTER(D)])
+        self._terminate = bind(self.kernel, 'TerminateProcess', w.BOOL, [H, w.UINT])
+        self._close = bind(self.kernel, 'CloseHandle', w.BOOL, [H])
+        self._free = bind(self.kernel, 'LocalFree', P, [P])
+
+    def check(self, result, code):
+        if not result:
+            raise ProbeFailure(f'{code}_winerror_{self.c.get_last_error()}')
+
+    def close_handle(self, handle):
+        if handle:
+            self._close(handle)
+
+    def restricted_token(self):
+        c, w = self.c, self.w
+        source, restricted, sid = w.HANDLE(), w.HANDLE(), c.c_void_p()
+        # QUERY | DUPLICATE | ASSIGN_PRIMARY | ADJUST_DEFAULT.
+        self.check(self._open_token(self._current(), 0x8B, c.byref(source)), 'open_ci_token')
+        try:
+            # DISABLE_MAX_PRIVILEGE | LUA_TOKEN. Never SANDBOX_INERT.
+            self.check(self._restrict(source, 0x5, 0, None, 0, None, 0, None,
+                                      c.byref(restricted)), 'restrict_ci_token')
+            self.check(self._sid('S-1-16-8192', c.byref(sid)), 'medium_integrity_sid')
+            label = self.SID_ATTRIBUTES(sid, 0x20)  # SE_GROUP_INTEGRITY.
+            self.check(self._set_token(restricted, 25, c.byref(label),
+                                      c.sizeof(label) + self._sid_length(sid)), 'set_medium_integrity')
+            result = restricted.value
+            restricted = w.HANDLE()
+            return result
+        finally:
+            if sid:
+                self._free(sid)
+            self.close_handle(restricted)
+            self.close_handle(source)
+
+    def create_suspended(self, token, executable, env):
+        c = self.c
+        executable = Path(executable).resolve(strict=True)
+        command = subprocess.list2cmdline([str(executable)])
+        if len(command) >= 1024:
+            raise ProbeFailure('child_command_too_long')
+        startup, info = self.STARTUPINFO(), self.PROCESSINFO()
+        startup.cb = c.sizeof(startup)
+        # Inherit the runner's interactive desktop; do not edit desktop ACLs.
+        block = c.create_unicode_buffer(windows_environment_block(env))
+        # CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT, no inherited environment.
+        self.check(self._create(token, 0, str(executable), c.create_unicode_buffer(command),
+                                0x404, block, str(executable.parent), c.byref(startup),
+                                c.byref(info)), 'create_standard_child')
+        return info.hProcess, info.hThread, int(info.dwProcessId)
+
+    def process_security(self, handle):
+        c, w = self.c, self.w
+        token, size, elevation = w.HANDLE(), w.DWORD(), w.DWORD()
+        self.check(self._open_token(handle, 0x8, c.byref(token)), 'open_child_token')
+        try:
+            self.check(self._get_token(token, 20, c.byref(elevation), c.sizeof(elevation),
+                                      c.byref(size)), 'child_elevation')
+            self._get_token(token, 25, None, 0, c.byref(size))
+            if not 0 < size.value <= 65536:
+                raise ProbeFailure('child_integrity_size_invalid')
+            buffer = c.create_string_buffer(size.value)
+            self.check(self._get_token(token, 25, buffer, size.value, c.byref(size)),
+                       'child_integrity')
+            label = c.cast(buffer, c.POINTER(self.SID_ATTRIBUTES)).contents
+            count = self._sid_count(label.Sid)
+            if not count or not 1 <= count[0] <= 15:
+                raise ProbeFailure('child_integrity_sid_invalid')
+            rid = self._sid_part(label.Sid, count[0] - 1)
+            if not rid:
+                raise ProbeFailure('child_integrity_rid_missing')
+            return {'elevated': bool(elevation.value), 'integrity_rid': int(rid[0])}
+        finally:
+            self.close_handle(token)
+
+    def resume(self, handle):
+        if self._resume(handle) != 1:
+            raise ProbeFailure('child_not_resumed_from_owned_suspension')
+
+    def wait(self, handle, milliseconds):
+        result = self._wait(handle, milliseconds)
+        if result not in (0, 258):  # WAIT_OBJECT_0 / WAIT_TIMEOUT.
+            raise ProbeFailure('owned_process_wait_failed')
+        return result == 0
+
+    def exit_code(self, handle):
+        code = self.w.DWORD()
+        self.check(self._exit_code(handle, self.c.byref(code)), 'owned_process_exit_code')
+        return int(code.value)
+
+    def terminate(self, handle):
+        # A concurrent exit is harmless; every operation uses the retained handle.
+        if not self._terminate(handle, 1) and not self.wait(handle, 0):
+            self.check(False, 'owned_process_terminate')
+
+
+class _OwnedStandardProcess:
+    def __init__(self, api, handle, pid, security):
+        self.api, self.handle, self.pid, self.security = api, handle, pid, security
+
+    def poll(self):
+        return self.api.exit_code(self.handle) if self.api.wait(self.handle, 0) else None
+
+    def wait(self, timeout):
+        milliseconds = int(timeout * 1000)
+        if not 0 <= milliseconds < 0xFFFFFFFF:
+            raise ProbeFailure('invalid_owned_wait_timeout')
+        if not self.api.wait(self.handle, milliseconds):
+            raise subprocess.TimeoutExpired('owned standard-integrity app', timeout)
+        return self.api.exit_code(self.handle)
+
+    def terminate(self):
+        self.api.terminate(self.handle)
+
+    def close(self):
+        if self.handle is not None:
+            self.api.close_handle(self.handle)
+            self.handle = None
+
+
+def _start_standard_user(executable, env, api):
+    token = api.restricted_token()
+    try:
+        process, thread, pid = api.create_suspended(token, executable, env)
+    finally:
+        api.close_handle(token)
+    try:
+        security = api.process_security(process)
+        if security.get('elevated') is not False or security.get('integrity_rid') != 8192:
+            raise ProbeFailure('child_not_standard_integrity')
+        api.resume(thread)
+        return _OwnedStandardProcess(api, process, pid, security)
+    except BaseException:
+        try:
+            api.terminate(process)
+            if not api.wait(process, 20000):
+                raise ProbeFailure('unresumed_owned_child_not_reaped')
+        finally:
+            api.close_handle(process)
+        raise
+    finally:
+        api.close_handle(thread)
+
+
+def start_standard_user(executable, env):
+    require_ci_execution(os.name, os.environ)
+    return _start_standard_user(executable, env, _WindowsStandardAPI())
+
+
 def safe_process_diagnostic(record, expected_port):
     command = record.get('command') or ''
     name = record.get('name') or ''
@@ -233,8 +445,9 @@ def _cold_start(executable, work, round_number, progress):
         f'--remote-debugging-address=127.0.0.1 --remote-debugging-port={port}'
     )
     env['WEBVIEW2_USER_DATA_FOLDER'] = str(work / 'webview-profile')
-    process = subprocess.Popen([str(executable)], env=env,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    progress['phase'] = f'cold_{round_number}_standard_user_launch'
+    process = start_standard_user(executable, env)
+    progress.setdefault('app_launch_security', []).append({'round': round_number, **process.security})
     browser = None
     client = None
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -302,15 +515,18 @@ def _cold_start(executable, work, round_number, progress):
             if browser:
                 browser.close()
         finally:
-            if client:
-                client.stop()
-            if process.poll() is None:
-                # Popen retains the owned Windows process handle. Avoid PID lookup
-                # and tree termination, including when game journeys are added later.
-                process.terminate()
-            process.wait(timeout=20)
-            _wait(lambda: _port_closed(port), 15, 'owned_webview_listener_not_closed')
-            progress['last_owned_root_and_listener_cleanup_verified'] = True
+            try:
+                if client:
+                    client.stop()
+            finally:
+                try:
+                    if process.poll() is None:
+                        process.terminate()
+                    process.wait(timeout=20)
+                    _wait(lambda: _port_closed(port), 15, 'owned_webview_listener_not_closed')
+                    progress['last_owned_root_and_listener_cleanup_verified'] = True
+                finally:
+                    process.close()
 
 
 def execute_cold_probe(installer, work, progress):
