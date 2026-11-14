@@ -40,8 +40,41 @@
     "inactivity_days": 7,
     "changed": false
   },
-  "full_main_ci": "Pending exact repaired source publication. Old e97 failure retained; local focused checks do not establish full CI or parity.",
-  "limits": "Four local PostgreSQL-backed methods only. Original route/platform/packaged/account/operator/final-review/release gates remain open.",
+  "full_main_ci": {
+    "source": "68bdf03ed740628441cb03a476b42601ade62fee",
+    "checkout_commit": "a67f479a29a9ce5cfa17f9658ecf8472b7ebbdf2",
+    "checkout_tree": "df6c37208edaf2913c798e50b035b3792d93cf9f",
+    "whole_tree_identity_verified": true,
+    "main_run": 43549805060,
+    "main_jobs_passed": 9,
+    "core": {
+      "job_id": 132309380664,
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 2375.03,
+      "raw_log_sha256": "db2cf6e4efc01489bcd6cbc227bdbbb2cd669bdd386a820d8dec7661a12abad1"
+    },
+    "member": {
+      "job_id": 132309380647,
+      "files_passed": 131,
+      "methods_passed": 1266,
+      "full_types_passed": true,
+      "raw_log_sha256": "8e10072c21cd8129e147f90b0896041bad7894a389b782bfcc01691522f5cfb7"
+    },
+    "desktop": {
+      "run": 43549805049,
+      "active_jobs_passed": 8,
+      "installer_builds_passed": 6,
+      "release_attachment": "skipped",
+      "macos_methods_passed": 127,
+      "ignored": 6,
+      "macos_raw_log_sha256": "0fbb0384db9190e3ebcc9c05df95c34fb0107d59003f8305ca2f755038edb6a9"
+    },
+    "limits": "Exact repaired-source component/CI baseline only. R2078 candidate native checks and all original packaged/platform/route/operator/final-review/release gates remain open."
+  },
+  "limits": "Four local PostgreSQL-backed methods plus exact-tree68bdf03e main9jobs/core7949 and member1266 pass. Later native discovery edits need their own checks. Original route/platform/packaged/account/operator/final-review/release gates remain open.",
   "capture": "Skipped: test-only correction and evidence documentation.",
   "archive": {
     "filename": "session-fixture-clock-r2077.zip",

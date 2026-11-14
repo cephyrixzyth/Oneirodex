@@ -15,6 +15,8 @@ use std::thread;
 use tauri::{Emitter, Manager, State};
 use url::{Host, Url};
 use zip::ZipArchive;
+#[cfg(any(target_os = "macos", test))]
+mod app_bundle;
 mod install_recovery;
 mod launch_supervisor;
 mod launch_tracking;
@@ -378,6 +380,12 @@ fn find_likely_exe(dir: &Path, max_depth: u32) -> Option<String> {
 fn find_likely_exe_inner(dir: &Path, depth: u32, max_depth: u32) -> Option<String> {
     if depth > max_depth {
         return None;
+    }
+
+    #[cfg(target_os = "macos")]
+    if app_bundle::is_app_bundle(dir) {
+        return app_bundle::executable_path(dir, is_launchable_file)
+            .map(|path| path.to_string_lossy().into_owned());
     }
 
     let entries = fs::read_dir(dir).ok()?;
@@ -2479,6 +2487,45 @@ mod tests {
     use std::process::Command;
     use std::time::{Duration, Instant};
     use tempfile::tempdir;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn discovery_finds_declared_bundle_main_from_extraction_root() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let work = tempdir().unwrap();
+        let app = work.path().join("Owned Game.app");
+        fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+        let main = app.join("Contents/MacOS/Main Game");
+        let helper = app.join("Contents/MacOS/AAA-helper");
+        for path in [&main, &helper] {
+            fs::write(path, b"owned discovery fixture; never executed").unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        fs::write(
+            app.join("Contents/Info.plist"),
+            br#"<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Main Game</string></dict></plist>"#,
+        )
+        .unwrap();
+        let found = find_likely_exe(work.path(), 2).map(PathBuf::from);
+        assert_eq!(found, Some(main));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn discovery_does_not_fall_back_to_a_broken_bundles_helper() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let work = tempdir().unwrap();
+        let app = work.path().join("Broken.app");
+        fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+        let helper = app.join("Contents/MacOS/helper");
+        fs::write(&helper, b"owned discovery fixture; never executed").unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::write(app.join("Contents/Info.plist"), b"malformed").unwrap();
+        assert_eq!(find_likely_exe(&app, 2), None);
+        assert_eq!(find_likely_exe(work.path(), 2), None);
+    }
 
     #[test]
     fn managed_child_fixture() {

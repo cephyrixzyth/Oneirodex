@@ -31,6 +31,11 @@ sha2 = "=0.10.9"
 [dev-dependencies]
 # Real temp dirs for the path-traversal / zip-slip unit tests in src/lib.rs.
 tempfile = "3"
+plist = { version = "=1.10.0", features = ["enable_unstable_features_that_may_break_with_minor_version_bumps"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Already locked through Tauri; read declared XML and binary bundle metadata.
+plist = { version = "=1.10.0", features = ["enable_unstable_features_that_may_break_with_minor_version_bumps"] }
 
 [features]
 default = ["custom-protocol"]

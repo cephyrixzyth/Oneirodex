@@ -45,7 +45,15 @@
     "source_sha256": "38b2d7d81f3b1cdbe7439ea4704b34c732a4e90317d9bee8bb72b8285257d5c4",
     "runtime_calendar_changed": false
   },
-  "new_head_full_member_ci": "pending after publication; previous source main is terminal failure in member and core",
+  "new_head_full_member_ci": {
+    "source": "68bdf03ed740628441cb03a476b42601ade62fee",
+    "run": 43549805060,
+    "job_id": 132309380647,
+    "files_passed": 131,
+    "methods_passed": 1266,
+    "full_types_passed": true,
+    "raw_log_sha256": "8e10072c21cd8129e147f90b0896041bad7894a389b782bfcc01691522f5cfb7"
+  },
   "archive": {
     "filename": "calendar-fixture-clock-r2075.zip",
     "sha256": "ba64b58a095c4f3417f186759bd49eaf430878ac41d0e6c4f7ed84837234dc73",
@@ -54,7 +62,7 @@
     "bytes": 30885,
     "storage": "Private canonical CI-MEMBER artifacts; raw CI/local host paths withheld from Git."
   },
-  "limits": "Thirteen focused methods/full types/lint/format only locally; full1266-context CI still required on the repair. No runtime Calendar/DOM/CSS or route-parity promotion.",
+  "limits": "Thirteen local focused methods/types/lint/format and exact-tree68bdf03e member131files/1266methods/fulltypes passed. Main baseline is also green; later R2078 discovery edits require their own checks. No runtime Calendar/DOM/CSS or route-parity promotion.",
   "capture": "Skipped: test-only change.",
   "related_core_checkpoint": {
     "source": "e97f89b9c7cd156ff3dfb04c5e4ad1efb2c42d63",
@@ -72,6 +80,6 @@
     "cause": "The fixture issues at Nov7 2026 UTC but active_login_sessions uses wall clock. On Nov14 the seven-day idle limit correctly excludes both sessions. No product expiry change is warranted.",
     "local_verification": "Blocked: existing review DB is stopped; restarting it fails binding loopback port5432 with Windows access-permissions error. No replacement DB, port change, or root env change performed.",
     "next_step": "Anchor this user-scoping fixture issuance to its observation clock, preserve age/idle boundary assertions in the adjacent test, then run the entire persistent-session file against a validated isolated test DB. No test repair has been applied in this checkpoint.",
-    "followup": "R2077 locally reproduces and corrects this fixture; four PostgreSQL-backed checks pass; exact-head full CI remains pending."
+    "followup": "R2077 repair passes exact-tree68bdf03e main CI: all9 jobs, core7949pass/15skip/548deselected; original failure retained."
   }
 }

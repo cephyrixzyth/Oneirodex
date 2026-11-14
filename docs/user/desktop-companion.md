@@ -64,6 +64,8 @@ The Friends webview is least-privilege (browse only); install/launch ACLs stay o
 
 ## Lifecycle
 
+The review source improves macOS executable discovery for extracted application bundles. When the search reaches an `.app`, it reads the declared main executable instead of searching its helpers. Missing, invalid, oversized or excessively complex bundle metadata is not guessed around. Native Mac and real packaged-game qualification are still pending for this discovery change.
+
 Cancel, Escape or clicking outside the version picker stops the download without
 changing the game's local state. Choosing the base version explicitly still
 downloads it.
