@@ -1,0 +1,93 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2080",
+  "observed_utc": "2026-11-14T18:54:39.045622+00:00",
+  "classification": "Windows packaged UI/IPC acceptance still unknown; first real run failed its CDP observation prerequisite.",
+  "first_run": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43627052128",
+    "job_id": 132545215952,
+    "harness_source": "c5e51daae69ad1d09e37b82e089a7ee6a4d3652a",
+    "raw_log_sha256": "cd40bceaeb8378610674c13ef4d9527e7880e2eb7cd26c85b053e10a77f29a08",
+    "receipt": {
+      "observed_utc": "2026-11-14T18:31:47.053030+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_webview_startup",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "owned_application_uninstalled": true,
+      "code": "webview_endpoint_not_ready"
+    }
+  },
+  "observed": "Pinned ZIP/installer verified; silent installation and uninstallation succeeded; installed binary hash recorded. The controller did not reach a CDP endpoint during the original60second window. Window/renderer/native IPC/account/game behavior was not observed.",
+  "followup": "Add bounded, sanitized process/window/runtime/flag/policy observations only on failure; retain original timeout, source package, ownership checks, security settings and acceptance assertions. No product change or blind timeout increase.",
+  "local_preflight": {
+    "observed_utc": "2026-11-14T18:54:39.045622+00:00",
+    "guard_methods_passed": 13,
+    "diagnostic_powershell": "parsed without execution",
+    "python_compile": "passed",
+    "source_sha256": {
+      "scripts/ci/probe_windows_packaged.py": "a30876582e31e78a6beb09b7ed3690fa5e5a2406521650404fb31da743aa70d5",
+      "scripts/ci/test_windows_packaged_probe.py": "aea3219632a694300e375af5e3d5a75c58c7ee82e34cef9dcfa948b95d94707d"
+    },
+    "git_normalized_source_sha256": {
+      "scripts/ci/probe_windows_packaged.py": "a30876582e31e78a6beb09b7ed3690fa5e5a2406521650404fb31da743aa70d5",
+      "scripts/ci/test_windows_packaged_probe.py": "aea3219632a694300e375af5e3d5a75c58c7ee82e34cef9dcfa948b95d94707d"
+    }
+  },
+  "runtime_retry": "pending explicit CI dispatch",
+  "installed_runtime_acceptance": false,
+  "dependency_followup": {
+    "inventory_records_retrieved": 113,
+    "severity": {
+      "critical": 13,
+      "high": 56,
+      "moderate": 43,
+      "low": 1
+    },
+    "new_records_reviewed": [
+      {
+        "number": 132,
+        "manifest": "requirements-dev.txt",
+        "ghsa": "GHSA-wqgw-9xfh-qf2g",
+        "affected": "<= 12.3.0",
+        "patched": "13.0.0",
+        "classification": "already_resolved_in_review_manifest",
+        "evidence": "requirements-dev.txt includes requirements.txt; reviewed source pins pillow13.0.0. Default alert remains open; no deployment claim."
+      },
+      {
+        "number": 131,
+        "manifest": "requirements-dev.txt",
+        "ghsa": "GHSA-xcvg-w56q-r89m",
+        "affected": "<= 12.3.0",
+        "patched": "13.0.0",
+        "classification": "already_resolved_in_review_manifest",
+        "evidence": "requirements-dev.txt includes requirements.txt; reviewed source pins pillow13.0.0. Default alert remains open; no deployment claim."
+      }
+    ],
+    "scope": "Other records were retrieved as inventory, not newly reviewed. Alerts stay open on default until authorized merge and recheck."
+  },
+  "rework": "A new diagnostic sanitizer scaffold had expected missing-function RED then13methods passed. Explicit page-number pagination was rejected; GitHub CLI cursor-aware pagination retrieved113 records without broader scopes. No duplicate native/full-suite tests or product-vulnerability claim.",
+  "limits": "The next run must establish whether the app, WebView2/CDP prerequisite or observer failed. Real-server/auth/offline/game/recovery/update/rollback, non-admin/physical-platform, route/operator/final-review/release gates remain open.",
+  "capture": "No local GUI execution or screenshots; remote diagnostics retain only bounded selected fields, never raw command lines, window text, paths or tokens.",
+  "archive": {
+    "filename": "windows-packaged-startup-observation-r2080.zip",
+    "sha256": "7ac95c84cbb47127f607afe13d486963a9bd7f9e2e2674d0b7298b7cae056fb7",
+    "payload_files": 8,
+    "manifest_in_addition": true,
+    "bytes": 15886,
+    "storage": "Private canonical package artifacts; prior installer capsule retained separately."
+  }
+}

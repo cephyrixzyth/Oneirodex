@@ -159,6 +159,69 @@ def runtime_environment(env):
     return {key: value for key, value in env.items() if key.upper() in allowed}
 
 
+def safe_process_diagnostic(record, expected_port):
+    command = record.get('command') or ''
+    name = record.get('name') or ''
+    return {'pid': int(record['pid']), 'parent': int(record['parent']),
+            'name': name if re.fullmatch(r'[A-Za-z0-9_.-]{1,80}', name) else 'unrecognized',
+            'expected_debug_port_flag': bool(re.search(
+                r'--remote-debugging-port=' + str(int(expected_port)) + r'(?:\s|$|\")', command)),
+            'probe_profile_flag': 'webview-profile' in command}
+
+
+def _startup_diagnostics(process, port, work):
+    script = r'''
+$root=Get-Process -Id ROOTPID -ErrorAction SilentlyContinue
+$rootName=if($root){$root.ProcessName+'.exe'}else{'oneirodex-desktop.exe'}
+$processes=@(Get-CimInstance Win32_Process | Where-Object {
+    $_.ProcessId -eq ROOTPID -or $_.Name -eq $rootName -or $_.Name -eq 'msedgewebview2.exe'
+} | ForEach-Object { @{pid=$_.ProcessId;parent=$_.ParentProcessId;name=$_.Name;command=$_.CommandLine} })
+$ids=@($processes|ForEach-Object {$_.pid})
+$listeners=@(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object {
+    $_.OwningProcess -in $ids
+} | ForEach-Object { @{pid=$_.OwningProcess;port=$_.LocalPort;address=$_.LocalAddress} })
+$versions=@()
+foreach($folder in @("${env:ProgramFiles(x86)}\Microsoft\EdgeWebView\Application",
+    "$env:ProgramFiles\Microsoft\EdgeWebView\Application",
+    "$env:LOCALAPPDATA\Microsoft\EdgeWebView\Application")) {
+    $versions+=@(Get-ChildItem -LiteralPath $folder -Directory -ErrorAction SilentlyContinue |
+        Where-Object {$_.Name -match '^\d+\.\d+\.\d+\.\d+$'} | ForEach-Object {$_.Name})
+}
+$policies=@()
+foreach($key in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKCU:\SOFTWARE\Policies\Microsoft\Edge')) {
+    $value=Get-ItemPropertyValue -LiteralPath $key -Name DeveloperToolsAvailability -ErrorAction SilentlyContinue
+    if($null -ne $value){$policies+=@([int]$value)}
+}
+$keywords=@()
+if($root -and $root.MainWindowHandle.ToInt64() -ne 0) {
+    try {
+        Add-Type -AssemblyName UIAutomationClient
+        $element=[System.Windows.Automation.AutomationElement]::FromHandle($root.MainWindowHandle)
+        $nodes=$element.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.Condition]::TrueCondition)
+        $text=@($nodes|Select-Object -First 100|ForEach-Object {$_.Current.Name}) -join ' '
+        foreach($word in @('Oneirodex Desktop','Connection','Server URL','WebView2','user data','access','error')) {
+            if($text -match [regex]::Escape($word)){$keywords+=@($word)}
+        }
+    } catch {}
+}
+@{root_alive=[bool]$root;has_main_window=[bool]($root -and $root.MainWindowHandle.ToInt64() -ne 0);
+    product_window_title=[bool]($root -and $root.MainWindowTitle -match 'Oneirodex');
+    session_id=$(if($root){$root.SessionId}else{-1});visible_text_keywords=$keywords;
+    processes=$processes;listeners=$listeners;runtime_versions=$versions;devtools_policy_values=$policies} |
+    ConvertTo-Json -Depth 5 -Compress
+'''.replace('ROOTPID', str(int(process.pid)))
+    result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
+                            capture_output=True, encoding='utf-8', timeout=20)
+    if result.returncode:
+        return {'observation': 'failed', 'code': 'startup_metadata_query_failed'}
+    raw = json.loads(result.stdout)
+    raw['processes'] = [safe_process_diagnostic(p, port) for p in raw['processes']]
+    raw['probe_webview_profile_created'] = (work / 'webview-profile').exists()
+    raw['parent_has_browser_folder_override'] = bool(os.environ.get('WEBVIEW2_BROWSER_EXECUTABLE_FOLDER'))
+    return raw
+
+
 def _cold_start(executable, work, round_number, progress):
     from playwright.sync_api import sync_playwright
 
@@ -228,6 +291,12 @@ def _cold_start(executable, work, round_number, progress):
                            'native_ipc': True, 'fresh_config': True,
                            'webview_version': browser.version,
                            'parent_directory_denied': True, 'listener_ownership_verified': True}
+    except Exception:
+        try:
+            progress['startup_diagnostics'] = _startup_diagnostics(process, port, work)
+        except Exception as diagnostic_error:
+            progress['startup_diagnostics'] = {'observation': 'failed', 'error_class': type(diagnostic_error).__name__}
+        raise
     finally:
         try:
             if browser:
@@ -241,6 +310,7 @@ def _cold_start(executable, work, round_number, progress):
                 process.terminate()
             process.wait(timeout=20)
             _wait(lambda: _port_closed(port), 15, 'owned_webview_listener_not_closed')
+            progress['last_owned_root_and_listener_cleanup_verified'] = True
 
 
 def execute_cold_probe(installer, work, progress):

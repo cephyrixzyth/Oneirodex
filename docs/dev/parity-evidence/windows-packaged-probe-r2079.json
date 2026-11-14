@@ -53,7 +53,7 @@
   ],
   "ci_security": "Explicit manual mode in the existing registered workflow. No build, coalition experiment or release in package-only mode. Job has contents/read and actions/read. Installer/app receive an OS-environment allowlist without CI credentials. No registry or browser-security changes. Only sanitized receipt JSON is uploaded.",
   "installed_runtime_acceptance": false,
-  "runtime_outcome": "not yet observed",
+  "runtime_outcome": "First actual run failed at WebView2/CDP startup observation; installation/uninstallation succeeded. No installed UI or IPC acceptance.",
   "limits": "Cold-start/IPC/physical-marker foundation only. Real ASGI/PostgreSQL identity, tokens/revocation/denial/offline/installed-game Play, exact-launch recovery, update/rollback, actual saves and other original gates remain required. No local GUI/installer execution occurred.",
   "rework": "Initial missing-module and environment-function scaffolds were expected REDs. ZIP backslash normalization admitted a nested filename in the first candidate; strict flat installer selection fixed two assertions. A simulated runtime failure reproduced an inspected-versus-failed receipt bug before correction. The first PowerShell parse observer passed its file argument incorrectly; the corrected observer parsed both steps without executing them. Optional npm metadata lookup was stopped; existing Python Playwright1.65.1 is pinned instead. These are harness/workflow rework, not additional product vulnerabilities.",
   "primary_sources": [
@@ -78,5 +78,16 @@
     "bytes": 2376837,
     "storage": "Private canonical Windows package artifacts; actual installer ZIP retained, no operator content."
   },
-  "evidence_selection": "Selected Git-ready archive pins current code and window-readiness wait. Original readiness snapshot and actual artifact ZIP retained; installed outcome remains pending. The archive keeps the earlier public-report snapshot alongside the explicitly selected Git-ready preflight; current source hashes identify the selected implementation."
+  "evidence_selection": "Selected Git-ready archive pins current code and window-readiness wait. Original readiness snapshot and actual artifact ZIP retained; installed outcome remains pending. The archive keeps the earlier public-report snapshot alongside the explicitly selected Git-ready preflight; current source hashes identify the selected implementation.",
+  "first_runtime_observation": {
+    "run": 43627052128,
+    "job": 132545215952,
+    "status": "failed",
+    "code": "webview_endpoint_not_ready",
+    "source_verified": true,
+    "installer_executed": true,
+    "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+    "owned_application_uninstalled": true,
+    "followup": "R2080 adds sanitized observations; product root cause and UI/IPC acceptance remain unknown."
+  }
 }

@@ -11,7 +11,7 @@ import probe_windows_packaged as probe
 
 from probe_windows_packaged import (
     ProbeFailure, create_workspace, extract_installer, require_ci_execution,
-    validate_source, verify_digest, listener_is_owned, runtime_environment,
+    validate_source, verify_digest, listener_is_owned, runtime_environment, safe_process_diagnostic,
 )
 
 SOURCE = '6a03c6fbdadcdc8f585d0012b3a36879e408fa0b'
@@ -138,6 +138,16 @@ class PackageGuardTests(unittest.TestCase):
                 code = probe.main()
             self.assertEqual(code, 1)
             self.assertEqual(__import__('json').loads(output.getvalue())['status'], 'failed')
+
+    def test_failure_diagnostics_do_not_serialize_command_lines_or_paths(self):
+        raw = {'pid': 12, 'parent': 10, 'name': 'msedgewebview2.exe',
+               'command': 'browser --remote-debugging-port=1234 --user-data-dir=private/webview-profile SECRET-VALUE'}
+        selected = safe_process_diagnostic(raw, 1234)
+        self.assertTrue(selected['expected_debug_port_flag'])
+        self.assertTrue(selected['probe_profile_flag'])
+        self.assertNotIn('SECRET-VALUE', repr(selected))
+        self.assertNotIn('private/', repr(selected))
+        self.assertNotIn('command', selected)
 
 
 if __name__ == '__main__':

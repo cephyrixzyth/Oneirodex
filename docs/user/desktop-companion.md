@@ -207,4 +207,4 @@ Related: [downloads.md](downloads.md) · [browser-play.md](browser-play.md) · [
 
 ## Packaged-runtime verification
 
-The review workflow has an explicit Windows package-only test mode. It verifies a pinned installer on a disposable CI runner and checks the installed companion’s startup, native bridge, reopen and an owned file’s retention. Its current harness has local safety checks; actual CI results are still pending. It does not run an installer on the operator computer or establish standalone-server, connected-account, real-game or other-platform acceptance.
+The review workflow has an explicit Windows package-only test mode. It verifies a pinned installer on a disposable CI runner and checks the installed companion’s startup, native bridge, reopen and an owned file’s retention. The first CI run installed and uninstalled the package but could not observe its embedded browser; startup, native-bridge and reopen acceptance remains pending. It does not run an installer on the operator computer or establish standalone-server, connected-account, real-game or other-platform acceptance.
