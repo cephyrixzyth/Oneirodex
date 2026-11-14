@@ -1,0 +1,271 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2081",
+  "observed_utc": "2026-11-14T19:10:48.571988+00:00",
+  "review_revision": "44bbc4ecfc437653d4a70d1febcd32054c4e3500",
+  "scope": "Bounded allowance checkpoint: static critical-dependency triage and preserved second installed-package observation; no product changes.",
+  "critical_alert_review": {
+    "inventory_observed_utc": "2026-11-14T18:48:04.063897+00:00",
+    "inventory_records": 113,
+    "critical_records_reviewed": 13,
+    "classification": "already_resolved_in_review_manifest",
+    "static_contract_verdict": "not_actionable for the affected-version claim in the review source",
+    "records": [
+      {
+        "number": 118,
+        "package": "authlib",
+        "manifest": "requirements.txt",
+        "review_version": "1.9.1",
+        "affected": "<= 1.8.0",
+        "patched": "1.9.0",
+        "ghsa": "GHSA-6v38-4h7w-rj9h",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 110,
+        "package": "authlib",
+        "manifest": "requirements-dev.txt",
+        "review_version": "1.9.1",
+        "affected": "<= 1.8.0",
+        "patched": "1.9.0",
+        "ghsa": "GHSA-6v38-4h7w-rj9h",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 106,
+        "package": "zip",
+        "manifest": "clients/desktop/src-tauri/Cargo.lock",
+        "review_version": "9.1.2",
+        "affected": "<= 9.0.4",
+        "patched": "9.0.5",
+        "ghsa": "GHSA-m665-v7pm-7grj",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 105,
+        "package": "pillow",
+        "manifest": "requirements.txt",
+        "review_version": "13.0.0",
+        "affected": "<= 12.3.0",
+        "patched": "13.0.0",
+        "ghsa": "GHSA-5x8w-8jj5-q52h",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 96,
+        "package": "pillow",
+        "manifest": "requirements.txt",
+        "review_version": "13.0.0",
+        "affected": ">= 11.0.0, < 13.0.0",
+        "patched": "13.0.0",
+        "ghsa": "GHSA-v9pv-5gc8-w2m6",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 91,
+        "package": "pillow",
+        "manifest": "requirements.txt",
+        "review_version": "13.0.0",
+        "affected": ">= 2.0.0, < 13.0.0",
+        "patched": "13.0.0",
+        "ghsa": "GHSA-332p-7hrc-92wf",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 74,
+        "package": "pillow",
+        "manifest": "requirements.txt",
+        "review_version": "13.0.0",
+        "affected": ">= 2.6.0, < 13.0.0",
+        "patched": "13.0.0",
+        "ghsa": "GHSA-w889-685w-c8fh",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 73,
+        "package": "pillow",
+        "manifest": "requirements-dev.txt",
+        "review_version": "13.0.0",
+        "affected": "<= 12.3.0",
+        "patched": "13.0.0",
+        "ghsa": "GHSA-5x8w-8jj5-q52h",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 64,
+        "package": "pillow",
+        "manifest": "requirements-dev.txt",
+        "review_version": "13.0.0",
+        "affected": ">= 11.0.0, < 13.0.0",
+        "patched": "13.0.0",
+        "ghsa": "GHSA-v9pv-5gc8-w2m6",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 59,
+        "package": "pillow",
+        "manifest": "requirements-dev.txt",
+        "review_version": "13.0.0",
+        "affected": ">= 2.0.0, < 13.0.0",
+        "patched": "13.0.0",
+        "ghsa": "GHSA-332p-7hrc-92wf",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 42,
+        "package": "pillow",
+        "manifest": "requirements-dev.txt",
+        "review_version": "13.0.0",
+        "affected": ">= 2.6.0, < 13.0.0",
+        "patched": "13.0.0",
+        "ghsa": "GHSA-w889-685w-c8fh",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 33,
+        "package": "pillow",
+        "manifest": "requirements-dev.txt",
+        "review_version": "13.0.0",
+        "affected": "<= 12.3.0",
+        "patched": "13.0.0",
+        "ghsa": "GHSA-8g5g-8vmr-9782",
+        "classification": "already_resolved_in_review_manifest"
+      },
+      {
+        "number": 16,
+        "package": "pillow",
+        "manifest": "requirements.txt",
+        "review_version": "13.0.0",
+        "affected": "<= 12.3.0",
+        "patched": "13.0.0",
+        "ghsa": "GHSA-8g5g-8vmr-9782",
+        "classification": "already_resolved_in_review_manifest"
+      }
+    ],
+    "manifest_sha256_git_normalized": {
+      "requirements.txt": "161263b5def9771663b787f77757be241bb21deb39619df32dd6cf54421c42d4",
+      "requirements-dev.txt": "f92c058fbd7c7b2676c90126b95d3802f5618fec3a123ac7ee3079ddd0f52737",
+      "clients/desktop/src-tauri/Cargo.lock": "cb11acd572e0a57a552a8206519e647e373aee28f847ec4ca23bbdcedb5218af"
+    },
+    "source_inventory_sha256": "51a98eb4277d4718e8711970521819ad838667935e59a71e95280026d42e95d3",
+    "private_triage_sha256": "7105c20eb37b278ef97066991a8af524788c6e1f8214533f09229f8a4a4fa42e",
+    "limits": "No dependency changes needed for these supplied ranges. Default alerts remain open; installed/deployed resolution is unverified. Other 100 inventory records are outside this critical-only followup; earlier individual reviews remain separate."
+  },
+  "windows_second_observation": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43629561197",
+    "job_id": 132552947762,
+    "harness_source": "44bbc4ecfc437653d4a70d1febcd32054c4e3500",
+    "raw_log_sha256": "9e325bfea75f32c6b0adcddfcba04a5a81e7b018bb5ac8cc811de468c9ef568a",
+    "receipt": {
+      "observed_utc": "2026-11-14T18:59:28.253851+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_webview_startup",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "startup_diagnostics": {
+        "product_window_title": true,
+        "visible_text_keywords": [
+          "Oneirodex Desktop"
+        ],
+        "listeners": [],
+        "processes": [
+          {
+            "pid": 8024,
+            "parent": 9092,
+            "name": "oneirodex-desktop.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": false
+          },
+          {
+            "pid": 7920,
+            "parent": 8024,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          },
+          {
+            "pid": 8196,
+            "parent": 7920,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          },
+          {
+            "pid": 4700,
+            "parent": 7920,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          },
+          {
+            "pid": 2044,
+            "parent": 7920,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          },
+          {
+            "pid": 2124,
+            "parent": 7920,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          },
+          {
+            "pid": 5192,
+            "parent": 7920,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          }
+        ],
+        "devtools_policy_values": [],
+        "session_id": 2,
+        "root_alive": true,
+        "runtime_versions": [
+          "156.0.4314.58"
+        ],
+        "has_main_window": true,
+        "probe_webview_profile_created": true,
+        "parent_has_browser_folder_override": false
+      },
+      "last_owned_root_and_listener_cleanup_verified": true,
+      "owned_application_uninstalled": true,
+      "code": "webview_endpoint_not_ready"
+    }
+  },
+  "observer_assessment": {
+    "classification": "evidence-supported explanation; corrective runtime rerun pending",
+    "explanation": "Microsoft documents that elevated WebView2 hosts ignore environment-supplied browser argument overrides. Both CI hosts were elevated; the second run had a live product window, matching static label and WebView2 processes, but no expected debugging flag or listener. This is consistent with an observer prerequisite failure; a non-elevated controlled rerun is still required to establish causality and UI/native-IPC acceptance.",
+    "primary_source": "https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/security#for-an-elevated-host-app-use-appropriate-override-flags"
+  },
+  "fresh_checks": {
+    "package_guard_methods_passed": 13,
+    "r1972_bundle": {
+      "bundle_valid": true,
+      "report_files_verified": 7,
+      "route_rows_verified": 1545,
+      "current_only_operations": 160,
+      "secret_and_path_scan": "passed"
+    },
+    "static_dependency_checks": "13 supplied ranges exclude reviewed versions and all reviewed versions meet their first patch; dev include chain has no overrides; all locked zip versions checked."
+  },
+  "next_action": "Task2b6: implement a CI-only standard-user launch/observation path with focused ownership, credential isolation and cleanup guards, retaining the exact 6a03c6fb NSIS artifact. Keep loopback ownership, timeout and native IPC assertions. Do not add debug plugins to the shipping binary, change registry/browser security, or launch a local GUI. Dispatch only after review and focused checks; retain original failures. Then continue actual isolated ASGI/PostgreSQL account/offline/game/restart journeys and every original gate.",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "No route coverage promotion, UI/IPC/account/game acceptance, merge, release or deployment. Original owner choices and private history retained. No new build or local installer/GUI execution.",
+  "capture": "Skipped: documentation/static triage only; no UI change."
+}
