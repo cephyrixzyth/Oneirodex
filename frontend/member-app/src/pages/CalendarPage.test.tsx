@@ -11,6 +11,10 @@ vi.mock('../api/calendar', () => ({
 
 const VIEW_KEY = 'od.calendar.view'
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 function installLocalStorageMock() {
   const store = new Map()
   const api = {
@@ -165,6 +169,10 @@ test('a stored agenda view falls back to List rather than selecting nothing', ()
 })
 
 test('month view renders a rotating cover tile per busy day', async () => {
+  // Keep the fixed upcoming release fixtures inside their advertised window.
+  // Only Date is mocked; user interactions and resource timers remain real.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-08-10T12:00:00Z'))
   const user = userEvent.setup()
   vi.mocked(calendarApi.fetchCalendar).mockResolvedValue({
     count: 2,
