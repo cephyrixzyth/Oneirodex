@@ -37,6 +37,16 @@ class ConnectedJourneyContracts(unittest.TestCase):
         native.stop_round.assert_called_once()
         self.assertIn('linux_connected_ui_cleanup_failed',failed.exception.__notes__)
 
+    def test_fixed_protocol_category_survives_failure_without_raw_status(self):
+        native=mock.Mock();native.execute_js.side_effect=[None,{'protocol_error':True,'PRIVATE':'PRIVATE'}]
+        def once(check,seconds,code):
+            if not check():raise ProbeFailure(code)
+        report={}
+        with mock.patch.object(journey,'wait_for',side_effect=once):
+            with self.assertRaises(ProbeFailure):journey.connect(native,'http://127.0.0.1:123','PRIVATE','online',report,'valid')
+        self.assertTrue(report['failed_ui_snapshot']['protocol_error'])
+        self.assertNotIn('PRIVATE',repr(report))
+
     def test_backend_cleanup_failure_cannot_leave_extended_acceptance_true(self):
         fixture=mock.Mock();fixture.close.side_effect=ProbeFailure('backend_cleanup_failed')
         def completed(deb,work,report,**kwargs):report['installed_runtime_acceptance']=True

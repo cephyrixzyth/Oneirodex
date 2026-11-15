@@ -20,6 +20,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs):return None
 
 
+def collection_list_projection(status,body):
+    try:value=json.loads(body)
+    except (ValueError,UnicodeError):value=None
+    return {'http_status':status,'root_array':isinstance(value,list),
+            'collections_array':isinstance(value,dict) and isinstance(value.get('collections'),list)}
+
+
 def require_backend_ci(root, env, platform, uid):
     require_ci_execution(platform, env, uid)
     if (root/'.env').exists():
@@ -211,6 +218,8 @@ class NativeServerAPI:
             'Access-Control-Request-Headers':'authorization'})
         self.progress['native_origin_preflight']={'http_status':code,
             'origin_allowed':headers.get('access-control-allow-origin',headers.get('Access-Control-Allow-Origin'))=='tauri://localhost'}
+        code,body,_=self.http('/api/collections',data['tokens']['adult'])
+        self.progress['backend_collection_list_shape']=collection_list_projection(code,body)
         data['base_url']=self.base_url
         return data
 

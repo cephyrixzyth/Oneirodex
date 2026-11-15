@@ -117,5 +117,12 @@ class ConnectedServerContracts(unittest.TestCase):
         self.assertEqual(api.progress['backend_bearer_http_controls']['wrong'],200)
         self.assertNotIn('PRIVATE',repr(api.progress))
 
+    def test_collection_list_projection_keeps_only_numeric_status_and_shape(self):
+        projected=server.collection_list_projection(200,b'{"collections":[],"PRIVATE":"PRIVATE"}')
+        self.assertEqual(projected,{'http_status':200,'root_array':False,'collections_array':True})
+        self.assertNotIn('PRIVATE',repr(projected))
+        self.assertEqual(server.collection_list_projection(200,b'[]')['root_array'],True)
+        self.assertFalse(server.collection_list_projection(500,b'not-json PRIVATE')['collections_array'])
+
 
 if __name__=='__main__':unittest.main()

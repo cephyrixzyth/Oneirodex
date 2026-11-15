@@ -16,10 +16,15 @@ STATE_SCRIPT = '''return (() => {
   return {ready: status === 'Enter credentials and click Connect.',
     online: /\\bOnline\\b/.test(summary), denied: summary.includes('Server access denied'),
     network_error: /network|cors|tls/i.test(status), keyring_error: /keyring|credential store|secure.store/i.test(status),
+    protocol_error: status.includes('Server API returned an unexpected response'),
+    redirect_error: status.includes('Server API redirect refused'),
+    permission_error: status.includes('Companion permission error'),
+    connecting: status === 'Connecting…',
     shared_visible: titles.includes('Synthetic CI Shared Game'),
     private_visible: titles.includes('Synthetic CI Adult Private Game')};
 })();'''
-STATE_FIELDS = ('ready','online','denied','network_error','keyring_error','shared_visible','private_visible')
+STATE_FIELDS = ('ready','online','denied','network_error','keyring_error','protocol_error',
+                'redirect_error','permission_error','connecting','shared_visible','private_visible')
 
 
 def mark(progress,label):

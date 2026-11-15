@@ -3,7 +3,7 @@
   "evidence_id": "R2113",
   "observed_utc": "2026-11-15T07:21:59.333365+00:00",
   "base_commit": "81a69d0f619718528e55115d844092af98d67935",
-  "classification": "Confirmed missing native-origin CORS response support; focused server correction, installed connected retry pending.",
+  "classification": "Missing native CORS support corrected; real preflight allow-origin now true and network/CORS UI category clears. Actual Connect still fails before online; downstream response-shape cause requires precise observation.",
   "native_failure": {
     "run": 43689034923,
     "job": 132735537658,
@@ -154,5 +154,143 @@
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
   "limits": "CORS unit contracts are not connected-account qualification. Wrong/revoked token UI may still expose a separate redirect/denial mismatch. Provider startup is not credential persistence/reboot durability. All original game/offline/restart/platform/AT/operator/route/final/release gates remain open.",
-  "capture": "Skipped: no UI edits or local app resources; installed native execution is isolated CI."
+  "capture": "Skipped: no UI edits or local app resources; installed native execution is isolated CI.",
+  "native_followup_r2113": {
+    "run": 43689683193,
+    "job": 132737480333,
+    "raw_log_sha256": "6e42c90c7515c275cb9ddab29e00d378308ec3de18b4c7e323aa444b14b9c227",
+    "receipt": {
+      "observed_utc": "2026-11-15T07:25:16.454205+00:00",
+      "status": "failed",
+      "mode": "remote-companion",
+      "installed_runtime_acceptance": false,
+      "acceptance_scope": "linux_connected_accounts_and_credentials",
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097566864,
+      "archive_sha256": "933c7bdae0ba086fa3bdbf6facad07c512402133fe8cdf2791d515ccb3289994",
+      "deb_sha256": "66859e1d50e083bbe83c6a16e1b1ad65d5a75dd85d5d9d4af34948a071965f75",
+      "source_and_digest_verified": true,
+      "backend_source_commit": "a26498b3fecd4b6b770d21e70fbe1181149a2633",
+      "phase": "linux_connected_account_journey",
+      "backend_launcher": "startweb.sh",
+      "backend_listener_owned": true,
+      "backend_alembic_head": "a4b5c6d7e8f9",
+      "postgres_version_num": "160016",
+      "backend_bearer_http_controls": {
+        "adult": 200,
+        "child": 200,
+        "wrong": 302,
+        "limited": 403
+      },
+      "native_origin_preflight": {
+        "http_status": 200,
+        "origin_allowed": true
+      },
+      "backend_ready": true,
+      "backend_synthetic_seeded": true,
+      "cleanup_verified": true,
+      "cold_rounds": [
+        {
+          "round": 1,
+          "bundled_renderer": true,
+          "native_ipc": true,
+          "parent_directory_denied": true,
+          "ordinary_user": true,
+          "listener_ownership_verified": true
+        },
+        {
+          "round": 2,
+          "bundled_renderer": true,
+          "native_ipc": true,
+          "parent_directory_denied": true,
+          "ordinary_user": true,
+          "listener_ownership_verified": true
+        }
+      ],
+      "platform": "Linux",
+      "effective_uid_nonzero": true,
+      "tauri_driver_version": "2.1.0",
+      "process_cleanup_scope": "Owned session/process groups and explicit driver ports; not product game-launch identity.",
+      "installer_executed": true,
+      "installed_binary_sha256": "220c19ec6b4714844bdc4609f27c42946ff9435f02eb568bde2df39e5d4d409b",
+      "native_package_versions": {
+        "webkit2gtk-driver": "2.50.4-0ubuntu0.22.04.1",
+        "libwebkit2gtk-4.1-0": "2.50.4-0ubuntu0.22.04.1"
+      },
+      "tauri_driver_sha256": "a71b247ca519f3ed02a364cd8692d71d381ffe81279c94c6ed65ec300d217868",
+      "owned_display_and_dbus_started": true,
+      "secret_service_owned_bus_ready": true,
+      "secret_service_package_version": "40.0-3ubuntu3",
+      "selected_driver_logs": [
+        {
+          "round": 1,
+          "prefix_bytes": 353,
+          "truncated": false,
+          "prefix_sha256": "dadc72ed76fdaf3862efa2810554a77b1fb040a284792d5e31d708b9419c8edf",
+          "matched_categories": [
+            "not_found"
+          ],
+          "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+        },
+        {
+          "round": 2,
+          "prefix_bytes": 353,
+          "truncated": false,
+          "prefix_sha256": "da59c250b388a7b3391b41efa6fb37be7055bcaeded8e95d73ab10f82ec159a4",
+          "matched_categories": [
+            "not_found"
+          ],
+          "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+        },
+        {
+          "round": 3,
+          "prefix_bytes": 353,
+          "truncated": false,
+          "prefix_sha256": "b0e4edef203607393cbf82cfe02864220560943efaa2136d9751822e9ab23006",
+          "matched_categories": [
+            "not_found"
+          ],
+          "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+        }
+      ],
+      "owned_marker_retained_after_cold_reopen": true,
+      "failed_ui_snapshot": {
+        "ready": false,
+        "online": false,
+        "denied": false,
+        "network_error": false,
+        "keyring_error": false,
+        "shared_visible": false,
+        "private_visible": false
+      },
+      "owned_package_uninstalled": true,
+      "owned_marker_retained_after_uninstall": true,
+      "owned_marker_removed": true,
+      "cleanup_errors": [],
+      "backend_cleanup_verified": true,
+      "selected_backend_log": {
+        "prefix_bytes": 12694,
+        "truncated": false,
+        "prefix_sha256": "d2e6d4d54740b58df010f81deb74662536a3b95c1ed42d0e8c92ca9e6e59338c",
+        "matched_categories": [
+          "migration"
+        ]
+      },
+      "code": "linux_connected_ui_adult_connect_not_verified"
+    }
+  },
+  "native_cors_header_verified": true,
+  "native_connected_acceptance": false,
+  "r2114_diagnostics": {
+    "linux_methods_passed": 37,
+    "red_to_green": "2 missing safe projections become37Linuxpass; pyflakes/diff pass",
+    "change": "Add numeric/root-array/collections-array response projection and fixed protocol/redirect/permission/connecting UI booleans. No raw body/status/text/token publication and no weaker acceptance.",
+    "source_sha256_git_normalized": {
+      "scripts/ci/linux_connected_server.py": "8e95a07ef4c5c82bbac28559adeaeac2d11b7bfbabcd9d1aa81e1c7d833d1e60",
+      "scripts/ci/linux_connected_journey.py": "2297472bdcd25c241d444919657c45b41917a3376d97f442bcd7138208b0ba07",
+      "scripts/ci/test_linux_connected_server.py": "0f4a199a041941efe283055e5331eeb9b14888cf21f1f5dcc1db6d904532505a",
+      "scripts/ci/test_linux_connected_journey.py": "88727f49eb2ade2bfc3615d749974738bdf4749e5884d88d54be88709e348c0c"
+    }
+  }
 }
