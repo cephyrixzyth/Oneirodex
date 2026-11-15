@@ -1,0 +1,38 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2095",
+  "observed_utc": "2026-11-15T00:49:54.587385+00:00",
+  "base_commit": "07fdc96b1617ae8a48eff4b314128728b0f65706",
+  "classification": "Disposable normal-user/private-desktop CI fixture implemented and locally safety-verified; native qualification pending.",
+  "prerequisite_evidence": "R2094: hosted runner lacks an OS-linked token (1312); do not repeat synthetic-restricted-token or missing-linked-token app attempts.",
+  "change": [
+    "Create a unique ordinary local account with a private nonce/marker and Users membership; credentials are ephemeral, transported through stdin only, never command arguments/environment/files/receipts.",
+    "Create new private window station/desktop with explicit account/System/Administrators access, restore the controller context, and grant access only on a fresh owned work prefix. Existing desktop ACLs and browser security are unchanged.",
+    "Load an ordinary logon profile using suspended CreateProcessWithLogonW; verify exact account SID, non-elevated/medium token and OS-resolved profile/environment before resume.",
+    "Retain process handles for cleanup; preserve the original failure when cleanup overlaps. If a child cannot be reaped, retain its desktop/account resources and explicitly fail cleanup. Delete only SID/nonce-owned account/profile resources."
+  ],
+  "verification": {
+    "red": [
+      "9lifecycle tests initially fail for absent fixture.",
+      "4native-binding tests then fail for absent bindings.",
+      "2overlapping-failure regressions expose masking/deletion ordering defects before correction."
+    ],
+    "local_fixture_methods_passed": 15,
+    "existing_package_methods_loaded": 39,
+    "existing_package_methods_passed": 37,
+    "existing_native_only_skipped": 2,
+    "account_powershell_scripts_parse_only": 2,
+    "pyflakes": "passed",
+    "native_mutations_on_operator_computer": false
+  },
+  "rework": "The first fake wait incorrectly made a live process exit during a nonblocking poll; corrected the fake, then verified actual termination order. A transport test initially inspected the later cleanup call rather than the password-bearing creation call; it now checks both and their separation.",
+  "source_sha256_git_normalized": {
+    "scripts/ci/windows_user_fixture.py": "fd105ded9e780fd2833334700e217dddeacc257d87744d4836139a8ee80fcf58",
+    "scripts/ci/test_windows_user_fixture.py": "0316d5ee797b85f911e3e9df177370b9c36ba35c9bebaedd312ea825da6aa91d"
+  },
+  "native_qualification": "not yet executed; next is fixture-only disposable Windows CI using known CLI exits before any package integration",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Fake API/binding tests and PowerShell AST parsing do not prove real account creation, token/profile/private-desktop behavior, cleanup or app startup. Existing product/account/game/platform/parity/release gates remain unchanged.",
+  "capture": "Skipped: CI-only fixture source; no native fixture executed locally."
+}
