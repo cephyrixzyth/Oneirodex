@@ -58,6 +58,28 @@ class ConnectedJourneyContracts(unittest.TestCase):
         self.assertTrue(report['failed_ui_snapshot']['search_requested'])
         self.assertNotIn('PRIVATE',repr(report))
 
+    def test_transient_online_state_does_not_qualify_before_connect_finishes(self):
+        native=mock.Mock();native.execute_js.side_effect=[None,{'online':True,'shared_visible':True,
+            'private_visible':True,'connection_settled':False}]
+        def once(check,seconds,code):
+            if not check():raise ProbeFailure(code)
+        report={}
+        with mock.patch.object(journey,'wait_for',side_effect=once):
+            with self.assertRaises(ProbeFailure):
+                journey.connect(native,'http://127.0.0.1:123','PRIVATE','online',report,'valid',private_visible=True)
+        self.assertIsNot(report.get('connected_account_checks',{}).get('valid'),True)
+
+    def test_completed_online_state_qualifies_and_records_finalization(self):
+        native=mock.Mock();native.execute_js.side_effect=[None,{'online':True,'shared_visible':True,
+            'private_visible':True,'connection_settled':True}]
+        def once(check,seconds,code):
+            if not check():raise ProbeFailure(code)
+        report={}
+        with mock.patch.object(journey,'wait_for',side_effect=once):
+            journey.connect(native,'http://127.0.0.1:123','PRIVATE','online',report,'valid',private_visible=True)
+        self.assertTrue(report['connected_account_checks']['valid_connection_settled'])
+        self.assertNotIn('failed_ui_snapshot',report);self.assertNotIn('PRIVATE',repr(report))
+
     def test_backend_cleanup_failure_cannot_leave_extended_acceptance_true(self):
         fixture=mock.Mock();fixture.close.side_effect=ProbeFailure('backend_cleanup_failed')
         def completed(deb,work,report,**kwargs):report['installed_runtime_acceptance']=True

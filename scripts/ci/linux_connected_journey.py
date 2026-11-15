@@ -13,6 +13,7 @@ STATE_SCRIPT = '''return (() => {
   const summary = document.querySelector('#auth-summary')?.textContent || '';
   const status = document.querySelector('#status')?.textContent || '';
   const titles = document.querySelector('#library')?.textContent || '';
+  const connectButton = document.querySelector('#connect-btn');
   const requested = path => (performance.getEntriesByType?.('resource') || []).some(entry => {
     try { return new URL(entry.name).pathname === path; } catch { return false; }
   });
@@ -23,12 +24,13 @@ STATE_SCRIPT = '''return (() => {
     redirect_error: status.includes('Server API redirect refused'),
     permission_error: status.includes('Companion permission error'),
     connecting: status === 'Connecting…',
+    connection_settled: connectButton instanceof HTMLButtonElement && !connectButton.disabled,
     identity_requested: requested('/api/client/identity'), search_requested: requested('/api/search'),
     shared_visible: titles.includes('Synthetic CI Shared Game'),
     private_visible: titles.includes('Synthetic CI Adult Private Game')};
 })();'''
 STATE_FIELDS = ('ready','online','denied','network_error','keyring_error','protocol_error',
-                'redirect_error','permission_error','connecting','identity_requested','search_requested',
+                'redirect_error','permission_error','connecting','connection_settled','identity_requested','search_requested',
                 'shared_visible','private_visible')
 
 
@@ -60,11 +62,12 @@ def connect(native,base_url,token,expected,progress,label,private_visible=None):
         value=native.execute_js(STATE_SCRIPT)
         snapshot={key:value.get(key) is True for key in STATE_FIELDS}
         progress['failed_ui_snapshot']=snapshot
-        return snapshot[expected] and (private_visible is None or
+        return snapshot['connection_settled'] and snapshot[expected] and (private_visible is None or
             (snapshot['shared_visible'] and snapshot['private_visible'] is private_visible))
     wait_for(settled,30,'linux_connected_ui_'+label+'_not_verified')
     progress.pop('failed_ui_snapshot',None)
     mark(progress,label)
+    mark(progress,label+'_connection_settled')
 
 
 def require_credentials(native,token,base_url,progress,label):
