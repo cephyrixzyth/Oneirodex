@@ -1,0 +1,51 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2101",
+  "observed_utc": "2026-11-15T01:47:47.884229+00:00",
+  "base_commit": "5db1f94bbc27655a115348b9c8ae4051ccdd8958",
+  "classification": "Qualified ordinary Windows fixture integrated with exact-package installer/app/uninstaller; native package execution pending.",
+  "prerequisite": "R2100 native42afac17/run43663086872/job132656472826 qualified actual same-account/profile/private desktop, CLI37/38 and owned cleanup.",
+  "change": [
+    "Copy the already pinned installer into the fresh fixture-owned prefix and verify byte hash equality. Run installer, actual app and uninstaller through the same verified ordinary account; no controller/linked-token fallback.",
+    "Use fixture-owned environment/profile for both cold app rounds and native IPC directory containment. Keep real bundled heading/connect-form, load_config/get_app_subdir success, parent-directory denial, loopback listener ownership and controller-written marker retention/reopen checks.",
+    "Preserve original UI/installation errors if uninstall or fixture cleanup also fails. Attempt an owned uninstaller after a partial install. Successful return requires independently verified fixture cleanup. Set installer_executed only after a checked actual launch.",
+    "Keep bounded boolean-only IPC contract/directory outcomes and controlled fixture error codes in failure receipts; never serialize returned config, tokens or directories."
+  ],
+  "primary_source": "https://v2.tauri.app/distribute/windows-installer/",
+  "installer_mode_ruling": "Pinned source has no NSIS install-mode override; Tauri documents current-user installation by default. Test that ordinary-user path directly; do not qualify a controller-admin install as ordinary-user delivery.",
+  "verification": {
+    "red": [
+      "Six package orchestration/profile cases fail before fixture integration.",
+      "Added missing-cleanup-verification test fails before success is gated on cleanup.",
+      "Controlled fixture launch errors lose their numeric code at the package boundary.",
+      "IPC receipt lacks boolean-only contract/owned-profile outcomes before rejection."
+    ],
+    "local_methods_loaded": 74,
+    "local_methods_passed": 72,
+    "native_only_skipped": 2,
+    "pyflakes": "passed",
+    "cases": [
+      "one qualified fixture for both rounds",
+      "installer/uninstaller never execute through privileged subprocess.run",
+      "foreign profile native-IPC directory rejected",
+      "partial installer failure uninstalls owned files",
+      "original UI failure survives uninstall failure",
+      "fixture cleanup failure or missing verification prevents success"
+    ]
+  },
+  "rework": "First positive directory assertion compared a Windows8.3temp alias with the canonical resolved path; the assertion now compares canonical paths. No production containment rule was weakened.",
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "c5bb625ed630c63c8247017872265ddba9ce3e16994d4ea351758b7d773a4f34",
+    "scripts/ci/test_windows_packaged_probe.py": "122b79b2a6cbbe6f3ff24f071219e4d5294ffbc940084d8a1efdd3ef51ba78bc",
+    "scripts/ci/test_windows_packaged_fixture.py": "8af6c2cca4736d08e7977de4ea00d286a0e9b0cd7ac80adfd752b176251f0a4b"
+  },
+  "product_source": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+  "package_source_run": 43553756754,
+  "artifact_id": 14097212804,
+  "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+  "native_retry": "pending explicit package-only mode; do not rebuild/change the shipping binary",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Local installer/browser/IPC tests are fakes. Native fixture qualification is prerequisite evidence only. Actual package UI/IPC/reopen/uninstall and all real-server/account/game/platform/parity/operator/release gates remain open. A private desktop cannot qualify physical UI/AT behavior.",
+  "capture": "Skipped: CI-only orchestration, no local app/installer/account/desktop execution."
+}

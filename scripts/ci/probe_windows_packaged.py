@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -754,23 +755,23 @@ def filetime_now():
     return 116444736000000000 + time.time_ns() // 100
 
 
-def _cold_start(executable, work, round_number, progress):
+def _cold_start(executable, work, round_number, progress, fixture):
     from playwright.sync_api import sync_playwright
 
     with socket.socket() as reservation:
         reservation.bind(('127.0.0.1', 0))
         port = reservation.getsockname()[1]
-    env = runtime_environment(os.environ)
+    env = dict(fixture.environment)
     env['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
         f'--remote-debugging-address=127.0.0.1 --remote-debugging-port={port}'
     )
     env['WEBVIEW2_USER_DATA_FOLDER'] = str(work / 'webview-profile')
     progress['phase'] = f'cold_{round_number}_standard_user_launch'
-    progress['suspended_creation_api'] = 'CreateProcessAsUserW'
-    progress['app_launch_token_policy'] = 'os_linked_primary_required'
+    progress['suspended_creation_api'] = 'CreateProcessWithLogonW'
+    progress['app_launch_token_policy'] = 'ordinary_fixture_account_required'
     trace = begin_startup_trace(work, progress, round_number)
     try:
-        process = start_standard_user(executable, env)
+        process = fixture.start(executable, env)
     except BaseException:
         if trace:
             progress.setdefault('startup_process_traces', []).append(
@@ -824,12 +825,16 @@ def _cold_start(executable, work, round_number, progress):
                 emptyToken: document.querySelector('#token').value.length === 0,
                 directory, parentDenied: denied};
         }''')
+        ipc_check = {'round': round_number, **{key: checks.get(key) is True
+                     for key in ('bridge', 'fresh', 'emptyToken', 'parentDenied')}}
+        progress.setdefault('native_ipc_checks', []).append(ipc_check)
         if not all(checks.get(key) is True for key in ('bridge', 'fresh', 'emptyToken', 'parentDenied')):
             raise ProbeFailure('packaged_ui_or_native_ipc_contract_failed')
         directory = Path(checks['directory']).resolve()
-        profile = Path(os.environ['USERPROFILE']).resolve()
-        if directory == profile or not directory.is_relative_to(profile) or not directory.is_dir():
-            raise ProbeFailure('installs_directory_not_owned_by_ci_profile')
+        profile = Path(fixture.profile_root).resolve()
+        ipc_check['directory_owned'] = directory != profile and directory.is_relative_to(profile) and directory.is_dir()
+        if not ipc_check['directory_owned']:
+            raise ProbeFailure('installs_directory_not_owned_by_fixture_profile')
         return directory, {'round': round_number, 'bundled_renderer': True,
                            'native_ipc': True, 'fresh_config': True,
                            'webview_version': browser.version,
@@ -865,57 +870,154 @@ def _cold_start(executable, work, round_number, progress):
                         process.close()
 
 
-def execute_cold_probe(installer, work, progress):
+def _controller_metadata():
     require_ci_execution(os.name, os.environ)
+    import ctypes
+    return {'ci_account_elevated': bool(ctypes.windll.shell32.IsUserAnAdmin()),
+            'windows_build': sys.getwindowsversion().build}
+
+
+def _open_standard_fixture(work, progress):
+    from windows_user_fixture import FixtureFailure, StandardUserFixture, safe_fixture_diagnostic
+    try:
+        return StandardUserFixture.open(work)
+    except FixtureFailure as error:
+        progress['standard_user_fixture'] = {'cleanup_verified': getattr(error, 'cleanup_verified', None) is True}
+        details = safe_fixture_diagnostic(getattr(error, 'diagnostic', None))
+        if details:
+            progress['fixture_diagnostic'] = details
+        raise ProbeFailure(str(error)) from None
+
+
+def _fixture_summary(fixture):
+    fields = ('standard_user_verified', 'profile_environment_verified', 'private_desktop_created', 'cleanup_verified')
+    result = {key: fixture.receipt.get(key) is True for key in fields}
+    result['cleanup_errors'] = [value for value in fixture.receipt.get('cleanup_errors', [])[:12]
+                                if isinstance(value, str) and re.fullmatch(r'fixture_[a-z0-9_]{1,100}', value)]
+    return result
+
+
+def _fixture_command(fixture, executable, arguments, timeout, progress, security_key):
+    child = fixture.start(executable, fixture.environment, arguments)
+    error = None
+    try:
+        state = child.security
+        if not (state.get('elevated') is False and state.get('integrity_rid') == 8192
+                and state.get('same_fixture_account') is True):
+            raise ProbeFailure('fixture_command_identity_not_verified')
+        progress[security_key] = {key: state[key] for key in ('elevated', 'integrity_rid', 'same_fixture_account')}
+        if security_key == 'installer_launch_security':
+            progress['installer_executed'] = True
+        return child.wait(timeout)
+    except BaseException as failure:
+        error = failure
+        raise
+    finally:
+        try:
+            child.close()
+        except Exception:
+            if error is None:
+                raise
+            error.add_note('owned_fixture_command_cleanup_failed')
+
+
+def _execute_installed_package(installer, fixture, progress):
+    work = fixture.work
     install = work / 'installed'
-    progress['phase'] = 'silent_install'
-    result = subprocess.run([str(installer), '/S', '/D=' + str(install)],
-                            env=runtime_environment(os.environ),
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180)
-    if result.returncode:
-        raise ProbeFailure('silent_install_failed')
     uninstaller = install / 'uninstall.exe'
-    marker = None
+    marker = body_error = None
     content = b'Oneirodex owned CI retention fixture; not a registered game or save.\n'
     result_receipt = progress
-    import ctypes
-    result_receipt['ci_account_elevated'] = bool(ctypes.windll.shell32.IsUserAnAdmin())
-    result_receipt['windows_build'] = sys.getwindowsversion().build
+    result_receipt.update(_controller_metadata())
+    owned_installer = work / installer.name
+    shutil.copyfile(installer, owned_installer)
+    if hashlib.sha256(owned_installer.read_bytes()).digest() != hashlib.sha256(installer.read_bytes()).digest():
+        raise ProbeFailure('fixture_installer_copy_changed')
+    result_receipt['fixture_installer_copy_verified'] = True
     try:
+        progress['phase'] = 'silent_install'
+        if _fixture_command(fixture, owned_installer, ['/S', '/D=' + str(install)], 180,
+                            progress, 'installer_launch_security') != 0:
+            raise ProbeFailure('silent_install_failed')
         executables = [p for p in install.glob('*.exe')
                        if p.is_file() and not p.name.lower().startswith('uninstall')]
         if len(executables) != 1:
             raise ProbeFailure('installed_binary_missing_or_ambiguous')
         executable = executables[0]
         result_receipt['installed_binary_sha256'] = hashlib.sha256(executable.read_bytes()).hexdigest()
-        directory, first = _cold_start(executable, work, 1, progress)
+        directory, first = _cold_start(executable, work, 1, progress, fixture)
         marker = directory / ('oneirodex-ci-retention-' + uuid.uuid4().hex + '.txt')
         with marker.open('xb') as output:
             output.write(content)
-        reopened_directory, second = _cold_start(executable, work, 2, progress)
+        reopened_directory, second = _cold_start(executable, work, 2, progress, fixture)
         if directory != reopened_directory or marker.read_bytes() != content:
             raise ProbeFailure('owned_marker_not_retained_across_reopen')
         result_receipt.update(cold_start_rounds=[first, second], installed_cold_start_verified=True,
                               genuine_ipc_success_and_denial=True,
                               owned_app_roots_stopped_and_debug_listeners_closed=True)
+    except BaseException as error:
+        body_error = error
+        raise
     finally:
-        if not uninstaller.is_file():
-            raise ProbeFailure('owned_uninstaller_missing')
-        cleanup = subprocess.run([str(uninstaller), '/S'], stdout=subprocess.DEVNULL,
-                                 env=runtime_environment(os.environ),
-                                 stderr=subprocess.DEVNULL, timeout=90)
-        if cleanup.returncode:
-            raise ProbeFailure('owned_uninstall_failed')
-        _wait(lambda: not any(p.name.lower() != 'uninstall.exe' for p in install.glob('*.exe')),
-              30, 'installed_binary_remained_after_uninstall')
-        if marker:
-            if not marker.is_file() or marker.read_bytes() != content:
-                raise ProbeFailure('uninstall_removed_owned_installs_marker')
-            result_receipt['owned_installs_marker_retained_by_uninstaller'] = True
-            marker.unlink()  # Delete only this probe's own exact, content-verified marker.
-            result_receipt['probe_removed_its_own_marker_after_verification'] = True
-        result_receipt['owned_application_uninstalled'] = True
+        try:
+            if not uninstaller.is_file():
+                raise ProbeFailure('owned_uninstaller_missing')
+            if _fixture_command(fixture, uninstaller, ['/S'], 90, progress, 'uninstaller_launch_security') != 0:
+                raise ProbeFailure('owned_uninstall_failed')
+            _wait(lambda: not any(p.name.lower() != 'uninstall.exe' for p in install.glob('*.exe')),
+                  30, 'installed_binary_remained_after_uninstall')
+            result_receipt['owned_application_uninstalled'] = True
+            if marker:
+                if not marker.is_file() or marker.read_bytes() != content:
+                    raise ProbeFailure('uninstall_removed_owned_installs_marker')
+                result_receipt['owned_installs_marker_retained_by_uninstaller'] = True
+                marker.unlink()
+                result_receipt['probe_removed_its_own_marker_after_verification'] = True
+        except Exception as cleanup_error:
+            code = str(cleanup_error) if isinstance(cleanup_error, ProbeFailure) else 'owned_package_cleanup_failed'
+            result_receipt.setdefault('package_cleanup_errors', []).append(code)
+            if body_error is None:
+                raise ProbeFailure(code) from None
+            body_error.add_note('owned_package_cleanup_failed')
     return result_receipt
+
+
+def execute_cold_probe(installer, work, progress):
+    require_ci_execution(os.name, os.environ)
+    from windows_user_fixture import FixtureFailure, safe_fixture_diagnostic
+    progress['phase'] = 'standard_user_fixture'
+    fixture = _open_standard_fixture(work / 'standard-user', progress)
+    body_error = None
+    try:
+        if not all(fixture.receipt.get(key) is True for key in (
+                'standard_user_verified', 'profile_environment_verified', 'private_desktop_created')):
+            raise ProbeFailure('standard_user_fixture_not_verified')
+        progress['standard_user_fixture'] = _fixture_summary(fixture)
+        return _execute_installed_package(installer, fixture, progress)
+    except BaseException as error:
+        body_error = error
+        if isinstance(error, FixtureFailure):
+            body_error = ProbeFailure(str(error))
+            details = safe_fixture_diagnostic(getattr(error, 'diagnostic', None))
+            if details:
+                progress['fixture_diagnostic'] = details
+            for note in getattr(error, '__notes__', []):
+                if note in ('fixture_child_cleanup_failed', 'fixture_cleanup_failed', 'owned_package_cleanup_failed'):
+                    body_error.add_note(note)
+            raise body_error from None
+        raise
+    finally:
+        cleanup_failed = False
+        try:
+            fixture.close()
+        except Exception:
+            cleanup_failed = True
+        finally:
+            progress['standard_user_fixture'] = _fixture_summary(fixture)
+        if cleanup_failed or not progress['standard_user_fixture']['cleanup_verified']:
+            if body_error is None:
+                raise ProbeFailure('standard_user_fixture_cleanup_failed') from None
+            body_error.add_note('standard_user_fixture_cleanup_failed')
 
 
 def github_json(endpoint):
@@ -978,7 +1080,6 @@ def main():
         work, installer, inspected = inspect_package(args)
         receipt.update(inspected, status='inspected')
         if args.execute:
-            receipt['installer_executed'] = True
             receipt.update(execute_cold_probe(installer, work, receipt), status='cold-start-passed', phase='complete')
         code = 0
     except ProbeFailure as error:
@@ -999,4 +1100,6 @@ def main():
 
 
 if __name__ == '__main__':
+    # The fixture imports this shared API; keep its controlled exception identity.
+    sys.modules.setdefault('probe_windows_packaged', sys.modules[__name__])
     sys.exit(main())

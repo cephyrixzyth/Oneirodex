@@ -158,19 +158,21 @@ class PackageGuardTests(unittest.TestCase):
         module.sync_playwright.return_value.start.return_value = client
         process = mock.Mock(pid=123, security={'elevated': False, 'integrity_rid': 8192})
         process.poll.return_value = None
+        fixture = mock.Mock(environment={})
+        fixture.start.return_value = process
         with tempfile.TemporaryDirectory() as tmp, \
              mock.patch.dict(probe.os.environ, {'GITHUB_ACTIONS': 'true', 'RUNNER_OS': 'Windows',
                  'GITHUB_REPOSITORY': 'cephyrixzyth/Oneirodex', 'GITHUB_RUN_ID': '123'}), \
              mock.patch.object(probe.subprocess, 'Popen', side_effect=AssertionError('unit must not spawn observer')) as observer_start, \
              mock.patch.object(probe, 'begin_startup_trace', return_value=None), \
              mock.patch.dict('sys.modules', {'playwright': mock.Mock(), 'playwright.sync_api': module}), \
-             mock.patch.object(probe, 'start_standard_user', return_value=process), \
+             mock.patch.object(probe, 'start_standard_user', side_effect=AssertionError('retired token path forbidden')), \
              mock.patch.object(probe, '_wait'), \
              mock.patch.object(probe, '_listener_snapshot', return_value=(
                  [{'address': '127.0.0.1', 'pid': 123}], {})), \
              mock.patch.object(probe, '_startup_diagnostics', return_value={'observation': 'synthetic'}):
             with self.assertRaisesRegex(RuntimeError, 'synthetic_client_stop_failure'):
-                probe._cold_start(Path('never-executed.exe'), Path(tmp), 1, {})
+                probe._cold_start(Path('never-executed.exe'), Path(tmp), 1, {}, fixture)
         process.terminate.assert_called_once_with()
         process.wait.assert_called_once_with(timeout=20)
         process.close.assert_called_once_with()
