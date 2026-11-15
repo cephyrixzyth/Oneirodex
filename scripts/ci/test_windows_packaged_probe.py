@@ -585,8 +585,10 @@ class StandardUserLaunchTests(unittest.TestCase):
             self.events = []
             self.exited = False
 
-        def restricted_token(self):
-            self.events.append('restricted_token')
+        def standard_token(self):
+            self.events.append('standard_token')
+            if self.fail == 'token':
+                raise ProbeFailure('ci_linked_token_unavailable_winerror_1312')
             return 'token'
 
         def create_suspended(self, token, executable, env):
@@ -625,7 +627,7 @@ class StandardUserLaunchTests(unittest.TestCase):
     def test_medium_non_elevated_token_is_checked_before_the_app_can_execute(self):
         api = self.API()
         process = probe._start_standard_user(Path('never-executed.exe'), {}, api)
-        self.assertEqual(api.events, ['restricted_token', 'create_suspended', ('close', 'token'),
+        self.assertEqual(api.events, ['standard_token', 'create_suspended', ('close', 'token'),
                                      ('security', 'process_handle'), ('resume', 'thread_handle'),
                                      ('close', 'thread_handle')])
         self.assertEqual(process.pid, 123)
@@ -646,11 +648,17 @@ class StandardUserLaunchTests(unittest.TestCase):
                 for handle in ['token', 'process_handle', 'thread_handle']:
                     self.assertEqual(api.events.count(('close', handle)), 1)
 
+    def test_missing_linked_token_never_creates_a_child_or_uses_a_fallback(self):
+        api = self.API(fail='token')
+        with self.assertRaisesRegex(ProbeFailure, 'ci_linked_token_unavailable'):
+            probe._start_standard_user(Path('never-executed.exe'), {}, api)
+        self.assertEqual(api.events, ['standard_token'])
+
     def test_failed_creation_closes_token_without_inventing_a_process_handle(self):
         api = self.API(fail='create')
         with self.assertRaisesRegex(ProbeFailure, 'synthetic_create_failure'):
             probe._start_standard_user(Path('never-executed.exe'), {}, api)
-        self.assertEqual(api.events, ['restricted_token', 'create_suspended', ('close', 'token')])
+        self.assertEqual(api.events, ['standard_token', 'create_suspended', ('close', 'token')])
 
     def test_failed_resume_terminates_only_the_retained_child_handle(self):
         api = self.API(fail='resume')
@@ -682,7 +690,7 @@ class StandardUserLaunchTests(unittest.TestCase):
             native.assert_not_called()
 
 
-    def test_native_launch_uses_same_user_restricted_token_api_without_handle_inheritance(self):
+    def test_native_launch_uses_same_user_standard_token_api_without_handle_inheritance(self):
         import ctypes as c
         class Startup(c.Structure):
             _fields_ = [('cb', c.c_uint32)]
@@ -695,7 +703,7 @@ class StandardUserLaunchTests(unittest.TestCase):
             executable = Path(tmp) / 'owned fixture with spaces.exe'
             executable.write_bytes(b'not executable; binding contract only')
             def create(*args):
-                self.assertEqual(len(args), 11, 'Use CreateProcessAsUserW for our restricted primary token')
+                self.assertEqual(len(args), 11, 'Use CreateProcessAsUserW for our linked primary token')
                 self.assertEqual(args[0], 'owned_token')
                 self.assertEqual(args[1], str(executable.resolve()))
                 self.assertTrue(args[2].value.startswith('"'))
@@ -710,6 +718,50 @@ class StandardUserLaunchTests(unittest.TestCase):
             self.assertEqual(api.create_suspended('owned_token', executable, {'APPDATA': 'owned-profile'}),
                              (111, 112, 113))
 
+
+    def test_standard_token_comes_from_windows_link_without_synthetic_restriction(self):
+        import ctypes as c
+        from ctypes import wintypes as w
+        for failure in (None, 'linked', 'duplicate'):
+            with self.subTest(failure=failure):
+                api = object.__new__(probe._WindowsStandardAPI)
+                api.c, api.w = c, w
+                self.assertTrue(callable(getattr(api, 'standard_token', None)),
+                                'Use the OS-provided linked token; do not manufacture a WebView host token')
+                events = []
+                api._current = lambda: 'current_ci_process'
+                def check(result, code):
+                    if not result:
+                        raise ProbeFailure(code + '_winerror_1312')
+                def open_token(process, rights, output):
+                    self.assertEqual((process, rights), ('current_ci_process', 0x8))
+                    output._obj.value = 11
+                    return True
+                def linked(source, kind, output, size, required):
+                    self.assertEqual((source.value, kind, size), (11, 19, c.sizeof(w.HANDLE)))
+                    events.append('linked_query')
+                    if failure == 'linked':
+                        return False
+                    output._obj.value = 12
+                    return True
+                def duplicate(linked_token, rights, attributes, impersonation, kind, output):
+                    self.assertEqual((linked_token.value, rights, attributes, impersonation, kind),
+                                     (12, 0xB, None, 2, 1))
+                    events.append('duplicate_primary')
+                    if failure == 'duplicate':
+                        return False
+                    output._obj.value = 13
+                    return True
+                api.check, api._open_token, api._get_token, api._duplicate = check, open_token, linked, duplicate
+                api.close_handle = lambda handle: events.append(('close', handle.value)) if handle.value else None
+                if failure:
+                    with self.assertRaisesRegex(ProbeFailure, 'linked|duplicate'):
+                        api.standard_token()
+                else:
+                    self.assertEqual(api.standard_token(), 13)
+                self.assertEqual(events.count(('close', 11)), 1)
+                self.assertEqual(events.count(('close', 12)), int(failure != 'linked'))
+                self.assertNotIn(('close', 13), events)
 
     def test_unicode_environment_has_a_double_terminator_and_no_ambiguous_keys(self):
         block = probe.windows_environment_block({'z': 'last', 'APPDATA': 'owned-é'})

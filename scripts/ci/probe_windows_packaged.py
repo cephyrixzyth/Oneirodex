@@ -218,11 +218,8 @@ class _WindowsStandardAPI:
         H, D, P = w.HANDLE, w.DWORD, c.c_void_p
         self._current = bind(self.kernel, 'GetCurrentProcess', H, [])
         self._open_token = bind(self.advapi, 'OpenProcessToken', w.BOOL, [H, D, c.POINTER(H)])
-        self._restrict = bind(self.advapi, 'CreateRestrictedToken', w.BOOL,
-                              [H, D, D, P, D, P, D, P, c.POINTER(H)])
-        self._sid = bind(self.advapi, 'ConvertStringSidToSidW', w.BOOL, [w.LPCWSTR, c.POINTER(P)])
-        self._sid_length = bind(self.advapi, 'GetLengthSid', D, [P])
-        self._set_token = bind(self.advapi, 'SetTokenInformation', w.BOOL, [H, c.c_int, P, D])
+        self._duplicate = bind(self.advapi, 'DuplicateTokenEx', w.BOOL,
+                               [H, D, P, c.c_int, c.c_int, c.POINTER(H)])
         self._get_token = bind(self.advapi, 'GetTokenInformation', w.BOOL,
                               [H, c.c_int, P, D, c.POINTER(D)])
         self._sid_count = bind(self.advapi, 'GetSidSubAuthorityCount', c.POINTER(w.BYTE), [P])
@@ -235,7 +232,6 @@ class _WindowsStandardAPI:
         self._exit_code = bind(self.kernel, 'GetExitCodeProcess', w.BOOL, [H, c.POINTER(D)])
         self._terminate = bind(self.kernel, 'TerminateProcess', w.BOOL, [H, w.UINT])
         self._close = bind(self.kernel, 'CloseHandle', w.BOOL, [H])
-        self._free = bind(self.kernel, 'LocalFree', P, [P])
 
     def check(self, result, code):
         if not result:
@@ -245,26 +241,24 @@ class _WindowsStandardAPI:
         if handle:
             self._close(handle)
 
-    def restricted_token(self):
+    def standard_token(self):
         c, w = self.c, self.w
-        source, restricted, sid = w.HANDLE(), w.HANDLE(), c.c_void_p()
-        # QUERY | DUPLICATE | ASSIGN_PRIMARY | ADJUST_DEFAULT.
-        self.check(self._open_token(self._current(), 0x8B, c.byref(source)), 'open_ci_token')
+        source, linked, primary, size = w.HANDLE(), w.HANDLE(), w.HANDLE(), w.DWORD()
+        self.check(self._open_token(self._current(), 0x8, c.byref(source)), 'open_ci_token')
         try:
-            # DISABLE_MAX_PRIVILEGE | LUA_TOKEN. Never SANDBOX_INERT.
-            self.check(self._restrict(source, 0x5, 0, None, 0, None, 0, None,
-                                      c.byref(restricted)), 'restrict_ci_token')
-            self.check(self._sid('S-1-16-8192', c.byref(sid)), 'medium_integrity_sid')
-            label = self.SID_ATTRIBUTES(sid, 0x20)  # SE_GROUP_INTEGRITY.
-            self.check(self._set_token(restricted, 25, c.byref(label),
-                                      c.sizeof(label) + self._sid_length(sid)), 'set_medium_integrity')
-            result = restricted.value
-            restricted = w.HANDLE()
+            # TokenLinkedToken: preserve the OS-created logon/token attributes.
+            # A manufactured restricted token can prevent WebView2 sandbox setup.
+            self.check(self._get_token(source, 19, c.byref(linked), c.sizeof(linked),
+                                       c.byref(size)), 'ci_linked_token_unavailable')
+            # QUERY | DUPLICATE | ASSIGN_PRIMARY, SecurityImpersonation, TokenPrimary.
+            self.check(self._duplicate(linked, 0xB, None, 2, 1, c.byref(primary)),
+                       'duplicate_ci_linked_primary')
+            result = primary.value
+            primary = w.HANDLE()
             return result
         finally:
-            if sid:
-                self._free(sid)
-            self.close_handle(restricted)
+            self.close_handle(primary)
+            self.close_handle(linked)
             self.close_handle(source)
 
     def create_suspended(self, token, executable, env):
@@ -353,7 +347,7 @@ class _OwnedStandardProcess:
 
 
 def _start_standard_user(executable, env, api):
-    token = api.restricted_token()
+    token = api.standard_token()
     try:
         process, thread, pid = api.create_suspended(token, executable, env)
     finally:
@@ -773,6 +767,7 @@ def _cold_start(executable, work, round_number, progress):
     env['WEBVIEW2_USER_DATA_FOLDER'] = str(work / 'webview-profile')
     progress['phase'] = f'cold_{round_number}_standard_user_launch'
     progress['suspended_creation_api'] = 'CreateProcessAsUserW'
+    progress['app_launch_token_policy'] = 'os_linked_primary_required'
     trace = begin_startup_trace(work, progress, round_number)
     try:
         process = start_standard_user(executable, env)

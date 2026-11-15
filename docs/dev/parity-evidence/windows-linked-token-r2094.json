@@ -1,0 +1,53 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2094",
+  "observed_utc": "2026-11-15T00:27:08.411925+00:00",
+  "base_commit": "7c9ccffd74c616250816d10e5da07e6b08cf66b9",
+  "classification": "CI launch-token correction motivated by actual startup failure and documented restricted-token limitation; native linked-token availability and startup pending.",
+  "preceding_native_run": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43657728210",
+    "job_id": 132639911446,
+    "harness_source": "7c9ccffd74c616250816d10e5da07e6b08cf66b9",
+    "raw_log_sha256": "d770a79ebd9f746f5a3cc052e85eb669abcaadec696cd3a8d825b9a390ab39bd",
+    "ci_guard_methods_passed": 37,
+    "ci_guard_elapsed_seconds": 22.177
+  },
+  "preceding_observation": "All five rejected stop records have a14character expected-name prefix and disagreeing parent fields. One WebView candidate reports0x80000003 before cleanup, three report0, and the root candidate reports1after controller cleanup. These remain explicitly rejected_stop_only, not accepted parent-chain exits. Actual parent values and full cause are unknown.",
+  "primary_sources": [
+    {
+      "url": "https://github.com/MicrosoftEdge/WebView2Feedback/issues/4850",
+      "support": "A Microsoft maintainer explains that a restricted host token can prevent Chromium renderer sandbox creation. The reported restriction setup differs from our flags; this motivates testing an OS-created linked token, not claiming an identical confirmed cause."
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/windows/win32/api/winnt/ne-winnt-token_information_class",
+      "support": "TokenLinkedToken obtains the associated OS token."
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-duplicatetokenex",
+      "support": "DuplicateTokenEx with TokenPrimary creates a token suitable for CreateProcessAsUser."
+    }
+  ],
+  "change": "Remove synthetic CreateRestrictedToken/integrity mutation. Require an OS-provided linked token, duplicate only QUERY/DUPLICATE/ASSIGN_PRIMARY rights, and retain actual suspended-child non-elevated/medium verification before resume. No elevated or synthetic fallback. Linked-token absence is an explicit prerequisite error. Source/linked/failed duplicate handles close; owned process lifecycle and sanitized environment are unchanged.",
+  "verification": {
+    "red": "Three token acquisition/duplicate subcases fail because the OS-linked method is absent.",
+    "local_methods_loaded": 39,
+    "local_passed": 37,
+    "native_only_skipped": 2,
+    "pyflakes": "passed",
+    "handle_cases": [
+      "linked query failure",
+      "duplicate failure",
+      "successful ownership transfer",
+      "no child/fallback on absent linked token",
+      "elevated or wrong integrity child not resumed"
+    ]
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "c0432b1fd82dbb7cf7e58c4d707d1cdcf4ac62a91bebe7785a1e916e39227603",
+    "scripts/ci/test_windows_packaged_probe.py": "44b4eaca200d1ed77fa4c727d454dc7be382b5c3712ff87fa4c17feb93c38fef"
+  },
+  "runtime_retry": "pending same exact-package CI",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: CI-only launch prerequisite."
+}
