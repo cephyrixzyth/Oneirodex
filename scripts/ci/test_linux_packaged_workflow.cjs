@@ -51,5 +51,6 @@ assert(job.steps.some(s=>s.run?.includes('npm run build:native-spas')));
 assert(job.steps.some(s=>s.with?.['node-version']==='22'));
 assert(job.steps.some(s=>s.run?.includes('--require-hashes -r requirements.lock')));
 assert(job.steps.some(s=>s.run?.includes('unittest discover -s tests -p test_native_companion_cors.py')));
+assert(job.steps.some(s=>s.run?.includes('unittest discover -s tests -p test_native_bearer_denial.py')));
 assert.deepEqual(job.services.postgres.ports,['127.0.0.1:5432:5432']);
 console.log(JSON.stringify({parsed:true,contexts:cases.length,original_job_steps_and_inputs_preserved:true,immutable_desktop_package:true,real_server_and_provider:true}));

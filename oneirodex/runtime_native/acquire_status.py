@@ -105,7 +105,16 @@ def mount_acquire_status_routes(app: FastAPI, flask_app, **kwargs):
 
 
 def _login_redirect(flask_app, request: Request, login_manager, auth_context: RequestAuthContext):
-    """Mirror Flask-Login's default unauthorized handling for the ``apis`` BP."""
+    """Keep browser redirects; rejected Bearer API calls require reauthentication."""
+    authorization_name = str(flask_app.config.get('AUTH_HEADER_NAME') or 'Authorization')
+    if request.headers.get(authorization_name, '').lower().startswith('bearer '):
+        from oneirodex.utils.api_contract import api_error_payload
+
+        payload, status = api_error_payload(
+            'API token authentication required', code='unauthorized',
+        )
+        return JSONResponse(payload, status_code=status, headers={'WWW-Authenticate': 'Bearer'})
+
     from oneirodex.utils.security_headers import security_header_values
 
     blueprint_views = getattr(login_manager, 'blueprint_login_views', {}) or {}

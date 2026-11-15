@@ -205,10 +205,10 @@ class NativeServerAPI:
         self.progress['postgres_version_num']=data.pop('postgres_version_num')
         controls={}
         self.progress['backend_bearer_http_controls']=controls
-        # This endpoint deliberately preserves Flask-Login's unauthenticated
-        # redirect. The opener refuses redirects; do not mistake that contract
-        # for a 401, or infer the companion's UI denial behavior from it.
-        for label,expected in (('adult',200),('child',200),('wrong',302),('limited',403)):
+        # Bearer rejection must be a readable JSON401, so the companion can
+        # distinguish denial from browser login redirects and network errors.
+        # Ordinary browser redirects are verified separately by handler tests.
+        for label,expected in (('adult',200),('child',200),('wrong',401),('limited',403)):
             code,_,_=self.http('/api/client/identity',data['tokens'][label])
             controls[label]=code
             if code!=expected:

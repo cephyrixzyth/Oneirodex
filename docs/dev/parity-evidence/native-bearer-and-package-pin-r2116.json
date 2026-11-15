@@ -1,0 +1,102 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2116",
+  "observed_utc": "2026-11-15T18:03:09.221169+00:00",
+  "base_commit": "effe86ec3045ef8e600c35994ecd3fa2b8eb58b1",
+  "classification": "Rejected Bearer login-redirect mismatch corrected; new source-bound Linux artifact statically verified and pinned; installed connected retry pending.",
+  "package": {
+    "doc_status": "Reference",
+    "source_commit": "effe86ec3045ef8e600c35994ecd3fa2b8eb58b1",
+    "source_run": 43742986907,
+    "artifact_id": 14173537237,
+    "artifact_name": "oneirodex-full-linux",
+    "archive_bytes": 85648068,
+    "archive_sha256": "f2f099bbcf6ae4dc8efcf6021042c5f402b2ccb0a5e92bcc00ccc87e33c89dcb",
+    "entries": [
+      {
+        "path": "deb/Oneirodex_1.1.9_amd64.deb",
+        "bytes": 3870314,
+        "sha256": "f28c73c5861051aa647c55bd37af0b82ef62f6e6ee2375a94961800158a27f1b"
+      },
+      {
+        "path": "appimage/Oneirodex_1.1.9_amd64.AppImage",
+        "bytes": 82430456,
+        "sha256": "e20c95243adfa40acd0e7741343d94713316e088fe23d2b4e2f1a2a20e4f402a"
+      }
+    ],
+    "debian_control": {
+      "Package": "oneirodex",
+      "Version": "1.1.9",
+      "Architecture": "amd64",
+      "Depends": "libwebkit2gtk-4.1-0, libgtk-3-0"
+    },
+    "debian_binary": {
+      "member": "usr/bin/oneirodex-desktop",
+      "bytes": 13912928,
+      "sha256": "231c55009975f0918331590bfd433f3b5845f5194b3cd6ef4aef9ea619204651",
+      "elf_class": 64,
+      "elf_machine": 62,
+      "machine_meaning": "x86_64"
+    },
+    "static_member_streams_read": true,
+    "extracted": false,
+    "installed": false,
+    "executed": false,
+    "installed_runtime_acceptance": false,
+    "limits": "Exact successful push source/qualified artifact metadata, ZIP/ar/tar/control/ELF hashes only. No package executed or installed locally; native account/credential/game acceptance remains open."
+  },
+  "source_builds": [
+    {
+      "run": 43742986907,
+      "event": "push",
+      "active_jobs_passed": 8,
+      "conclusion": "success"
+    },
+    {
+      "run": 43742992554,
+      "event": "pull_request",
+      "active_jobs_passed": 8,
+      "conclusion": "success"
+    }
+  ],
+  "source_ci": {
+    "run": 43742992580,
+    "active_jobs_passed": 8,
+    "core": "still running at checkpoint; no full CI success claimed"
+  },
+  "auth_change": "Shared native API unauthorized helper returns the standard unauthorized JSON401 envelope and WWW-Authenticate:Bearer when a Bearer header was presented. Ordinary anonymous browser login redirects remain302; valid-token200, scope403, HEAD/no-body and security headers remain. Invalid token details and credentials are never returned. This makes reachable rejection distinguishable from refused redirects/outages.",
+  "owner_policy": "Keep the previously verified local shelf with explicit server-access-denied status when a reachable server rejects credentials. Do not classify arbitrary redirects as proof of revocation. The server now gives an explicit Bearer denial.",
+  "verification": {
+    "pure_handler_methods": 5,
+    "handler_cases": "Wrong secret, revoked, expired, inactive and unknown-prefix tokens on real identity/collection handlers with fake persistence; browser302, valid200, scope403, HEAD/security-header/no-touch controls. No app/server/database created locally.",
+    "linux_methods_passed": 38,
+    "linux_workflow_contexts": 13,
+    "pyflakes": "passed",
+    "api_envelope": "passed:10known, baseline unchanged",
+    "pin_red": "3 failures: new verified artifact refused, old collection-bug source accepted and changed selection rejected before explicit update;38Linux GREEN after new exact pins.",
+    "auth_red": "9 denial subcases initially return302;5methods GREEN. The first source-only detection attempt remained RED because rejected identities deliberately have anonymous source; corrected header negotiation without changing authentication resolution.",
+    "fixture_control_red": "Native fixture expected prior302; updated strict source contract to401 with RED-to-GREEN. Browser302 tested independently; redirect refusal unchanged."
+  },
+  "source_sha256_git_normalized": {
+    ".github/workflows/desktop-build.yml": "3da273f2a4e8ad15e666880ef9872232cb9a37e2b5d39b617f646d42a20ca856",
+    "oneirodex/runtime_native/acquire_status.py": "7a63a6760d1b7198c10622ccd852af01d05c9545b86cbb3b0aee38729e25d743",
+    "tests/test_native_bearer_denial.py": "c5d94a4ba18975f6eea6d532bea811fa9a698e609520936973e9001c05f54b9f",
+    "scripts/ci/linux_connected_server.py": "b8745e697d1e18268837af1b40a01983c85289fb3d20b3aa29958d79c5c53e45",
+    "scripts/ci/test_linux_connected_server.py": "f131ff9c776a060faef9663ed69fc0e290037b690f53928f10afc46fceb4d41c",
+    "scripts/ci/probe_linux_packaged.py": "80ce4a9b977bd1553470037413045d60c4a07b874ed8314640b20041342f1327",
+    "scripts/ci/test_linux_packaged_probe.py": "ba24b3252852fbf55d02afaabc7cd87f780145d45f63bdbb72d832307c12ded9",
+    "scripts/ci/test_linux_packaged_workflow.cjs": "44339cd7255276dbcd9dd1635749be238929da8c72fe7d1095ff4b4bfe9b1537"
+  },
+  "retained_evidence": {
+    "old_same_package_failures": "R2111/R2112/R2113/R2114 actual terminal failures and owned cleanup preserved; R2115 source SDK correction separately verified.",
+    "private_capsule_sha256": "a9b767b821dd8d4c21cd7e487d7a9b4bd95da3b4b99304610d7b8cce77dce76a",
+    "capsule_entries_verified": 79,
+    "new_source_archive_sha256": "f2f099bbcf6ae4dc8efcf6021042c5f402b2ccb0a5e92bcc00ccc87e33c89dcb",
+    "old6a_package": "Retained unchanged historical evidence; no longer selected for the corrected connected journey."
+  },
+  "next": "Dispatch exclusive Linux package-only connected probe with exact effe source/run43742986907/archivef2f099bb pins; observe real UI/keyring/accounts/denial/switch/revocation/Forget and cleanup. Preserve current source CI core handle and all original acceptance gates.",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Static ZIP/ar/tar/ELF/source identity, installer builds, local fake tests and provider startup do not qualify connected accounts or real games. Full core CI at effe pending; later Bearer helper change still needs aggregate regression verification. Windows namespace prerequisite and real game/offline/process/restart/platform/AT/operator/route/final/release gates remain open.",
+  "capture": "Skipped: no UI markup/style edits or local native resources; actual installed journey only disposable CI."
+}

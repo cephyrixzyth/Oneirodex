@@ -14,8 +14,8 @@ import zipfile
 
 spec = importlib.util.find_spec('probe_linux_packaged')
 probe = __import__('probe_linux_packaged') if spec else None
-SOURCE = '6a03c6fbdadcdc8f585d0012b3a36879e408fa0b'
-DIGEST = '933c7bdae0ba086fa3bdbf6facad07c512402133fe8cdf2791d515ccb3289994'
+SOURCE = 'effe86ec3045ef8e600c35994ecd3fa2b8eb58b1'
+DIGEST = 'f2f099bbcf6ae4dc8efcf6021042c5f402b2ccb0a5e92bcc00ccc87e33c89dcb'
 
 
 def archive(members):
@@ -32,8 +32,8 @@ class LinuxPackageGuards(unittest.TestCase):
         self.assertIsNotNone(probe, 'Linux actual-package guards must precede native execution')
         self.run = {'head_sha': SOURCE, 'head_branch': 'codex/release-v1.1.9', 'event': 'push',
                     'status': 'completed', 'conclusion': 'success'}
-        self.artifact = {'id': 14097566864, 'name': 'oneirodex-full-linux', 'expired': False,
-                         'digest': 'sha256:' + DIGEST, 'size_in_bytes': 85649119}
+        self.artifact = {'id': 14173537237, 'name': 'oneirodex-full-linux', 'expired': False,
+                         'digest': 'sha256:' + DIGEST, 'size_in_bytes': 85648068}
         self.env = {'GITHUB_ACTIONS': 'true', 'RUNNER_OS': 'Linux',
                     'GITHUB_REPOSITORY': 'cephyrixzyth/Oneirodex', 'GITHUB_RUN_ID': '123'}
 
@@ -43,6 +43,13 @@ class LinuxPackageGuards(unittest.TestCase):
                            ('status', 'in_progress'), ('conclusion', 'failure')]:
             with self.subTest(key=key), self.assertRaises(probe.ProbeFailure):
                 probe.validate_source({**self.run, key: value}, [self.artifact], SOURCE, DIGEST)
+
+    def test_retired_collection_bug_package_cannot_be_substituted_for_new_source(self):
+        old_source='6a03c6fbdadcdc8f585d0012b3a36879e408fa0b'
+        old_digest='933c7bdae0ba086fa3bdbf6facad07c512402133fe8cdf2791d515ccb3289994'
+        old_artifact={**self.artifact,'id':14097566864,'digest':'sha256:'+old_digest,'size_in_bytes':85649119}
+        with self.assertRaises(probe.ProbeFailure):
+            probe.validate_source({**self.run,'head_sha':old_source},[old_artifact],old_source,old_digest)
 
     def test_artifact_expiry_digest_size_and_ambiguity_fail_closed(self):
         for key, value in [('expired', True), ('digest', 'sha256:'+'b'*64), ('id', True),
@@ -63,7 +70,7 @@ class LinuxPackageGuards(unittest.TestCase):
             with self.assertRaises(probe.ProbeFailure):probe.require_ci_execution(platform,env,uid)
 
     def test_linux_selection_rejects_mixed_modes_release_and_missing_pins(self):
-        selected={'LINUX_PACKAGED_SMOKE_ONLY':'true','PACKAGE_SOURCE_RUN':'43553756754',
+        selected={'LINUX_PACKAGED_SMOKE_ONLY':'true','PACKAGE_SOURCE_RUN':'43742986907',
                   'PACKAGE_SOURCE_COMMIT':SOURCE,'PACKAGE_ARCHIVE_DIGEST':DIGEST}
         probe.validate_selection(selected)
         for key,value in [('PROBE_ONLY','true'),('PROBE_FAMILY','true'),('WINDOWS_PACKAGED_SMOKE_ONLY','true'),
@@ -108,7 +115,7 @@ class LinuxPackageGuards(unittest.TestCase):
             with mock.patch.dict(probe.os.environ,{},clear=True), \
                  mock.patch.object(probe.subprocess,'run',side_effect=AssertionError('no commands')), \
                  contextlib.redirect_stdout(out):
-                status=probe.main(['--execute','--work-dir',str(work),'--source-run','43553756754',
+                status=probe.main(['--execute','--work-dir',str(work),'--source-run','43742986907',
                                    '--source-commit',SOURCE,'--archive-digest',DIGEST])
             self.assertEqual(status,2);self.assertEqual(json.loads(out.getvalue())['status'],'unsupported')
             self.assertFalse(work.exists());self.assertNotIn(str(work),out.getvalue())

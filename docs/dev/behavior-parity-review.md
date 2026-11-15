@@ -10,6 +10,8 @@ Work in risk-ranked route-family batches. Reuse evidence only when exact image i
 
 ## Current evidence status - 2026-11-15
 
+[R2116](parity-evidence/native-bearer-and-package-pin-r2116.json) pins the newly built Linux package from exact `effe86ec` source after both desktop workflows pass. ZIP/Debian/executable hashes were checked without local extraction or execution. Source also returns JSON401 for rejected Bearer API calls while preserving browser302 and scope403; five pure handler methods and 38 Linux guards pass. Actual connected-account/keyring qualification remains pending. Eight CI jobs passed; Python core is still running at this checkpoint.
+
 [R2115](parity-evidence/desktop-collection-envelope-r2115.json) confirms the next installed Connect failure: the real server returns an object containing `collections`, while the client expects a bare array. Source now accepts the canonical object, retains bare-array compatibility and rejects malformed responses. Node22 verification passes 372 desktop fake checks and 110 API-client checks, both typechecks and both UI bundles. Replacement installer and connected runtime verification remain pending; the old pinned binary has not been substituted.
 
 The R2113 live retry confirms the CORS allow-origin header and clears the network/CORS failure category, but Connect still stops before Online. R2114 adds fixed protocol/response-shape diagnostics while retaining the same installed binary and strict journey. Neither CORS headers nor provider startup alone qualify account/credential behavior.
