@@ -243,7 +243,7 @@ class NativeServerAPI:
         return data
 
     def internal(self,action,payload=None):
-        if action not in ('seed','revoke'):raise ProbeFailure('linux_fixture_action_not_allowed')
+        if action not in ('seed','revoke','observe-game'):raise ProbeFailure('linux_fixture_action_not_allowed')
         safe_ci={key:os.environ[key] for key in ('GITHUB_ACTIONS','RUNNER_OS','GITHUB_REPOSITORY','GITHUB_RUN_ID')}
         result=subprocess.run([sys.executable,str(Path(__file__).resolve()),'--'+action+'-owned'],
                               cwd=self.root,env={**self.env,**safe_ci,'ONEIRODEX_CI_DATABASE_MARKER':self.marker},
@@ -330,8 +330,9 @@ def seed_native_fixture():
             db.add(Game(uuid=str(uuid.uuid4()),name='Synthetic CI Adult Private Game',library_uuid=private.uuid))
             db.add(UserLibraryAccess(user_id=child.id,library_uuid=allowed.uuid));db.commit()
             tokens,ids={},{}
-            for label,user,scopes in (('adult',adult,['read:library','write:download','write:presence']),
-                                      ('child',child,['read:library','write:presence']),('limited',adult,['write:presence'])):
+            for label,user,scopes in (('adult',adult,['read:library','write:library','write:download','write:presence']),
+                                      ('child',child,['read:library','write:presence']),('limited',adult,['write:presence']),
+                                      ('child_recovery',child,['read:library','write:presence'])):
                 row,raw=generate_api_token(user,'Synthetic CI '+label,scopes)
                 tokens[label]=raw;ids[label]={'token_id':row.id,'user_id':user.id,'account_id':user.user_id}
             tokens['wrong']='_'.join(tokens['adult'].split('_',2)[:2])+'_'+secrets.token_urlsafe(32)
@@ -367,10 +368,44 @@ def revoke_native_fixture(payload):
     finally:engine.dispose()
 
 
-if __name__=='__main__':
-    if sys.argv[1:] not in (['--seed-owned'],['--revoke-owned']):sys.exit(2)
+def observe_game_native_fixture(payload):
+    root=Path(__file__).resolve().parents[2]
+    require_backend_ci(root,os.environ,sys.platform,getattr(os,'geteuid',lambda:-1)())
+    sys.path.insert(0,str(root))
+    parsed=validate_control_url(os.environ.get('DATABASE_URL',''))
+    marker=os.environ.get('ONEIRODEX_CI_DATABASE_MARKER','')
+    if (not re.fullmatch(r'oneirodex_companion_test_[1-9][0-9]*_[a-f0-9]{12}',parsed.path.lstrip('/'))
+            or not re.fullmatch(r'oneirodex-ci-connected-[a-f0-9]{32}',marker)
+            or not isinstance(payload,dict) or type(payload.get('user_id')) is not int or payload['user_id']<1
+            or not isinstance(payload.get('game_uuid'),str)
+            or not re.fullmatch(r'[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}',payload['game_uuid'])):
+        raise ProbeFailure('linux_fixture_game_observer_not_owned')
+    from sqlalchemy import create_engine,select,text
+    from oneirodex.runtime_native.db_session import native_db,native_engine_session_scope
+    from oneirodex.models import Game,User,PlaySession
+    from linux_game_journey import session_projection
+    engine=create_engine(urllib.parse.urlunsplit(parsed).replace('postgresql://','postgresql+psycopg2://',1))
     try:
-        value=seed_native_fixture() if sys.argv[1]=='--seed-owned' else revoke_native_fixture(json.loads(sys.stdin.buffer.read(4096)))
+        with native_engine_session_scope(engine):
+            db=native_db.session
+            if db.scalar(text("SELECT shobj_description(oid,'pg_database') FROM pg_database WHERE datname=current_database()"))!=marker:
+                raise ProbeFailure('linux_fixture_game_observer_marker_mismatch')
+            game=db.execute(select(Game).filter_by(uuid=payload['game_uuid'])).scalars().one()
+            user=db.get(User,payload['user_id'])
+            if game.name!='Synthetic CI Shared Game' or user is None or user.name!='SyntheticCIAdult':
+                raise ProbeFailure('linux_fixture_game_observer_identity_mismatch')
+            rows=db.execute(select(PlaySession).filter_by(game_uuid=game.uuid)).scalars().all()
+            return session_projection(rows,user.id)
+    finally:engine.dispose()
+
+
+if __name__=='__main__':
+    if sys.argv[1:] not in (['--seed-owned'],['--revoke-owned'],['--observe-game-owned']):sys.exit(2)
+    try:
+        if sys.argv[1]=='--seed-owned':value=seed_native_fixture()
+        else:
+            payload=json.loads(sys.stdin.buffer.read(4096))
+            value=revoke_native_fixture(payload) if sys.argv[1]=='--revoke-owned' else observe_game_native_fixture(payload)
     except Exception as error:
         print(json.dumps({'code':'linux_seed_failed','error_class':type(error).__name__}),file=sys.stderr)
         sys.exit(1)

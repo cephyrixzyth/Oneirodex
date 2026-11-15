@@ -14,7 +14,27 @@ from linux_packaged_native import wait_for
 def fixture_archive():
     """Self-authored bounded deterministic payload, not a compatibility fixture."""
     members = {
-        'synthetic-game.sh': (b'#!/bin/sh\nprintf "Synthetic CI installed payload\\n"\nexit 0\n', 0o755),
+        'synthetic-game.sh': (b'''#!/bin/sh
+set -eu
+umask 077
+control="$HOME/.oneirodex-ci-game"
+[ -d "$control" ] && [ -f "$control/next" ] || exit 70
+read -r nonce < "$control/next"
+case "$nonce" in ''|*[!0-9a-f]*) exit 70;; esac
+[ "${#nonce}" -eq 32 ] || exit 70
+if [ "${1:-}" != child ]; then
+  printf '%s\\n' "$$" > "$control/root-$nonce.pid"
+  /usr/bin/setsid /bin/sh "$0" child &
+  exit 0
+fi
+printf '%s\\n' "$$" > "$control/child-$nonce.pid"
+count=0
+while [ ! -f "$control/stop-$nonce" ] && [ "$count" -lt 2400 ]; do
+  sleep 0.1
+  count=$((count + 1))
+done
+printf '%s\\n' "$nonce" > "$control/exit-$nonce"
+''', 0o755),
         'README.txt': (b'Synthetic archive transfer and extraction fixture. No game compatibility claim.\n', 0o644),
     }
     output = io.BytesIO()
@@ -159,3 +179,5 @@ def run_installed_journey(native, fixture, progress):
     progress['installed_archive_journey_verified'] = True
     progress['installed_archive_scope'] = ('Synthetic ZIP transfer/extraction and cached shelf before reconnect; '
         'no payload execution, network outage, Play/Reveal, game compatibility or save-retention qualification.')
+    from linux_game_journey import run_game_journey
+    run_game_journey(native, fixture, progress)
