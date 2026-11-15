@@ -379,7 +379,7 @@ if($failed -or (Get-LocalUser -Name $p.name -ErrorAction SilentlyContinue)){exit
         c = self.c
         descriptor = c.c_void_p()
         # New objects only; no Everyone or inherited interactive-desktop ACL mutation.
-        sddl = f'D:P(A;;GA;;;{sid})(A;;GA;;;SY)(A;;GA;;;BA)'
+        sddl = f'D:P(A;;GA;;;{sid})(A;;GA;;;SY)(A;;GA;;;BA)S:(ML;;NW;;;ME)'
         self._checked(self._descriptor(sddl, 1, c.byref(descriptor), None), 'fixture_security_descriptor')
         try:
             attributes = self.SecurityAttributes(c.sizeof(self.SecurityAttributes), descriptor, False)

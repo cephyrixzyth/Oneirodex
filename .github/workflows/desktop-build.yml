@@ -27,6 +27,11 @@ on:
         required: false
         type: boolean
         default: false
+      windows_user_fixture_only:
+        description: 'Only qualify a disposable ordinary Windows account/private desktop; no app installation, build or release.'
+        required: false
+        type: boolean
+        default: false
       package_source_run:
         description: 'Successful review-branch push run that produced the Windows package.'
         required: false
@@ -94,7 +99,7 @@ permissions:
 
 jobs:
   macos-coalition-probe:
-    if: github.event_name != 'workflow_dispatch' || inputs.packaged_smoke_only != true
+    if: github.event_name != 'workflow_dispatch' || (inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true)
     name: macOS coalition API/isolation probe
     runs-on: macos-latest
     timeout-minutes: 5
@@ -142,7 +147,7 @@ jobs:
           if-no-files-found: error
 
   rust-checks:
-    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true)
+    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true)
     name: rust · fmt + clippy + test
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -213,7 +218,7 @@ jobs:
         run: bash ../../../scripts/ci/test-real-game-archive-enospc.sh
 
   build:
-    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true)
+    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true)
     name: ${{ matrix.label }} · ${{ matrix.flavor }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -356,8 +361,8 @@ jobs:
           if-no-files-found: error
 
   windows-packaged-probe:
-    name: Windows installed companion cold-start probe
-    if: github.event_name == 'workflow_dispatch' && inputs.packaged_smoke_only == true
+    name: ${{ inputs.windows_user_fixture_only && 'Windows ordinary-user fixture qualification' || 'Windows installed companion cold-start probe' }}
+    if: github.event_name == 'workflow_dispatch' && (inputs.packaged_smoke_only == true || inputs.windows_user_fixture_only == true)
     runs-on: windows-latest
     timeout-minutes: 15
     permissions:
@@ -376,6 +381,8 @@ jobs:
           PROBE_ONLY: ${{ inputs.probe_only }}
           PROBE_FAMILY: ${{ inputs.probe_family }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          FIXTURE_ONLY: ${{ inputs.windows_user_fixture_only }}
+          PACKAGED_SMOKE_ONLY: ${{ inputs.packaged_smoke_only }}
           PACKAGE_SOURCE_RUN: ${{ inputs.package_source_run }}
           PACKAGE_SOURCE_COMMIT: ${{ inputs.package_source_commit }}
           PACKAGE_ARCHIVE_DIGEST: ${{ inputs.package_archive_digest }}
@@ -383,21 +390,40 @@ jobs:
           if ($env:PROBE_ONLY -eq 'true' -or $env:PROBE_FAMILY -eq 'true' -or $env:RELEASE_TAG) {
             throw 'Package-only mode cannot select a coalition experiment or release.'
           }
-          if ($env:PACKAGE_SOURCE_RUN -notmatch '^[1-9][0-9]*$' -or
+          if ($env:FIXTURE_ONLY -eq 'true') {
+            if ($env:PACKAGED_SMOKE_ONLY -eq 'true' -or $env:PACKAGE_SOURCE_RUN -or
+                $env:PACKAGE_SOURCE_COMMIT -or $env:PACKAGE_ARCHIVE_DIGEST) {
+              throw 'Fixture-only mode cannot select a package or package identity inputs.'
+            }
+          } elseif ($env:PACKAGED_SMOKE_ONLY -ne 'true' -or
+              $env:PACKAGE_SOURCE_RUN -notmatch '^[1-9][0-9]*$' -or
               $env:PACKAGE_SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$' -or
               $env:PACKAGE_ARCHIVE_DIGEST -notmatch '^[a-f0-9]{64}$') {
             throw 'Package-only mode requires explicit source and archive identity pins.'
           }
 
       - name: Probe guard contracts
-        run: python -m unittest discover -s scripts/ci -p test_windows_packaged_probe.py
+        run: python -m unittest discover -s scripts/ci -p 'test_windows_*.py'
+
+      - name: Qualify the disposable standard-user fixture without an app
+        if: inputs.windows_user_fixture_only == true
+        shell: pwsh
+        run: |
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP ('oneirodex-standard-user-fixture-' + $env:GITHUB_RUN_ID)
+          $fixtureOutput = & python scripts/ci/probe_windows_user_fixture.py --execute --work-dir $fixtureRoot
+          $fixtureExit = $LASTEXITCODE
+          $fixtureOutput | Out-File -LiteralPath (Join-Path $env:RUNNER_TEMP 'oneirodex-standard-user-fixture-status.json') -Encoding utf8
+          Write-Output $fixtureOutput
+          exit $fixtureExit
 
       - name: Install pinned CDP client
+        if: inputs.packaged_smoke_only == true
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
         run: python -m pip install --disable-pip-version-check playwright==1.65.1
 
       - name: Install and exercise the actual companion package
+        if: inputs.packaged_smoke_only == true
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -413,11 +439,20 @@ jobs:
           exit $probeExit
 
       - name: Retain sanitized package probe receipt
-        if: always()
+        if: always() && inputs.packaged_smoke_only == true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: oneirodex-windows-packaged-probe
           path: ${{ runner.temp }}/oneirodex-packaged-probe-status.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Retain sanitized standard-user fixture receipt
+        if: always() && inputs.windows_user_fixture_only == true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: oneirodex-windows-standard-user-fixture
+          path: ${{ runner.temp }}/oneirodex-standard-user-fixture-status.json
           if-no-files-found: warn
           retention-days: 7
 
@@ -430,6 +465,7 @@ jobs:
     if: >-
       (github.event_name != 'workflow_dispatch' || inputs.probe_only != true) &&
       (github.event_name != 'workflow_dispatch' || inputs.packaged_smoke_only != true) &&
+      (github.event_name != 'workflow_dispatch' || inputs.windows_user_fixture_only != true) &&
       ((github.event_name == 'push' && github.ref_type == 'tag') ||
        (github.event_name == 'workflow_dispatch' && inputs.release_tag != '' &&
          (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||

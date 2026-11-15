@@ -305,6 +305,28 @@ class NativeBindingTests(unittest.TestCase):
         self.assertNotIn(('close_station', 1), events)
         self.assertNotIn(('close_desktop', 2), events)
 
+    def test_new_desktop_security_has_explicit_medium_label_and_only_owned_principals(self):
+        import ctypes as c
+        from ctypes import wintypes as w
+        class Attributes(c.Structure):
+            _fields_ = [('length', w.DWORD), ('descriptor', c.c_void_p), ('inherit', w.BOOL)]
+        api = object.__new__(fixture.NativeFixtureAPI)
+        api.c, api.SecurityAttributes = c, Attributes
+        captured = []
+        def descriptor(sddl, revision, output, size):
+            captured.append(sddl)
+            output._obj.value = 111
+            return True
+        api._descriptor = descriptor
+        api._free = lambda value: captured.append('descriptor_freed')
+        with api._security(SID) as attributes:
+            self.assertFalse(attributes._obj.inherit)
+        self.assertIn('S:(ML;;NW;;;ME)', captured[0])
+        self.assertEqual(captured[0].count('(A;;GA;;;'), 3)
+        self.assertIn('(A;;GA;;;' + SID + ')', captured[0])
+        self.assertNotIn(';;;WD)', captured[0])
+        self.assertEqual(captured[-1], 'descriptor_freed')
+
 
 if __name__ == '__main__':
     unittest.main()
