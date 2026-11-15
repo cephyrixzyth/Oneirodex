@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from starlette.background import BackgroundTask
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
-from .acquire_status import _login_redirect
+from .acquire_status import _companion_login_response as _login_redirect
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context, require_bearer_scope
 from .query_compat import first_query_value

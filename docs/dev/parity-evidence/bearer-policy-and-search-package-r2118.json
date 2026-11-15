@@ -91,5 +91,6 @@
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
   "limits": "Builds/static hashes/pure policy methods/early header CI do not qualify actual connected account or OS credentials. Full core CI and newer policy regression coverage remain distinct. Original game/offline/wrapper/exit/exact-launch recovery, Windows namespace, other platform/AT/operator/route/final/release gates remain open.",
-  "capture": "Skipped: no UI markup/style changes or local native resources; actual installed journey only disposable CI."
+  "capture": "Skipped: no UI markup/style changes or local native resources; actual installed journey only disposable CI.",
+  "correction_r2120": "R2120 correction: the personal-token router does support scoped Bearer authentication (its source uses the shared session/remember/Bearer resolver). Calling it session-only was an incorrect inference. R2118 generic allow_bearer=False tests passed but did not exercise that actual router; they did not fix its expired-Bearer legacy302 contract. The exact existing early CI case still failed at3ff. R2120 restores the general login helper exactly to original6a AST, opts only client/collection/game companion routers into JSON401 and adds actual personal-router expired302/no-data and valid-scoped-Bearer200 controls. Prior test/runtime counts remain historical facts; the incorrect endpoint classification and claimed endpoint fix are superseded."
 }

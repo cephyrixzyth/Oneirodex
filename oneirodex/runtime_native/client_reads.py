@@ -9,7 +9,7 @@ from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
-from .acquire_status import _login_redirect
+from .acquire_status import _companion_login_response as _login_redirect
 from .csrf_compat import csrf_error_response
 from .request_auth import request_auth_context
 

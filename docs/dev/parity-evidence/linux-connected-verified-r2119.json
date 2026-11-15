@@ -262,5 +262,6 @@
   "final_settled_ui_acceptance": false,
   "overall_goal": "active and incomplete",
   "next": "Publish controller/early regression, obtain current-source aggregate CI and same-package final-settlement native retry. Then original actual archive/local Play/Reveal/offline/denied shelf/game-process/save/restart/platform/operator/parity journeys. No merge/release/deployment.",
-  "capture": "Skipped: no markup/style changes or local native resources; all installed UI/API/OS credential checks use disposable CI."
+  "capture": "Skipped: no markup/style changes or local native resources; all installed UI/API/OS credential checks use disposable CI.",
+  "correction_r2120": "R2120 correction: the personal-token router does support scoped Bearer authentication (its source uses the shared session/remember/Bearer resolver). Calling it session-only was an incorrect inference. R2118 generic allow_bearer=False tests passed but did not exercise that actual router; they did not fix its expired-Bearer legacy302 contract. The exact existing early CI case still failed at3ff. R2120 restores the general login helper exactly to original6a AST, opts only client/collection/game companion routers into JSON401 and adds actual personal-router expired302/no-data and valid-scoped-Bearer200 controls. Prior test/runtime counts remain historical facts; the incorrect endpoint classification and claimed endpoint fix are superseded."
 }

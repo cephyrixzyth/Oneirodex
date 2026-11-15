@@ -105,7 +105,7 @@ jobs:
           python -m pytest tests/test_asgi_native_pilot_dispatch.py -q
           -k 'theme_font_stylesheet_is_native or credentialed_theme_font_request or member_auth_runtime_bootstrap_is_native or credential_free_confirmation_page or credential_free_auth_pages'
 
-      - name: Verify personal-token routes preserve session-only sign-in
+      - name: Verify personal-token routes preserve legacy denial responses
         run: >-
           python -m pytest tests/test_native_account_tokens.py -q
           -k 'expired_bearer_cannot_list_personal_tokens'

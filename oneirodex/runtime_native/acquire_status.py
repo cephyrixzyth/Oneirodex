@@ -104,8 +104,8 @@ def mount_acquire_status_routes(app: FastAPI, flask_app, **kwargs):
     return app
 
 
-def _login_redirect(flask_app, request: Request, login_manager, auth_context: RequestAuthContext):
-    """Challenge rejected Bearer auth where supported; keep browser redirects."""
+def _companion_login_response(flask_app, request: Request, login_manager, auth_context: RequestAuthContext):
+    """Opt companion routes into JSON Bearer denials without changing other APIs."""
     authorization_name = str(flask_app.config.get('AUTH_HEADER_NAME') or 'Authorization')
     if (
         auth_context.user is None
@@ -119,6 +119,11 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context: Re
         )
         return JSONResponse(payload, status_code=status, headers={'WWW-Authenticate': 'Bearer'})
 
+    return _login_redirect(flask_app, request, login_manager, auth_context)
+
+
+def _login_redirect(flask_app, request: Request, login_manager, auth_context: RequestAuthContext):
+    """Mirror Flask-Login's default unauthorized handling for the ``apis`` BP."""
     from oneirodex.utils.security_headers import security_header_values
 
     blueprint_views = getattr(login_manager, 'blueprint_login_views', {}) or {}

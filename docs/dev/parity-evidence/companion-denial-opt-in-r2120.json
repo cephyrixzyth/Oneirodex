@@ -1,0 +1,263 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2120",
+  "observed_utc": "2026-11-15T19:36:35.329644+00:00",
+  "base_commit": "3ff18b55295a14a904434a7b3181fac6a5545ac5",
+  "classification": "Actual Linux settled connected journey25checks passed. Unrelated personal-token denial regression now fixed through explicit companion opt-in; corrected prior session-only misclassification. Current-source native/core recheck pending.",
+  "settled_native_terminal": {
+    "run": 43751298936,
+    "job": 132925624809,
+    "harness_commit": "3ff18b55295a14a904434a7b3181fac6a5545ac5",
+    "raw_log_sha256": "064bb4684be5261023da6e6dcfa36f15a1030596310bd814ebfcc1b8e626db38",
+    "receipt": {
+      "observed_utc": "2026-11-15T19:16:51.333757+00:00",
+      "status": "passed",
+      "mode": "remote-companion",
+      "installed_runtime_acceptance": true,
+      "acceptance_scope": "linux_connected_accounts_and_credentials",
+      "source_commit": "ce8c35a6980891ef85c26cb64aa0d8a3ecc9e867",
+      "source_run": 43747390211,
+      "artifact_id": 14173989223,
+      "archive_sha256": "7e253a922f9481715b399b217821822cb317dff13e83192a0ce0c8e33b4d1749",
+      "deb_sha256": "94374bcad58a0475c432c5ca1cb6963cac2959a071f5456822bc19d69841e754",
+      "source_and_digest_verified": true,
+      "backend_source_commit": "3ff18b55295a14a904434a7b3181fac6a5545ac5",
+      "phase": "complete",
+      "backend_launcher": "startweb.sh",
+      "backend_listener_owned": true,
+      "backend_alembic_head": "a4b5c6d7e8f9",
+      "postgres_version_num": "160016",
+      "backend_bearer_http_controls": {
+        "adult": 200,
+        "child": 200,
+        "wrong": 401,
+        "limited": 403
+      },
+      "native_origin_preflight": {
+        "http_status": 200,
+        "origin_allowed": true
+      },
+      "backend_collection_list_shape": {
+        "http_status": 200,
+        "root_array": false,
+        "collections_array": true
+      },
+      "backend_search_wire_controls": {
+        "adult_empty": {
+          "http_status": 200,
+          "root_array": true,
+          "results_array": false,
+          "games_array": false,
+          "item_count": 0,
+          "shared_visible": false,
+          "private_visible": false
+        },
+        "adult_star": {
+          "http_status": 200,
+          "root_array": true,
+          "results_array": false,
+          "games_array": false,
+          "item_count": 0,
+          "shared_visible": false,
+          "private_visible": false
+        },
+        "adult_letter": {
+          "http_status": 200,
+          "root_array": true,
+          "results_array": false,
+          "games_array": false,
+          "item_count": 2,
+          "shared_visible": true,
+          "private_visible": true
+        },
+        "child_empty": {
+          "http_status": 200,
+          "root_array": true,
+          "results_array": false,
+          "games_array": false,
+          "item_count": 0,
+          "shared_visible": false,
+          "private_visible": false
+        },
+        "child_star": {
+          "http_status": 200,
+          "root_array": true,
+          "results_array": false,
+          "games_array": false,
+          "item_count": 0,
+          "shared_visible": false,
+          "private_visible": false
+        },
+        "child_letter": {
+          "http_status": 200,
+          "root_array": true,
+          "results_array": false,
+          "games_array": false,
+          "item_count": 1,
+          "shared_visible": true,
+          "private_visible": false
+        }
+      },
+      "backend_ready": true,
+      "backend_synthetic_seeded": true,
+      "cleanup_verified": true,
+      "cold_rounds": [
+        {
+          "round": 1,
+          "bundled_renderer": true,
+          "native_ipc": true,
+          "parent_directory_denied": true,
+          "ordinary_user": true,
+          "listener_ownership_verified": true
+        },
+        {
+          "round": 2,
+          "bundled_renderer": true,
+          "native_ipc": true,
+          "parent_directory_denied": true,
+          "ordinary_user": true,
+          "listener_ownership_verified": true
+        }
+      ],
+      "platform": "Linux",
+      "effective_uid_nonzero": true,
+      "tauri_driver_version": "2.1.0",
+      "process_cleanup_scope": "Owned session/process groups and explicit driver ports; not product game-launch identity.",
+      "installer_executed": true,
+      "installed_binary_sha256": "a30d27b45cfb26c320c576a75e53abce97f237783369813c282684c2692535fd",
+      "native_package_versions": {
+        "webkit2gtk-driver": "2.50.4-0ubuntu0.22.04.1",
+        "libwebkit2gtk-4.1-0": "2.50.4-0ubuntu0.22.04.1"
+      },
+      "tauri_driver_sha256": "a71b247ca519f3ed02a364cd8692d71d381ffe81279c94c6ed65ec300d217868",
+      "owned_display_and_dbus_started": true,
+      "secret_service_owned_bus_ready": true,
+      "secret_service_package_version": "40.0-3ubuntu3",
+      "selected_driver_logs": [
+        {
+          "round": 1,
+          "prefix_bytes": 353,
+          "truncated": false,
+          "prefix_sha256": "5b3e7c3a1ddde5b131a8738df79a5ee6ae249d119529dac35ffe0947eacd1a5a",
+          "matched_categories": [
+            "not_found"
+          ],
+          "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+        },
+        {
+          "round": 2,
+          "prefix_bytes": 353,
+          "truncated": false,
+          "prefix_sha256": "8036c631ec715fada1a9fe083280c8f17999fccbad4cc5138466276f611a5933",
+          "matched_categories": [
+            "not_found"
+          ],
+          "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+        },
+        {
+          "round": 3,
+          "prefix_bytes": 353,
+          "truncated": false,
+          "prefix_sha256": "effa1d886217d06d204527b15b99454827643b561187cd4d8023dbb35b36f88c",
+          "matched_categories": [
+            "not_found"
+          ],
+          "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+        },
+        {
+          "round": 4,
+          "prefix_bytes": 353,
+          "truncated": false,
+          "prefix_sha256": "8483020b5423377582c9d638e2eaaff10e85f3051e633e37378f391492ab9774",
+          "matched_categories": [
+            "not_found"
+          ],
+          "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+        }
+      ],
+      "owned_marker_retained_after_cold_reopen": true,
+      "connected_account_checks": {
+        "adult_connect": true,
+        "adult_connect_connection_settled": true,
+        "adult_persisted_json_has_no_plaintext_token": true,
+        "adult_os_credential_persisted": true,
+        "adult_live_identity": true,
+        "os_credential_hydrated_after_app_cold_reopen": true,
+        "adult_reconnect": true,
+        "adult_reconnect_connection_settled": true,
+        "wrong_token_denied": true,
+        "wrong_token_denied_connection_settled": true,
+        "wrong_failed_connect_preserves_credential": true,
+        "limited_token_denied": true,
+        "limited_token_denied_connection_settled": true,
+        "limited_failed_connect_preserves_credential": true,
+        "child_account_switch": true,
+        "child_account_switch_connection_settled": true,
+        "child_persisted_json_has_no_plaintext_token": true,
+        "child_os_credential_persisted": true,
+        "child_live_identity": true,
+        "child_revocation_persisted": true,
+        "revoked_token_denied": true,
+        "revoked_token_denied_connection_settled": true,
+        "revoked_denial_preserves_saved_credential": true,
+        "forget_clears_os_credential_and_config": true,
+        "forgotten_json_has_no_plaintext_token": true
+      },
+      "connected_account_journey_verified": true,
+      "owned_package_uninstalled": true,
+      "owned_marker_retained_after_uninstall": true,
+      "owned_marker_removed": true,
+      "cleanup_errors": [],
+      "backend_cleanup_verified": true,
+      "selected_backend_log": {
+        "prefix_bytes": 16520,
+        "truncated": false,
+        "prefix_sha256": "f7cdf2d92cb9d6d9d00536c8a791b8fb5e9f92d324bccbc00aba09e2884a42d7",
+        "matched_categories": [
+          "migration"
+        ]
+      }
+    }
+  },
+  "qualified_previous_scope": "Real installed ce client, real ASGI/Postgres/Secret Service,19account/credential outcomes plus6explicit completed-Connect outcomes. All package/process/listener/marker/backend/database cleanup verified. Provider remains running across app closure; no real game/offline-with-files/platform/AT/operator/parity qualification.",
+  "early_ci_terminal": {
+    "run": 43751154766,
+    "job": 132925173306,
+    "source": "3ff18b55295a14a904434a7b3181fac6a5545ac5",
+    "raw_log_sha256": "24ee17e4485528cfafe764ca8052e146ad917d622781bf0897b7b9374f5c10f7",
+    "store_invariants": "50passed/1skipped4.69s",
+    "five_header_guard": "5passed/35deselected2.39s",
+    "personal_token_case": "1failed/13deselected0.68s; actual401 vs required existing302. Whole core was not started.",
+    "cause": "General login helper changed denial behavior for unrelated personal-token routes. Those routes accept scoped Bearer tokens; they were not setting allow_bearer=False because they are not session-only."
+  },
+  "correction_of_prior_claims": "R2120 correction: the personal-token router does support scoped Bearer authentication (its source uses the shared session/remember/Bearer resolver). Calling it session-only was an incorrect inference. R2118 generic allow_bearer=False tests passed but did not exercise that actual router; they did not fix its expired-Bearer legacy302 contract. The exact existing early CI case still failed at3ff. R2120 restores the general login helper exactly to original6a AST, opts only client/collection/game companion routers into JSON401 and adds actual personal-router expired302/no-data and valid-scoped-Bearer200 controls. Prior test/runtime counts remain historical facts; the incorrect endpoint classification and claimed endpoint fix are superseded.",
+  "implementation": [
+    "Restore _login_redirect exactly to original6a AST, preserving default browser/other API login behavior.",
+    "Introduce _companion_login_response and explicitly import it as the denial adapter only in client_reads, collection_reads and game_reads. Supported rejected companion Bearer still gets standard JSON401; browser/unsupported/role-refusal fallback keeps prior handling.",
+    "Leave personal-token routes and their existing expected302 test unchanged. Add direct actual-router expired-token/no-read/no-touch and valid-scoped-Bearer200 checks; generic route-policy checks call the actual opt-in adapter.",
+    "Rename the inaccurate early CI step label to legacy denial responses; its actual failing test command, every other CI job/selection/exclusion/permission remains unchanged."
+  ],
+  "verification": {
+    "real_handler_red": "Actual personal-token router reproduces the same CI401-vs302 failure, with no local server or database.",
+    "handler_green": "9pure methods pass0.123s including supported companion401/scope403/valid200, browser302, unsupported policy, authenticated role refusal and actual personal-route positive/negative cases.",
+    "default_helper_equivalence": "AST equality to qualified6a original helper passed.",
+    "linux_adjacent": "43methods pass0.229s",
+    "workflow": "Only inaccurate step label changed; all commands/jobs/permissions preserved.",
+    "lint": "Changed helper/client/game/test Python files clean; collection adapter retains exactly its two existing pyflakes findings, no new warnings.",
+    "bundle_validator": "Passed:7reports/1545routes/160current-only/lifecycle/secret-path scan",
+    "latest_source_native_and_aggregate": "pending; do not infer from previous3ff native success"
+  },
+  "source_sha256_git_normalized": {
+    ".github/workflows/ci-tests.yml": "ed71e8462be27b25dc63cf5606413cfa3bc6f432821ede2ecd4e7cd14180e414",
+    "oneirodex/runtime_native/acquire_status.py": "fb9b8b9bfd16050e2fec392c3512b529c0741ca5f0cab9ff9031897cdeffdc17",
+    "oneirodex/runtime_native/client_reads.py": "cbfbc116f3df12f39bda317431c2c2326e29afb9c8e6b2fe84e315d9ce675a92",
+    "oneirodex/runtime_native/collection_reads.py": "ada30b701bc82b308b068d65e2aab5021f61b831b7b072dd6eacf2f31df8067f",
+    "oneirodex/runtime_native/game_reads.py": "71d6dff4bf39ab670137ef0b9ca2d19bcb22bf427b8be190ba1539a6a0f8bb7b",
+    "tests/test_native_bearer_denial.py": "7650351fc8bca349ce15c9dca3cc0c64105d1736b8b0b744648b615951b20ff7"
+  },
+  "previous_settled_native_acceptance": true,
+  "current_source_native_recheck_pending": true,
+  "overall_goal": "active and incomplete",
+  "next": "Publish actual endpoint fix/corrections, request fresh CI including exact early token case and full core; repeat the same ce package connected native flow against the corrected server. Then original actual archive/Play/Reveal/offline/denied-shelf/wrapper/exit/restart/save/platform/AT/operator/route/final/release.",
+  "capture": "Skipped: no UI markup/style changes and no local native resources; all actual installed/OS-secret checks run in disposable CI."
+}

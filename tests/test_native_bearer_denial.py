@@ -9,8 +9,9 @@ from unittest import mock
 from starlette.requests import Request
 from oneirodex.runtime_native.client_reads import create_client_reads_router
 from oneirodex.runtime_native.collection_reads import create_collection_reads_router
-from oneirodex.runtime_native.acquire_status import _login_redirect
+from oneirodex.runtime_native.acquire_status import _companion_login_response
 from oneirodex.runtime_native.request_auth import request_auth_context
+from oneirodex.runtime_native.account_tokens import create_account_tokens_router
 
 
 class NativeBearerDenialContracts(unittest.TestCase):
@@ -74,7 +75,7 @@ class NativeBearerDenialContracts(unittest.TestCase):
         find_token=mock.Mock(side_effect=AssertionError('session-only route must not resolve tokens'))
         context=request_auth_context(request,settings.config,find_user=lambda _id:None,
             find_token=find_token,commit_token_touch=mock.Mock(),login_manager=manager,allow_bearer=False)
-        response=_login_redirect(settings,request,manager,context)
+        response=_companion_login_response(settings,request,manager,context)
         self.assertEqual(response.status_code,302);self.assertNotIn('www-authenticate',response.headers)
         find_token.assert_not_called()
 
@@ -85,8 +86,41 @@ class NativeBearerDenialContracts(unittest.TestCase):
         settings=SimpleNamespace(config={'SECRET_KEY':'pure-test-secret','TESTING':True})
         manager=SimpleNamespace(login_view='/login',blueprint_login_views={},login_message=None)
         context=SimpleNamespace(user=SimpleNamespace(id=27),session_data={},should_set_session_cookie=False)
-        response=_login_redirect(settings,request,manager,context)
+        response=_companion_login_response(settings,request,manager,context)
         self.assertEqual(response.status_code,302);self.assertNotIn('www-authenticate',response.headers)
+
+    def test_actual_personal_token_route_preserves_expired_bearer_redirect_without_data_access(self):
+        request=Request({'type':'http','method':'GET','scheme':'http','path':'/api/tokens','query_string':b'',
+            'headers':[(b'authorization',b'Bearer gt_abcd1234_actual-secret')],
+            'server':('fixture.invalid',80),'client':('127.0.0.1',1)})
+        settings=SimpleNamespace(config={'SECRET_KEY':'pure-test-secret','TESTING':True})
+        manager=SimpleNamespace(login_view='/login',blueprint_login_views={},login_message=None)
+        token=SimpleNamespace(user_id=27,token_hash=hashlib.sha256(b'actual-secret').hexdigest(),
+            revoked_at=None,expires_at=datetime.now(timezone.utc)-timedelta(days=1))
+        touched=mock.Mock();data=mock.Mock()
+        router=create_account_tokens_router(settings,find_user=lambda _id:None,find_token=lambda _prefix:token,
+            commit_token_touch=touched,login_manager=manager,data_access=data)
+        route=next(route for route in router.routes if route.path=='/api/tokens' and 'GET' in route.methods)
+        response=route.endpoint(request)
+        self.assertEqual(response.status_code,302);self.assertTrue(response.headers['location'].startswith('/login?'))
+        self.assertNotIn('www-authenticate',response.headers);data.list_for_user.assert_not_called();touched.assert_not_called()
+
+    def test_actual_personal_token_route_still_accepts_valid_scoped_bearer(self):
+        request=Request({'type':'http','method':'GET','scheme':'http','path':'/api/tokens','query_string':b'',
+            'headers':[(b'authorization',b'Bearer gt_abcd1234_actual-secret')],
+            'server':('fixture.invalid',80),'client':('127.0.0.1',1)})
+        settings=SimpleNamespace(config={'SECRET_KEY':'pure-test-secret','TESTING':True})
+        manager=SimpleNamespace(login_view='/login',blueprint_login_views={},login_message=None)
+        user=SimpleNamespace(id=27,role='user',state=True)
+        token=SimpleNamespace(user_id=27,token_hash=hashlib.sha256(b'actual-secret').hexdigest(),revoked_at=None,expires_at=None)
+        touched=mock.Mock();data=mock.Mock();data.list_for_user.return_value=[]
+        policy=SimpleNamespace(forbidden_scopes=lambda _role:set(),valid_scopes=lambda:{'read:library'},presets=lambda:{})
+        router=create_account_tokens_router(settings,find_user=lambda _id:user,find_token=lambda _prefix:token,
+            commit_token_touch=touched,login_manager=manager,data_access=data,policy=policy)
+        route=next(route for route in router.routes if route.path=='/api/tokens' and 'GET' in route.methods)
+        response=route.endpoint(request)
+        self.assertEqual(response.status_code,200);self.assertEqual(json.loads(response.body)['tokens'],[])
+        data.list_for_user.assert_called_once_with(27);touched.assert_called_once()
 
 
 if __name__=='__main__':unittest.main()
