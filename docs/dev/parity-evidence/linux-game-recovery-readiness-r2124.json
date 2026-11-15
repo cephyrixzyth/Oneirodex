@@ -36,5 +36,10 @@
     "Actual file-manager Reveal, reachable denial and network-outage shelf with files, saves/update/rollback/uninstall retention, platform/AT/operator/parity/final/release remain in original scope."
   ],
   "overall_goal": "active and incomplete",
-  "capture": "Skipped: no UI markup/style changes; all actual native execution is disposable CI only."
+  "capture": "Skipped: no UI markup/style changes; all actual native execution is disposable CI only.",
+  "followup_r2125": {
+    "native_terminal": "success",
+    "report": "linux-game-family-recovery-terminal-r2125.json",
+    "scope": "Actual installed Play/detached-child heartbeat/exact-launch account recovery and reporter stop verified; other original gates open."
+  }
 }
