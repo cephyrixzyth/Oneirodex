@@ -755,6 +755,66 @@ def filetime_now():
     return 116444736000000000 + time.time_ns() // 100
 
 
+def safe_webview_log_summary(data):
+    """Publish fixed categories and codes, never SDK messages, URLs or profile paths."""
+    limit = 256 * 1024
+    prefix = data[:limit]
+    text = prefix.decode('utf-16' if prefix.startswith(b'\xff\xfe') else 'utf-8-sig', errors='replace')
+    patterns = {
+        'profile_lock': r'process[_ ]?singleton|lock ?file',
+        'profile_directory': r'user.?data|profile.?director',
+        'access_denied': r'access (?:is )?denied|permission denied',
+        'sandbox': r'sandbox', 'desktop': r'window.?station|desktop',
+        'ipc': r'mojo|platform.?channel|named.?pipe', 'gpu': r'\bgpu\b|d3d|direct3d',
+        'broker': r'broker', 'creation_failure': r'failed to (?:create|launch|start)|createprocess[^\r\n]{0,160}failed'}
+    known = {'process_singleton_win.cc', 'sandbox_win.cc', 'sandbox_policy_base.cc',
+             'browser_main_loop.cc', 'browser_main_runner_impl.cc', 'browser_process_impl.cc',
+             'chrome_browser_main_win.cc', 'chrome_browser_main.cc', 'platform_channel.cc',
+             'named_platform_channel_win.cc', 'win_util.cc', 'embedded_browser_impl.cc'}
+    severities = dict.fromkeys(('error', 'warning', 'fatal', 'info', 'verbose'), 0)
+    locations, unknown = [], 0
+    for match in re.finditer(r'^\[[^\]\r\n]{0,120}:(ERROR|FATAL|WARNING|INFO|VERBOSE[0-9]+):'
+                             r'([^\]\r\n]{1,200})\(([0-9]{1,6})\)\]', text, re.MULTILINE):
+        severity = match[1].lower()
+        severity = 'verbose' if severity.startswith('verbose') else severity
+        severities[severity] += 1
+        component = re.split(r'[\\/]', match[2])[-1]
+        if component in known:
+            value = {'component': component, 'line': int(match[3]), 'severity': severity}
+            if value not in locations and len(locations) < 12:
+                locations.append(value)
+        else:
+            unknown += 1
+    codes = sorted({m.lower() for m in re.findall(
+        r'\b(?:hresult|hr|error[_ ]?code|last[_ ]?error)\s*[=:]\s*(0x[0-9a-f]{8})\b', text, re.IGNORECASE)})[:12]
+    return {'observation': 'selected_prefix', 'bytes_read': len(prefix),
+            'prefix_sha256': hashlib.sha256(prefix).hexdigest(), 'truncated': len(data) > limit,
+            'matched_categories': [key for key, pattern in patterns.items() if re.search(pattern, text, re.IGNORECASE)],
+            'hresult_codes': codes, 'severity_counts': severities, 'known_locations': locations,
+            'unknown_component_records': unknown,
+            'limits': 'Selected static terms/codes only; matches are not a causal diagnosis or complete log capture.'}
+
+
+def _read_webview_log(work, round_number):
+    if type(round_number) is not int or round_number not in (1, 2):
+        return {'observation': 'invalid_round'}
+    path = work / f'webview-startup-{round_number}.log'
+    try:
+        metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or getattr(metadata, 'st_file_attributes', 0) & 0x400:
+            return {'observation': 'rejected_reparse_or_nonregular'}
+        with path.open('rb') as source:
+            data = source.read(256 * 1024 + 1)
+        selected = safe_webview_log_summary(data)
+        selected['observed_file_bytes'] = metadata.st_size
+        selected['truncated'] |= metadata.st_size > selected['bytes_read']
+        return selected
+    except FileNotFoundError:
+        return {'observation': 'missing'}
+    except OSError as error:
+        return {'observation': 'unavailable', 'error_class': type(error).__name__}
+
+
 def _cold_start(executable, work, round_number, progress, fixture):
     from playwright.sync_api import sync_playwright
 
@@ -763,7 +823,8 @@ def _cold_start(executable, work, round_number, progress, fixture):
         port = reservation.getsockname()[1]
     env = dict(fixture.environment)
     env['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'] = (
-        f'--remote-debugging-address=127.0.0.1 --remote-debugging-port={port}'
+        f'--remote-debugging-address=127.0.0.1 --remote-debugging-port={port} '
+        f'--enable-logging --log-file="{work / ("webview-startup-" + str(round_number) + ".log")}"'
     )
     env['WEBVIEW2_USER_DATA_FOLDER'] = str(work / 'webview-profile')
     progress['phase'] = f'cold_{round_number}_standard_user_launch'
@@ -867,7 +928,14 @@ def _cold_start(executable, work, round_number, progress, fixture):
                             progress.setdefault('startup_process_traces', []).append(
                                 {'round': round_number, **trace.finish(process.pid, cleanup_time)})
                     finally:
-                        process.close()
+                        try:
+                            progress.setdefault('webview_startup_logs', []).append(
+                                {'round': round_number, **_read_webview_log(work, round_number)})
+                        except Exception as log_error:
+                            progress.setdefault('webview_startup_logs', []).append(
+                                {'round': round_number, 'observation': 'failed', 'error_class': type(log_error).__name__})
+                        finally:
+                            process.close()
 
 
 def _controller_metadata():

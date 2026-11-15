@@ -174,6 +174,10 @@ class ColdStartProfileTests(unittest.TestCase):
                         with self.assertRaisesRegex(probe.ProbeFailure, 'installs_directory_not_owned'):
                             probe._cold_start(root / 'never-run.exe', root, 1, progress, context)
                 self.assertEqual(context.start.call_args.args[1]['USERPROFILE'], str(profile))
+                arguments = context.start.call_args.args[1]['WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS']
+                self.assertIn('--enable-logging', arguments)
+                self.assertIn('--log-file=', arguments)
+                self.assertIn('webview-startup-1.log', arguments)
                 self.assertEqual(progress['app_launch_token_policy'], 'ordinary_fixture_account_required')
                 self.assertIn('native_ipc_checks', progress)
                 self.assertEqual(progress['native_ipc_checks'][0]['directory_owned'], inside)

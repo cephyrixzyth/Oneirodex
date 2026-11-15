@@ -1,0 +1,231 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2102",
+  "observed_utc": "2026-11-15T04:56:20.746916+00:00",
+  "base_commit": "8f2dd45553dbfc985f967737edd51222fbf7018c",
+  "classification": "Bounded per-process WebView startup error logging prepared; actual browser-start cause unknown.",
+  "preceding_native_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43665233552",
+    "job_id": 132663014799,
+    "harness_source": "8f2dd45553dbfc985f967737edd51222fbf7018c",
+    "raw_log_sha256": "7ffa237a6352309519b7a83c685207367d5fd629c81eec27dd8c58e5eb3411ad",
+    "ci_guard_methods_passed": 74,
+    "ci_guard_elapsed_seconds": 22.084,
+    "receipt": {
+      "observed_utc": "2026-11-15T01:54:58.542050+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_webview_startup",
+      "standard_user_fixture": {
+        "standard_user_verified": true,
+        "profile_environment_verified": true,
+        "private_desktop_created": true,
+        "cleanup_verified": true,
+        "cleanup_errors": []
+      },
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "fixture_installer_copy_verified": true,
+      "installer_launch_security": {
+        "elevated": false,
+        "integrity_rid": 8192,
+        "same_fixture_account": true
+      },
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "suspended_creation_api": "CreateProcessWithLogonW",
+      "app_launch_token_policy": "ordinary_fixture_account_required",
+      "app_launch_security": [
+        {
+          "round": 1,
+          "elevated": false,
+          "integrity_rid": 8192,
+          "same_fixture_account": true
+        }
+      ],
+      "startup_diagnostics": {
+        "product_window_title": false,
+        "visible_text_keywords": [],
+        "listeners": [],
+        "processes": [
+          {
+            "pid": 9608,
+            "parent": 7032,
+            "name": "oneirodex-desktop.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": false
+          }
+        ],
+        "devtools_policy_values": [],
+        "session_id": 2,
+        "root_alive": true,
+        "runtime_versions": [
+          "156.0.4314.58"
+        ],
+        "native_initialization": {
+          "window_count": 0,
+          "window_observation": "complete",
+          "keywords": [],
+          "hresult_codes": [],
+          "query_hresult_codes": [],
+          "event_observation": "empty_or_unavailable",
+          "events": []
+        },
+        "has_main_window": false,
+        "probe_webview_profile_created": true,
+        "parent_has_browser_folder_override": false
+      },
+      "last_owned_root_and_listener_cleanup_verified": true,
+      "startup_process_traces": [
+        {
+          "round": 1,
+          "observation": "complete",
+          "capture_complete": false,
+          "root_start_seen": true,
+          "parent_chain_events": [
+            {
+              "kind": "start",
+              "pid": 9608,
+              "parent": 7032,
+              "name": "oneirodex-desktop.exe",
+              "time_created": "134391813549565696",
+              "association": "parent_chain_trace"
+            },
+            {
+              "kind": "start",
+              "pid": 5092,
+              "parent": 9608,
+              "name": "msedgewebview2.exe",
+              "time_created": "134391813561415322",
+              "association": "parent_chain_trace"
+            },
+            {
+              "kind": "start",
+              "pid": 5924,
+              "parent": 5092,
+              "name": "msedgewebview2.exe",
+              "time_created": "134391813561415323",
+              "association": "parent_chain_trace"
+            },
+            {
+              "kind": "start",
+              "pid": 8748,
+              "parent": 9608,
+              "name": "msedgewebview2.exe",
+              "time_created": "134391813561415325",
+              "association": "parent_chain_trace"
+            },
+            {
+              "kind": "start",
+              "pid": 7484,
+              "parent": 8748,
+              "name": "msedgewebview2.exe",
+              "time_created": "134391813561415327",
+              "association": "parent_chain_trace"
+            }
+          ],
+          "root_stop_seen": false,
+          "unmatched_target_stops": 5,
+          "rejected_stop_diagnostics": [
+            {
+              "expected_name": "msedgewebview2.exe",
+              "parent_matches": false,
+              "name_shape": "prefix",
+              "name_length": 14,
+              "exit_status": "0x00000015",
+              "before_controller_cleanup": true,
+              "association": "rejected_stop_only"
+            },
+            {
+              "expected_name": "msedgewebview2.exe",
+              "parent_matches": false,
+              "name_shape": "prefix",
+              "name_length": 14,
+              "exit_status": "0x00000000",
+              "before_controller_cleanup": true,
+              "association": "rejected_stop_only"
+            },
+            {
+              "expected_name": "msedgewebview2.exe",
+              "parent_matches": false,
+              "name_shape": "prefix",
+              "name_length": 14,
+              "exit_status": "0x00000015",
+              "before_controller_cleanup": true,
+              "association": "rejected_stop_only"
+            },
+            {
+              "expected_name": "msedgewebview2.exe",
+              "parent_matches": false,
+              "name_shape": "prefix",
+              "name_length": 14,
+              "exit_status": "0x00000000",
+              "before_controller_cleanup": true,
+              "association": "rejected_stop_only"
+            },
+            {
+              "expected_name": "oneirodex-desktop.exe",
+              "parent_matches": false,
+              "name_shape": "prefix",
+              "name_length": 14,
+              "exit_status": "0x00000001",
+              "before_controller_cleanup": false,
+              "association": "rejected_stop_only"
+            }
+          ],
+          "unattributed_events": [],
+          "subscription_errors": [],
+          "dropped": 0,
+          "limits": "Read-only name/parent/time diagnostics, not product launch identity. Completion describes local collection only; provider delivery is not exhaustive. Root stop after controller cleanup is intentional."
+        }
+      ],
+      "uninstaller_launch_security": {
+        "elevated": false,
+        "integrity_rid": 8192,
+        "same_fixture_account": true
+      },
+      "owned_application_uninstalled": true,
+      "code": "webview_endpoint_not_ready"
+    }
+  },
+  "change": "Add only process-local enable-logging/log-file browser arguments. After owned root cleanup, read at most256KiB of the dedicated round log, reject reparse/nonregular files, and publish only fixed term categories, labelled numeric HRESULTs, severity counts and allowlisted source locations. Record observed size and prefix SHA256/truncation; no raw SDK text, paths, URLs, account/SID or messages.",
+  "primary_sources": [
+    "https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/webview-features-flags",
+    "https://www.chromium.org/for-testers/enable-logging/"
+  ],
+  "verification": {
+    "red": "Three absent reader/sanitizer cases plus two existing launch-wiring subcases fail before logging support.",
+    "local_methods_loaded": 77,
+    "local_methods_passed": 75,
+    "native_only_skipped": 2,
+    "cases": [
+      "static category/code projection excludes private paths/URLs/names/messages",
+      "bounded256KiB prefix hashing/truncation",
+      "trailing content not scanned",
+      "reparse file rejected before open",
+      "per-process logging args wired to actual fixture launch"
+    ],
+    "pyflakes": "passed"
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "bca6c56e86a2b17f8733628e312cb43b1786d38a43aeefd523526cfac491fd0f",
+    "scripts/ci/test_windows_packaged_fixture.py": "7a69a13874d7322ce376405558f7cd18cc895968257f9b057a7bbafb22518695",
+    "scripts/ci/test_windows_webview_log.py": "bc6d31e031296a7401a635820b42aa53fe91c2eac9bcef3aedd205f29e788370"
+  },
+  "ruling": "The native ordinary-account path removes the earlier token prerequisite but does not establish why WebView fails. Two rejected stop candidates report0x15; they remain rejected because parent fields disagree. Do not map them to an attributed crash, Windows error or matched Chromium version without evidence. Default-desktop window enumeration cannot establish absence of a window on the private desktop.",
+  "native_retry": "pending same pinned package-only mode with bounded SDK log receipt",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Selected terms are observations, not causal proof or complete logs. Raw SDK text remains on the disposable runner and is not uploaded. Browser sandbox/security, registry policies, shipping binary and startup timeout are unchanged. Native UI/IPC/reopen/retention/real account/game/platform/parity/operator/release gates remain open.",
+  "capture": "Skipped: selected CI log diagnostics only; no local app/account/desktop/installer execution."
+}
