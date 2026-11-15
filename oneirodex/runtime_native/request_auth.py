@@ -33,6 +33,7 @@ class RequestAuthContext:
     session_cookie_name: str
     remember_cookie_name: str
     session_refresh_each_request: bool
+    allow_bearer: bool = True
 
     @property
     def user(self) -> Any | None:
@@ -177,6 +178,7 @@ def request_auth_context(
         session_cookie_name=session_cookie_name,
         remember_cookie_name=remember_cookie_name,
         session_refresh_each_request=bool(config.get("SESSION_REFRESH_EACH_REQUEST", True)),
+        allow_bearer=allow_bearer,
     )
 
 

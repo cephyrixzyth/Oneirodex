@@ -105,9 +105,13 @@ def mount_acquire_status_routes(app: FastAPI, flask_app, **kwargs):
 
 
 def _login_redirect(flask_app, request: Request, login_manager, auth_context: RequestAuthContext):
-    """Keep browser redirects; rejected Bearer API calls require reauthentication."""
+    """Challenge rejected Bearer auth where supported; keep browser redirects."""
     authorization_name = str(flask_app.config.get('AUTH_HEADER_NAME') or 'Authorization')
-    if request.headers.get(authorization_name, '').lower().startswith('bearer '):
+    if (
+        auth_context.user is None
+        and getattr(auth_context, 'allow_bearer', True)
+        and request.headers.get(authorization_name, '').lower().startswith('bearer ')
+    ):
         from oneirodex.utils.api_contract import api_error_payload
 
         payload, status = api_error_payload(

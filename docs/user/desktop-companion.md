@@ -207,7 +207,7 @@ Related: [downloads.md](downloads.md) · [browser-play.md](browser-play.md) · [
 
 ## Packaged-runtime verification
 
-Real Linux Connect testing found missing server CORS support and client collection/search response mismatches. Current source fixes these and returns explicit Bearer denials. The latest search correction still requires replacement installers and full connected-account verification. Ordinary browser sign-in redirects, browser security, token checks and scopes remain enabled.
+Real Linux Connect testing found missing server CORS support and client collection/search response mismatches. Current source fixes these and returns explicit Bearer denials. Replacement installers with the search correction now build successfully; full connected-account verification is still pending. Explicit Bearer denial applies to token-supported routes. Session-only sign-in, ordinary browser redirects, browser security, token checks and scopes remain enabled.
 
 The pinned Linux Debian companion package has passed two cold starts of its bundled UI and genuine native-command success and denial checks on a disposable Ubuntu 22.04 runner. A controller-owned marker remained in the same profile after reopen and package removal, then was removed. Owned process groups, listeners and package cleanup passed. Connected accounts, OS credential persistence, offline Play/Reveal, real game saves, game-process recovery and physical-device qualification remain pending.
 
