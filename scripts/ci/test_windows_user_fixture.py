@@ -41,7 +41,7 @@ class FakeAPI:
         self.alive.add(self.next_handle)
         return self.next_handle, self.next_handle + 1, self.next_handle + 100
 
-    def state(self, handle):
+    def state(self, handle, *credentials):
         self.events.append(('state', handle))
         profile = 'C:\\Users\\' + self.name
         return self.state_override or {
@@ -125,9 +125,10 @@ class FixtureLifecycleTests(unittest.TestCase):
             with self.subTest(change=change):
                 api = FakeAPI()
                 original = api.state
-                api.state = lambda handle: {**original(handle), **change}
-                with self.assertRaises(fixture.FixtureFailure):
+                api.state = lambda handle, *credentials: {**original(handle, *credentials), **change}
+                with self.assertRaises(fixture.FixtureFailure) as failed:
                     self.make(api)
+                self.assertIs(getattr(failed.exception, 'cleanup_verified', None), True)
                 self.assertFalse(any(isinstance(e, tuple) and e[0] == 'resume' for e in api.events))
                 self.assertEqual(api.events.count(('terminate', 22)), 1)
                 self.assertEqual(api.events.count(('close_handle', 22)), 1)
@@ -184,7 +185,7 @@ class FixtureLifecycleTests(unittest.TestCase):
         api = FakeAPI()
         context = self.make(api)
         original_state, original_terminate = api.state, api.terminate
-        api.state = lambda handle: {**original_state(handle), 'sid': 'S-1-5-18'}
+        api.state = lambda handle, *credentials: {**original_state(handle, *credentials), 'sid': 'S-1-5-18'}
         def cannot_terminate(handle):
             raise fixture.FixtureFailure('fixture_synthetic_termination_failure')
         api.terminate = cannot_terminate
@@ -366,6 +367,104 @@ class NativeBindingTests(unittest.TestCase):
                                 env=fixture.observer_environment(os.environ))
         self.assertEqual(result.returncode, 0, 'Password conversion must not depend on a loaded cmdlet')
         self.assertEqual(result.stdout.strip(), 'conversion_ok')
+
+    def test_child_profile_inspection_requests_query_only_and_environment_uses_same_user_logon(self):
+        import inspect
+        import ctypes as c
+        from ctypes import wintypes as w
+        api = object.__new__(fixture.NativeFixtureAPI)
+        self.assertEqual(len(inspect.signature(api.state).parameters), 3,
+                         'State inspection must authenticate its same-user environment token')
+        api.c, api.w = c, w
+        api.base = mock.Mock(process_security=lambda handle: {'elevated': False, 'integrity_rid': 8192})
+        calls = []
+        def open_token(process, rights, output):
+            self.assertEqual((process, rights), (999, 0x8), 'Child token needs read-only QUERY rights')
+            output._obj.value = 10
+            return True
+        api.base._open_token = open_token
+        api.base.close_handle = lambda handle: calls.append(('close', handle.value))
+        api._token_sid = lambda token: SID
+        api._user_token = lambda name, password: w.HANDLE(11)
+        profile = 'C:\\Users\\odci0123456789ab'
+        def user_path(token, buffer, size):
+            if buffer is None:
+                size._obj.value = len(profile) + 1
+                return False
+            buffer.value = profile
+            return True
+        def profiles_path(buffer, size):
+            if buffer is None:
+                size._obj.value = 9
+                return False
+            buffer.value = 'C:\\Users'
+            return True
+        api._profile_path, api._profiles_path = user_path, profiles_path
+        block = c.create_unicode_buffer('USERPROFILE=' + profile + '\0APPDATA=' + profile + '\\AppData\\Roaming\0\0')
+        def environment(output, token, inherit):
+            self.assertEqual(token.value, 11)
+            self.assertIs(inherit, False)
+            output._obj.value = c.addressof(block)
+            return True
+        api._environment = environment
+        api._destroy_environment = lambda value: calls.append('environment_freed')
+        result = api.state(999, 'odci0123456789ab', 'sentinel')
+        self.assertEqual(result['sid'], SID)
+        self.assertEqual(result['profile_root'], profile)
+        self.assertEqual(result['environment']['USERPROFILE'], profile)
+        self.assertIn(('close', 10), calls)
+        self.assertIn(('close', 11), calls)
+        self.assertIn('environment_freed', calls)
+        def changed_profile(token, buffer, size):
+            value = profile if token.value == 10 else profile + '.other'
+            if buffer is None:
+                size._obj.value = len(value) + 1
+                return False
+            buffer.value = value
+            return True
+        api._profile_path = changed_profile
+        api._environment = mock.Mock(side_effect=AssertionError('Do not read a mismatched profile environment'))
+        with self.assertRaisesRegex(fixture.FixtureFailure, 'environment_profile_mismatch'):
+            api.state(999, 'odci0123456789ab', 'sentinel')
+        api._environment.assert_not_called()
+
+    def test_environment_logon_rejects_a_different_account_before_reading_its_profile(self):
+        import inspect
+        import ctypes as c
+        from ctypes import wintypes as w
+        api = object.__new__(fixture.NativeFixtureAPI)
+        self.assertEqual(len(inspect.signature(api.state).parameters), 3)
+        api.c, api.w = c, w
+        api.base = mock.Mock(process_security=lambda handle: {'elevated': False, 'integrity_rid': 8192})
+        def open_token(process, rights, output):
+            self.assertEqual(rights, 0x8)
+            output._obj.value = 10
+            return True
+        api.base._open_token = open_token
+        api._token_sid = lambda token: SID if token.value == 10 else 'S-1-5-18'
+        api._user_token = lambda *args: w.HANDLE(11)
+        api._profile_path = mock.Mock(side_effect=AssertionError('Do not inspect another user profile'))
+        with self.assertRaisesRegex(fixture.FixtureFailure, 'environment_account_mismatch'):
+            api.state(999, 'odci0123456789ab', 'sentinel')
+        api._profile_path.assert_not_called()
+
+    def test_environment_token_uses_normal_local_logon_and_clears_native_password_buffer(self):
+        import ctypes as c
+        from ctypes import wintypes as w
+        api = object.__new__(fixture.NativeFixtureAPI)
+        api.c, api.w = c, w
+        self.assertTrue(callable(getattr(api, '_user_token', None)))
+        buffers = []
+        def logon(name, domain, password, kind, provider, output):
+            self.assertEqual((name, domain, kind, provider), ('odci0123456789ab', '.', 2, 0))
+            self.assertEqual(password.value, 'sentinel')
+            buffers.append(password)
+            output._obj.value = 11
+            return True
+        api._logon = logon
+        result = api._user_token('odci0123456789ab', 'sentinel')
+        self.assertEqual(result.value, 11)
+        self.assertTrue(all(character == '\0' for character in buffers[0]))
 
 
 if __name__ == '__main__':

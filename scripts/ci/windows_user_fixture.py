@@ -118,6 +118,7 @@ class StandardUserFixture:
                 context.close()
             except Exception:
                 error.add_note('fixture_cleanup_failed')
+            error.cleanup_verified = context.receipt['cleanup_verified']
             raise
 
     def __init__(self, work, api):
@@ -154,7 +155,7 @@ class StandardUserFixture:
         child = _OwnedChild(self.api, handle, pid)
         self._children.append(child)
         try:
-            profile, actual_env = self._validated_state(self.api.state(handle))
+            profile, actual_env = self._validated_state(self.api.state(handle, self._name, self._password))
             if bootstrap:
                 self.profile_root, self.environment = profile, actual_env
             self.api.resume(thread)
@@ -266,6 +267,8 @@ class NativeFixtureAPI:
         self._create_logon = bind(self.base.advapi, 'CreateProcessWithLogonW', w.BOOL,
                                  [w.LPCWSTR, w.LPCWSTR, w.LPCWSTR, D, w.LPCWSTR, w.LPWSTR,
                                   D, P, w.LPCWSTR, c.POINTER(self.STARTUPINFO), c.POINTER(self.PROCESSINFO)])
+        self._logon = bind(self.base.advapi, 'LogonUserW', w.BOOL,
+                           [w.LPCWSTR, w.LPCWSTR, w.LPCWSTR, D, D, c.POINTER(H)])
         self._descriptor = bind(self.base.advapi, 'ConvertStringSecurityDescriptorToSecurityDescriptorW',
                                 w.BOOL, [w.LPCWSTR, D, c.POINTER(P), P])
         self._free = bind(self.base.kernel, 'LocalFree', P, [P])
@@ -482,11 +485,9 @@ if($failed -or (Get-LocalUser -Name $p.name -ErrorAction SilentlyContinue)){exit
         finally:
             c.memset(c.addressof(secret), 0, c.sizeof(secret))
 
-    def state(self, process):
+    def _token_sid(self, token):
         c, w = self.c, self.w
-        security = self.base.process_security(process)
-        token, size, sid_text, environment = w.HANDLE(), w.DWORD(), c.c_void_p(), c.c_void_p()
-        self._checked(self.base._open_token(process, 0xA, c.byref(token)), 'fixture_open_child_token')
+        size, sid_text = w.DWORD(), c.c_void_p()
         try:
             self.base._get_token(token, 1, None, 0, c.byref(size))
             if not 0 < size.value <= 65536:
@@ -495,7 +496,31 @@ if($failed -or (Get-LocalUser -Name $p.name -ErrorAction SilentlyContinue)){exit
             self._checked(self.base._get_token(token, 1, user, size.value, c.byref(size)), 'fixture_child_user')
             sid = c.cast(user, c.POINTER(c.c_void_p))[0]
             self._checked(self._sid_string(sid, c.byref(sid_text)), 'fixture_child_sid')
-            sid_value = c.wstring_at(sid_text)
+            return c.wstring_at(sid_text)
+        finally:
+            if sid_text:
+                self._free(sid_text)
+
+    def _user_token(self, name, password):
+        c, w = self.c, self.w
+        token, secret = w.HANDLE(), c.create_unicode_buffer(password)
+        try:
+            self._checked(self._logon(name, '.', secret, 2, 0, c.byref(token)), 'fixture_environment_logon')
+            return token
+        finally:
+            c.memset(c.addressof(secret), 0, c.sizeof(secret))
+
+    def state(self, process, name, password):
+        c, w = self.c, self.w
+        security = self.base.process_security(process)
+        token, environment_token, environment = w.HANDLE(), w.HANDLE(), c.c_void_p()
+        # Do not request DUPLICATE on another logon's child token.
+        self._checked(self.base._open_token(process, 0x8, c.byref(token)), 'fixture_open_child_token')
+        try:
+            sid_value = self._token_sid(token)
+            environment_token = self._user_token(name, password)
+            if self._token_sid(environment_token) != sid_value:
+                raise FixtureFailure('fixture_environment_account_mismatch')
             def path(query, *prefix):
                 count = w.DWORD()
                 query(*prefix, None, c.byref(count))
@@ -505,8 +530,10 @@ if($failed -or (Get-LocalUser -Name $p.name -ErrorAction SilentlyContinue)){exit
                 self._checked(query(*prefix, value, c.byref(count)), 'fixture_profile_path')
                 return value.value
             profile_root = path(self._profile_path, token)
+            if ntpath.normcase(path(self._profile_path, environment_token)) != ntpath.normcase(profile_root):
+                raise FixtureFailure('fixture_environment_profile_mismatch')
             profiles_root = path(self._profiles_path)
-            self._checked(self._environment(c.byref(environment), token, False), 'fixture_user_environment')
+            self._checked(self._environment(c.byref(environment), environment_token, False), 'fixture_user_environment')
             chars = c.cast(environment, c.POINTER(c.c_wchar))
             entries, current = [], []
             for index in range(65536):
@@ -526,8 +553,7 @@ if($failed -or (Get-LocalUser -Name $p.name -ErrorAction SilentlyContinue)){exit
         finally:
             if environment:
                 self._destroy_environment(environment)
-            if sid_text:
-                self._free(sid_text)
+            self.base.close_handle(environment_token)
             self.base.close_handle(token)
 
     def resume(self, thread):

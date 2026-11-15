@@ -39,10 +39,28 @@
     "scripts/ci/windows_user_fixture.py": "0208c8b5202eaff9c362c4577a604ec1368cc7f20c5d26cc47dc2ab6c18bd549",
     "scripts/ci/test_windows_user_fixture.py": "40c6d8841d3cc058d4828fa57a5c4787cff73da6f1148d0983a201addb40106d"
   },
-  "native_retry": "pending fixture-only CI with unchanged mode guards",
+  "native_retry": "password conversion/account/private desktop/suspended CLI creation advanced; child-token QUERY|DUPLICATE denied5 before resume; abort cleanup outcome not surfaced",
   "native_fixture_qualified": false,
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
   "limits": "R2098 verified failure location and abort cleanup; exact hosted module configuration is not established. Direct conversion control does not establish successful account/profile/desktop creation or app startup.",
-  "capture": "Skipped: CI fixture conversion source and nonmutating local CLI control."
+  "capture": "Skipped: CI fixture conversion source and nonmutating local CLI control.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43662284953",
+    "job_id": 132654008955,
+    "harness_source": "7f87cf03a95bef4cc870ca530a061be9632ac58e",
+    "raw_log_sha256": "b82d892918fe7db1639605c12a0f9b988f3d451e96c1f192f3fcc5c4d106e05c",
+    "ci_fixture_guard_methods_passed": 24,
+    "ci_guard_elapsed_seconds": 1.845,
+    "receipt": {
+      "observed_utc": "2026-11-15T01:16:29.394785+00:00",
+      "status": "failed",
+      "native_fixture_qualified": false,
+      "installed_runtime_acceptance": false,
+      "cleanup_verified": false,
+      "phase": "fixture_provisioning",
+      "code": "fixture_open_child_token_winerror_5"
+    },
+    "package_client_build_mac_release": "observed skipped"
+  }
 }
