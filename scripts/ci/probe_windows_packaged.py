@@ -24,6 +24,7 @@ REPOSITORY = 'cephyrixzyth/Oneirodex'
 MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
 TRACE_OPERATION_TIMEOUT_SECONDS = 0
 TRACE_STOP_FILTER_BY_NAME = False
+TRACE_STOP_NAME_PREFIX_LENGTH = 14
 
 
 class ProbeFailure(RuntimeError):
@@ -560,6 +561,7 @@ def safe_startup_trace(record, root_pid, cleanup_time):
         events.append(selected)
     active, related, unrelated = {}, [], []
     root_seen = False
+    unmatched_stops = 0
     for event in sorted(events, key=lambda e: int(e['time_created'])):
         pid = event['pid']
         if event['kind'] == 'start':
@@ -575,10 +577,12 @@ def safe_startup_trace(record, root_pid, cleanup_time):
             if prior and prior[0] == event['parent']:
                 actual, expected = event['name'].lower(), prior[1]
                 match = ('exact' if actual == expected else
-                         'truncated' if len(actual) == 15 and expected.startswith(actual) else None)
+                         'truncated' if len(actual) == TRACE_STOP_NAME_PREFIX_LENGTH and expected.startswith(actual) else None)
                 if match:
                     event['name'], event['stop_name_match'] = expected, match
                     related_now = True
+            if prior and not related_now:
+                unmatched_stops += 1
             # Never emit foreign/truncated names without the matching active start.
             if not related_now and event['name'] not in names:
                 continue
@@ -593,8 +597,10 @@ def safe_startup_trace(record, root_pid, cleanup_time):
             errors.append({'kind': error['kind'], 'hresult': error['hresult'].lower()})
     dropped = record.get('dropped', 0)
     return {'observation': record.get('status') if record.get('status') in ('complete', 'deadline', 'failed') else 'unknown',
-            'capture_complete': record.get('status') == 'complete' and type(dropped) is int and dropped == 0 and not raw_errors,
+            'capture_complete': record.get('status') == 'complete' and type(dropped) is int and dropped == 0 and not raw_errors and unmatched_stops == 0,
             'root_start_seen': root_seen, 'parent_chain_events': related,
+            'root_stop_seen': any(e['kind'] == 'stop' and e['pid'] == root_pid for e in related),
+            'unmatched_target_stops': unmatched_stops,
             'unattributed_events': unrelated, 'subscription_errors': errors,
             'dropped': dropped if type(dropped) is int and dropped >= 0 else None,
             'limits': 'Read-only name/parent/time diagnostics, not product launch identity. Completion describes local collection only; provider delivery is not exhaustive. Root stop after controller cleanup is intentional.'}

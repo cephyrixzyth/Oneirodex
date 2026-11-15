@@ -497,6 +497,10 @@ finally {
         for label, status in [('short', '0x00000025'), ('long', '0x00000026')]:
             self.assertGreater(result['sources']['start_current'][label]['count'], 0, json.dumps(result))
             self.assertIn(status, result['sources']['stop_current'][label]['exit_codes'], json.dumps(result))
+            native_names = result['sources']['stop_current'][label]
+            if native_names['prefix']:
+                self.assertTrue(all(length == probe.TRACE_STOP_NAME_PREFIX_LENGTH
+                                    for length in native_names['name_lengths']), json.dumps(result))
             if label == 'short':
                 self.assertIn(status, result['sources']['stop_default'][label]['exit_codes'], json.dumps(result))
             self.assertIn(status, result['sources']['stop_unfiltered'][label]['exit_codes'], json.dumps(result))
@@ -511,7 +515,7 @@ finally {
             {'kind': 'start', 'pid': 11, 'parent': 10, 'time_created': '110',
              'name': 'msedgewebview2.exe'},
             {'kind': 'stop', 'pid': 11, 'parent': 10, 'time_created': '120',
-             'name': 'msedgewebview2.', 'exit_status': '0xc0000142'},
+             'name': 'msedgewebview2', 'exit_status': '0xc0000142'},
             {'kind': 'stop', 'pid': 12, 'parent': 999, 'time_created': '130',
              'name': 'PRIVATE-FOREIGN', 'exit_status': '0x00000000'}]}
         result = probe.safe_startup_trace(raw, 10, 200)
@@ -529,6 +533,20 @@ finally {
         result = probe.safe_startup_trace(raw, 10, 200)
         self.assertFalse(result['capture_complete'])
         self.assertEqual(result['subscription_errors'], [{'kind': 'start', 'hresult': '0x80131500'}])
+        self.assertNotIn('PRIVATE', repr(result))
+
+
+
+
+    def test_unmatched_stop_for_an_active_lifetime_prevents_a_complete_capture_claim(self):
+        raw = {'status': 'complete', 'dropped': 0, 'events': [
+            {'kind': 'start', 'pid': 10, 'parent': 1, 'time_created': '100',
+             'name': 'oneirodex-desktop.exe'},
+            {'kind': 'stop', 'pid': 10, 'parent': 1, 'time_created': '110',
+             'name': 'PRIVATE-FOREIGN', 'exit_status': '0x00000000'}]}
+        result = probe.safe_startup_trace(raw, 10, 200)
+        self.assertFalse(result['capture_complete'])
+        self.assertEqual(result['unmatched_target_stops'], 1)
         self.assertNotIn('PRIVATE', repr(result))
 
 
