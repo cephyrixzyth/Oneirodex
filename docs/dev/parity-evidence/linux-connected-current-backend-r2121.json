@@ -1,0 +1,264 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2121",
+  "observed_utc": "2026-11-15T19:42:36.673229+00:00",
+  "classification": "Confirmed current-backend installed Linux account/credential flow and all nine CI jobs; original whole-program acceptance remains incomplete.",
+  "backend_commit": "3cb31ed2e6a3d8740cc7e2b784f8f7988b93fea7",
+  "native_run": 43753765218,
+  "native_job": 132933259739,
+  "raw_log": {
+    "path": "findings/DT-006/linux-connected-opt-in-run-43753765218-job-132933259739-r2120.log",
+    "sha256": "415f217962d7cb70f3a946a98104f4e21a32392a82c6b9ac6145856f88b8b817"
+  },
+  "receipt": {
+    "observed_utc": "2026-11-15T19:42:36.673229+00:00",
+    "status": "passed",
+    "mode": "remote-companion",
+    "installed_runtime_acceptance": true,
+    "acceptance_scope": "linux_connected_accounts_and_credentials",
+    "source_commit": "ce8c35a6980891ef85c26cb64aa0d8a3ecc9e867",
+    "source_run": 43747390211,
+    "artifact_id": 14173989223,
+    "archive_sha256": "7e253a922f9481715b399b217821822cb317dff13e83192a0ce0c8e33b4d1749",
+    "deb_sha256": "94374bcad58a0475c432c5ca1cb6963cac2959a071f5456822bc19d69841e754",
+    "source_and_digest_verified": true,
+    "backend_source_commit": "3cb31ed2e6a3d8740cc7e2b784f8f7988b93fea7",
+    "phase": "complete",
+    "backend_launcher": "startweb.sh",
+    "backend_listener_owned": true,
+    "backend_alembic_head": "a4b5c6d7e8f9",
+    "postgres_version_num": "160016",
+    "backend_bearer_http_controls": {
+      "adult": 200,
+      "child": 200,
+      "wrong": 401,
+      "limited": 403
+    },
+    "native_origin_preflight": {
+      "http_status": 200,
+      "origin_allowed": true
+    },
+    "backend_collection_list_shape": {
+      "http_status": 200,
+      "root_array": false,
+      "collections_array": true
+    },
+    "backend_search_wire_controls": {
+      "adult_empty": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 0,
+        "shared_visible": false,
+        "private_visible": false
+      },
+      "adult_star": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 0,
+        "shared_visible": false,
+        "private_visible": false
+      },
+      "adult_letter": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 2,
+        "shared_visible": true,
+        "private_visible": true
+      },
+      "child_empty": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 0,
+        "shared_visible": false,
+        "private_visible": false
+      },
+      "child_star": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 0,
+        "shared_visible": false,
+        "private_visible": false
+      },
+      "child_letter": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 1,
+        "shared_visible": true,
+        "private_visible": false
+      }
+    },
+    "backend_ready": true,
+    "backend_synthetic_seeded": true,
+    "cleanup_verified": true,
+    "cold_rounds": [
+      {
+        "round": 1,
+        "bundled_renderer": true,
+        "native_ipc": true,
+        "parent_directory_denied": true,
+        "ordinary_user": true,
+        "listener_ownership_verified": true
+      },
+      {
+        "round": 2,
+        "bundled_renderer": true,
+        "native_ipc": true,
+        "parent_directory_denied": true,
+        "ordinary_user": true,
+        "listener_ownership_verified": true
+      }
+    ],
+    "platform": "Linux",
+    "effective_uid_nonzero": true,
+    "tauri_driver_version": "2.1.0",
+    "process_cleanup_scope": "Owned session/process groups and explicit driver ports; not product game-launch identity.",
+    "installer_executed": true,
+    "installed_binary_sha256": "a30d27b45cfb26c320c576a75e53abce97f237783369813c282684c2692535fd",
+    "native_package_versions": {
+      "webkit2gtk-driver": "2.50.4-0ubuntu0.22.04.1",
+      "libwebkit2gtk-4.1-0": "2.50.4-0ubuntu0.22.04.1"
+    },
+    "tauri_driver_sha256": "a71b247ca519f3ed02a364cd8692d71d381ffe81279c94c6ed65ec300d217868",
+    "owned_display_and_dbus_started": true,
+    "secret_service_owned_bus_ready": true,
+    "secret_service_package_version": "40.0-3ubuntu3",
+    "selected_driver_logs": [
+      {
+        "round": 1,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "7909b74329850ee2dad8219b4980c9c61058de0e90e36b114573dde4a873b861",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      },
+      {
+        "round": 2,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "233cd10af3fd7f4c98ebfe5ae26dcd07a2f4d5b8ca5c99f3cd2ba044ef403f86",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      },
+      {
+        "round": 3,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "104256c3a5f6e909096aed057496cda4124890ee685a7a1d4e298f0757904eea",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      },
+      {
+        "round": 4,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "40c29d65fc0a7e98552ea83b2cc088c3a50b6539bec33c32458e058014689b30",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      }
+    ],
+    "owned_marker_retained_after_cold_reopen": true,
+    "connected_account_checks": {
+      "adult_connect": true,
+      "adult_connect_connection_settled": true,
+      "adult_persisted_json_has_no_plaintext_token": true,
+      "adult_os_credential_persisted": true,
+      "adult_live_identity": true,
+      "os_credential_hydrated_after_app_cold_reopen": true,
+      "adult_reconnect": true,
+      "adult_reconnect_connection_settled": true,
+      "wrong_token_denied": true,
+      "wrong_token_denied_connection_settled": true,
+      "wrong_failed_connect_preserves_credential": true,
+      "limited_token_denied": true,
+      "limited_token_denied_connection_settled": true,
+      "limited_failed_connect_preserves_credential": true,
+      "child_account_switch": true,
+      "child_account_switch_connection_settled": true,
+      "child_persisted_json_has_no_plaintext_token": true,
+      "child_os_credential_persisted": true,
+      "child_live_identity": true,
+      "child_revocation_persisted": true,
+      "revoked_token_denied": true,
+      "revoked_token_denied_connection_settled": true,
+      "revoked_denial_preserves_saved_credential": true,
+      "forget_clears_os_credential_and_config": true,
+      "forgotten_json_has_no_plaintext_token": true
+    },
+    "connected_account_journey_verified": true,
+    "owned_package_uninstalled": true,
+    "owned_marker_retained_after_uninstall": true,
+    "owned_marker_removed": true,
+    "cleanup_errors": [],
+    "backend_cleanup_verified": true,
+    "selected_backend_log": {
+      "prefix_bytes": 16520,
+      "truncated": false,
+      "prefix_sha256": "79386ba9749d9c3956e8c2803d0c8529bd6d0be6144f7df2667c3b660912bfa9",
+      "matched_categories": [
+        "migration"
+      ]
+    }
+  },
+  "verification": {
+    "native_guard_methods": "43 passed in 0.061s",
+    "locked_runtime_cors": "7 passed in 0.048s",
+    "locked_runtime_bearer_and_actual_personal_routes": "9 passed in 0.060s",
+    "current_source_ci": {
+      "run": 43753628294,
+      "core_job": 132932836994,
+      "source": "3cb31ed2e6a3d8740cc7e2b784f8f7988b93fea7",
+      "status": "success",
+      "active_jobs_passed": 9,
+      "passed": 7965,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1482.86,
+      "coverage_percent": 74.99,
+      "early_store": "50 passed, 1 skipped in 3.11s",
+      "early_headers": "5 passed, 35 deselected in 1.45s",
+      "early_personal_denial": "1 passed, 13 deselected in 0.35s",
+      "raw_log_path": "findings/DT-006/current-core-run-43753628294-job-132932836994-r2121.log",
+      "raw_log_sha256": "b6a60fd88ebb28b62c36b313df520913b63b661706d32c559eb737be4efa7454",
+      "not_full_suite": true
+    },
+    "desktop_pr_build": {
+      "run": 43753628372,
+      "status": "success",
+      "active_jobs": 8,
+      "includes_six_installers": true,
+      "release_attachment": "skipped"
+    }
+  },
+  "supersedes_pending_native_in": "companion-denial-opt-in-r2120.json",
+  "correction_preserved": "Personal-token routes accept scoped Bearer tokens. Their original helper and legacy expired-token denial are preserved; only companion client/collection/game routes explicitly opt into readable JSON token denials.",
+  "limits": [
+    "Provider remained running during companion closure; no OS or credential-provider restart durability claim.",
+    "No installed-game files were present in this run. Marker retention is not game or save retention.",
+    "No Play/Reveal, network-outage shelf with files, wrapper/game exit/exact-launch recovery, save/update/rollback, physical/platform/AT/operator/paired-route/final/release qualification.",
+    "The immutable ce8c35a6 client package and current 3cb31ed2 backend have separate identities; later installer outputs are not silently substituted."
+  ],
+  "next": "Continue task2b10 actual packaged archive download/install, persisted file verification and cold cached-shelf restoration; retain all original remaining acceptance gates.",
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: no markup/style changes; actual native tests ran only in disposable CI."
+}

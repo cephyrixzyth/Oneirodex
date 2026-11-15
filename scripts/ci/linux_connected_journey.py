@@ -136,10 +136,14 @@ def run_connected_journey(native,fixture,progress):
 
 
 def run_connected_package(deb,work,progress):
+    from linux_installed_journey import run_installed_journey
     fixture=ConnectedServer.open(Path(__file__).resolve().parents[2],work,progress)
     error=None
     try:
-        execute_probe(deb,work,progress,journey=lambda native,report:run_connected_journey(native,fixture,report))
+        def journey(native,report):
+            run_connected_journey(native,fixture,report)
+            run_installed_journey(native,fixture,report)
+        execute_probe(deb,work,progress,journey=journey)
     except BaseException as failed:
         error=failed
         progress['installed_runtime_acceptance']=False

@@ -259,5 +259,10 @@
   "current_source_native_recheck_pending": true,
   "overall_goal": "active and incomplete",
   "next": "Publish actual endpoint fix/corrections, request fresh CI including exact early token case and full core; repeat the same ce package connected native flow against the corrected server. Then original actual archive/Play/Reveal/offline/denied-shelf/wrapper/exit/restart/save/platform/AT/operator/route/final/release.",
-  "capture": "Skipped: no UI markup/style changes and no local native resources; all actual installed/OS-secret checks run in disposable CI."
+  "capture": "Skipped: no UI markup/style changes and no local native resources; all actual installed/OS-secret checks run in disposable CI.",
+  "followup_r2121": {
+    "current_backend_native_verified": true,
+    "report": "linux-connected-current-backend-r2121.json",
+    "core_ci": "All nine jobs passed at corrected3cb; core7965pass/15skip/548deselected, coverage74.99%. See R2121; historical R2120 pending state retained."
+  }
 }

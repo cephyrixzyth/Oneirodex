@@ -319,11 +319,15 @@ def seed_native_fixture():
             adult=User(name='SyntheticCIAdult',email='ci-adult@example.test',role='user',state=True,is_email_verified=True)
             child=User(name='SyntheticCIChild',email='ci-child@example.test',role='child',state=True,is_email_verified=True)
             for user in (adult,child):user.set_password(secrets.token_urlsafe(32));db.add(user)
-            allowed=Library(name='Synthetic CI Allowed',platform=LibraryPlatform.PCWIN)
+            allowed=Library(name='Synthetic CI Allowed',platform=LibraryPlatform.OTHER)
             private=Library(name='Synthetic CI Adult Private',platform=LibraryPlatform.PCWIN)
             db.add_all([allowed,private]);db.flush()
-            for library,title in ((allowed,'Synthetic CI Shared Game'),(private,'Synthetic CI Adult Private Game')):
-                db.add(Game(uuid=str(uuid.uuid4()),name=title,library_uuid=library.uuid))
+            from linux_installed_journey import write_fixture_archive
+            archive,manifest=write_fixture_archive(Path(os.environ['DATA_FOLDER_GAMES']))
+            shared=Game(uuid=str(uuid.uuid4()),name='Synthetic CI Shared Game',library_uuid=allowed.uuid,
+                        full_disk_path=str(archive),size=manifest['archive_bytes'])
+            db.add(shared)
+            db.add(Game(uuid=str(uuid.uuid4()),name='Synthetic CI Adult Private Game',library_uuid=private.uuid))
             db.add(UserLibraryAccess(user_id=child.id,library_uuid=allowed.uuid));db.commit()
             tokens,ids={},{}
             for label,user,scopes in (('adult',adult,['read:library','write:download','write:presence']),
@@ -331,7 +335,8 @@ def seed_native_fixture():
                 row,raw=generate_api_token(user,'Synthetic CI '+label,scopes)
                 tokens[label]=raw;ids[label]={'token_id':row.id,'user_id':user.id,'account_id':user.user_id}
             tokens['wrong']='_'.join(tokens['adult'].split('_',2)[:2])+'_'+secrets.token_urlsafe(32)
-            return {'tokens':tokens,'ids':ids,'alembic_head':head,'postgres_version_num':version}
+            return {'tokens':tokens,'ids':ids,'alembic_head':head,'postgres_version_num':version,
+                    'installed_fixture':{'game_uuid':shared.uuid,'manifest':manifest}}
     finally:
         engine.dispose()
 
