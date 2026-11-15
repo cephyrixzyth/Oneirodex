@@ -10,7 +10,7 @@ Work in risk-ranked route-family batches. Reuse evidence only when exact image i
 
 ## Current evidence status - 2026-11-14
 
-[R2100](parity-evidence/windows-fixture-query-only-r2100.json) corrects an overbroad child-token request after R2099 advanced to a suspended CLI child but was denied duplicate access. The probe now inspects that child with query-only rights and obtains an environment through a normal logon of the same temporary account, checking SID/profile equality. No privileges or ACLs are broadened. All 27 fixture tests pass locally; native fixture and app acceptance remain pending.
+[R2100](parity-evidence/windows-fixture-query-only-r2100.json) corrects an overbroad child-token request after R2099 advanced to a suspended CLI child but was denied duplicate access. The probe now inspects that child with query-only rights and obtains an environment through a normal logon of the same temporary account, checking SID/profile equality. No privileges or ACLs are broadened. All 27 fixture tests pass locally and in native CI. The actual ordinary-account/profile/private-desktop CLI control now passes both expected exits and verified owned cleanup. This qualifies the fixture; running the installed app through it remains pending.
 
 [R2099](parity-evidence/windows-fixture-secure-conversion-r2099.json) removes the password-conversion cmdlet dependency after R2098 identified that step failing with ObjectNotFound/0x80131501 and verified abort cleanup. Direct .NET conversion passes the actual excerpt control with module autoload disabled; all 24 fixture checks pass locally. No local account/desktop was created. Native fixture and app acceptance remain pending.
 
