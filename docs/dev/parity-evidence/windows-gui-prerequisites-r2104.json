@@ -3,7 +3,7 @@
   "evidence_id": "R2104",
   "observed_utc": "2026-11-15T05:23:16.818906+00:00",
   "base_commit": "633d9bbe01da4a1f6d0228b9ab56349a75b51189",
-  "classification": "Bounded native fixture prerequisites prepared and locally verified; actual Windows observations pending.",
+  "classification": "Confirmed native fixture session-local mutex access denial. CLI/profile/window/file and cleanup verified; WebView root cause and installed app acceptance remain unknown.",
   "preceding_evidence": {
     "report": "windows-webview-log-format-r2103.json",
     "native_run": 43679710933,
@@ -46,7 +46,8 @@
     "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-openmutexw",
     "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createmutexw",
     "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew",
-    "https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/process_singleton_win.cc"
+    "https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/process_singleton_win.cc",
+    "https://learn.microsoft.com/en-us/windows/win32/termserv/kernel-object-namespaces"
   ],
   "source_sha256_git_normalized": {
     "scripts/ci/windows_gui_prerequisites.py": "2a47f045e719bf098eb18af0b98d3277a8dec27500073631a421a223a13527c4",
@@ -55,9 +56,58 @@
     "scripts/ci/test_windows_user_fixture_control.py": "d776e5fa14f3b747ada3c3f28ddf4b1899dab401b2e2beb1a83c93da82a7d3a3",
     ".github/workflows/desktop-build.yml": "37e4bd8912f07ac2ef0d8213fb2348dd87e91b88a80ca79db9bcdfb67285e93f"
   },
-  "native_retry": "pending fixture-only mode; no new app retry scheduled",
+  "native_retry": "Terminal failure: own Local mutex creation and documented upstream browser mutex opening return5; message-only window and fresh delete-on-close lock-file checks pass. Cleanup verified.",
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
   "limits": "Pure/fake local checks do not prove actual Win32 behavior. Even successful native prerequisites cannot qualify WebView, bundled UI/native IPC/reopen/AT/accounts/games/platform/parity. Do not change browser security, timeout, pinned package or existing desktop ACL from generic diagnostic terms.",
-  "capture": "Skipped: native helper tests use fake APIs locally; genuine observation permitted only on disposable CI."
+  "capture": "Skipped: native helper tests use fake APIs locally; genuine observation permitted only on disposable CI.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43680966660",
+    "job_id": 132711283427,
+    "harness_source": "8ef71f4d1bb8b2281e98c98b95c62c55dd75a1fa",
+    "raw_log_sha256": "fc89956ca4d39a293d90ca620f6e91ffade2fd85966bf069d96bd6e3513fbae0",
+    "ci_guard_methods_passed": 37,
+    "ci_guard_elapsed_seconds": 1.916,
+    "receipt": {
+      "observed_utc": "2026-11-15T05:25:03.352691+00:00",
+      "status": "failed",
+      "native_fixture_qualified": false,
+      "installed_runtime_acceptance": false,
+      "cleanup_verified": true,
+      "phase": "gui_prerequisite_observation",
+      "standard_user_verified": true,
+      "profile_environment_verified": true,
+      "private_desktop_created": true,
+      "cli_exit_codes": [
+        37,
+        38
+      ],
+      "owned_profile_marker_retained_between_cli_rounds": true,
+      "gui_prerequisites": {
+        "schema_version": 1,
+        "own_mutex": {
+          "succeeded": false,
+          "win32_error": 5
+        },
+        "browser_mutex_open": {
+          "succeeded": false,
+          "win32_error": 5
+        },
+        "message_window": {
+          "succeeded": true,
+          "win32_error": 0
+        },
+        "lock_file": {
+          "succeeded": true,
+          "win32_error": 0
+        },
+        "owned_prerequisites_passed": false
+      },
+      "owned_marker_removed": true,
+      "cleanup_errors": [],
+      "code": "fixture_gui_owned_prerequisite_failed"
+    }
+  },
+  "ruling": "All37 native guard methods pass1.916s. Exact ordinary account/nonadmin/medium/profile/private desktop and CLI37/38 checks pass. Both mutex observations return5; this does not prove the foreign mutex exists or that this WebView version uses its name. Basic window/file success cannot overcome missing namespace access. No browser/desktop/kernel ACL or security workaround is applied.",
+  "next": "Require an ordinary-account Windows execution context with proven session-local mutex access before repeating the app gate. Preserve the full Windows acceptance requirements and continue independent original platform gates meanwhile."
 }
