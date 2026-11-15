@@ -474,7 +474,22 @@ jobs:
     permissions:
       contents: read
       actions: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: oneirodex-ci-control-only
+          POSTGRES_DB: oneirodex_ci_control_test
+        ports:
+          - '127.0.0.1:5432:5432'
+        options: >-
+          --health-cmd "pg_isready -U postgres -d oneirodex_ci_control_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
+      ONEIRODEX_CI_CONTROL_DATABASE_URL: postgresql://postgres:oneirodex-ci-control-only@127.0.0.1:5432/oneirodex_ci_control_test
       LINUX_PACKAGED_SMOKE_ONLY: ${{ inputs.linux_packaged_smoke_only }}
       WINDOWS_PACKAGED_SMOKE_ONLY: ${{ inputs.packaged_smoke_only }}
       WINDOWS_USER_FIXTURE_ONLY: ${{ inputs.windows_user_fixture_only }}
@@ -502,15 +517,30 @@ jobs:
               raise SystemExit(1)
           PY
       - name: Linux package guard and lifecycle contracts
-        run: python -m unittest discover -s scripts/ci -p 'test_linux_packaged*.py'
+        run: python -m unittest discover -s scripts/ci -p 'test_linux_*.py'
+      - name: Prepare hash-locked native backend environment
+        run: |
+          test ! -e .env
+          python -m venv venv
+          venv/bin/python -m pip install --require-hashes -r requirements.lock
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Build all five real server SPAs from source
+        run: |
+          npm ci
+          npm run build:native-spas
       - name: Install native Linux test prerequisites
         run: |
           sudo -n apt-get update
           native_driver_version=$(apt-cache policy webkit2gtk-driver | awk '/Candidate:/ {print $2; exit}')
           native_webview_version=$(apt-cache policy libwebkit2gtk-4.1-0 | awk '/Candidate:/ {print $2; exit}')
+          native_keyring_version=$(apt-cache policy gnome-keyring | awk '/Candidate:/ {print $2; exit}')
           [[ "$native_driver_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
           [[ "$native_webview_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
-          sudo -n apt-get install -y "webkit2gtk-driver=$native_driver_version" "libwebkit2gtk-4.1-0=$native_webview_version" xvfb xauth dbus-x11
+          [[ "$native_keyring_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
+          sudo -n apt-get install -y "webkit2gtk-driver=$native_driver_version" "libwebkit2gtk-4.1-0=$native_webview_version" "gnome-keyring=$native_keyring_version" xvfb xauth dbus-x11
       - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
       - name: Install pinned external native driver
         run: cargo install tauri-driver --version '=2.1.0' --locked --root "$RUNNER_TEMP/oneirodex-tauri-driver"
@@ -519,7 +549,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set +e
-          python scripts/ci/probe_linux_packaged.py --execute \
+          venv/bin/python scripts/ci/probe_linux_packaged.py --execute --connected \
             --source-run "$PACKAGE_SOURCE_RUN" --source-commit "$PACKAGE_SOURCE_COMMIT" \
             --archive-digest "$PACKAGE_ARCHIVE_DIGEST" \
             --work-dir "$RUNNER_TEMP/oneirodex-linux-packaged-$GITHUB_RUN_ID" \

@@ -1,0 +1,78 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2111",
+  "observed_utc": "2026-11-15T07:01:12.654459+00:00",
+  "base_commit": "5d713c9937aac97fd7b81398a43ff8f2cc4c7fb7",
+  "classification": "Real backend/provider/installed UI account journey implemented and locally verified; live connected results pending.",
+  "qualified_cold_prerequisite": "linux-packaged-probe-r2108.json",
+  "immutable_client_package": "Same R2105/R2108 source6a/run43553756754/artifact14097566864/archive933c7bda/Deb66859e1d/binary220c19ec; no desktop binary rebuild.",
+  "change": [
+    "R2109 owns a unique marked loopback test PostgreSQL database and actual startweb.sh ASGI process; strict CI/UID/dotenv/URL/collision guards and server-before-DB cleanup. Native schema head/current-clock synthetic users/catalog/tokens use production models/token generation and revocation helpers in isolated subprocess/native DB scopes.",
+    "R2110 adds foreground secrets-only GNOME Secret Service on the owned DBus/profile, random unlock password through stdin after held guardian registration, and genuine bundled form/native credential checks. Two existing cold controls remain prerequisites.",
+    "Selected UI journey: valid adult Connect/live identity/ACL titles, native OS secret persistence and companion cold hydration, wrong/scope-limited denial with previous credential unchanged, child switch with private title absent, production-helper revocation/current DB state, revoked denial and genuine Forget.",
+    "Actual persisted config path derives from genuine native installs directory in owned app-data; scan after successful Connect before native config reads and after Forget. Do not infer plaintext absence from an unused configuration directory.",
+    "R2111 extends only exclusive Linux job: loopback PostgreSQL16 control service, hash-locked venv, Node22/five real server SPAs and signed candidate-pinned native Secret Service packages. Shipping client remains immutable. Default/preexisting non-Linux job steps/permissions and release guards preserved."
+  ],
+  "privacy": [
+    "No operator root dotenv read/write, real store/provider accounts or local app/server/keyring/database provisioning.",
+    "Synthetic raw API tokens stay in private subprocess/controller/native UI/provider memory; never public reports, argv or environment. Provider unlock password is stdin only.",
+    "Filtered server/app environments and independent owned profile paths; every token-bearing backend call targets literal loopback and verifies owned listener, with redirects refused.",
+    "Probe HTTP preflight and UI failure projections publish status/fixed booleans only; no raw HTML/response/SDK text. Seed failures select a fixed error class, not raw stderr.",
+    "Extended acceptance resets false if account journey or backend cleanup fails; preserve primary and cleanup errors."
+  ],
+  "verification": {
+    "linux_methods_passed": 33,
+    "linux_workflow_contexts": 13,
+    "legacy_workflow_contexts": 15,
+    "pyflakes": "passed",
+    "prior_adjacent_windows": "R2108 87pass/2native-onlyskip retained; Windows source and job steps unchanged.",
+    "red": [
+      "7 missing backend contracts",
+      "2 missing provider/callback interfaces",
+      "3 missing UI projection/cleanup contracts",
+      "backend cleanup failure after otherwise accepted package",
+      "actual app-data JSON plaintext check",
+      "fixed-class private child failure diagnostic"
+    ],
+    "rework": [
+      "First provider fake omitted the already-created runtime directory; corrected the fake.",
+      "Initial config scan targeted XDG config; source tracing showed actual config under app data. Replaced with direct genuine app-data config checks before native reads, with a plaintext RED.",
+      "One scratch patch context failed without editing source; corrected before verification."
+    ],
+    "cases": [
+      "nonCI/root/dotenv/foreignURL/database collision refusal",
+      "actual create/start/seed failure cleanup",
+      "no DB drop with unverified live server",
+      "provider password pipe/registration",
+      "post-cold journey ordering",
+      "private error projection",
+      "credential mismatch cannot qualify persistence",
+      "primary UI error survives cleanup",
+      "extended acceptance revoked on backend cleanup failure",
+      "real config location/regular containment/plaintext denial",
+      "preserved default strict loopback WebDriver listener ownership; backend allows actual launcher all-IPv4 bind but requests only loopback"
+    ]
+  },
+  "source_sha256_git_normalized": {
+    ".github/workflows/desktop-build.yml": "d09ade35a04825c1cf0e4d96b0749ab5a6bd159f86107461fde31116b6e5375a",
+    "scripts/ci/probe_linux_packaged.py": "3d2e8a326f3851f4d6efa8d59533091eca39132dd7305d16eda5a2ff0b8b646f",
+    "scripts/ci/linux_packaged_native.py": "c78c7ca11cdf8fb6912ad775fb99bb901ece6587ed757030684d562eda39e14e",
+    "scripts/ci/linux_packaged_runtime.py": "e5c3c83c45e1f0822daf1d135690a7d2edcf865084d7b895fadadb316c20e2a3",
+    "scripts/ci/linux_connected_server.py": "653e11361cb275c55cc0504e94316aa63704d1913374fb28af6dd407460e8bbb",
+    "scripts/ci/linux_connected_journey.py": "5d9722a9f99ea87d1d8453753dfed936dc88399d92b93fd36b820f585ef02f5b",
+    "scripts/ci/test_linux_connected_server.py": "02a3c9c6765bb3d67865d7a3aef2bbbafdda779813a56043a159843819d5441f",
+    "scripts/ci/test_linux_connected_journey.py": "42b0bfea2fe13dbaf4136c732c3d3b435302cef7d7e30cc55be6d248d121ad29",
+    "scripts/ci/test_linux_packaged_runtime.py": "e031d7019b868ea22d522874d09165111278710b3e2e2845d3eb8b15194cfc47",
+    "scripts/ci/test_linux_packaged_workflow.cjs": "e656b91fd9f309d4732faad316996fadacc77e592acfcdc49b874fca35953dbf"
+  },
+  "primary_sources": [
+    "https://manpages.debian.org/bookworm/gnome-keyring/gnome-keyring-daemon.1.en.html",
+    "https://v2.tauri.app/develop/tests/webdriver/manual-setup/"
+  ],
+  "native_retry": "pending same pinned Linux package-only mode with explicit --connected; CORS/provider/role/startup compatibility remains unknown.",
+  "installed_runtime_acceptance": false,
+  "acceptance_scope": "Linux real-server connected account/credential journey; R2108 historical cold success remains separate.",
+  "overall_goal": "active and incomplete",
+  "limits": "Local contracts are pure/fake and do not qualify actual provider/server/UI behavior. Provider survival across app closure does not prove reboot/provider-restart durability. Real installed-game/offline Play/Reveal/denied-shelf/wrapper/exit/exact-launch recovery, physical/platform/AT/operator/parity/final review/release remain open. Windows namespace prerequisite unchanged. No product CORS defect/fix claimed from static searches alone.",
+  "capture": "Skipped: no local app/server/native resources or UI changes; actual connected execution only on disposable CI."
+}

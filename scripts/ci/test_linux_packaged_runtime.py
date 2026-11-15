@@ -24,6 +24,7 @@ class FakeNative:
     def install(self,deb):self.event('install')
     def verify_binary(self):self.event('verify_binary')
     def start_context(self):self.event('start_context')
+    def start_secret_service(self):self.event('start_secret_service')
     def round(self,number):
         self.event('round_'+str(number))
         return self.directory,{'bundled_renderer':True,'native_ipc':True,'parent_directory_denied':True,'ordinary_user':True,'listener_ownership_verified':True}
@@ -79,6 +80,36 @@ class LinuxRuntimeContracts(unittest.TestCase):
         self.assertNotIn('PRIVATE',repr(env));self.assertEqual(env['HOME'],str(self.work/'home'))
         self.assertEqual(env['XDG_DATA_HOME'],str(self.work/'data'))
 
+    def test_connected_journey_runs_after_cold_controls_before_uninstall_and_failure_is_preserved(self):
+        native=FakeNative(self.work);progress={}
+        def journey(api,report):
+            api.event('journey')
+            raise ProbeFailure('synthetic_connected_failure')
+        with self.assertRaisesRegex(ProbeFailure,'synthetic_connected_failure'):
+            runtime.execute_probe(self.work/'never.deb',self.work,progress,native=native,journey=journey)
+        self.assertLess(native.events.index('start_secret_service'),native.events.index('round_1'))
+        self.assertLess(native.events.index('round_2'),native.events.index('journey'))
+        self.assertLess(native.events.index('journey'),native.events.index('uninstall'))
+        self.assertTrue(progress['cleanup_verified']);self.assertFalse(progress['installed_runtime_acceptance'])
+
+    def test_secret_service_password_uses_pipe_after_handle_registration_only(self):
+        import linux_packaged_native as native
+        api=native.NativeLinuxAPI.__new__(native.NativeLinuxAPI)
+        api.work=self.work;api.progress={};api.support=[]
+        (self.work/'runtime').mkdir()
+        child=mock.Mock();child.stdin.write.side_effect=lambda value:self.assertEqual(api.support,[child])
+        api.spawn=mock.Mock(return_value=child)
+        def command(args,*a,**kw):
+            return SimpleNamespace(returncode=0,stdout=b'42.1-1' if args[0]=='dpkg-query' else b'(true,)')
+        api.command=mock.Mock(side_effect=command)
+        api.start_secret_service()
+        self.assertTrue(api.progress['secret_service_owned_bus_ready'])
+        self.assertTrue(api.spawn.call_args.kwargs['input_pipe'])
+        self.assertTrue(all(isinstance(value,str) for value in api.spawn.call_args.args[0]))
+        self.assertGreater(len(child.stdin.write.call_args.args[0]),20)
+        self.assertNotIn(child.stdin.write.call_args.args[0].decode(),repr(api.spawn.call_args))
+        child.stdin.close.assert_called_once()
+
     def test_group_cleanup_keeps_guardian_unreaped_until_other_members_stop(self):
         import linux_packaged_native as native
         events=[]
@@ -120,6 +151,7 @@ class LinuxRuntimeContracts(unittest.TestCase):
             self.assertTrue(native.listener_owned(4444,123))
             (proc/'net'/'tcp').write_text('header\n'+row.replace('0100007F','00000000'))
             self.assertFalse(native.listener_owned(4444,123))
+            self.assertTrue(native.listener_owned(4444,123,allow_wildcard=True))
             (proc/'net'/'tcp').write_text('header\n'+row)
             self.assertFalse(native.listener_owned(4444,999))
 

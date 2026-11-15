@@ -144,13 +144,15 @@ def retrieve_package(work, source_run, source_commit, archive_digest, progress):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--connected', action='store_true')
     parser.add_argument('--work-dir', type=Path, required=True)
     parser.add_argument('--source-run', required=True)
     parser.add_argument('--source-commit', required=True)
     parser.add_argument('--archive-digest', required=True)
     args = parser.parse_args(argv)
     receipt = {'observed_utc': datetime.now(timezone.utc).isoformat(), 'status': 'failed',
-               'mode': 'remote-companion', 'installed_runtime_acceptance': False}
+               'mode': 'remote-companion', 'installed_runtime_acceptance': False,
+               'acceptance_scope':'linux_connected_accounts_and_credentials' if args.connected else 'linux_cold_ui_native_ipc'}
     try:
         require_ci_execution(sys.platform, os.environ, getattr(os, 'geteuid', lambda: -1)())
         if not args.execute:
@@ -158,17 +160,23 @@ def main(argv=None):
         validate_selection(os.environ)
         work = create_workspace(args.work_dir, os.environ['RUNNER_TEMP'])
         deb = retrieve_package(work, args.source_run, args.source_commit, args.archive_digest, receipt)
-        from linux_packaged_runtime import execute_probe
-        execute_probe(deb, work, receipt)
+        if args.connected:
+            from linux_connected_journey import run_connected_package
+            run_connected_package(deb,work,receipt)
+        else:
+            from linux_packaged_runtime import execute_probe
+            execute_probe(deb, work, receipt)
         receipt['status'] = 'passed'
         code = 0
     except ProbeFailure as error:
+        receipt['installed_runtime_acceptance']=False
         receipt['code'] = str(error)
         code = 2 if str(error) in ('execution_requires_ordinary_disposable_linux_ci',
                                   'linux_execution_not_requested') else 1
         if code == 2:
             receipt['status'] = 'unsupported'
     except Exception as error:
+        receipt['installed_runtime_acceptance']=False
         receipt.update(code='linux_packaged_probe_failed', error_class=type(error).__name__)
         code = 1
     print(json.dumps(receipt, indent=2))

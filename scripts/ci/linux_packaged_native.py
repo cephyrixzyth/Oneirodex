@@ -56,14 +56,15 @@ def process_group_members(group):
     return members
 
 
-def listener_owned(port, group):
+def listener_owned(port, group, *, allow_wildcard=False):
     inodes = []
     for table in ('tcp', 'tcp6'):
         for line in (Path('/proc/net')/table).read_text().splitlines()[1:]:
             fields = line.split()
             address, number = fields[1].split(':')
             if int(number, 16) == port and fields[3] == '0A':
-                if table != 'tcp' or address != '0100007F':
+                allowed = ('0100007F','00000000') if allow_wildcard else ('0100007F',)
+                if table != 'tcp' or address not in allowed:
                     return False
                 inodes.append(fields[9])
     if not inodes:
@@ -152,8 +153,9 @@ class NativeLinuxAPI:
         self.progress['native_package_versions'] = versions
         self.progress['tauri_driver_sha256'] = hashlib.sha256(self.driver.read_bytes()).hexdigest()
 
-    def spawn(self, args, output=None):
-        return subprocess.Popen([sys.executable, '-c', GUARDIAN_CODE, *args], env=self.env, stdin=subprocess.DEVNULL,
+    def spawn(self, args, output=None, *, input_pipe=False):
+        return subprocess.Popen([sys.executable, '-c', GUARDIAN_CODE, *args], env=self.env,
+                                stdin=subprocess.PIPE if input_pipe else subprocess.DEVNULL,
                                 stdout=output or subprocess.DEVNULL, stderr=output or subprocess.DEVNULL,
                                 start_new_session=True)
 
@@ -203,6 +205,29 @@ class NativeLinuxAPI:
         wait_for(lambda: bus_socket.exists(), 15, 'linux_owned_dbus_not_ready')
         self.progress['owned_display_and_dbus_started'] = True
 
+    def start_secret_service(self):
+        control = self.work/'runtime/keyring'
+        control.mkdir(mode=0o700)
+        process = self.spawn(['gnome-keyring-daemon','--foreground','--components=secrets','--unlock',
+                              '--control-directory='+str(control)],input_pipe=True)
+        self.support.append(process)  # Own the guardian before any pipe operation can fail.
+        try:
+            process.stdin.write(secrets.token_urlsafe(40).encode())
+            process.stdin.close()
+        except OSError:
+            raise ProbeFailure('linux_secret_service_unlock_transport_failed') from None
+        def ready():
+            result = self.command(['gdbus','call','--session','--dest','org.freedesktop.DBus',
+                '--object-path','/org/freedesktop/DBus','--method','org.freedesktop.DBus.NameHasOwner',
+                'org.freedesktop.secrets'],'linux_secret_service_query_failed',allow_failure=True)
+            return result.returncode == 0 and result.stdout.strip() == b'(true,)'
+        wait_for(ready,20,'linux_owned_secret_service_not_ready')
+        version = self.command(['dpkg-query','-W','-f=${Version}','gnome-keyring'],
+                               'linux_secret_service_version_unavailable').stdout.decode().strip()
+        if not re.fullmatch(r'[a-zA-Z0-9.+:~_-]{1,100}',version):
+            raise ProbeFailure('linux_secret_service_version_invalid')
+        self.progress.update(secret_service_owned_bus_ready=True,secret_service_package_version=version)
+
     def request(self, method, suffix, payload=None):
         if not self.active or not all(listener_owned(port, self.active.pid) for port in self.ports):
             raise ProbeFailure('linux_webdriver_listener_not_owned')
@@ -221,7 +246,7 @@ class NativeLinuxAPI:
             raise ProbeFailure('linux_webdriver_response_too_large')
         return json.loads(data)['value']
 
-    def round(self, number):
+    def open_round(self, number):
         self.round_number = number
         self.ports = [free_port(), free_port()]
         if self.ports[0] == self.ports[1]:
@@ -239,6 +264,15 @@ class NativeLinuxAPI:
             raise ProbeFailure('linux_webdriver_session_invalid')
         self.session = '/session/'+session
         self.request('POST', self.session+'/timeouts', {'script': 30000, 'pageLoad': 30000, 'implicit': 0})
+
+    def execute_js(self,script,args=None):
+        return self.request('POST',self.session+'/execute/sync',{'script':script,'args':args or []})
+
+    def execute_async(self,script,args=None):
+        return self.request('POST',self.session+'/execute/async',{'script':script,'args':args or []})
+
+    def round(self, number):
+        self.open_round(number)
         script = '''const done = arguments[arguments.length - 1]; (async () => {
           const ipc = window.__TAURI_INTERNALS__;
           if (!ipc || typeof ipc.invoke !== 'function') return {bridge: false};

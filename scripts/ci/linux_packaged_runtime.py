@@ -12,7 +12,7 @@ def runtime_environment(work, ignored_parent=None):
             'XDG_RUNTIME_DIR': str(work/'runtime'), 'TMPDIR': str(work/'tmp')}
 
 
-def execute_probe(deb, work, progress, native=None):
+def execute_probe(deb, work, progress, native=None, journey=None):
     progress.update(installed_runtime_acceptance=False, cleanup_verified=False, cold_rounds=[])
     if native is None:
         from linux_packaged_native import NativeLinuxAPI
@@ -28,6 +28,8 @@ def execute_probe(deb, work, progress, native=None):
         progress['installer_executed'] = True
         native.verify_binary()
         native.start_context()
+        if journey is not None:
+            native.start_secret_service()
         for number in (1, 2):
             progress['phase'] = 'linux_cold_round_' + str(number)
             round_error = None
@@ -41,6 +43,7 @@ def execute_probe(deb, work, progress, native=None):
                 data_root = Path(native.data_root).resolve(strict=True)
                 if directory == data_root or not directory.is_relative_to(data_root) or not directory.is_dir():
                     raise ProbeFailure('linux_installs_directory_not_owned')
+                native.app_directory=directory.parent
                 progress['cold_rounds'].append({'round': number, **{key: True for key in required}})
             except BaseException as error:
                 round_error = error
@@ -59,6 +62,9 @@ def execute_probe(deb, work, progress, native=None):
             elif marker.parent != directory or marker.read_bytes() != content:
                 raise ProbeFailure('linux_reopen_marker_changed')
         progress['owned_marker_retained_after_cold_reopen'] = True
+        if journey is not None:
+            progress['phase'] = 'linux_connected_account_journey'
+            journey(native, progress)
     except BaseException as error:
         body_error = error
         raise

@@ -42,9 +42,13 @@ for(const [event,inputs,tag,expected] of cases)
 const job=current.jobs['linux-packaged-probe'];
 assert.equal(job['runs-on'],'ubuntu-22.04');
 assert.deepEqual(job.permissions,{contents:'read',actions:'read'});
-assert(job.steps.some(s=>s.run?.includes('test_linux_packaged*.py')));
+assert(job.steps.some(s=>s.run?.includes('test_linux_*.py')));
 assert(job.steps.some(s=>s.run?.includes('--version \'=2.1.0\' --locked')));
 const run=job.steps.find(s=>s.name==='Install and exercise the pinned Linux package');
-assert(run.run.includes('probe_linux_packaged.py --execute'));
-assert(!job.steps.some(s=>/tauri build|npm run build/.test(s.run||'')));
-console.log(JSON.stringify({parsed:true,contexts:cases.length,original_job_steps_and_inputs_preserved:true,linux_only_no_product_build:true}));
+assert(run.run.includes('probe_linux_packaged.py --execute --connected'));
+assert(!job.steps.some(s=>/tauri build|cargo build/.test(s.run||'')));
+assert(job.steps.some(s=>s.run?.includes('npm run build:native-spas')));
+assert(job.steps.some(s=>s.with?.['node-version']==='22'));
+assert(job.steps.some(s=>s.run?.includes('--require-hashes -r requirements.lock')));
+assert.deepEqual(job.services.postgres.ports,['127.0.0.1:5432:5432']);
+console.log(JSON.stringify({parsed:true,contexts:cases.length,original_job_steps_and_inputs_preserved:true,immutable_desktop_package:true,real_server_and_provider:true}));
