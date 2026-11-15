@@ -10,6 +10,8 @@ Work in risk-ranked route-family batches. Reuse evidence only when exact image i
 
 ## Current evidence status - 2026-11-15
 
+[R2115](parity-evidence/desktop-collection-envelope-r2115.json) confirms the next installed Connect failure: the real server returns an object containing `collections`, while the client expects a bare array. Source now accepts the canonical object, retains bare-array compatibility and rejects malformed responses. Node22 verification passes 372 desktop fake checks and 110 API-client checks, both typechecks and both UI bundles. Replacement installer and connected runtime verification remain pending; the old pinned binary has not been substituted.
+
 The R2113 live retry confirms the CORS allow-origin header and clears the network/CORS failure category, but Connect still stops before Online. R2114 adds fixed protocol/response-shape diagnostics while retaining the same installed binary and strict journey. Neither CORS headers nor provider startup alone qualify account/credential behavior.
 
 [R2113](parity-evidence/native-companion-cors-r2113.json) records a real installed Linux Connect failure: native-origin preflight lacked CORS headers despite valid backend credentials. The server correction covers outer ASGI dispatch with exact bundled native origins and no cross-origin cookie credentials; seven pure contracts and 35 adjacent Linux guards pass. Actual connected-account acceptance remains pending. Provider startup, both cold rounds and all owned cleanup passed in the failed run.

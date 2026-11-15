@@ -6,8 +6,6 @@ Optional **Tauri** client under `clients/desktop/` for Install / Update / Uninst
 
 ## Connect
 
-The server permits the bundled webview origins `tauri://localhost`, `http://tauri.localhost` and `https://tauri.localhost` for HTTP API calls. Token authentication and scopes still apply; this does not enable cross-origin cookie credentials, arbitrary websites, opaque `null` origins or development ports. The R2113 server correction has focused CORS coverage; installed connected-account verification is still pending.
-
 1. Open **Account → API tokens** (`/tokens`) — or create via `POST /api/tokens` if you prefer the API.
 2. Create a token with the **Desktop companion** preset (`read:library` + `write:download` + `write:presence`), or **Thin client** for connect-only seats. A token needs `write:download` or `write:library` to acknowledge or release queued commands; read-only tokens can inspect permitted data but cannot change queue state. Bearer clients calling `POST /api/check_username` also need `read:social`.
 3. Copy the one-time secret (`gt_<hexprefix>_<urlsafe-secret>`) — it is shown only once. The secret uses URL-safe base64 (`A–Z`, `a–z`, `0–9`, `_`, `-`), so **hyphens and underscores in the secret are normal**. Paste the **entire** `gt_…` string into Connect. Truncating at a `-` (or any earlier character) always fails auth. On plain HTTP LAN, browser clipboard may be limited — use **Copy secret** (copies the raw token only) or select the one-time secret field and Ctrl+C / ⌘C.
@@ -208,6 +206,8 @@ On a domain PC where Windows Folder Redirection puts Documents, AppData or the p
 Related: [downloads.md](downloads.md) · [browser-play.md](browser-play.md) · [translation-patches.md](translation-patches.md) · [social-and-voice.md](social-and-voice.md) — Friends window section mirrors web dock / pop-out / Big Picture **Y**
 
 ## Packaged-runtime verification
+
+Real Linux Connect testing found missing server CORS support and a client collection-response mismatch. Both are corrected in current source; replacement installers and the complete connected-account journey still need native verification. Browser security, token checks and scopes remain enabled.
 
 The pinned Linux Debian companion package has passed two cold starts of its bundled UI and genuine native-command success and denial checks on a disposable Ubuntu 22.04 runner. A controller-owned marker remained in the same profile after reopen and package removal, then was removed. Owned process groups, listeners and package cleanup passed. Connected accounts, OS credential persistence, offline Play/Reveal, real game saves, game-process recovery and physical-device qualification remain pending.
 

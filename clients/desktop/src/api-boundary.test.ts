@@ -8,6 +8,26 @@ import { once } from 'node:events'
 afterEach(() => vi.unstubAllGlobals())
 const auth = () => createAuthStore({ baseUrl: 'https://a.example', token: 'gt_abcdef01_fixtureA' })
 describe('desktop control-plane transport', () => {
+  it.each([{ collections: [] }, { collections: [{ id: 1, name: 'Shared library' }] }])(
+    'accepts the server collection envelope %j through the real requester',
+    async ({ collections }) => {
+      vi.stubGlobal('fetch', async () => Response.json({ collections }))
+      expect(await validateConnection(createDesktopApi(auth()))).toEqual({
+        ok: true,
+        collectionCount: collections.length,
+      })
+    },
+  )
+  it.each([null, {}, { collections: null }, { collections: 'invalid' }])(
+    'rejects malformed collection response %j as protocol failure',
+    async (body) => {
+      vi.stubGlobal('fetch', async () => Response.json(body))
+      expect(await validateConnection(createDesktopApi(auth()))).toMatchObject({
+        ok: false,
+        cause: 'protocol',
+      })
+    },
+  )
   it('refuses a real HTTP redirect without forwarding a bearer request to its destination', async () => {
     let sinkRequests = 0
     let originBearer: string | undefined

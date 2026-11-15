@@ -131,7 +131,8 @@ export function classifyConnectionError(error: unknown): ConnectionFailure['caus
 /** Validates credentials by listing collections (lightweight authenticated call). */
 export async function validateConnection(api: OneirodexClient): Promise<ConnectionResult> {
   try {
-    const collections = await api.browse.listCollections()
+    const payload = await api.browse.listCollections()
+    const collections = Array.isArray(payload) ? payload : payload?.collections
     if (!Array.isArray(collections)) throw new DesktopTransportError('protocol')
     return { ok: true, collectionCount: collections.length }
   } catch (error) {

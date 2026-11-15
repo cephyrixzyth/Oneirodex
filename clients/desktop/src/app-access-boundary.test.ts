@@ -146,7 +146,7 @@ describe('actual companion connection orchestration', () => {
     )
     vi.stubGlobal('fetch', async (url: string) => {
       const path = new URL(String(url)).pathname
-      if (path === '/api/collections') return Response.json([])
+      if (path === '/api/collections') return Response.json({ collections: [] })
       if (path === '/api/client/identity') return Response.json({ account_id: 'account-a' })
       if (path === '/api/search')
         return Response.json({ results: [{ uuid: 'game-a', name: 'Private A Title' }] })
@@ -201,7 +201,7 @@ describe('actual companion connection orchestration', () => {
       vi.stubGlobal('fetch', async (url: string) => {
         const path = new URL(String(url)).pathname
         paths.push(path)
-        if (path === '/api/collections') return Response.json([])
+        if (path === '/api/collections') return Response.json({ collections: [] })
         if (path === '/api/client/identity') {
           verified = true
           return Response.json({ account_id: 'account-a' })
@@ -280,7 +280,7 @@ describe('actual companion connection orchestration', () => {
       vi.stubGlobal('fetch', async (url: string) => {
         const path = new URL(String(url)).pathname
         paths.push(path)
-        if (path === '/api/collections') return Response.json([])
+        if (path === '/api/collections') return Response.json({ collections: [] })
         if (path === '/api/client/identity') return Response.json({ account_id: 'account-a' })
         if (path === '/api/search')
           return Response.json({
@@ -356,7 +356,7 @@ describe('actual companion connection orchestration', () => {
     vi.stubGlobal('fetch', async (url: string) => {
       const path = new URL(String(url)).pathname
       paths.push(path)
-      if (path === '/api/collections') return Response.json([])
+      if (path === '/api/collections') return Response.json({ collections: [] })
       if (path === '/api/client/identity') return Response.json({ account_id: 'account-a' })
       if (path === '/api/search')
         return Response.json({ results: [...preview, { uuid: 'game-a', name: 'Private A Title' }] })
@@ -424,7 +424,7 @@ describe('actual companion connection orchestration', () => {
     })
     vi.stubGlobal('fetch', async (url: string) => {
       const path = new URL(String(url)).pathname
-      if (path === '/api/collections') return Response.json([])
+      if (path === '/api/collections') return Response.json({ collections: [] })
       if (path === '/api/client/identity') return Response.json({ account_id: 'account-a' })
       if (path === '/api/search')
         return Response.json({ results: [{ uuid: 'game-a', name: 'Private A Title' }] })
@@ -447,7 +447,7 @@ describe('actual companion connection orchestration', () => {
     vi.stubGlobal('fetch', async (url: string) => {
       const path = new URL(String(url)).pathname
       paths.push(path)
-      if (path === '/api/collections') return Response.json([])
+      if (path === '/api/collections') return Response.json({ collections: [] })
       if (path === '/api/client/identity') return Response.json({ account_id: 'account-a' })
       if (path === '/api/search')
         return Response.json({ results: [{ uuid: 'game-a', name: 'Private A Title' }] })
@@ -570,7 +570,8 @@ describe('actual companion connection orchestration', () => {
                 commands: [],
               })
         }
-        if (path === '/api/collections') return Response.json([{ id: 1, name: 'Allowed' }])
+        if (path === '/api/collections')
+          return Response.json({ collections: [{ id: 1, name: 'Allowed' }] })
         if (path === '/api/client/identity') {
           identities.push(phase)
           return Response.json({
