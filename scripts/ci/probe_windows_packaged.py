@@ -562,6 +562,7 @@ def safe_startup_trace(record, root_pid, cleanup_time):
     active, related, unrelated = {}, [], []
     root_seen = False
     unmatched_stops = 0
+    rejected_stops = []
     for event in sorted(events, key=lambda e: int(e['time_created'])):
         pid = event['pid']
         if event['kind'] == 'start':
@@ -583,6 +584,16 @@ def safe_startup_trace(record, root_pid, cleanup_time):
                     related_now = True
             if prior and not related_now:
                 unmatched_stops += 1
+                if len(rejected_stops) < 12:
+                    actual = event['name'].lower()
+                    shape = ('exact' if actual == prior[1] else 'empty' if not actual else
+                             'prefix' if prior[1].startswith(actual) else 'other')
+                    rejected_stops.append({
+                        'expected_name': prior[1], 'parent_matches': prior[0] == event['parent'],
+                        'name_shape': shape, 'name_length': min(len(actual), 4096),
+                        'exit_status': event['exit_status'],
+                        'before_controller_cleanup': event['before_controller_cleanup'],
+                        'association': 'rejected_stop_only'})
             # Never emit foreign/truncated names without the matching active start.
             if not related_now and event['name'] not in names:
                 continue
@@ -601,6 +612,7 @@ def safe_startup_trace(record, root_pid, cleanup_time):
             'root_start_seen': root_seen, 'parent_chain_events': related,
             'root_stop_seen': any(e['kind'] == 'stop' and e['pid'] == root_pid for e in related),
             'unmatched_target_stops': unmatched_stops,
+            'rejected_stop_diagnostics': rejected_stops,
             'unattributed_events': unrelated, 'subscription_errors': errors,
             'dropped': dropped if type(dropped) is int and dropped >= 0 else None,
             'limits': 'Read-only name/parent/time diagnostics, not product launch identity. Completion describes local collection only; provider delivery is not exhaustive. Root stop after controller cleanup is intentional.'}

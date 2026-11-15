@@ -549,6 +549,31 @@ finally {
         self.assertEqual(result['unmatched_target_stops'], 1)
         self.assertNotIn('PRIVATE', repr(result))
 
+    def test_rejected_stop_diagnostics_are_bounded_and_do_not_promote_identity(self):
+        for parent, name, shape in [(999, 'msedgewebview2', 'prefix'),
+                                     (10, 'msedgewebview2.', 'prefix'),
+                                     (10, 'PRIVATE-FOREIGN', 'other')]:
+            with self.subTest(parent=parent, shape=shape):
+                raw = {'status': 'complete', 'dropped': 0, 'events': []}
+                for pid in range(20, 40):
+                    raw['events'].extend([
+                        {'kind': 'start', 'pid': pid, 'parent': 10, 'time_created': str(pid * 10),
+                         'name': 'msedgewebview2.exe'},
+                        {'kind': 'stop', 'pid': pid, 'parent': parent, 'time_created': str(pid * 10 + 1),
+                         'name': name, 'exit_status': '0xc0000142', 'private': 'PRIVATE'}])
+                raw['events'].insert(0, {'kind': 'start', 'pid': 10, 'parent': 1,
+                                         'time_created': '100', 'name': 'oneirodex-desktop.exe'})
+                result = probe.safe_startup_trace(raw, 10, 1000)
+                self.assertEqual(len(result.get('rejected_stop_diagnostics', [])), 12)
+                rejected = result['rejected_stop_diagnostics'][0]
+                self.assertEqual(rejected, {
+                    'expected_name': 'msedgewebview2.exe', 'parent_matches': parent == 10,
+                    'name_shape': shape, 'name_length': len(name), 'exit_status': '0xc0000142',
+                    'before_controller_cleanup': True, 'association': 'rejected_stop_only'})
+                self.assertFalse(result['capture_complete'])
+                self.assertFalse(any(e['kind'] == 'stop' for e in result['parent_chain_events']))
+                self.assertEqual(result['unmatched_target_stops'], 20)
+                self.assertNotIn('PRIVATE', repr(result))
 
 
 class StandardUserLaunchTests(unittest.TestCase):

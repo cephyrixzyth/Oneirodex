@@ -1,0 +1,46 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2093",
+  "observed_utc": "2026-11-15T00:20:33.161466+00:00",
+  "base_commit": "df0496b8dca868eaf11324fdcf7e4de5797d9e21",
+  "classification": "Bounded rejection diagnostics; no correlation relaxation or product startup fix.",
+  "preceding_native_run": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43657310809",
+    "job_id": 132638608288,
+    "harness_source": "df0496b8dca868eaf11324fdcf7e4de5797d9e21",
+    "raw_log_sha256": "bcc7cfae13f8b28981dd565977d574c147e8ab080c7ff050cb67f1684ce7f8bc",
+    "ci_guard_methods_passed": 36,
+    "ci_guard_elapsed_seconds": 22.061
+  },
+  "preceding_observation": {
+    "native_provider_prefix": 14,
+    "fixture_exit_codes": [
+      37,
+      38
+    ],
+    "actual_target_starts": 5,
+    "unmatched_target_stops": 4,
+    "capture_complete": false,
+    "root_stop_seen": false,
+    "subscription_errors": [],
+    "dropped": 0,
+    "app_failure": "webview_endpoint_not_ready",
+    "owned_cleanup_and_uninstall": true
+  },
+  "change": "Retain at most12 rejected-stop summaries for already active target lifetimes: known canonical expected name, parent-equality boolean, name shape/length, numeric exit status and before-cleanup boolean. Explicit rejected_stop_only association cannot qualify a process identity or accepted exit. No raw foreign names/paths/commands/SIDs are published; existing matching rules remain unchanged.",
+  "verification": {
+    "red": "Three mismatch subcases fail missing diagnostics; exact parent mismatch, wrong prefix length and foreign name.",
+    "local_methods_loaded": 37,
+    "local_passed": 35,
+    "native_only_skipped": 2,
+    "pyflakes": "passed"
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "85f6589947a275e9e50b3d4b4dc64ab98a0b14e4884bda58ccf07ccfb536d10d",
+    "scripts/ci/test_windows_packaged_probe.py": "e266b73eac43172ac525686a0106ff2e51424049a34a181d00921ccd8056e6a8"
+  },
+  "runtime_retry": "pending same exact-package CI",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: CI-only diagnostic addition."
+}

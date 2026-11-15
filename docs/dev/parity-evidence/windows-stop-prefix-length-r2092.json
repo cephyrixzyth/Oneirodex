@@ -3,7 +3,7 @@
   "evidence_id": "R2092",
   "observed_utc": "2026-11-15T00:11:33.135729+00:00",
   "base_commit": "a1257e98f6824ae84037890d5d27787471a306bb",
-  "classification": "Evidence-based parser prefix correction and completeness guard; native verification pending.",
+  "classification": "Native prefix14 compatibility verified; incomplete actual app lifecycle capture explicitly detected, not a complete app trace.",
   "preceding_native_result": {
     "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43656302249",
     "job_id": 132635452745,
@@ -270,9 +270,260 @@
     "scripts/ci/test_windows_packaged_probe.py": "2c8948d07c692b3900bab5ebe4556892da70b5e863db4f162918a176f705afe4"
   },
   "ruling": "A provider success must not stand in for parser compatibility. The native name-length assertion now couples actual platform output to the correlation rule. The14character behavior is observed on the tested runner, not an unsupported claim about every Windows release.",
-  "runtime_retry": "pending exact-package dispatch; native length/provider guard before app trace",
+  "runtime_retry": "terminal webview_endpoint_not_ready; native prefix guard passes but four actual stops remain rejected for an unknown field mismatch",
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
   "limits": "No application process-identity decision or security/timeout/package change. Diagnostic correlation is not account-bound game ownership or full exit coverage. All original acceptance gates remain open.",
-  "capture": "Skipped: CI metadata parser only."
+  "capture": "Skipped: CI metadata parser only.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43657310809",
+    "job_id": 132638608288,
+    "harness_source": "df0496b8dca868eaf11324fdcf7e4de5797d9e21",
+    "raw_log_sha256": "bcc7cfae13f8b28981dd565977d574c147e8ab080c7ff050cb67f1684ce7f8bc",
+    "ci_guard_methods_passed": 36,
+    "ci_guard_elapsed_seconds": 22.061,
+    "provider_control": {
+      "sources": {
+        "start_current": {
+          "exception_events": 0,
+          "short": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [],
+            "name_lengths": [
+              10
+            ]
+          },
+          "truncated": false,
+          "long": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [],
+            "name_lengths": [
+              27
+            ]
+          },
+          "query_hresult_codes": []
+        },
+        "stop_default": {
+          "exception_events": 0,
+          "short": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000025"
+            ],
+            "name_lengths": [
+              10
+            ]
+          },
+          "truncated": false,
+          "long": {
+            "exit_codes": [],
+            "exact": 0,
+            "other": 0,
+            "empty": 0,
+            "count": 0,
+            "prefix": 0
+          },
+          "query_hresult_codes": []
+        },
+        "stop_current": {
+          "exception_events": 0,
+          "short": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000025"
+            ],
+            "name_lengths": [
+              10
+            ]
+          },
+          "truncated": false,
+          "long": {
+            "count": 1,
+            "prefix": 1,
+            "other": 0,
+            "exact": 0,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000026"
+            ],
+            "name_lengths": [
+              14
+            ]
+          },
+          "query_hresult_codes": []
+        },
+        "stop_unfiltered": {
+          "exception_events": 0,
+          "short": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000025"
+            ],
+            "name_lengths": [
+              10
+            ]
+          },
+          "truncated": false,
+          "long": {
+            "count": 1,
+            "prefix": 1,
+            "other": 0,
+            "exact": 0,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000026"
+            ],
+            "name_lengths": [
+              14
+            ]
+          },
+          "query_hresult_codes": []
+        }
+      },
+      "error": "none",
+      "fixture_exits": {
+        "long": 38,
+        "short": 37
+      }
+    },
+    "receipt": {
+      "observed_utc": "2026-11-15T00:16:46.324309+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_webview_startup",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "suspended_creation_api": "CreateProcessAsUserW",
+      "app_launch_security": [
+        {
+          "round": 1,
+          "elevated": false,
+          "integrity_rid": 8192
+        }
+      ],
+      "startup_diagnostics": {
+        "product_window_title": false,
+        "visible_text_keywords": [],
+        "listeners": [],
+        "processes": [
+          {
+            "pid": 8968,
+            "parent": 4584,
+            "name": "oneirodex-desktop.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": false
+          }
+        ],
+        "devtools_policy_values": [],
+        "session_id": 2,
+        "root_alive": true,
+        "runtime_versions": [
+          "156.0.4314.58"
+        ],
+        "native_initialization": {
+          "window_count": 1,
+          "window_observation": "complete",
+          "keywords": [],
+          "hresult_codes": [],
+          "query_hresult_codes": [],
+          "event_observation": "complete",
+          "events": []
+        },
+        "has_main_window": true,
+        "probe_webview_profile_created": true,
+        "parent_has_browser_folder_override": false
+      },
+      "last_owned_root_and_listener_cleanup_verified": true,
+      "startup_process_traces": [
+        {
+          "round": 1,
+          "observation": "complete",
+          "capture_complete": false,
+          "root_start_seen": true,
+          "parent_chain_events": [
+            {
+              "kind": "start",
+              "pid": 8968,
+              "parent": 4584,
+              "name": "oneirodex-desktop.exe",
+              "time_created": "134391754134573756",
+              "association": "parent_chain_trace"
+            },
+            {
+              "kind": "start",
+              "pid": 8280,
+              "parent": 8968,
+              "name": "msedgewebview2.exe",
+              "time_created": "134391754144667038",
+              "association": "parent_chain_trace"
+            },
+            {
+              "kind": "start",
+              "pid": 3132,
+              "parent": 8280,
+              "name": "msedgewebview2.exe",
+              "time_created": "134391754164914118",
+              "association": "parent_chain_trace"
+            },
+            {
+              "kind": "start",
+              "pid": 2436,
+              "parent": 8968,
+              "name": "msedgewebview2.exe",
+              "time_created": "134391754175092877",
+              "association": "parent_chain_trace"
+            },
+            {
+              "kind": "start",
+              "pid": 5244,
+              "parent": 2436,
+              "name": "msedgewebview2.exe",
+              "time_created": "134391754175092880",
+              "association": "parent_chain_trace"
+            }
+          ],
+          "root_stop_seen": false,
+          "unmatched_target_stops": 4,
+          "unattributed_events": [],
+          "subscription_errors": [],
+          "dropped": 0,
+          "limits": "Read-only name/parent/time diagnostics, not product launch identity. Completion describes local collection only; provider delivery is not exhaustive. Root stop after controller cleanup is intentional."
+        }
+      ],
+      "owned_application_uninstalled": true,
+      "code": "webview_endpoint_not_ready"
+    }
+  }
 }
