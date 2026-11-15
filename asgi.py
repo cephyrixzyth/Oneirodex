@@ -39,6 +39,7 @@ from werkzeug.exceptions import RequestedRangeNotSatisfiable
 from werkzeug.utils import secure_filename, send_file as werkzeug_send_file
 
 from sqlalchemy import select
+from oneirodex.runtime_native.companion_cors import native_companion_cors
 
 
 def create_app(config_object=None):
@@ -3019,6 +3020,7 @@ class LazyASGIApp:
             return native_engine_session_scope(self._native_sqlalchemy_engine, db)
         return native_session_scope(app or self._flask_app, db)
 
+    @native_companion_cors
     async def __call__(self, scope, receive, send):
         if scope["type"] == "lifespan":
             await self._handle_lifespan(receive, send)

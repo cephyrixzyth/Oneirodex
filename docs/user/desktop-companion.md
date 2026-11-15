@@ -6,6 +6,8 @@ Optional **Tauri** client under `clients/desktop/` for Install / Update / Uninst
 
 ## Connect
 
+The server permits the bundled webview origins `tauri://localhost`, `http://tauri.localhost` and `https://tauri.localhost` for HTTP API calls. Token authentication and scopes still apply; this does not enable cross-origin cookie credentials, arbitrary websites, opaque `null` origins or development ports. The R2113 server correction has focused CORS coverage; installed connected-account verification is still pending.
+
 1. Open **Account → API tokens** (`/tokens`) — or create via `POST /api/tokens` if you prefer the API.
 2. Create a token with the **Desktop companion** preset (`read:library` + `write:download` + `write:presence`), or **Thin client** for connect-only seats. A token needs `write:download` or `write:library` to acknowledge or release queued commands; read-only tokens can inspect permitted data but cannot change queue state. Bearer clients calling `POST /api/check_username` also need `read:social`.
 3. Copy the one-time secret (`gt_<hexprefix>_<urlsafe-secret>`) — it is shown only once. The secret uses URL-safe base64 (`A–Z`, `a–z`, `0–9`, `_`, `-`), so **hyphens and underscores in the secret are normal**. Paste the **entire** `gt_…` string into Connect. Truncating at a `-` (or any earlier character) always fails auth. On plain HTTP LAN, browser clipboard may be limited — use **Copy secret** (copies the raw token only) or select the one-time secret field and Ctrl+C / ⌘C.

@@ -10,6 +10,8 @@ Work in risk-ranked route-family batches. Reuse evidence only when exact image i
 
 ## Current evidence status - 2026-11-15
 
+[R2113](parity-evidence/native-companion-cors-r2113.json) records a real installed Linux Connect failure: native-origin preflight lacked CORS headers despite valid backend credentials. The server correction covers outer ASGI dispatch with exact bundled native origins and no cross-origin cookie credentials; seven pure contracts and 35 adjacent Linux guards pass. Actual connected-account acceptance remains pending. Provider startup, both cold rounds and all owned cleanup passed in the failed run.
+
 R2111 live backend startup, current schema and owned database cleanup passed, but the probe stopped before package/UI execution at an incorrect harness401 expectation for the identity endpoint. R2112 follows its existing unauthenticated redirect contract and retains numeric failures; 35 local Linux contracts pass. No real connected-account/provider result is claimed yet. See the terminal observation and follow-up in the [R2111 report](parity-evidence/linux-connected-account-r2111.json).
 
 [R2111](parity-evidence/linux-connected-account-r2111.json) prepares the unchanged installed Linux client against real `startweb.sh` ASGI/PostgreSQL and an isolated native Secret Service provider. The planned UI cases cover valid Connect/persistence/reopen, wrong/scope/revoked denial, account/ACL switching and Forget. Thirty-three pure/fake Linux contracts plus workflow selection and pyflakes pass locally. Actual connected behavior, CORS, provider compatibility and cleanup remain pending; the earlier R2108 cold-runtime success remains separately verified. No local app/server/keyring was run.
