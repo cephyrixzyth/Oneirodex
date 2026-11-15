@@ -54,5 +54,6 @@
   "ruling": "Tauri documents direct tauri-driver support on Windows/Linux; embedded macOS automation needs an optional plugin. Do not add an automation plugin or mock native IPC to make the pinned release appear qualified.",
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
-  "capture": "Skipped: static archive/member inspection only; nothing extracted to the filesystem, installed or executed."
+  "capture": "Skipped: static archive/member inspection only; nothing extracted to the filesystem, installed or executed.",
+  "followup_native_evidence": "linux-packaged-probe-r2108.json"
 }

@@ -10,7 +10,7 @@ Work in risk-ranked route-family batches. Reuse evidence only when exact image i
 
 ## Current evidence status - 2026-11-15
 
-[R2108](parity-evidence/linux-packaged-probe-r2108.json) implements the exact existing Linux package cold/reopen/native IPC/uninstall-retention probe and an exclusive manual CI mode. Eighteen Linux contracts, 87 adjacent Windows methods (two native methods skipped), 13 new workflow contexts and 15 legacy contexts pass locally. This is harness verification; actual installed UI/IPC and cleanup remain pending. The shipping binary is unchanged. Windows namespace access, real connected-account/game/platform/AT/operator/parity and final release gates remain open.
+[R2108](parity-evidence/linux-packaged-probe-r2108.json) implements the exact existing Linux package cold/reopen/native IPC/uninstall-retention probe and an exclusive manual CI mode. Eighteen Linux contracts, 87 adjacent Windows methods (two native methods skipped), 13 new workflow contexts and 15 legacy contexts pass locally. Native CI then passed all 18 guards and exercised the unchanged installed Debian binary through two cold bundled-UI/genuine native IPC rounds, including parent-directory denial. Same-profile owned-marker retention across cold reopen and actual package purge, plus owned process-group/listener/package/marker cleanup, pass on Ubuntu 22.04. This qualifies the Linux cold-runtime prerequisite; connected-account/keyring/offline-game/process-recovery and broader acceptance remain pending. Windows namespace access, real connected-account/game/platform/AT/operator/parity and final release gates remain open.
 
 ## Current evidence status - 2026-11-14
 

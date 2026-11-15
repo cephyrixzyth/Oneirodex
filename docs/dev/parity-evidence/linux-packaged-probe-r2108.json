@@ -3,7 +3,7 @@
   "evidence_id": "R2108",
   "observed_utc": "2026-11-15T06:03:32.936476+00:00",
   "base_commit": "0dc15da0510b2529a26b9a4e43a372841e75db62",
-  "classification": "Exact Linux package/native runtime CI controller implemented and locally verified; genuine installed-runtime outcome pending.",
+  "classification": "Linux remote-companion cold bundled UI/native IPC/reopen/uninstall-fixture-retention prerequisite verified on Ubuntu22.04; original connected-account/game/platform/parity acceptance remains open.",
   "package_evidence": "linux-packaged-artifact-pin-r2105.json",
   "package_pins": {
     "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
@@ -73,9 +73,99 @@
     "https://crates.io/api/v1/crates/tauri-driver",
     "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-driver/src/webdriver.rs"
   ],
-  "native_retry": "pending exact-package Linux-only dispatch; local contracts are not native acceptance",
-  "installed_runtime_acceptance": false,
+  "native_retry": "Terminal success: exact6a package two cold bundled-UI/genuine native IPC rounds, denial, same-profile owned marker after reopen/uninstall and owned group/listener/package cleanup pass.",
+  "installed_runtime_acceptance": true,
   "overall_goal": "active and incomplete",
   "limits": "Harness correctness repairs are not new product-vulnerability findings. Owned session/group cleanup is a probe boundary, not verified product game-family/PID-reuse behavior. Successful native cold/IPC/retention is only a prerequisite for original real-server/account/keyring/offline/game/wrapper/exit/resume/platform/AT/operator/parity/final-review/release gates. Windows ordinary-account Local mutex prerequisite remains open; no ACL or browser-security workaround.",
-  "capture": "Skipped: local pure/fake tests and workflow selection only; actual UI permitted solely on disposable CI."
+  "capture": "Skipped: local pure/fake tests and workflow selection only; actual UI permitted solely on disposable CI.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43683809168",
+    "job_id": 132719920066,
+    "harness_source": "c1d6be835c5019b79f2d83defc71fee94cfd5a16",
+    "raw_log_sha256": "f04be42027a64897e03ca81589796799fab7ff349a0b8d4197a5ee6a58c3deec",
+    "ci_guard_methods_passed": 18,
+    "ci_guard_elapsed_seconds": 0.11,
+    "acceptance_scope": "Linux remote-companion cold bundled UI, genuine native IPC success/denial, same-profile cold reopen, owned-marker uninstall retention and owned process-group/listener/package cleanup only",
+    "receipt": {
+      "observed_utc": "2026-11-15T06:05:54.152038+00:00",
+      "status": "passed",
+      "mode": "remote-companion",
+      "installed_runtime_acceptance": true,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097566864,
+      "archive_sha256": "933c7bdae0ba086fa3bdbf6facad07c512402133fe8cdf2791d515ccb3289994",
+      "deb_sha256": "66859e1d50e083bbe83c6a16e1b1ad65d5a75dd85d5d9d4af34948a071965f75",
+      "source_and_digest_verified": true,
+      "cleanup_verified": true,
+      "cold_rounds": [
+        {
+          "round": 1,
+          "bundled_renderer": true,
+          "native_ipc": true,
+          "parent_directory_denied": true,
+          "ordinary_user": true,
+          "listener_ownership_verified": true
+        },
+        {
+          "round": 2,
+          "bundled_renderer": true,
+          "native_ipc": true,
+          "parent_directory_denied": true,
+          "ordinary_user": true,
+          "listener_ownership_verified": true
+        }
+      ],
+      "platform": "Linux",
+      "effective_uid_nonzero": true,
+      "tauri_driver_version": "2.1.0",
+      "process_cleanup_scope": "Owned session/process groups and explicit driver ports; not product game-launch identity.",
+      "phase": "complete",
+      "installer_executed": true,
+      "installed_binary_sha256": "220c19ec6b4714844bdc4609f27c42946ff9435f02eb568bde2df39e5d4d409b",
+      "native_package_versions": {
+        "webkit2gtk-driver": "2.50.4-0ubuntu0.22.04.1",
+        "libwebkit2gtk-4.1-0": "2.50.4-0ubuntu0.22.04.1"
+      },
+      "tauri_driver_sha256": "a71b247ca519f3ed02a364cd8692d71d381ffe81279c94c6ed65ec300d217868",
+      "owned_display_and_dbus_started": true,
+      "selected_driver_logs": [
+        {
+          "round": 1,
+          "prefix_bytes": 353,
+          "truncated": false,
+          "prefix_sha256": "6df234fea3148a5e73608bb19d37a4893c75265a59b2a1a7e3403822635de0ed",
+          "matched_categories": [
+            "not_found"
+          ],
+          "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+        },
+        {
+          "round": 2,
+          "prefix_bytes": 353,
+          "truncated": false,
+          "prefix_sha256": "64d3690195a5621d7a17c9cfb96de949fb9bd102f240954f74952e7cc70c3a19",
+          "matched_categories": [
+            "not_found"
+          ],
+          "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+        }
+      ],
+      "owned_marker_retained_after_cold_reopen": true,
+      "owned_package_uninstalled": true,
+      "owned_marker_retained_after_uninstall": true,
+      "owned_marker_removed": true,
+      "cleanup_errors": []
+    },
+    "ci_timing": {
+      "job_started_utc": "2026-11-15T06:04:53Z",
+      "job_completed_utc": "2026-11-15T06:06:08Z",
+      "job_wall_seconds": 75,
+      "driver_tool_install_compile_step_seconds": 19,
+      "actual_package_execution_step_seconds": 9,
+      "limits": "CI step/job wall time, not model inference or exclusive wait; overlaps root-chat activity. Queue time excluded."
+    }
+  },
+  "installed_runtime_acceptance_scope": "Linux remote-companion cold bundled UI, genuine native IPC success/denial, same-profile cold reopen, owned-marker uninstall retention and owned process-group/listener/package cleanup only",
+  "ruling": "Actual WebKit driver/runtime2.50.4-0ubuntu0.22.04.1 with locked tauri-driver2.1.0 passed both ordinary-user rounds. Static not_found log terms remain selected observations, not a product failure. Owned session/group and explicit port cleanup plus package/marker removal are verified; this does not establish detached game-family cleanup, genuine user save retention, keyring persistence, connected account, offline Play/Reveal, restart recovery, physical hardware, Windows or whole-goal acceptance."
 }
