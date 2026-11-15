@@ -1,0 +1,81 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2108",
+  "observed_utc": "2026-11-15T06:03:32.936476+00:00",
+  "base_commit": "0dc15da0510b2529a26b9a4e43a372841e75db62",
+  "classification": "Exact Linux package/native runtime CI controller implemented and locally verified; genuine installed-runtime outcome pending.",
+  "package_evidence": "linux-packaged-artifact-pin-r2105.json",
+  "package_pins": {
+    "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+    "source_run": 43553756754,
+    "artifact_id": 14097566864,
+    "archive_sha256": "933c7bdae0ba086fa3bdbf6facad07c512402133fe8cdf2791d515ccb3289994",
+    "deb_sha256": "66859e1d50e083bbe83c6a16e1b1ad65d5a75dd85d5d9d4af34948a071965f75",
+    "binary_sha256": "220c19ec6b4714844bdc4609f27c42946ff9435f02eb568bde2df39e5d4d409b"
+  },
+  "change": [
+    "R2106 exact-source/artifact/digest/size/type/member/fresh-workspace/ordinary Linux CI guards; no local native execution.",
+    "R2107 genuine installed binary, owned ordinary-user Xvfb/D-Bus, loopback native external WebDriver, bundled heading/form and real native IPC success/parent traversal denial, same-profile cold reopen and controller-owned marker retention across package removal.",
+    "Native process-group guardians remain alive/unreaped until the last group signal, preventing cleanup from authorizing a recycled numeric group after leader reap. Reaped leader with remaining members fails closed. Ownership checks require loopback socket inode, ordinary UID and exact owned group.",
+    "R2108 default-off exclusive Linux package-only workflow; every preexisting job step/permission and input contract preserved except two descriptions generalized to selected platform. No product rebuild, automation plugin or fake IPC."
+  ],
+  "verification": {
+    "linux_methods_passed": 18,
+    "windows_methods_loaded": 89,
+    "windows_methods_passed": 87,
+    "windows_native_only_skipped": 2,
+    "linux_workflow_contexts": 13,
+    "legacy_workflow_contexts": 15,
+    "pyflakes": "passed",
+    "red": [
+      "7 missing guard contracts after correcting one test-file syntax error.",
+      "6 missing lifecycle contracts.",
+      "Guardian cleanup ordering regression.",
+      "Missing exclusive Linux selection contract and default-off workflow mode.",
+      "Final review: directory-tagged Debian member incorrectly accepted; package-query error incorrectly treated as absence. Both reproduced then corrected."
+    ],
+    "cases": [
+      "immutable source/archive/package identity",
+      "foreign existing package untouched",
+      "root/nonCI/wrongplatform refused before native access",
+      "unsafe extra/traversal/symlink/directory-tagged/duplicate/digest/size payloads denied before publish",
+      "partial install cleanup",
+      "genuine native round fields required",
+      "owned data-directory containment",
+      "primary UI failure survives cleanup failure; no uninstall with unverified live context",
+      "owned marker cold reopen/uninstall retention and exact removal",
+      "runtime environment excludes CI credentials and unrelated home/display/DBus",
+      "loopback listener socket UID/group ownership and vanished FD handling",
+      "unreaped guardian signal ordering and reaped-leader refusal",
+      "mixed mode/release/foreign pins refused",
+      "original workflow contexts preserved"
+    ]
+  },
+  "tool_provenance": {
+    "tauri_driver": "2.1.0, cargo install --locked",
+    "registry_crate_sha256": "2f2e29bd6900fb718dfdc06f2e7a371d6087c085daaf83709847ef3e6b0c1953",
+    "native_webkit": "Signed Ubuntu22.04 candidate versions explicitly selected during setup; exact installed driver/runtime versions recorded by native probe. Compatibility remains pending.",
+    "webdriver_client": "Python standard-library W3C HTTP protocol; no Selenium/browser download."
+  },
+  "source_sha256_git_normalized": {
+    ".github/workflows/desktop-build.yml": "27e83632be14e9971ca9233344245a3c9864b4138ccc1f9bbb0fbdaa4f5eaecc",
+    "scripts/ci/probe_linux_packaged.py": "6ca1f6f672e4614d3c321150e8026703996687e66236e66b22d2fd448ad3aecf",
+    "scripts/ci/linux_packaged_runtime.py": "63d44e900c1f24def68a7be4b2be1d95d0c1d4cc0b5a3d277d960215aba20441",
+    "scripts/ci/linux_packaged_native.py": "86d24137a527f4742788238342cb8a37302a32926ecb2c6f133177357bca34c0",
+    "scripts/ci/test_linux_packaged_probe.py": "f909258f05921ee0a8ea62155d241400f529d9b82385f67a24f3cff36867e19e",
+    "scripts/ci/test_linux_packaged_runtime.py": "13c15bf7286a22d7a0f6147ec11c44cf01158aa3ff3d5631b683f521602d411d",
+    "scripts/ci/test_linux_packaged_workflow.cjs": "119af6d19e96fac5662511efd340854076cfc71a4de82f7d1b093e417a432145"
+  },
+  "primary_sources": [
+    "https://v2.tauri.app/develop/tests/webdriver/manual-setup/",
+    "https://v2.tauri.app/develop/tests/webdriver/ci/",
+    "https://v2.tauri.app/develop/tests/webdriver/example/selenium/",
+    "https://crates.io/api/v1/crates/tauri-driver",
+    "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-driver/src/webdriver.rs"
+  ],
+  "native_retry": "pending exact-package Linux-only dispatch; local contracts are not native acceptance",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Harness correctness repairs are not new product-vulnerability findings. Owned session/group cleanup is a probe boundary, not verified product game-family/PID-reuse behavior. Successful native cold/IPC/retention is only a prerequisite for original real-server/account/keyring/offline/game/wrapper/exit/resume/platform/AT/operator/parity/final-review/release gates. Windows ordinary-account Local mutex prerequisite remains open; no ACL or browser-security workaround.",
+  "capture": "Skipped: local pure/fake tests and workflow selection only; actual UI permitted solely on disposable CI."
+}

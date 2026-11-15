@@ -8,6 +8,10 @@ Establish and verify 100% behavior parity between the exact official v1.1.8 rele
 
 Work in risk-ranked route-family batches. Reuse evidence only when exact image identity and scope are proven. Fix confirmed regressions, then run focused verification. Keep independent clean-main fixes reviewable. The owner authorized pushing the review branches on 2026-11-06 and expanded authorization on 2026-11-08 to merge, release, and deploy the app after remediation and verification gates pass. Follow the release checklist and deployment preflight; authorization does not establish readiness or permit Unraid OS, array, or pool changes.
 
+## Current evidence status - 2026-11-15
+
+[R2108](parity-evidence/linux-packaged-probe-r2108.json) implements the exact existing Linux package cold/reopen/native IPC/uninstall-retention probe and an exclusive manual CI mode. Eighteen Linux contracts, 87 adjacent Windows methods (two native methods skipped), 13 new workflow contexts and 15 legacy contexts pass locally. This is harness verification; actual installed UI/IPC and cleanup remain pending. The shipping binary is unchanged. Windows namespace access, real connected-account/game/platform/AT/operator/parity and final release gates remain open.
+
 ## Current evidence status - 2026-11-14
 
 [R2105](parity-evidence/linux-packaged-artifact-pin-r2105.json) statically pins the existing full Linux release archive, Debian package and actual executable from the same successful product source. Package metadata and ELF/member hashes were read without installation or execution. Linux installed-runtime verification is the next independent platform gate; the Windows mutex prerequisite and all original account/game/parity/platform/operator/release requirements remain open.

@@ -32,8 +32,13 @@ on:
         required: false
         type: boolean
         default: false
+      linux_packaged_smoke_only:
+        description: 'Only install and inspect the pinned Linux companion artifact on a disposable runner; no product build or release.'
+        required: false
+        type: boolean
+        default: false
       package_source_run:
-        description: 'Successful review-branch push run that produced the Windows package.'
+        description: 'Successful review-branch push run that produced the selected platform package.'
         required: false
         default: ''
       package_source_commit:
@@ -41,7 +46,7 @@ on:
         required: false
         default: ''
       package_archive_digest:
-        description: 'Pinned 64-character SHA256 of the uploaded Windows artifact ZIP.'
+        description: 'Pinned 64-character SHA256 of the selected platform artifact ZIP.'
         required: false
         default: ''
       probe_domain:
@@ -99,7 +104,7 @@ permissions:
 
 jobs:
   macos-coalition-probe:
-    if: github.event_name != 'workflow_dispatch' || (inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true)
+    if: github.event_name != 'workflow_dispatch' || (inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true && inputs.linux_packaged_smoke_only != true)
     name: macOS coalition API/isolation probe
     runs-on: macos-latest
     timeout-minutes: 5
@@ -147,7 +152,7 @@ jobs:
           if-no-files-found: error
 
   rust-checks:
-    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true)
+    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true && inputs.linux_packaged_smoke_only != true)
     name: rust · fmt + clippy + test
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -218,7 +223,7 @@ jobs:
         run: bash ../../../scripts/ci/test-real-game-archive-enospc.sh
 
   build:
-    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true)
+    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true && inputs.linux_packaged_smoke_only != true)
     name: ${{ matrix.label }} · ${{ matrix.flavor }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -362,7 +367,7 @@ jobs:
 
   windows-packaged-probe:
     name: ${{ inputs.windows_user_fixture_only && 'Windows ordinary-user fixture qualification' || 'Windows installed companion cold-start probe' }}
-    if: github.event_name == 'workflow_dispatch' && (inputs.packaged_smoke_only == true || inputs.windows_user_fixture_only == true)
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_packaged_smoke_only != true && (inputs.packaged_smoke_only == true || inputs.windows_user_fixture_only == true)
     runs-on: windows-latest
     timeout-minutes: 15
     permissions:
@@ -461,6 +466,75 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  linux-packaged-probe:
+    name: Linux installed companion cold-start probe
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_packaged_smoke_only == true
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+    env:
+      LINUX_PACKAGED_SMOKE_ONLY: ${{ inputs.linux_packaged_smoke_only }}
+      WINDOWS_PACKAGED_SMOKE_ONLY: ${{ inputs.packaged_smoke_only }}
+      WINDOWS_USER_FIXTURE_ONLY: ${{ inputs.windows_user_fixture_only }}
+      PROBE_ONLY: ${{ inputs.probe_only }}
+      PROBE_FAMILY: ${{ inputs.probe_family }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      PACKAGE_SOURCE_RUN: ${{ inputs.package_source_run }}
+      PACKAGE_SOURCE_COMMIT: ${{ inputs.package_source_commit }}
+      PACKAGE_ARCHIVE_DIGEST: ${{ inputs.package_archive_digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Validate exclusive Linux package selection
+        run: |
+          python - <<'PY'
+          import os,sys
+          sys.path.insert(0,'scripts/ci')
+          from probe_linux_packaged import validate_selection,ProbeFailure
+          try:
+              validate_selection(os.environ)
+          except ProbeFailure as error:
+              print(str(error))
+              raise SystemExit(1)
+          PY
+      - name: Linux package guard and lifecycle contracts
+        run: python -m unittest discover -s scripts/ci -p 'test_linux_packaged*.py'
+      - name: Install native Linux test prerequisites
+        run: |
+          sudo -n apt-get update
+          native_driver_version=$(apt-cache policy webkit2gtk-driver | awk '/Candidate:/ {print $2; exit}')
+          native_webview_version=$(apt-cache policy libwebkit2gtk-4.1-0 | awk '/Candidate:/ {print $2; exit}')
+          [[ "$native_driver_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
+          [[ "$native_webview_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
+          sudo -n apt-get install -y "webkit2gtk-driver=$native_driver_version" "libwebkit2gtk-4.1-0=$native_webview_version" xvfb xauth dbus-x11
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
+      - name: Install pinned external native driver
+        run: cargo install tauri-driver --version '=2.1.0' --locked --root "$RUNNER_TEMP/oneirodex-tauri-driver"
+      - name: Install and exercise the pinned Linux package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          python scripts/ci/probe_linux_packaged.py --execute \
+            --source-run "$PACKAGE_SOURCE_RUN" --source-commit "$PACKAGE_SOURCE_COMMIT" \
+            --archive-digest "$PACKAGE_ARCHIVE_DIGEST" \
+            --work-dir "$RUNNER_TEMP/oneirodex-linux-packaged-$GITHUB_RUN_ID" \
+            > "$RUNNER_TEMP/oneirodex-linux-packaged-status.json"
+          probe_exit=$?
+          cat "$RUNNER_TEMP/oneirodex-linux-packaged-status.json"
+          exit "$probe_exit"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: oneirodex-linux-packaged-probe
+          path: ${{ runner.temp }}/oneirodex-linux-packaged-status.json
+          if-no-files-found: warn
+          retention-days: 7
+
   release:
     name: attach installers to the GitHub release
     needs: build
@@ -471,6 +545,7 @@ jobs:
       (github.event_name != 'workflow_dispatch' || inputs.probe_only != true) &&
       (github.event_name != 'workflow_dispatch' || inputs.packaged_smoke_only != true) &&
       (github.event_name != 'workflow_dispatch' || inputs.windows_user_fixture_only != true) &&
+      (github.event_name != 'workflow_dispatch' || inputs.linux_packaged_smoke_only != true) &&
       ((github.event_name == 'push' && github.ref_type == 'tag') ||
        (github.event_name == 'workflow_dispatch' && inputs.release_tag != '' &&
          (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||
