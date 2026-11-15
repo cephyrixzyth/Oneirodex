@@ -149,10 +149,33 @@
     "scripts/ci/windows_user_fixture.py": "efc292bcbb549fb46753016516f5b2dd431be87ada5aef9edf2e5a6121ce9bea",
     "scripts/ci/probe_windows_user_fixture.py": "587abf6c073c8a53e2cde1e37d9f895b6f5395e5338e108f3482b53463f3aaf9"
   },
-  "native_retry": "pending explicit fixture-only CI; no package/build/release selected",
+  "native_retry": "terminal provisioning password step ObjectNotFound/0x80131501; abort cleanup verified; no app",
   "native_fixture_qualified": false,
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
   "limits": "R2097 never reached fixture provisioning. R2096 account failure cause/abort cleanup still unknown. Native fixture, package/account/game/UI/IPC and original acceptance gates remain open.",
-  "capture": "Skipped: CI-only mode selection."
+  "capture": "Skipped: CI-only mode selection.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43661743221",
+    "job_id": 132652372991,
+    "harness_source": "c3a62f25455320d3d584f04e1d8ae16c37acdf4e",
+    "raw_log_sha256": "f8e1274856aa7e07be08dbeda2890131e1b36b06a88a8db69361fc29dd211276",
+    "ci_fixture_guard_methods_passed": 23,
+    "ci_guard_elapsed_seconds": 0.081,
+    "receipt": {
+      "observed_utc": "2026-11-15T01:10:02.074702+00:00",
+      "status": "failed",
+      "native_fixture_qualified": false,
+      "installed_runtime_acceptance": false,
+      "cleanup_verified": true,
+      "phase": "fixture_provisioning",
+      "code": "fixture_account_creation_failed",
+      "diagnostic": {
+        "stage": "password",
+        "category": "ObjectNotFound",
+        "hresult": "0x80131501"
+      }
+    },
+    "package_client_build_mac_release": "observed skipped"
+  }
 }

@@ -344,6 +344,29 @@ class NativeBindingTests(unittest.TestCase):
         self.assertNotIn(';;;WD)', captured[0])
         self.assertEqual(captured[-1], 'descriptor_freed')
 
+    @unittest.skipUnless(__import__('os').name == 'nt', 'Pure Windows PowerShell conversion control')
+    def test_password_conversion_needs_no_autoloaded_security_cmdlet(self):
+        import json
+        import os
+        import subprocess
+        api = object.__new__(fixture.NativeFixtureAPI)
+        api.powershell, api.observer_env = 'never-run.exe', {}
+        with mock.patch.object(fixture.subprocess, 'run', return_value=subprocess.CompletedProcess(
+                [], 0, json.dumps({'sid': SID}), '')) as run:
+            api.create_account('odci0123456789ab', 'sentinel', 'oneirodex-ci-' + 'a' * 32)
+        script = run.call_args.args[0][-1]
+        conversion = script.split("$stage='password'", 1)[1].split("$stage='create_user'", 1)[0]
+        control = ("$ErrorActionPreference='Stop';$PSModuleAutoLoadingPreference='None';"
+                   "$p=@{password='Aa9!local-conversion-fixture'};$secure=$null;try{" + conversion +
+                   ";if($secure.Length -ne $p.password.Length -or -not $secure.IsReadOnly()){exit 3};"
+                   "[Console]::WriteLine('conversion_ok')}finally{if($secure){$secure.Dispose()}}")
+        result = subprocess.run([str(Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+                                 '-NoProfile', '-NonInteractive', '-Command', control],
+                                capture_output=True, encoding='utf-8', timeout=10,
+                                env=fixture.observer_environment(os.environ))
+        self.assertEqual(result.returncode, 0, 'Password conversion must not depend on a loaded cmdlet')
+        self.assertEqual(result.stdout.strip(), 'conversion_ok')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -10,6 +10,8 @@ Work in risk-ranked route-family batches. Reuse evidence only when exact image i
 
 ## Current evidence status - 2026-11-14
 
+[R2099](parity-evidence/windows-fixture-secure-conversion-r2099.json) removes the password-conversion cmdlet dependency after R2098 identified that step failing with ObjectNotFound/0x80131501 and verified abort cleanup. Direct .NET conversion passes the actual excerpt control with module autoload disabled; all 24 fixture checks pass locally. No local account/desktop was created. Native fixture and app acceptance remain pending.
+
 [R2098](parity-evidence/windows-fixture-guard-scope-r2098.json) separates fixture-only preflight from unrelated observer experiments. R2097 stopped before provisioning when a duplicate reference query missed an event, although the current query received both expected exits. Fixture mode now runs its 23 relevant checks; package mode retains all Windows guards. Fifteen workflow contexts pass. Provisioning cause and native qualification remain pending; the reference-query uncertainty is retained.
 
 [R2097](parity-evidence/windows-standard-user-provisioning-r2097.json) fixes an evidence omission after R2096 passed all 60 native guard methods but failed during account provisioning. The original receipt lacks the OS error and abort-cleanup result; neither is inferred. The next control reports only fixed stage/category and numeric HRESULT. Local checks pass 60 methods with two native methods skipped. No app, installer, client download, build or release ran in the fixture-only attempt.

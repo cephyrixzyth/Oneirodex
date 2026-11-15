@@ -1,0 +1,48 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2099",
+  "observed_utc": "2026-11-15T01:15:17.422875+00:00",
+  "base_commit": "c3a62f25455320d3d584f04e1d8ae16c37acdf4e",
+  "classification": "Confirmed provisioning dependency on an unavailable password-conversion command; isolated conversion fix verified locally, native qualification pending.",
+  "preceding_native_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43661743221",
+    "job_id": 132652372991,
+    "harness_source": "c3a62f25455320d3d584f04e1d8ae16c37acdf4e",
+    "raw_log_sha256": "f8e1274856aa7e07be08dbeda2890131e1b36b06a88a8db69361fc29dd211276",
+    "ci_fixture_guard_methods_passed": 23,
+    "ci_guard_elapsed_seconds": 0.081,
+    "receipt": {
+      "observed_utc": "2026-11-15T01:10:02.074702+00:00",
+      "status": "failed",
+      "native_fixture_qualified": false,
+      "installed_runtime_acceptance": false,
+      "cleanup_verified": true,
+      "phase": "fixture_provisioning",
+      "code": "fixture_account_creation_failed",
+      "diagnostic": {
+        "stage": "password",
+        "category": "ObjectNotFound",
+        "hresult": "0x80131501"
+      }
+    },
+    "package_client_build_mac_release": "observed skipped"
+  },
+  "change": "Construct a System.Security.SecureString directly, append each controlled password character, mark read-only, and dispose in finally. Remove ConvertTo-SecureString dependency without changing credential transport, account permissions, child security or module paths.",
+  "verification": {
+    "red": "Execute only the actual password-conversion excerpt with PowerShell module autoload disabled; old cmdlet conversion fails. No account/desktop command is run by this test.",
+    "green": "The direct .NET conversion succeeds with the expected length/read-only state under the same module-disabled control.",
+    "local_fixture_methods_passed": 24,
+    "local_mutations": "pure CLI memory conversion only; no accounts/profiles/desktops/app or installer created",
+    "pyflakes": "passed"
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/windows_user_fixture.py": "0208c8b5202eaff9c362c4577a604ec1368cc7f20c5d26cc47dc2ab6c18bd549",
+    "scripts/ci/test_windows_user_fixture.py": "40c6d8841d3cc058d4828fa57a5c4787cff73da6f1148d0983a201addb40106d"
+  },
+  "native_retry": "pending fixture-only CI with unchanged mode guards",
+  "native_fixture_qualified": false,
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "R2098 verified failure location and abort cleanup; exact hosted module configuration is not established. Direct conversion control does not establish successful account/profile/desktop creation or app startup.",
+  "capture": "Skipped: CI fixture conversion source and nonmutating local CLI control."
+}

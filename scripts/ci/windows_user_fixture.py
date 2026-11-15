@@ -323,7 +323,9 @@ try {
         [Console]::WriteLine('{"stage":"existing_account","category":"ResourceExists"}');exit 2
     }
     $stage='password'
-    $secure=ConvertTo-SecureString $p.password -AsPlainText -Force
+    $secure=[System.Security.SecureString]::new()
+    foreach($character in ([string]$p.password).ToCharArray()){$secure.AppendChar($character)}
+    $secure.MakeReadOnly()
     $stage='create_user'
     $created=New-LocalUser -Name $p.name -Password $secure -Description $p.marker -UserMayNotChangePassword
     $stage='membership'
