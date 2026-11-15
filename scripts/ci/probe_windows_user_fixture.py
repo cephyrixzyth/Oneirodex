@@ -7,7 +7,7 @@ import re
 import sys
 import uuid
 
-from windows_user_fixture import FixtureFailure, StandardUserFixture, require_fixture_ci
+from windows_user_fixture import FixtureFailure, StandardUserFixture, require_fixture_ci, safe_fixture_diagnostic
 
 
 def run_control(work, progress, factory=None):
@@ -101,6 +101,11 @@ def main(argv=None):
         code = 0
     except FixtureFailure as error:
         receipt['code'] = str(error)
+        details = safe_fixture_diagnostic(getattr(error, 'diagnostic', None))
+        if details:
+            receipt['diagnostic'] = details
+        if getattr(error, 'cleanup_verified', None) is True:
+            receipt['cleanup_verified'] = True
         code = 2 if str(error) in ('execution_requires_disposable_windows_ci',
                                   'fixture_execution_not_requested') else 1
         if code == 2:

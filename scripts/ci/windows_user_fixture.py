@@ -20,6 +20,21 @@ class FixtureFailure(RuntimeError):
                          else 'fixture_operation_failed')
 
 
+def safe_fixture_diagnostic(raw):
+    if not isinstance(raw, dict):
+        return {}
+    selected = {}
+    if raw.get('stage') in ('lookup', 'password', 'create_user', 'membership', 'existing_account',
+                           'profile_wait', 'profile_validate', 'profile_delete', 'account_delete', 'verify'):
+        selected['stage'] = raw['stage']
+    if raw.get('category') in ('ResourceExists', 'PermissionDenied', 'InvalidArgument',
+                              'InvalidOperation', 'ObjectNotFound', 'NotSpecified', 'SecurityError'):
+        selected['category'] = raw['category']
+    if isinstance(raw.get('hresult'), str) and re.fullmatch(r'0x[0-9a-fA-F]{8}', raw['hresult']):
+        selected['hresult'] = raw['hresult'].lower()
+    return selected
+
+
 def require_fixture_ci():
     env = os.environ
     if not (os.name == 'nt' and env.get('GITHUB_ACTIONS') == 'true'
@@ -287,7 +302,13 @@ class NativeFixtureAPI:
                 input=json.dumps(payload), env=self.observer_env, capture_output=True,
                 encoding='utf-8', timeout=60, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             if result.returncode or len(result.stdout) > 4096:
-                raise FixtureFailure(code)
+                error = FixtureFailure(code)
+                try:
+                    raw = json.loads(result.stdout) if len(result.stdout) <= 4096 else {}
+                except ValueError:
+                    raw = {}
+                error.diagnostic = safe_fixture_diagnostic(raw)
+                raise error
             return json.loads(result.stdout)
         except (ValueError, subprocess.SubprocessError, OSError):
             raise FixtureFailure(code) from None
@@ -296,18 +317,25 @@ class NativeFixtureAPI:
         self._account_identity(name, marker)
         script = r'''
 $ErrorActionPreference='Stop'
-$p=ConvertFrom-Json ([Console]::In.ReadToEnd());$created=$null;$secure=$null
+$p=ConvertFrom-Json ([Console]::In.ReadToEnd());$created=$null;$secure=$null;$stage='lookup'
 try {
-    if(Get-LocalUser -Name $p.name -ErrorAction SilentlyContinue){exit 2}
+    if(Get-LocalUser -Name $p.name -ErrorAction SilentlyContinue){
+        [Console]::WriteLine('{"stage":"existing_account","category":"ResourceExists"}');exit 2
+    }
+    $stage='password'
     $secure=ConvertTo-SecureString $p.password -AsPlainText -Force
+    $stage='create_user'
     $created=New-LocalUser -Name $p.name -Password $secure -Description $p.marker -UserMayNotChangePassword
+    $stage='membership'
     $group=Get-LocalGroup -SID 'S-1-5-32-545'
     Add-LocalGroupMember -Group $group -Member $created -ErrorAction Stop
     [Console]::WriteLine((@{sid=$created.SID.Value}|ConvertTo-Json -Compress))
 } catch {
+    $diagnostic=@{stage=$stage;category=[string]$_.CategoryInfo.Category;hresult=('0x{0:x8}' -f $_.Exception.HResult)}
     if($created -and $created.Description -eq $p.marker){
         Remove-LocalUser -SID $created.SID -ErrorAction SilentlyContinue
     }
+    [Console]::WriteLine(($diagnostic|ConvertTo-Json -Compress))
     exit 1
 } finally {
     if($secure){$secure.Dispose()};$p.password=$null
@@ -325,7 +353,9 @@ try {
             # Covers timeout/transport failure after OS creation, without owning a foreign collision.
             try:
                 self.delete_account(name, None, marker, None)
+                error.cleanup_verified = True
             except Exception:
+                error.cleanup_verified = False
                 error.add_note('fixture_unclaimed_account_cleanup_failed')
             raise
 

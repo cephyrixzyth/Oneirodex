@@ -279,6 +279,23 @@ class NativeBindingTests(unittest.TestCase):
                     api.delete_account(name, sid, 'oneirodex-ci-' + 'a' * 32, None)
         run.assert_not_called()
 
+    def test_account_failure_keeps_only_allowlisted_diagnostics_and_cleanup_result(self):
+        import json
+        import subprocess
+        api = object.__new__(fixture.NativeFixtureAPI)
+        api.powershell, api.observer_env = 'never-run.exe', {}
+        response = {'stage': 'membership', 'category': 'ResourceExists', 'hresult': '0x80070089',
+                    'message': 'PRIVATE', 'sid': SID}
+        results = [subprocess.CompletedProcess([], 1, json.dumps(response), 'PRIVATE'),
+                   subprocess.CompletedProcess([], 0, '{"removed":true}', '')]
+        with mock.patch.object(fixture.subprocess, 'run', side_effect=results):
+            with self.assertRaises(fixture.FixtureFailure) as failed:
+                api.create_account('odci0123456789ab', 'PRIVATE', 'oneirodex-ci-' + 'a' * 32)
+        self.assertEqual(getattr(failed.exception, 'diagnostic', None), {
+            'stage': 'membership', 'category': 'ResourceExists', 'hresult': '0x80070089'})
+        self.assertIs(getattr(failed.exception, 'cleanup_verified', None), True)
+        self.assertNotIn('PRIVATE', repr(failed.exception.__dict__))
+
     def test_failed_desktop_creation_restores_borrowed_station_and_closes_only_new_objects(self):
         from contextlib import nullcontext
         api = object.__new__(fixture.NativeFixtureAPI)

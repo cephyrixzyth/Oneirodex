@@ -118,6 +118,24 @@ class FixtureControlTests(unittest.TestCase):
             control.run_control(Path(self.tmp.name) / 'work', {}, factory=lambda path: context)
         self.assertIn('fixture_child_cleanup_failed', failed.exception.__notes__)
 
+    def test_provisioning_failure_reports_allowlisted_details_and_verified_abort_cleanup(self):
+        failure = fixture.FixtureFailure('fixture_account_creation_failed')
+        failure.diagnostic = {'stage': 'membership', 'category': 'ResourceExists',
+                              'hresult': '0x80070089', 'message': 'PRIVATE'}
+        failure.cleanup_verified = True
+        output = io.StringIO()
+        with mock.patch.object(control, 'require_fixture_ci'), \
+             mock.patch.object(control.StandardUserFixture, 'open', side_effect=failure), \
+             contextlib.redirect_stdout(output):
+            status = control.main(['--execute', '--work-dir', str(Path(self.tmp.name) / 'not-created')])
+        result = json.loads(output.getvalue())
+        self.assertEqual(status, 1)
+        self.assertEqual(result.get('diagnostic'), {
+            'stage': 'membership', 'category': 'ResourceExists', 'hresult': '0x80070089'})
+        self.assertIs(result.get('cleanup_verified'), True)
+        self.assertNotIn('PRIVATE', output.getvalue())
+        self.assertFalse(result['native_fixture_qualified'])
+
 
 if __name__ == '__main__':
     unittest.main()

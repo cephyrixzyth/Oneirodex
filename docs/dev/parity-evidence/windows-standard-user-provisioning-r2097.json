@@ -1,0 +1,49 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2097",
+  "observed_utc": "2026-11-15T01:05:32.523901+00:00",
+  "base_commit": "8eb027297040d54cf3c225118a3b89e64f3e7cd2",
+  "classification": "Fix omitted sanitized provisioning diagnostics/abort-cleanup outcome; actual account-provisioning cause remains unknown.",
+  "preceding_native_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43660913079",
+    "job_id": 132649819026,
+    "harness_source": "8eb027297040d54cf3c225118a3b89e64f3e7cd2",
+    "raw_log_sha256": "3735364120c4d5ac6fdcc657a43ed0283d55e79ce8efe329488c38dd70ae604b",
+    "ci_guard_methods_passed": 60,
+    "ci_guard_elapsed_seconds": 23.552,
+    "receipt": {
+      "observed_utc": "2026-11-15T01:00:30.018809+00:00",
+      "status": "failed",
+      "native_fixture_qualified": false,
+      "installed_runtime_acceptance": false,
+      "cleanup_verified": false,
+      "phase": "fixture_provisioning",
+      "code": "fixture_account_creation_failed"
+    },
+    "package_client_build_mac_release": "observed skipped"
+  },
+  "change": "Retain only allowlisted account-operation stage and error category plus a numeric HRESULT. Never return raw errors, account/SID/profile/password/commands. An account-creation failure also carries its independently checked abort-cleanup result. Original failure is preserved and no ordinary-user/app acceptance is promoted.",
+  "verification": {
+    "red": [
+      "OS provisioning stage/category/HRESULT and abort-cleanup result absent at the API boundary.",
+      "CLI receipt omits these already sanitized fields."
+    ],
+    "local_methods_loaded": 62,
+    "local_methods_passed": 60,
+    "native_only_skipped": 2,
+    "account_powershell_scripts_parse_only": 2,
+    "pyflakes": "passed"
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/windows_user_fixture.py": "efc292bcbb549fb46753016516f5b2dd431be87ada5aef9edf2e5a6121ce9bea",
+    "scripts/ci/test_windows_user_fixture.py": "8e8bbed23446ab83e2f68d6e603d43b2d776255ced7b0171271974b94fdf671f",
+    "scripts/ci/probe_windows_user_fixture.py": "587abf6c073c8a53e2cde1e37d9f895b6f5395e5338e108f3482b53463f3aaf9",
+    "scripts/ci/test_windows_user_fixture_control.py": "45d4538f57aa1137defda00684c57e40b5b7844e3e00681663c1e36b73fa0ea4"
+  },
+  "native_retry": "pending same explicit fixture-only mode; no app/package selected",
+  "native_fixture_qualified": false,
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "R2096 cannot establish the actual provisioning error or actual abort-cleanup outcome. Native fixture execution and installed account/game/UI/IPC remain open.",
+  "capture": "Skipped: CI-only diagnostics; no local account/desktop/app mutation."
+}
