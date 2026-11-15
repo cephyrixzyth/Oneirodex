@@ -773,16 +773,32 @@ def safe_webview_log_summary(data):
              'named_platform_channel_win.cc', 'win_util.cc', 'embedded_browser_impl.cc'}
     severities = dict.fromkeys(('error', 'warning', 'fatal', 'info', 'verbose'), 0)
     locations, unknown = [], 0
+    events, win32_codes = [], set()
+    fixed_messages = (
+        ('chrome_browser_main.cc', 'singleton_creation_failed',
+         r'Failed to create a ProcessSingleton for your profile directory\b'),
+        ('process_singleton_win.cc', 'singleton_mutex_failed', r'CreateMutex failed\b'),
+        ('process_singleton_win.cc', 'singleton_lock_file_failed', r'Lock file can not be created\b'),
+    )
     for match in re.finditer(r'^\[[^\]\r\n]{0,120}:(ERROR|FATAL|WARNING|INFO|VERBOSE[0-9]+):'
-                             r'([^\]\r\n]{1,200})\(([0-9]{1,6})\)\]', text, re.MULTILINE):
+                             r'([^\]\r\n]{1,200}?)(?:\(([0-9]{1,6})\)|:([0-9]{1,6}))\]'
+                             r'([^\r\n]{0,8192})', text, re.MULTILINE):
         severity = match[1].lower()
         severity = 'verbose' if severity.startswith('verbose') else severity
         severities[severity] += 1
         component = re.split(r'[\\/]', match[2])[-1]
         if component in known:
-            value = {'component': component, 'line': int(match[3]), 'severity': severity}
+            value = {'component': component, 'line': int(match[3] or match[4]), 'severity': severity}
             if value not in locations and len(locations) < 12:
                 locations.append(value)
+            for source, event, pattern in fixed_messages:
+                if component == source and re.match(pattern, match[5].lstrip()):
+                    if event not in events:
+                        events.append(event)
+                    # PLOG Windows errors end in a numeric code. Never return the message.
+                    suffix = re.search(r'\((0x[0-9a-fA-F]{8})\)\s*$', match[5])
+                    if suffix:
+                        win32_codes.add(suffix[1].lower())
         else:
             unknown += 1
     codes = sorted({m.lower() for m in re.findall(
@@ -791,6 +807,7 @@ def safe_webview_log_summary(data):
             'prefix_sha256': hashlib.sha256(prefix).hexdigest(), 'truncated': len(data) > limit,
             'matched_categories': [key for key, pattern in patterns.items() if re.search(pattern, text, re.IGNORECASE)],
             'hresult_codes': codes, 'severity_counts': severities, 'known_locations': locations,
+            'diagnostic_events': events, 'win32_error_codes': sorted(win32_codes)[:12],
             'unknown_component_records': unknown,
             'limits': 'Selected static terms/codes only; matches are not a causal diagnosis or complete log capture.'}
 

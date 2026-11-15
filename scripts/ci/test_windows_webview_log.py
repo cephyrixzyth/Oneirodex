@@ -33,6 +33,32 @@ class WebViewLogTests(unittest.TestCase):
         self.assertNotIn('Users', repr(result))
         self.assertNotIn('CreateMutex', repr(result))
 
+    def test_modern_colon_headers_and_fixed_singleton_diagnostics_preserve_privacy(self):
+        data = (b'[1:2:0115/030405.001:ERROR:chrome_browser_main.cc:2100] '
+                b'Failed to create a ProcessSingleton for your profile directory. PRIVATE\n'
+                b'[1:2:0115/030405.002:FATAL:process_singleton_win.cc:468] '
+                b'CreateMutex failed. PRIVATE C:\\Users\\PRIVATE (0x00000005)\n'
+                b'[1:2:0115/030405.003:ERROR:PRIVATE.cc:44] PRIVATE\n')
+        result = probe.safe_webview_log_summary(data)
+        self.assertEqual(result['severity_counts']['error'], 2)
+        self.assertEqual(result['severity_counts']['fatal'], 1)
+        self.assertEqual(result['known_locations'], [
+            {'component': 'chrome_browser_main.cc', 'line': 2100, 'severity': 'error'},
+            {'component': 'process_singleton_win.cc', 'line': 468, 'severity': 'fatal'}])
+        self.assertEqual(result['unknown_component_records'], 1)
+        self.assertEqual(result['diagnostic_events'], ['singleton_creation_failed', 'singleton_mutex_failed'])
+        self.assertEqual(result['win32_error_codes'], ['0x00000005'])
+        self.assertNotIn('PRIVATE', repr(result))
+        self.assertNotIn('Users', repr(result))
+
+    def test_diagnostic_events_require_known_source_and_message_start(self):
+        data = (b'[1:2:0115/030405.001:ERROR:PRIVATE.cc:1] CreateMutex failed (0x00000005)\n'
+                b'[1:2:0115/030405.002:ERROR:process_singleton_win.cc:1] '
+                b'PRIVATE profile path CreateMutex failed (0x00000005)\n')
+        result = probe.safe_webview_log_summary(data)
+        self.assertEqual(result['diagnostic_events'], [])
+        self.assertEqual(result['win32_error_codes'], [])
+
     def test_reader_hashes_a_bounded_prefix_and_does_not_scan_trailing_private_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             data = b'x' * (256 * 1024) + b' PRIVATE HRESULT=0x12345678'
