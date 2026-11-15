@@ -122,6 +122,27 @@ afterEach(() => {
 })
 
 describe('actual companion connection orchestration', () => {
+  it('connects with canonical server collection and search wire shapes', async () => {
+    vi.stubGlobal('fetch', async (input: string) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/collections') return Response.json({ collections: [] })
+      if (url.pathname === '/api/client/identity') return Response.json({ account_id: 'account-a' })
+      if (url.pathname === '/api/search')
+        return Response.json(
+          url.searchParams.get('query') === 'a'
+            ? [{ uuid: 'game-a', name: 'Private A Title' }]
+            : [],
+        )
+      if (url.pathname === '/api/mods/summary') return Response.json({ enabled: false, games: [] })
+      if (url.pathname === '/api/client/heartbeat') return Response.json({ commands: [] })
+      if (url.pathname === '/api/client/lifecycle') return Response.json({ records: [] })
+      throw new Error('Unexpected request in canonical wire fixture')
+    })
+    submit()
+    await settled()
+    expect(field('#auth-summary').textContent).toMatch(/Online/)
+    expect(field('#library').textContent).toContain('Private A Title')
+  })
   it('keeps local Play available if profile hashing becomes unavailable', async () => {
     vi.stubGlobal('crypto', {
       subtle: { digest: vi.fn().mockRejectedValue(new Error('profile hashing unavailable')) },

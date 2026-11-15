@@ -27,6 +27,19 @@ def collection_list_projection(status,body):
             'collections_array':isinstance(value,dict) and isinstance(value.get('collections'),list)}
 
 
+def search_list_projection(status,body):
+    try:value=json.loads(body)
+    except (ValueError,UnicodeError):value=None
+    results=value.get('results') if isinstance(value,dict) else None
+    games=value.get('games') if isinstance(value,dict) else None
+    items=next((v for v in (value,results,games) if isinstance(v,list)),[])
+    return {'http_status':status,'root_array':isinstance(value,list),
+            'results_array':isinstance(results,list),'games_array':isinstance(games,list),
+            'item_count':len(items),
+            'shared_visible':any(isinstance(v,dict) and v.get('name')=='Synthetic CI Shared Game' for v in items),
+            'private_visible':any(isinstance(v,dict) and v.get('name')=='Synthetic CI Adult Private Game' for v in items)}
+
+
 def require_backend_ci(root, env, platform, uid):
     require_ci_execution(platform, env, uid)
     if (root/'.env').exists():
@@ -220,6 +233,12 @@ class NativeServerAPI:
             'origin_allowed':headers.get('access-control-allow-origin',headers.get('Access-Control-Allow-Origin'))=='tauri://localhost'}
         code,body,_=self.http('/api/collections',data['tokens']['adult'])
         self.progress['backend_collection_list_shape']=collection_list_projection(code,body)
+        search_controls={}
+        for role in ('adult','child'):
+            for label,query in (('empty',''),('star','*'),('letter','a')):
+                code,body,_=self.http('/api/search?'+urllib.parse.urlencode({'query':query}),data['tokens'][role])
+                search_controls[role+'_'+label]=search_list_projection(code,body)
+        self.progress['backend_search_wire_controls']=search_controls
         data['base_url']=self.base_url
         return data
 

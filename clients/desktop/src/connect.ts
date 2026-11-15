@@ -1,4 +1,4 @@
-import type { OneirodexClient, SearchResultItem } from '@oneirodex/api-client'
+import type { OneirodexClient, SearchResponse, SearchResultItem } from '@oneirodex/api-client'
 import { OneirodexApiError } from '@oneirodex/api-client'
 
 import { DesktopTransportError } from './api.js'
@@ -151,11 +151,8 @@ export function shapeInvalidConnectionResult(): ConnectionFailure {
   return { ok: false, message, cause: 'shape_invalid' }
 }
 
-function extractSearchResults(response: {
-  results?: SearchResultItem[]
-  games?: SearchResultItem[]
-}): SearchResultItem[] {
-  return response.results ?? response.games ?? []
+function extractSearchResults(response: SearchResponse): SearchResultItem[] {
+  return Array.isArray(response) ? response : (response.results ?? response.games ?? [])
 }
 
 /** Fetches a small slice of the library via search (fallback queries if empty). */
@@ -168,7 +165,11 @@ export async function fetchLibraryPreview(
   for (const query of queries) {
     try {
       const response = await api.browse.search({ query })
-      if (strict && (!response || !Array.isArray(response.results ?? response.games))) {
+      if (
+        strict &&
+        (!response ||
+          (!Array.isArray(response) && !Array.isArray(response.results ?? response.games)))
+      ) {
         throw new DesktopTransportError('protocol')
       }
       const items = extractSearchResults(response)

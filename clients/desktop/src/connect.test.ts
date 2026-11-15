@@ -11,6 +11,8 @@ import {
   validateConnection,
 } from './connect.js'
 import { createLifecycleRegistry } from './lifecycle.js'
+import { createAuthStore } from './auth.js'
+import { createDesktopApi } from './api.js'
 
 function mockClient(partial: Partial<OneirodexClient>): OneirodexClient {
   return partial as OneirodexClient
@@ -141,6 +143,32 @@ describe('shapeInvalidConnectionResult', () => {
 })
 
 describe('fetchLibraryPreview', () => {
+  it('accepts the real search endpoint array and follows empty-query fallbacks', async () => {
+    const queries: string[] = []
+    const api = createDesktopApi(
+      createAuthStore({ baseUrl: 'https://fixture.example', token: 'gt_abcd1234_synthetic' }),
+      async (input) => {
+        const query = new URL(String(input)).searchParams.get('query') ?? ''
+        queries.push(query)
+        return Response.json(query === 'a' ? [{ uuid: 'game-a', name: 'Shared game' }] : [])
+      },
+    )
+    await expect(fetchLibraryPreview(api, 12, true)).resolves.toEqual([
+      { uuid: 'game-a', name: 'Shared game' },
+    ])
+    expect(queries).toEqual(['', '*', 'a'])
+  })
+
+  it.each([null, {}, { results: 'invalid' }])(
+    'rejects malformed strict search response %j as protocol failure',
+    async (body) => {
+      const api = createDesktopApi(
+        createAuthStore({ baseUrl: 'https://fixture.example', token: 'gt_abcd1234_synthetic' }),
+        async () => Response.json(body),
+      )
+      await expect(fetchLibraryPreview(api, 12, true)).rejects.toMatchObject({ cause: 'protocol' })
+    },
+  )
   it('returns search results from games array', async () => {
     const client = mockClient({
       browse: {

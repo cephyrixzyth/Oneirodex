@@ -124,5 +124,12 @@ class ConnectedServerContracts(unittest.TestCase):
         self.assertEqual(server.collection_list_projection(200,b'[]')['root_array'],True)
         self.assertFalse(server.collection_list_projection(500,b'not-json PRIVATE')['collections_array'])
 
+    def test_search_projection_retains_only_fixed_shapes_and_synthetic_visibility(self):
+        value=server.search_list_projection(200,b'[{"name":"Synthetic CI Shared Game","PRIVATE":"PRIVATE"}]')
+        self.assertEqual(value,{'http_status':200,'root_array':True,'results_array':False,'games_array':False,
+                                'item_count':1,'shared_visible':True,'private_visible':False})
+        self.assertNotIn('PRIVATE',repr(value))
+        self.assertFalse(server.search_list_projection(500,b'PRIVATE')['root_array'])
+
 
 if __name__=='__main__':unittest.main()

@@ -1885,7 +1885,7 @@ def test_theme_font_stylesheet_is_native_and_preserves_css_contract(monkeypatch,
     assert get_response.status_code == 200
     assert get_response.headers['content-type'] == 'text/css; charset=utf-8'
     assert get_response.headers['cache-control'] == 'private, max-age=60'
-    assert get_response.headers['vary'] == 'Cookie'
+    assert {token.strip().lower() for token in get_response.headers['vary'].split(',')} == {'cookie', 'origin'}
     assert "font-family: 'Cabinet-Test'" in get_response.text
     assert '/static/library/fonts/Cabinet-Test.woff2' in get_response.text
     assert '--od-font-family: "Cabinet-Test", sans-serif' in get_response.text
@@ -1925,11 +1925,11 @@ def test_credentialed_theme_font_request_uses_native_user_preference(monkeypatch
     response, override = asyncio.run(run())
     assert response.status_code == 200
     assert response.headers['cache-control'] == 'private, max-age=60'
-    assert response.headers['vary'] == 'Cookie'
+    assert {token.strip().lower() for token in response.headers['vary'].split(',')} == {'cookie', 'origin'}
     assert '"VT323", "Courier New", monospace' in response.text
     assert '"Orbitron", "Arial Black", sans-serif' in override.text
     assert override.headers['cache-control'] == 'private, max-age=60'
-    assert override.headers['vary'] == 'Cookie'
+    assert {token.strip().lower() for token in override.headers['vary'].split(',')} == {'cookie', 'origin'}
 
 
 def test_member_auth_runtime_bootstrap_is_native_with_flask_session_compat(monkeypatch, tmp_path):
@@ -1965,7 +1965,7 @@ def test_member_auth_runtime_bootstrap_is_native_with_flask_session_compat(monke
     assert response.json()['runtime'] == 'fastapi-session-compat'
     assert response.json()['oidc_display_name'] == 'Household SSO'
     assert response.headers['cache-control'] == 'no-store'
-    assert response.headers['vary'] == 'Cookie'
+    assert {token.strip().lower() for token in response.headers['vary'].split(',')} == {'cookie', 'origin'}
     assert response.headers['content-security-policy']
     assert head.status_code == 200 and head.content == b''
     cookie = response.cookies.get('session')
@@ -2047,7 +2047,7 @@ def test_credential_free_confirmation_page_is_native_and_exactly_matched(monkeyp
     assert get_response.status_code == 200
     assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
     assert get_response.headers['cache-control'] == 'no-store'
-    assert get_response.headers['vary'] == 'Cookie'
+    assert {token.strip().lower() for token in get_response.headers['vary'].split(',')} == {'cookie', 'origin'}
     assert 'id="member-auth-root"' in get_response.text
     assert head_response.status_code == 200
     assert head_response.content == b''
@@ -2083,7 +2083,7 @@ def test_credential_free_auth_pages_are_native_and_use_validated_shell(monkeypat
     get_response, head_response, reset_response = asyncio.run(run())
     assert get_response.status_code == 200
     assert get_response.headers['cache-control'] == 'no-store'
-    assert get_response.headers['vary'] == 'Cookie'
+    assert {token.strip().lower() for token in get_response.headers['vary'].split(',')} == {'cookie', 'origin'}
     assert 'id="member-auth-root"' in get_response.text
     assert head_response.status_code == 200
     assert head_response.content == b''

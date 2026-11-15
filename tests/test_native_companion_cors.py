@@ -72,6 +72,7 @@ class CompanionCORSContracts(unittest.TestCase):
             events,calls,headers=self.exchange(origin)
             self.assertEqual(len(calls),1);self.assertEqual(events[0]['status'],200)
             self.assertNotIn(b'access-control-allow-origin',headers)
+            self.assertEqual(set(headers[b'vary'].decode().lower().split(', ')),{'cookie','origin'})
 
     def test_lifespan_and_websocket_pass_through(self):
         for kind in ('lifespan','websocket'):

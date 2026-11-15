@@ -13,6 +13,9 @@ STATE_SCRIPT = '''return (() => {
   const summary = document.querySelector('#auth-summary')?.textContent || '';
   const status = document.querySelector('#status')?.textContent || '';
   const titles = document.querySelector('#library')?.textContent || '';
+  const requested = path => (performance.getEntriesByType?.('resource') || []).some(entry => {
+    try { return new URL(entry.name).pathname === path; } catch { return false; }
+  });
   return {ready: status === 'Enter credentials and click Connect.',
     online: /\\bOnline\\b/.test(summary), denied: summary.includes('Server access denied'),
     network_error: /network|cors|tls/i.test(status), keyring_error: /keyring|credential store|secure.store/i.test(status),
@@ -20,11 +23,13 @@ STATE_SCRIPT = '''return (() => {
     redirect_error: status.includes('Server API redirect refused'),
     permission_error: status.includes('Companion permission error'),
     connecting: status === 'Connecting…',
+    identity_requested: requested('/api/client/identity'), search_requested: requested('/api/search'),
     shared_visible: titles.includes('Synthetic CI Shared Game'),
     private_visible: titles.includes('Synthetic CI Adult Private Game')};
 })();'''
 STATE_FIELDS = ('ready','online','denied','network_error','keyring_error','protocol_error',
-                'redirect_error','permission_error','connecting','shared_visible','private_visible')
+                'redirect_error','permission_error','connecting','identity_requested','search_requested',
+                'shared_visible','private_visible')
 
 
 def mark(progress,label):

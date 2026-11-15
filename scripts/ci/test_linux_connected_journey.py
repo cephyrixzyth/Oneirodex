@@ -47,6 +47,17 @@ class ConnectedJourneyContracts(unittest.TestCase):
         self.assertTrue(report['failed_ui_snapshot']['protocol_error'])
         self.assertNotIn('PRIVATE',repr(report))
 
+    def test_failure_retains_fixed_request_stage_booleans_without_resource_urls(self):
+        native=mock.Mock();native.execute_js.side_effect=[None,{'identity_requested':True,'search_requested':True,'PRIVATE':'PRIVATE'}]
+        def once(check,seconds,code):
+            if not check():raise ProbeFailure(code)
+        report={}
+        with mock.patch.object(journey,'wait_for',side_effect=once):
+            with self.assertRaises(ProbeFailure):journey.connect(native,'http://127.0.0.1:123','PRIVATE','online',report,'valid')
+        self.assertTrue(report['failed_ui_snapshot']['identity_requested'])
+        self.assertTrue(report['failed_ui_snapshot']['search_requested'])
+        self.assertNotIn('PRIVATE',repr(report))
+
     def test_backend_cleanup_failure_cannot_leave_extended_acceptance_true(self):
         fixture=mock.Mock();fixture.close.side_effect=ProbeFailure('backend_cleanup_failed')
         def completed(deb,work,report,**kwargs):report['installed_runtime_acceptance']=True

@@ -100,6 +100,11 @@ jobs:
         # suite so transaction regressions fail quickly and with a focused log.
         run: python -m pytest tests/test_store_connections.py -q
 
+      - name: Verify native CORS preserves private cookie cache variation
+        run: >-
+          python -m pytest tests/test_asgi_native_pilot_dispatch.py -q
+          -k 'theme_font_stylesheet_is_native or credentialed_theme_font_request or member_auth_runtime_bootstrap_is_native or credential_free_confirmation_page or credential_free_auth_pages'
+
       # UID-018 ratchet. The envelope helper landed with two files migrated and
       # the problem then grew from ~699 call sites to 1194 — new routes reached
       # for the old shapes faster than old ones were converted. Same model as

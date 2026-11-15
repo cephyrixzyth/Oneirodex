@@ -86,11 +86,13 @@ export interface SearchResultItem {
   [key: string]: unknown
 }
 
-export interface SearchResponse {
+export interface SearchResultEnvelope {
   results?: SearchResultItem[]
   games?: SearchResultItem[]
   [key: string]: unknown
 }
+
+export type SearchResponse = SearchResultItem[] | SearchResultEnvelope
 
 export interface CollectionSummary {
   id: number
