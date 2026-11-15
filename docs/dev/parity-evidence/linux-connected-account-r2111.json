@@ -69,10 +69,53 @@
     "https://manpages.debian.org/bookworm/gnome-keyring/gnome-keyring-daemon.1.en.html",
     "https://v2.tauri.app/develop/tests/webdriver/manual-setup/"
   ],
-  "native_retry": "pending same pinned Linux package-only mode with explicit --connected; CORS/provider/role/startup compatibility remains unknown.",
+  "native_retry": "R2111 terminal failure before app/package execution: wrong-token identity control expected401. Actual numeric failing response was omitted; do not assert its value from this run. Production endpoint source preserves unauthenticated302. R2112 corrects the harness expectation to302, records numeric controls before assertions and adds two RED-to-GREEN contracts. Real UI/CORS/provider/account behavior remains pending.",
   "installed_runtime_acceptance": false,
   "acceptance_scope": "Linux real-server connected account/credential journey; R2108 historical cold success remains separate.",
   "overall_goal": "active and incomplete",
   "limits": "Local contracts are pure/fake and do not qualify actual provider/server/UI behavior. Provider survival across app closure does not prove reboot/provider-restart durability. Real installed-game/offline Play/Reveal/denied-shelf/wrapper/exit/exact-launch recovery, physical/platform/AT/operator/parity/final review/release remain open. Windows namespace prerequisite unchanged. No product CORS defect/fix claimed from static searches alone.",
-  "capture": "Skipped: no local app/server/native resources or UI changes; actual connected execution only on disposable CI."
+  "capture": "Skipped: no local app/server/native resources or UI changes; actual connected execution only on disposable CI.",
+  "native_run_r2111": {
+    "run": 43688575127,
+    "job": 132734161156,
+    "harness_commit": "afb295ffe48dca04c9fa0f77f1653b0d65519405",
+    "raw_log_sha256": "68bc0ac8857203b5b1cba3a38b41e917c68e0a2a20e9cb182fa8103ed6ee00c9",
+    "receipt": {
+      "observed_utc": "2026-11-15T07:10:24.672479+00:00",
+      "status": "failed",
+      "mode": "remote-companion",
+      "installed_runtime_acceptance": false,
+      "acceptance_scope": "linux_connected_accounts_and_credentials",
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097566864,
+      "archive_sha256": "933c7bdae0ba086fa3bdbf6facad07c512402133fe8cdf2791d515ccb3289994",
+      "deb_sha256": "66859e1d50e083bbe83c6a16e1b1ad65d5a75dd85d5d9d4af34948a071965f75",
+      "source_and_digest_verified": true,
+      "backend_source_commit": "afb295ffe48dca04c9fa0f77f1653b0d65519405",
+      "phase": "linux_backend_seed",
+      "backend_launcher": "startweb.sh",
+      "backend_listener_owned": true,
+      "backend_alembic_head": "a4b5c6d7e8f9",
+      "postgres_version_num": "160016",
+      "backend_cleanup_verified": true,
+      "selected_backend_log": {
+        "prefix_bytes": 12407,
+        "truncated": false,
+        "prefix_sha256": "4d6ef72cc9a5b74c3a81da8d79b0523128cb909c5ffd27d056e53c98bd883de0",
+        "matched_categories": [
+          "migration"
+        ]
+      },
+      "code": "linux_backend_bearer_control_failed_wrong"
+    }
+  },
+  "r2112_followup": {
+    "classification": "Confirmed harness assumption/diagnostic defect fixed; no product authentication change.",
+    "linux_methods_passed": 35,
+    "source_sha256_git_normalized": {
+      "scripts/ci/linux_connected_server.py": "1ce902332ad7b5b36e18ad382cec4ef32760a649f5ec6faf0c4a28ac3d36ea95",
+      "scripts/ci/test_linux_connected_server.py": "5238554606342a4fd771906581b548b257dbb01593c0cf3770c8cdfc6627cdf2"
+    }
+  }
 }

@@ -92,5 +92,30 @@ class ConnectedServerContracts(unittest.TestCase):
         self.assertEqual(api.progress['backend_internal_failure'],{'action':'seed','error_class':'OperationalError'})
         self.assertNotIn('PRIVATE',repr(api.progress))
 
+    def test_seed_controls_observe_legacy_identity_redirect_without_following_it(self):
+        api=server.NativeServerAPI.__new__(server.NativeServerAPI)
+        api.progress={};api.base_url='http://127.0.0.1:6121'
+        tokens={label:'PRIVATE-'+label for label in ('adult','child','wrong','limited')}
+        data={'tokens':tokens,'ids':{},'alembic_head':'fixture-head','postgres_version_num':'160016'}
+        def response(path,token=None,**kwargs):
+            if kwargs.get('method')=='OPTIONS':return 200,b'',{}
+            status=302 if token==tokens['wrong'] else 403 if token==tokens['limited'] else 200
+            return status,b'',{'Location':'/login?next=%2Fapi%2Fclient%2Fidentity'} if status==302 else {}
+        with mock.patch.object(api,'internal',return_value=data),mock.patch.object(api,'http',side_effect=response):
+            api.seed('fixture')
+        self.assertEqual(api.progress['backend_bearer_http_controls'],{'adult':200,'child':200,'wrong':302,'limited':403})
+        self.assertEqual(api.progress['native_origin_preflight'],{'http_status':200,'origin_allowed':False})
+        self.assertNotIn('PRIVATE',repr(api.progress))
+
+    def test_seed_control_failure_keeps_numeric_observation_and_never_accepts_wrong_token(self):
+        api=server.NativeServerAPI.__new__(server.NativeServerAPI)
+        api.progress={};api.base_url='http://127.0.0.1:6121'
+        data={'tokens':dict.fromkeys(('adult','child','wrong','limited'),'PRIVATE'),
+              'ids':{},'alembic_head':'fixture-head','postgres_version_num':'160016'}
+        with mock.patch.object(api,'internal',return_value=data),mock.patch.object(api,'http',return_value=(200,b'',{})):
+            with self.assertRaisesRegex(ProbeFailure,'control_failed_wrong'):api.seed('fixture')
+        self.assertEqual(api.progress['backend_bearer_http_controls']['wrong'],200)
+        self.assertNotIn('PRIVATE',repr(api.progress))
+
 
 if __name__=='__main__':unittest.main()
