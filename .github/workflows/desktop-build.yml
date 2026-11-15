@@ -415,7 +415,7 @@ jobs:
         shell: pwsh
         run: |
           $fixtureRoot = Join-Path $env:RUNNER_TEMP ('oneirodex-standard-user-fixture-' + $env:GITHUB_RUN_ID)
-          $fixtureOutput = & python scripts/ci/probe_windows_user_fixture.py --execute --work-dir $fixtureRoot
+          $fixtureOutput = & python scripts/ci/probe_windows_user_fixture.py --execute --gui-prerequisites --work-dir $fixtureRoot
           $fixtureExit = $LASTEXITCODE
           $fixtureOutput | Out-File -LiteralPath (Join-Path $env:RUNNER_TEMP 'oneirodex-standard-user-fixture-status.json') -Encoding utf8
           Write-Output $fixtureOutput

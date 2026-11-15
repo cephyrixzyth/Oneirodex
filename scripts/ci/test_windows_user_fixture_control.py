@@ -87,6 +87,31 @@ class FixtureControlTests(unittest.TestCase):
         self.assertFalse(progress['native_fixture_qualified'])
         self.assertTrue(context.closed)
 
+    def test_gui_prerequisite_failure_keeps_observation_and_cleans_account_and_marker(self):
+        context = FakeContext(self.profile)
+        progress = {}
+        observation = {'owned_prerequisites_passed': False,
+                       'message_window': {'succeeded': False, 'win32_error': 5}}
+        with mock.patch.object(control, 'observe_gui_prerequisites', return_value=observation) as observer:
+            with self.assertRaisesRegex(fixture.FixtureFailure, 'gui_owned_prerequisite_failed'):
+                control.run_control(Path(self.tmp.name) / 'work', progress,
+                                    factory=lambda path: context, gui_prerequisites=True)
+        observer.assert_called_once_with(context)
+        self.assertEqual(progress['gui_prerequisites'], observation)
+        self.assertTrue(progress['cleanup_verified'])
+        self.assertTrue(progress['owned_marker_removed'])
+        self.assertFalse(progress['native_fixture_qualified'])
+        self.assertFalse(list(self.profile.iterdir()))
+
+    def test_cli_explicit_gui_selection_reaches_control_only_after_ci_fence(self):
+        with mock.patch.object(control, 'require_fixture_ci') as fence, \
+             mock.patch.object(control, 'run_control') as run, \
+             contextlib.redirect_stdout(io.StringIO()):
+            code = control.main(['--execute', '--gui-prerequisites', '--work-dir', 'never-created'])
+        self.assertEqual(code, 0)
+        fence.assert_called_once()
+        self.assertTrue(run.call_args.kwargs['gui_prerequisites'])
+
     def test_body_failure_survives_cleanup_failure_and_both_are_visible(self):
         context = FakeContext(self.profile, fail=True)
         progress = {}

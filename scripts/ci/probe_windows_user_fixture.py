@@ -4,13 +4,66 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
+import stat
 import sys
 import uuid
 
 from windows_user_fixture import FixtureFailure, StandardUserFixture, require_fixture_ci, safe_fixture_diagnostic
 
 
-def run_control(work, progress, factory=None):
+def observe_gui_prerequisites(context):
+    """Run a small checked child; publish a bounded fixed-schema projection only."""
+    if not all(context.receipt.get(key) is True for key in (
+            'standard_user_verified', 'profile_environment_verified', 'private_desktop_created')):
+        raise FixtureFailure('fixture_gui_prerequisite_not_verified')
+    work = context.work
+    helper, output = work / 'gui-prerequisites.py', work / 'gui-prerequisites.json'
+    with helper.open('xb') as target:
+        target.write(Path(__file__).with_name('windows_gui_prerequisites.py').read_bytes())
+    child = context.start(Path(sys.executable).resolve(strict=True), context.environment,
+                          [str(helper), '--output', str(output)])
+    child_error = None
+    try:
+        status = child.wait(30)
+        if status != 0:
+            raise FixtureFailure('fixture_gui_helper_exit_' + str(status & 0xFFFFFFFF))
+    except BaseException as error:
+        child_error = error
+        raise
+    finally:
+        try:
+            child.close()
+        except Exception:
+            if child_error is None:
+                raise
+            child_error.add_note('fixture_gui_child_cleanup_failed')
+    try:
+        metadata = output.lstat()
+        if (not stat.S_ISREG(metadata.st_mode) or getattr(metadata, 'st_file_attributes', 0) & 0x400
+                or metadata.st_size > 8192):
+            raise ValueError('invalid receipt file')
+        with output.open('rb') as source:
+            data = source.read(8193)
+        if len(data) > 8192:
+            raise ValueError('receipt too large')
+        raw = json.loads(data)
+        if type(raw.get('schema_version')) is not int or raw['schema_version'] != 1:
+            raise ValueError('unknown schema')
+        selected = {'schema_version': 1}
+        for key in ('own_mutex', 'browser_mutex_open', 'message_window', 'lock_file'):
+            value = raw[key]
+            if (type(value.get('succeeded')) is not bool or type(value.get('win32_error')) is not int
+                    or not 0 <= value['win32_error'] <= 0xFFFFFFFF):
+                raise ValueError('invalid observation')
+            selected[key] = {field: value[field] for field in ('succeeded', 'win32_error')}
+        selected['owned_prerequisites_passed'] = all(selected[key]['succeeded'] for key in (
+            'own_mutex', 'message_window', 'lock_file'))
+        return selected
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        raise FixtureFailure('fixture_gui_receipt_invalid') from None
+
+
+def run_control(work, progress, factory=None, gui_prerequisites=False):
     progress.update(native_fixture_qualified=False, installed_runtime_acceptance=False,
                     cleanup_verified=False, phase='fixture_provisioning')
     context = (factory or StandardUserFixture.open)(work)
@@ -51,6 +104,12 @@ def run_control(work, progress, factory=None):
                   or not marker.is_file() or marker.read_bytes() != content):
                 raise FixtureFailure('fixture_control_profile_marker_changed')
         progress['owned_profile_marker_retained_between_cli_rounds'] = True
+        if gui_prerequisites:
+            progress['phase'] = 'gui_prerequisite_observation'
+            observation = observe_gui_prerequisites(context)
+            progress['gui_prerequisites'] = observation
+            if not observation['owned_prerequisites_passed']:
+                raise FixtureFailure('fixture_gui_owned_prerequisite_failed')
     except BaseException as error:
         body_error = error
         raise
@@ -88,6 +147,7 @@ def run_control(work, progress, factory=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--gui-prerequisites', action='store_true')
     parser.add_argument('--work-dir', type=Path, required=True)
     args = parser.parse_args(argv)
     receipt = {'observed_utc': datetime.now(timezone.utc).isoformat(), 'status': 'failed',
@@ -96,7 +156,7 @@ def main(argv=None):
         require_fixture_ci()
         if not args.execute:
             raise FixtureFailure('fixture_execution_not_requested')
-        run_control(args.work_dir, receipt)
+        run_control(args.work_dir, receipt, gui_prerequisites=args.gui_prerequisites)
         receipt['status'] = 'fixture-qualified'
         code = 0
     except FixtureFailure as error:

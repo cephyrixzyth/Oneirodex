@@ -1,0 +1,63 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2104",
+  "observed_utc": "2026-11-15T05:23:16.818906+00:00",
+  "base_commit": "633d9bbe01da4a1f6d0228b9ab56349a75b51189",
+  "classification": "Bounded native fixture prerequisites prepared and locally verified; actual Windows observations pending.",
+  "preceding_evidence": {
+    "report": "windows-webview-log-format-r2103.json",
+    "native_run": 43679710933,
+    "harness_source": "4f304ad69db1194d693818133fee31991462120d",
+    "result": "All79 guards passed, header parser verified, ordinary-account install/uninstall/cleanup passed; browser endpoint still failed. Cause unknown."
+  },
+  "change": "Add an explicitly selected standard-account helper in fixture-only CI. Observe own invisible message-only window create/destroy, random unacquired mutex create/close and fresh lock-file create/delete-on-close. Open/close only the documented upstream browser mutex with the same requested access as CreateMutex; absence/denial is an observation and not proof this WebView version uses it. No foreign create/acquire/release/ACL mutation.",
+  "privacy_and_boundaries": [
+    "CI fence before fixture creation; existing checked suspended account/SID/nonadmin/medium/profile and clean environment before helper resume",
+    "Child helper additionally refuses non-Windows or nonfixture username/output naming before native or file calls",
+    "Bound result to8192bytes, reject reparse/nonregular receipt, validate exact bool/integer fields and project fixed schema; recalculate owned gate rather than trust child aggregate",
+    "Checked child reap and fixture account/profile/desktop cleanup remain mandatory; primary child failure survives close failure",
+    "No app/package/client download/build/release in fixture-only mode; no local native GUI/account/mutex/installer execution"
+  ],
+  "verification": {
+    "red": "Five missing-helper contract cases failed before implementation.",
+    "local_methods_loaded": 89,
+    "local_methods_passed": 87,
+    "native_only_skipped": 2,
+    "fixture_methods_selected_in_ci": 37,
+    "workflow_truth_table_contexts": 15,
+    "pyflakes": "passed",
+    "cases": [
+      "fixed private-data-free observations",
+      "owned failure preserves subsequent checks",
+      "foreign denied observation does not imply owned failure",
+      "local helper refusal before native/file access",
+      "verified fixture before helper and retained primary/cleanup failure",
+      "bounded receipt projection rejects oversize",
+      "foreign OpenMutex request uses upstream access mask with no create/wait/release",
+      "random own mutex collision rejected and handle closed",
+      "message-only window destroy failure rejected",
+      "fresh file CREATE_NEW/delete-on-close policy",
+      "GUI failure cleans account/marker",
+      "explicit CLI option wiring after CI fence"
+    ]
+  },
+  "primary_sources": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createwindowexw",
+    "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-openmutexw",
+    "https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createmutexw",
+    "https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew",
+    "https://chromium.googlesource.com/chromium/src/+/refs/heads/main/chrome/browser/process_singleton_win.cc"
+  ],
+  "source_sha256_git_normalized": {
+    "scripts/ci/windows_gui_prerequisites.py": "2a47f045e719bf098eb18af0b98d3277a8dec27500073631a421a223a13527c4",
+    "scripts/ci/probe_windows_user_fixture.py": "02738b9d2799394a506763addd93a3e86a8d6157f12e76801630493780592343",
+    "scripts/ci/test_windows_user_fixture_gui.py": "a5f34c73de4b6e37316890a64f9d5c87bca9b26b580223711ee6be955b449e7b",
+    "scripts/ci/test_windows_user_fixture_control.py": "d776e5fa14f3b747ada3c3f28ddf4b1899dab401b2e2beb1a83c93da82a7d3a3",
+    ".github/workflows/desktop-build.yml": "37e4bd8912f07ac2ef0d8213fb2348dd87e91b88a80ca79db9bcdfb67285e93f"
+  },
+  "native_retry": "pending fixture-only mode; no new app retry scheduled",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Pure/fake local checks do not prove actual Win32 behavior. Even successful native prerequisites cannot qualify WebView, bundled UI/native IPC/reopen/AT/accounts/games/platform/parity. Do not change browser security, timeout, pinned package or existing desktop ACL from generic diagnostic terms.",
+  "capture": "Skipped: native helper tests use fake APIs locally; genuine observation permitted only on disposable CI."
+}
