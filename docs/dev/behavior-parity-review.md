@@ -10,6 +10,8 @@ Work in risk-ranked route-family batches. Reuse evidence only when exact image i
 
 ## Current evidence status - 2026-11-14
 
+[R2098](parity-evidence/windows-fixture-guard-scope-r2098.json) separates fixture-only preflight from unrelated observer experiments. R2097 stopped before provisioning when a duplicate reference query missed an event, although the current query received both expected exits. Fixture mode now runs its 23 relevant checks; package mode retains all Windows guards. Fifteen workflow contexts pass. Provisioning cause and native qualification remain pending; the reference-query uncertainty is retained.
+
 [R2097](parity-evidence/windows-standard-user-provisioning-r2097.json) fixes an evidence omission after R2096 passed all 60 native guard methods but failed during account provisioning. The original receipt lacks the OS error and abort-cleanup result; neither is inferred. The next control reports only fixed stage/category and numeric HRESULT. Local checks pass 60 methods with two native methods skipped. No app, installer, client download, build or release ran in the fixture-only attempt.
 
 [R2096](parity-evidence/windows-standard-user-control-r2096.json) prepares an explicit fixture-only Windows CI run with no app installation/build/release. It requires two known CLI exits, OS-profile continuity and owned cleanup; a controller-written marker is only fixture data. Local checks pass 58 methods with two native methods skipped, 15 workflow contexts and nine actual nonmutating selection guards. Native fixture qualification failed at account provisioning; installed-app acceptance remains pending.

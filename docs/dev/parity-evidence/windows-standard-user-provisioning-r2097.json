@@ -40,10 +40,141 @@
     "scripts/ci/probe_windows_user_fixture.py": "587abf6c073c8a53e2cde1e37d9f895b6f5395e5338e108f3482b53463f3aaf9",
     "scripts/ci/test_windows_user_fixture_control.py": "45d4538f57aa1137defda00684c57e40b5b7844e3e00681663c1e36b73fa0ea4"
   },
-  "native_retry": "pending same explicit fixture-only mode; no app/package selected",
+  "native_retry": "terminal unrelated observer comparison failure before fixture control; no provisioning diagnostic outcome",
   "native_fixture_qualified": false,
   "installed_runtime_acceptance": false,
   "overall_goal": "active and incomplete",
   "limits": "R2096 cannot establish the actual provisioning error or actual abort-cleanup outcome. Native fixture execution and installed account/game/UI/IPC remain open.",
-  "capture": "Skipped: CI-only diagnostics; no local account/desktop/app mutation."
+  "capture": "Skipped: CI-only diagnostics; no local account/desktop/app mutation.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43661472425",
+    "job_id": 132651532619,
+    "harness_source": "597ac8b6cd8bbdd1a80b68fb7411135dbbb3a1eb",
+    "raw_log_sha256": "ae43174a40ef239c991481105376b3a670279220625933ec796956c1a9a87fd8",
+    "ci_guard_methods_loaded": 62,
+    "ci_guard_passed": 61,
+    "ci_guard_failed": 1,
+    "ci_guard_elapsed_seconds": 22.256,
+    "fixture_executed": false,
+    "failed_method": "test_native_stop_delivery_for_short_and_long_lived_fixture_names",
+    "provider_control": {
+      "sources": {
+        "start_current": {
+          "exception_events": 0,
+          "short": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [],
+            "name_lengths": [
+              10
+            ]
+          },
+          "truncated": false,
+          "long": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [],
+            "name_lengths": [
+              27
+            ]
+          },
+          "query_hresult_codes": []
+        },
+        "stop_default": {
+          "exception_events": 0,
+          "short": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000025"
+            ],
+            "name_lengths": [
+              10
+            ]
+          },
+          "truncated": false,
+          "long": {
+            "exit_codes": [],
+            "exact": 0,
+            "other": 0,
+            "empty": 0,
+            "count": 0,
+            "prefix": 0
+          },
+          "query_hresult_codes": []
+        },
+        "stop_current": {
+          "exception_events": 0,
+          "short": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000025"
+            ],
+            "name_lengths": [
+              10
+            ]
+          },
+          "truncated": false,
+          "long": {
+            "count": 1,
+            "prefix": 1,
+            "other": 0,
+            "exact": 0,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000026"
+            ],
+            "name_lengths": [
+              14
+            ]
+          },
+          "query_hresult_codes": []
+        },
+        "stop_unfiltered": {
+          "exception_events": 0,
+          "short": {
+            "exit_codes": [],
+            "exact": 0,
+            "other": 0,
+            "empty": 0,
+            "count": 0,
+            "prefix": 0
+          },
+          "truncated": false,
+          "long": {
+            "count": 1,
+            "prefix": 1,
+            "other": 0,
+            "exact": 0,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000026"
+            ],
+            "name_lengths": [
+              14
+            ]
+          },
+          "query_hresult_codes": []
+        }
+      },
+      "error": "none",
+      "fixture_exits": {
+        "long": 38,
+        "short": 37
+      }
+    }
+  }
 }

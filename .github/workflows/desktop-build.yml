@@ -403,7 +403,12 @@ jobs:
           }
 
       - name: Probe guard contracts
+        if: inputs.packaged_smoke_only == true
         run: python -m unittest discover -s scripts/ci -p 'test_windows_*.py'
+
+      - name: Standard-user fixture guard contracts
+        if: inputs.windows_user_fixture_only == true
+        run: python -m unittest discover -s scripts/ci -p 'test_windows_user_fixture*.py'
 
       - name: Qualify the disposable standard-user fixture without an app
         if: inputs.windows_user_fixture_only == true
