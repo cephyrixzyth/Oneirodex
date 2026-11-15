@@ -386,7 +386,7 @@ $currentTimeout=CURRENT_TIMEOUT
 $where=" WHERE ProcessName='SHORT_NAME' OR ProcessName='oneirodex-trace-control.exe'"
 $specs=@(
     @{label='start_current';class='Win32_ProcessStartTrace';suffix=$where;timeout=$currentTimeout;kind='start'},
-    @{label='stop_current';class='Win32_ProcessStopTrace';suffix=$where;timeout=$currentTimeout;kind='stop'},
+    @{label='stop_current';class='Win32_ProcessStopTrace';suffix=CURRENT_STOP_SUFFIX;timeout=$currentTimeout;kind='stop'},
     @{label='stop_default';class='Win32_ProcessStopTrace';suffix=$where;timeout=$null;kind='stop'},
     @{label='stop_unfiltered';class='Win32_ProcessStopTrace';suffix='';timeout=$null;kind='stop'})
 $result=@{error='none';fixture_exits=@{};sources=@{}}
@@ -434,6 +434,8 @@ try {
                         $summary=$result.sources[$spec.label][$item.label]
                         $summary.count++
                         $name=([string]$native.ProcessName).ToLowerInvariant()
+                        if(-not $summary.ContainsKey('name_lengths')){$summary.name_lengths=@()}
+                        $summary.name_lengths+=@([int]$name.Length)
                         if($name -eq $item.expected_name){$summary.exact++}
                         elseif(-not $name){$summary.empty++}
                         elseif($item.expected_name.StartsWith($name)){$summary.prefix++}
@@ -477,6 +479,7 @@ finally {
             self.assertRegex(short_name, r'^[a-z0-9_.-]{1,80}$')
             script = script.replace('SHORT_NAME', short_name)
             script = script.replace('CURRENT_TIMEOUT', str(probe.TRACE_OPERATION_TIMEOUT_SECONDS))
+            script = script.replace('CURRENT_STOP_SUFFIX', '$where' if probe.TRACE_STOP_FILTER_BY_NAME else "''")
             for key, value in [('NONCE_VALUE', 'provider-' + probe.uuid.uuid4().hex),
                                ('ORIGINAL_EXE', original), ('LONG_EXE', long_fixture),
                                ('PYTHON_HOME', sys.prefix)]:
@@ -494,8 +497,39 @@ finally {
         for label, status in [('short', '0x00000025'), ('long', '0x00000026')]:
             self.assertGreater(result['sources']['start_current'][label]['count'], 0, json.dumps(result))
             self.assertIn(status, result['sources']['stop_current'][label]['exit_codes'], json.dumps(result))
-            self.assertIn(status, result['sources']['stop_default'][label]['exit_codes'], json.dumps(result))
+            if label == 'short':
+                self.assertIn(status, result['sources']['stop_default'][label]['exit_codes'], json.dumps(result))
             self.assertIn(status, result['sources']['stop_unfiltered'][label]['exit_codes'], json.dumps(result))
+
+
+
+
+    def test_startup_trace_correlates_truncated_stop_name_only_to_a_live_start(self):
+        raw = {'status': 'complete', 'dropped': 0, 'events': [
+            {'kind': 'start', 'pid': 10, 'parent': 1, 'time_created': '100',
+             'name': 'oneirodex-desktop.exe'},
+            {'kind': 'start', 'pid': 11, 'parent': 10, 'time_created': '110',
+             'name': 'msedgewebview2.exe'},
+            {'kind': 'stop', 'pid': 11, 'parent': 10, 'time_created': '120',
+             'name': 'msedgewebview2.', 'exit_status': '0xc0000142'},
+            {'kind': 'stop', 'pid': 12, 'parent': 999, 'time_created': '130',
+             'name': 'PRIVATE-FOREIGN', 'exit_status': '0x00000000'}]}
+        result = probe.safe_startup_trace(raw, 10, 200)
+        self.assertEqual(len(result['parent_chain_events']), 3)
+        stop = result['parent_chain_events'][-1]
+        self.assertEqual(stop['name'], 'msedgewebview2.exe')
+        self.assertEqual(stop['stop_name_match'], 'truncated')
+        self.assertEqual(stop['exit_status'], '0xc0000142')
+        self.assertNotIn('PRIVATE', repr(result))
+
+    def test_startup_trace_subscription_errors_prevent_a_complete_capture_claim(self):
+        raw = {'status': 'complete', 'dropped': 0, 'events': [],
+               'subscription_errors': [{'kind': 'start', 'hresult': '0x80131500', 'message': 'PRIVATE'},
+                                       {'kind': 'foreign', 'hresult': 'PRIVATE'}]}
+        result = probe.safe_startup_trace(raw, 10, 200)
+        self.assertFalse(result['capture_complete'])
+        self.assertEqual(result['subscription_errors'], [{'kind': 'start', 'hresult': '0x80131500'}])
+        self.assertNotIn('PRIVATE', repr(result))
 
 
 

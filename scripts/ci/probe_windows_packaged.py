@@ -22,7 +22,8 @@ import zipfile
 
 REPOSITORY = 'cephyrixzyth/Oneirodex'
 MAX_ARCHIVE_BYTES = 32 * 1024 * 1024
-TRACE_OPERATION_TIMEOUT_SECONDS = 10
+TRACE_OPERATION_TIMEOUT_SECONDS = 0
+TRACE_STOP_FILTER_BY_NAME = False
 
 
 class ProbeFailure(RuntimeError):
@@ -535,20 +536,23 @@ $nativeInitialization=@{window_count=$windowCount;window_observation=$windowObse
 
 def safe_startup_trace(record, root_pid, cleanup_time):
     """Diagnostic lifecycles only; never adopt a numeric PID after its stop/reuse."""
-    raw_events = record.get('events', []) if isinstance(record, dict) else []
+    if not isinstance(record, dict):
+        record = {}
+    raw_events = record.get('events', [])
+    names = ('oneirodex-desktop.exe', 'msedgewebview2.exe')
     events = []
     for event in raw_events[:128] if isinstance(raw_events, list) else []:
         if not isinstance(event, dict):
             continue
-        name, stamp = event.get('name'), event.get('time_created')
-        if (name not in ('oneirodex-desktop.exe', 'msedgewebview2.exe')
-                or event.get('kind') not in ('start', 'stop')
+        name, stamp, kind = event.get('name'), event.get('time_created'), event.get('kind')
+        if (kind not in ('start', 'stop') or not isinstance(name, str)
+                or (kind == 'start' and name not in names)
                 or type(event.get('pid')) is not int or not 0 < event['pid'] <= 0xFFFFFFFF
                 or type(event.get('parent')) is not int or not 0 <= event['parent'] <= 0xFFFFFFFF
                 or not isinstance(stamp, str) or not re.fullmatch(r'[1-9][0-9]{0,19}', stamp)):
             continue
         selected = {key: event[key] for key in ('kind', 'pid', 'parent', 'name', 'time_created')}
-        if event['kind'] == 'stop':
+        if kind == 'stop':
             status = event.get('exit_status')
             selected['exit_status'] = status.lower() if isinstance(status, str) and re.fullmatch(
                 r'0x[0-9a-fA-F]{8}', status) else None
@@ -559,21 +563,40 @@ def safe_startup_trace(record, root_pid, cleanup_time):
     for event in sorted(events, key=lambda e: int(e['time_created'])):
         pid = event['pid']
         if event['kind'] == 'start':
-            active.pop(pid, None)  # New start invalidates the earlier lifetime.
+            active.pop(pid, None)
             related_now = ((pid == root_pid and event['name'] == 'oneirodex-desktop.exe')
                            or event['parent'] in active)
             if related_now:
                 active[pid] = (event['parent'], event['name'])
                 root_seen |= pid == root_pid
         else:
-            related_now = active.pop(pid, None) == (event['parent'], event['name'])
+            prior = active.pop(pid, None)
+            related_now = False
+            if prior and prior[0] == event['parent']:
+                actual, expected = event['name'].lower(), prior[1]
+                match = ('exact' if actual == expected else
+                         'truncated' if len(actual) == 15 and expected.startswith(actual) else None)
+                if match:
+                    event['name'], event['stop_name_match'] = expected, match
+                    related_now = True
+            # Never emit foreign/truncated names without the matching active start.
+            if not related_now and event['name'] not in names:
+                continue
         event['association'] = 'parent_chain_trace' if related_now else 'name_and_time_only'
         (related if related_now else unrelated).append(event)
+    raw_errors = record.get('subscription_errors', [])
+    errors = []
+    for error in raw_errors[:12] if isinstance(raw_errors, list) else []:
+        if (isinstance(error, dict) and error.get('kind') in ('start', 'stop')
+                and isinstance(error.get('hresult'), str)
+                and re.fullmatch(r'0x[0-9a-fA-F]{8}', error['hresult'])):
+            errors.append({'kind': error['kind'], 'hresult': error['hresult'].lower()})
     dropped = record.get('dropped', 0)
     return {'observation': record.get('status') if record.get('status') in ('complete', 'deadline', 'failed') else 'unknown',
-            'capture_complete': record.get('status') == 'complete' and type(dropped) is int and dropped == 0,
+            'capture_complete': record.get('status') == 'complete' and type(dropped) is int and dropped == 0 and not raw_errors,
             'root_start_seen': root_seen, 'parent_chain_events': related,
-            'unattributed_events': unrelated, 'dropped': dropped if type(dropped) is int and dropped >= 0 else None,
+            'unattributed_events': unrelated, 'subscription_errors': errors,
+            'dropped': dropped if type(dropped) is int and dropped >= 0 else None,
             'limits': 'Read-only name/parent/time diagnostics, not product launch identity. Completion describes local collection only; provider delivery is not exhaustive. Root stop after controller cleanup is intentional.'}
 
 
@@ -584,13 +607,14 @@ function Write-TraceStage([string]$value){[IO.File]::WriteAllText($stage,$value)
 Write-TraceStage 'script_started'
 $startId='oneirodex-start-'+$nonce;$stopId='oneirodex-stop-'+$nonce
 $records=New-Object System.Collections.Generic.List[object]
+$tracked=@{};$subscriptionErrors=@()
 $dropped=0;$status='complete';$watch=[Diagnostics.Stopwatch]::StartNew();$stopAt=$null
 try {
     $where=" WHERE ProcessName='oneirodex-desktop.exe' OR ProcessName='msedgewebview2.exe'"
     Write-TraceStage 'start_subscription'
     Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStartTrace'+$where) -SourceIdentifier $startId -OperationTimeoutSec TRACE_OPERATION_TIMEOUT | Out-Null
     Write-TraceStage 'stop_subscription'
-    Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStopTrace'+$where) -SourceIdentifier $stopId -OperationTimeoutSec TRACE_OPERATION_TIMEOUT | Out-Null
+    Register-CimIndicationEvent -Namespace root/cimv2 -Query ('SELECT * FROM Win32_ProcessStopTrace'+TRACE_STOP_WHERE) -SourceIdentifier $stopId -OperationTimeoutSec TRACE_OPERATION_TIMEOUT | Out-Null
     Write-TraceStage 'ready_file'
     [IO.File]::WriteAllText($ready,$nonce)
     Write-TraceStage 'collecting'
@@ -599,13 +623,26 @@ try {
             $sourceId=if($kind -eq 'start'){$startId}else{$stopId}
             foreach($entry in @(Get-Event -SourceIdentifier $sourceId -ErrorAction SilentlyContinue)) {
                 $native=$entry.SourceEventArgs.NewEvent
-                if($records.Count -lt 128) {
+                if($null -eq $native) {
+                    if($null -ne $entry.SourceEventArgs.Exception) {
+                        if($subscriptionErrors.Count -lt 12) {
+                            $subscriptionErrors+=@(@{kind=$kind;hresult=('0x{0:x8}' -f $entry.SourceEventArgs.Exception.HResult)})
+                        } else {$dropped++}
+                    } else {$dropped++}
+                    Remove-Event -EventIdentifier $entry.EventIdentifier
+                    continue
+                }
+                $eventPid=[int]$native.ProcessID
+                $eligible=$kind -eq 'start' -or $tracked.ContainsKey($eventPid)
+                if($kind -eq 'start'){$tracked[$eventPid]=$true}
+                if($eligible -and $records.Count -lt 128) {
                     $item=@{kind=$kind;pid=[int]$native.ProcessID;parent=[int]$native.ParentProcessID;
                         name=([string]$native.ProcessName).ToLowerInvariant();
                         time_created=([string]$native.TIME_CREATED)}
                     if($kind -eq 'stop'){$item.exit_status=('0x{0:x8}' -f [uint32]$native.ExitStatus)}
                     $records.Add($item)
-                } else {$dropped++}
+                } elseif($eligible) {$dropped++}
+                if($kind -eq 'stop'){$tracked.Remove($eventPid)}
                 Remove-Event -EventIdentifier $entry.EventIdentifier
             }
         }
@@ -623,7 +660,7 @@ finally {
         Unregister-Event -SourceIdentifier $sourceId -ErrorAction SilentlyContinue
         Remove-Event -SourceIdentifier $sourceId -ErrorAction SilentlyContinue
     }
-    $result=@{nonce=$nonce;status=$status;dropped=$dropped;events=@($records.ToArray())}
+    $result=@{nonce=$nonce;status=$status;dropped=$dropped;events=@($records.ToArray());subscription_errors=$subscriptionErrors}
     [IO.File]::WriteAllText($output,($result|ConvertTo-Json -Depth 5 -Compress))
 }
 '''
@@ -638,6 +675,7 @@ class _StartupProcessTrace:
         self.output = work / ('trace-output-' + self.nonce + '.json')
         self.stage = work / ('trace-stage-' + self.nonce)
         script = _STARTUP_TRACE_SCRIPT.replace('TRACE_OPERATION_TIMEOUT', str(TRACE_OPERATION_TIMEOUT_SECONDS))
+        script = script.replace('TRACE_STOP_WHERE', '$where' if TRACE_STOP_FILTER_BY_NAME else "''")
         for key, value in [('READY_FILE', self.ready), ('STOP_FILE', self.stop),
                            ('OUTPUT_FILE', self.output), ('NONCE_VALUE', self.nonce), ('STAGE_FILE', self.stage)]:
             script = script.replace(key, "'" + str(value).replace("'", "''") + "'")

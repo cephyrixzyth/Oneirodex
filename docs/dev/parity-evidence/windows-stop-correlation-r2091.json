@@ -1,0 +1,141 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2091",
+  "observed_utc": "2026-11-15T00:01:57.856320+00:00",
+  "base_commit": "632f6e0e77819d57a86aa6fcf76a41ecb56d1e5e",
+  "classification": "Confirmed CI observer stop-filter fix candidate; native verification pending.",
+  "preceding_native_red": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43655291514",
+    "job_id": 132632358582,
+    "harness_source": "632f6e0e77819d57a86aa6fcf76a41ecb56d1e5e",
+    "raw_log_sha256": "da7f7e4454dd8464d4958adc3a2bdbe04643cca22ea42e1bbd616b9ddef4168e",
+    "guard_methods_loaded": 33,
+    "guard_methods_passed": 32,
+    "native_provider_method_failed": 1,
+    "provider_control": {
+      "sources": {
+        "start_current": {
+          "exception_events": 1,
+          "short": {
+            "exit_codes": [],
+            "exact": 1,
+            "other": 0,
+            "empty": 0,
+            "count": 1,
+            "prefix": 0
+          },
+          "query_hresult_codes": [
+            "0x80131500"
+          ],
+          "truncated": false,
+          "long": {
+            "exit_codes": [],
+            "exact": 1,
+            "other": 0,
+            "empty": 0,
+            "count": 1,
+            "prefix": 0
+          }
+        },
+        "stop_default": {
+          "exception_events": 0,
+          "short": {
+            "exit_codes": [
+              "0x00000025"
+            ],
+            "exact": 1,
+            "other": 0,
+            "empty": 0,
+            "count": 1,
+            "prefix": 0
+          },
+          "truncated": false,
+          "long": {
+            "exit_codes": [],
+            "exact": 0,
+            "other": 0,
+            "empty": 0,
+            "count": 0,
+            "prefix": 0
+          },
+          "query_hresult_codes": []
+        },
+        "stop_current": {
+          "exception_events": 0,
+          "short": {
+            "exit_codes": [
+              "0x00000025"
+            ],
+            "exact": 1,
+            "other": 0,
+            "empty": 0,
+            "count": 1,
+            "prefix": 0
+          },
+          "truncated": false,
+          "long": {
+            "exit_codes": [],
+            "exact": 0,
+            "other": 0,
+            "empty": 0,
+            "count": 0,
+            "prefix": 0
+          },
+          "query_hresult_codes": []
+        },
+        "stop_unfiltered": {
+          "exception_events": 0,
+          "short": {
+            "exit_codes": [
+              "0x00000025"
+            ],
+            "exact": 1,
+            "other": 0,
+            "empty": 0,
+            "count": 1,
+            "prefix": 0
+          },
+          "truncated": false,
+          "long": {
+            "exit_codes": [
+              "0x00000026"
+            ],
+            "exact": 0,
+            "other": 0,
+            "empty": 0,
+            "count": 1,
+            "prefix": 1
+          },
+          "query_hresult_codes": []
+        }
+      },
+      "error": "none",
+      "fixture_exits": {
+        "long": 38,
+        "short": 37
+      }
+    },
+    "installer_or_app_executed": false
+  },
+  "change": "Subscribe to unfiltered stops but record only PIDs with previously observed target starts. Correlate a stop chronologically with the active start, matching parent and exact or15character-truncated name; normalize only to that known target name. Clear lifetime state on stop/reuse; discard foreign names. Keep explicit diagnostic-only identity limits. Use default server operation timeout0 and report bounded subscription HRESULTs, preventing completeness claims after any subscription error.",
+  "timeout_evidence": "The ten-second start subscription emitted one exception event; the short-name stop still arrived under ten seconds. This is not proof that all subscriptions expire after ten seconds. Default timeout avoids the observed short-operation error; actual streaming behavior still requires native verification. App/CDP60second and observer-ready20second bounds remain unchanged.",
+  "verification": {
+    "red": "Two new truncated-name/error-completeness tests fail before correction.",
+    "local_methods_loaded": 35,
+    "local_passed": 33,
+    "native_methods_skipped": 2,
+    "python_compile": "passed",
+    "pyflakes": "passed",
+    "powershell_ast": "Both observer and provider-control sources parsed without execution."
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "fb9c8ffeed09bcd41ca2d72cc6a296b93405dfec5245e2d182a0507e2c5d995d",
+    "scripts/ci/test_windows_packaged_probe.py": "d1009841925b34441c495140fd95617ba9e3b1d4c4c941141f3b98b841c86f44"
+  },
+  "ruling": "The native provider control now requires the corrected current stop policy and the unfiltered positive for both fixtures; default name-filtered query remains a positive only for the short name. The disproven long-name filtered case stays recorded as a diagnostic negative, not a required success. No app assertion is weakened.",
+  "runtime_retry": "pending exact-package workflow; provider control first",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "No product process-tracking identity change, package rebuild, registry/ACL/browser-security edit or local native-query/GUI/installer execution. Missing events are still not proof of absence. All original acceptance gates remain open.",
+  "capture": "Skipped: CI observer only."
+}
