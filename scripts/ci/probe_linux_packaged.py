@@ -15,10 +15,10 @@ import sys
 import zipfile
 
 REPOSITORY = 'cephyrixzyth/Oneirodex'
-SOURCE = 'ce8c35a6980891ef85c26cb64aa0d8a3ecc9e867'
-ARCHIVE_DIGEST = '7e253a922f9481715b399b217821822cb317dff13e83192a0ce0c8e33b4d1749'
-DEB_DIGEST = '94374bcad58a0475c432c5ca1cb6963cac2959a071f5456822bc19d69841e754'
-BINARY_DIGEST = 'a30d27b45cfb26c320c576a75e53abce97f237783369813c282684c2692535fd'
+SOURCE = 'dc8e0ddea9ef2e4b6ba3ba8a905021c5dc2674f3'
+ARCHIVE_DIGEST = '106d0dd61f7aa59f385fdca74272ff39725fb9f604ef6c23e2be2ab754561270'
+DEB_DIGEST = '6e1e8931752633323a8e28abaa8c17a5cdec2beda6c38c6857a24c1db284a297'
+BINARY_DIGEST = '8f74ca079fb7344910206c738b2e49729c92255c82ef439f81ff713a7f21db19'
 DEB_MEMBER = 'deb/Oneirodex_1.1.9_amd64.deb'
 MAX_ARCHIVE_BYTES = 128 * 1024 * 1024
 
@@ -39,7 +39,7 @@ def validate_selection(env):
     if (env.get('LINUX_PACKAGED_SMOKE_ONLY') != 'true'
             or any(env.get(key) == 'true' for key in ('PROBE_ONLY','PROBE_FAMILY',
                 'WINDOWS_PACKAGED_SMOKE_ONLY','WINDOWS_USER_FIXTURE_ONLY')) or env.get('RELEASE_TAG')
-            or env.get('PACKAGE_SOURCE_RUN') != '43747390211'
+            or env.get('PACKAGE_SOURCE_RUN') != '43803881137'
             or env.get('PACKAGE_SOURCE_COMMIT') != SOURCE or env.get('PACKAGE_ARCHIVE_DIGEST') != ARCHIVE_DIGEST):
         raise ProbeFailure('linux_package_selection_not_exclusive_or_pinned')
 
@@ -55,9 +55,9 @@ def validate_source(run, artifacts, expected_source, expected_digest):
     if len(candidates) != 1:
         raise ProbeFailure('linux_artifact_missing_or_ambiguous')
     artifact = candidates[0]
-    if not (type(artifact.get('id')) is int and artifact['id'] == 14173989223
+    if not (type(artifact.get('id')) is int and artifact['id'] == 14197603603
             and artifact.get('expired') is False and artifact.get('digest') == 'sha256:' + expected_digest
-            and type(artifact.get('size_in_bytes')) is int and artifact['size_in_bytes'] == 85645568):
+            and type(artifact.get('size_in_bytes')) is int and artifact['size_in_bytes'] == 85645912):
         raise ProbeFailure('linux_artifact_not_qualified')
     return artifact
 
@@ -70,7 +70,7 @@ def create_workspace(path, owned_root):
     return work
 
 
-def extract_deb(data, work, expected_digest=DEB_DIGEST, expected_size=3870386):
+def extract_deb(data, work, expected_digest=DEB_DIGEST, expected_size=3870350):
     if len(data) > MAX_ARCHIVE_BYTES:
         raise ProbeFailure('linux_archive_too_large')
     try:
@@ -117,7 +117,7 @@ def _gh_json(path):
 
 
 def retrieve_package(work, source_run, source_commit, archive_digest, progress):
-    if source_run != '43747390211':
+    if source_run != '43803881137':
         raise ProbeFailure('unexpected_linux_source_run')
     prefix = 'repos/' + REPOSITORY + '/actions/'
     run = _gh_json(prefix + 'runs/' + source_run)
