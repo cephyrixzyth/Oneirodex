@@ -38,12 +38,38 @@ if embedded_db_wanted; then
     embedded_db_defaults
 fi
 
+# Is the database credential actually in use the known legacy default?
+# $1 is POSTGRES_PASSWORD exactly as the operator supplied it (may be empty).
+# An external database reached only through DATABASE_URL carries its own
+# password, so this script's `postgres` fallback is not what connects and must
+# not be mistaken for the operator's choice. A URL that is empty, points at
+# loopback (it is rewritten to the Compose `db` service below) or has no
+# password still falls back to `postgres`.
+legacy_postgres_password_in_use() {
+    local supplied="$1"
+    if [[ -n "${supplied}" ]]; then
+        [[ "${supplied}" == "postgres" ]]
+        return
+    fi
+    if [[ -z "${DATABASE_URL}" \
+        || "${DATABASE_URL}" == *"@localhost"* \
+        || "${DATABASE_URL}" == *"@127.0.0.1"* \
+        || "${DATABASE_URL}" == *"@::1"* ]]; then
+        return 0
+    fi
+    if [[ ! "${DATABASE_URL}" =~ ://[^:/@]*:[^@]+@ ]]; then
+        return 0
+    fi
+    [[ "${DATABASE_URL}" =~ ://[^:/@]*:postgres@ ]]
+}
+
 # Inside Docker Compose, Postgres is the sibling service named "db".
 # Never wait on localhost/127.0.0.1 (common leftover from non-Docker .env files).
 if [[ "${EMBEDDED}" == "false" && -f /.dockerenv ]]; then
     export DATABASE_HOST="${DATABASE_HOST:-db}"
     export DATABASE_PORT="${DATABASE_PORT:-5432}"
     export POSTGRES_USER="${POSTGRES_USER:-postgres}"
+    SUPPLIED_POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
     export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
     export POSTGRES_DB="${POSTGRES_DB:-oneirodex}"
 
@@ -56,7 +82,7 @@ if [[ "${EMBEDDED}" == "false" && -f /.dockerenv ]]; then
         echo "   (e.g. openssl rand -hex 24) before the first start; see docs/runbooks/docker-compose-deploy.md."
         exit 1
     fi
-    if [[ "${POSTGRES_PASSWORD}" == "postgres" ]]; then
+    if legacy_postgres_password_in_use "${SUPPLIED_POSTGRES_PASSWORD}"; then
         if [[ "${ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD:-false}" != "true" ]]; then
             echo "❌ POSTGRES_PASSWORD is the legacy default 'postgres'. Set a unique password or explicitly enable legacy compatibility for an existing database volume."
             echo "   See docs/runbooks/docker-compose-deploy.md."

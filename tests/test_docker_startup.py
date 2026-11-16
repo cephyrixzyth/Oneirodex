@@ -91,6 +91,55 @@ def test_entrypoint_passes_database_settings_as_environment_not_python_source():
     assert "os.environ.get('POSTGRES_USER', '${DB_USER}')" not in entrypoint
 
 
+STRONG = 's3cretstrongvalue'
+LEGACY_GUARD_CASES = [
+    # (POSTGRES_PASSWORD as supplied, DATABASE_URL, legacy default in use?)
+    (STRONG, f'postgresql://postgres:{STRONG}@db:5432/oneirodex', False),
+    ('postgres', 'postgresql://postgres:postgres@db:5432/oneirodex', True),
+    # An explicit legacy password is refused whatever the URL says.
+    ('postgres', f'postgresql://od:{STRONG}@pg.lan:5432/oneirodex', True),
+    # Nothing supplied: the script's own `postgres` fallback is what connects.
+    ('', '', True),
+    ('', f'postgresql://od:{STRONG}@localhost:5432/oneirodex', True),
+    ('', f'postgresql://od:{STRONG}@127.0.0.1:5432/oneirodex', True),
+    ('', 'postgresql://od@pg.lan:5432/oneirodex', True),
+    ('', 'postgresql://od:postgres@pg.lan:5432/oneirodex', True),
+    # An external database reached only through DATABASE_URL uses the URL's
+    # password; the fallback must not be mistaken for the operator's choice.
+    ('', f'postgresql://od:{STRONG}@pg.lan:5432/oneirodex', False),
+    ('', 'postgresql://od:postgres-but-longer@pg.lan:5432/oneirodex', False),
+]
+
+
+@pytest.mark.parametrize('supplied, url, expected', LEGACY_GUARD_CASES)
+def test_legacy_password_guard_judges_the_credential_in_use(supplied, url, expected):
+    if not BASH or not Path(BASH).exists():
+        pytest.skip('Bash required')
+    entrypoint = (ROOT / 'entrypoint.sh').read_text(encoding='utf-8')
+    start = entrypoint.index('legacy_postgres_password_in_use() {')
+    function = entrypoint[start:entrypoint.index('\n}\n', start) + 3]
+    script = function + '''
+DATABASE_URL="$2"
+if legacy_postgres_password_in_use "$1"; then echo legacy; else echo unique; fi
+'''
+    env = {**os.environ, 'MSYS_NO_PATHCONV': '1', 'MSYS2_ARG_CONV_EXCL': '*'}
+    env.pop('DATABASE_URL', None)
+    result = subprocess.run([BASH, '-c', script, 'guard-test', supplied, url],
+                            env=env, capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == ('legacy' if expected else 'unique')
+
+
+def test_entrypoint_guard_uses_the_supplied_password_not_its_own_fallback():
+    entrypoint = (ROOT / 'entrypoint.sh').read_text(encoding='utf-8')
+
+    recorded = entrypoint.index('SUPPLIED_POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"')
+    fallback = entrypoint.index('export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"')
+    assert recorded < fallback
+    assert 'if legacy_postgres_password_in_use "${SUPPLIED_POSTGRES_PASSWORD}"; then' in entrypoint
+    assert 'if [[ "${POSTGRES_PASSWORD}" == "postgres" ]]; then' not in entrypoint
+
+
 def test_docker_build_inputs_are_digest_pinned_and_emit_image_evidence():
     dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
     workflow = (ROOT / '.github' / 'workflows' / 'docker-publish.yml').read_text(encoding='utf-8')

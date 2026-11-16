@@ -276,6 +276,12 @@ probe refuses startup. Fresh volumes are initialized using the configured
 password. The check runs in the database container, so it still applies when
 the app container is stopped.
 
+The app container applies the same rule to the credential it will actually use.
+When the image runs against your own PostgreSQL and only `DATABASE_URL` is set,
+the password inside that URL is what is checked. A URL with no password, or one
+that points at loopback, falls back to `POSTGRES_PASSWORD`, and an unset
+`POSTGRES_PASSWORD` counts as the legacy default.
+
 Generate a password (hex, because it is spliced into `DATABASE_URL` and `@ : / ? # % $` would break the URL):
 
 ```bash
