@@ -19,6 +19,8 @@ button.click(); return true;'''
 STATUS_SCRIPT = '''const status = document.querySelector('#status');
 return {opened: (status?.textContent || '').startsWith('Full library opened'),
         error: status?.dataset.tone === 'error'};'''
+CLOSE_SCRIPT = '''const done = arguments[arguments.length - 1];
+window.__TAURI_INTERNALS__.invoke('plugin:window|close', {label: arguments[0]}).then(() => done(true), () => done(false));'''
 SITE_SCRIPT = '''const done = arguments[arguments.length - 1];
 const ipc = window.__TAURI_INTERNALS__;
 const finish = native => done({origin: location.origin, path: location.pathname,
@@ -91,9 +93,12 @@ def open_full_library(native, base_url, token, progress):
             checks.update(site_window_inspected=True, site_window_is_server_origin=True,
                           site_window_address_has_no_token=True, site_window_cannot_read_native_secret=True,
                           site_window_route=holder['value']['path'])
-            native.request('DELETE', native.session + '/window')
         finally:
             native.request('POST', native.session + '/window', {'handle': main})
+        # Close through the companion's own window permission; the driver's
+        # close command does not retire the native window record.
+        if native.execute_async(CLOSE_SCRIPT, [LABEL]) is not True:
+            raise ProbeFailure('linux_library_window_close_refused')
         wait_for(lambda: LABEL not in _labels(native), 15, 'linux_library_window_not_closed')
         checks['site_window_closed'] = True
     elif handles:

@@ -23,7 +23,6 @@ class FakeNative:
             return ['main'] + (self.extra if self.open else [])
         if method == 'GET': return self.current
         if method == 'POST': self.current = payload['handle']; return None
-        if method == 'DELETE': self.open = False; return None
         raise AssertionError(method)
 
     def execute_js(self, script, args=None):
@@ -32,6 +31,9 @@ class FakeNative:
 
     def execute_async(self, script, args=None):
         if script is library.LABELS_SCRIPT: return ['main'] + ([library.LABEL] if self.open else [])
+        if script is library.CLOSE_SCRIPT:
+            assert self.current == 'main' and args == [library.LABEL]
+            self.open = False; return True
         return self.page
 
 
