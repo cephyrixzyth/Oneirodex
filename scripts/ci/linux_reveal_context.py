@@ -59,6 +59,14 @@ def window_ids(raw):
     return values
 
 
+def xfconf_foreground_command(binary, help_text):
+    # Xfconf 4.16 defaults do_daemon to FALSE; --daemon explicitly forks.
+    # Require that CLI contract, then verify the real bus owner stays in our held group.
+    if '--daemon' not in help_text or '--version' not in help_text:
+        raise ProbeFailure('linux_xfconf_foreground_contract_unknown')
+    return [str(binary)]
+
+
 class RevealContext:
     def __init__(self, native, progress):
         require_ci_execution(sys.platform, os.environ, getattr(os, 'geteuid', lambda: -1)())
@@ -96,6 +104,7 @@ class RevealContext:
             if not re.fullmatch(r'[a-zA-Z0-9.+:~_-]{1,100}', value):
                 raise ProbeFailure('linux_manager_package_version_invalid')
             versions[package] = value
+        self.progress['file_manager_versions'] = versions
         paths = self.native.command(['dpkg-query','-L','thunar'], 'linux_manager_package_inventory_failed').stdout.decode().splitlines()
         selected = []
         for item in paths:
@@ -118,10 +127,10 @@ class RevealContext:
         conf = [Path(path) for path in conf_paths if Path(path).name == 'xfconfd']
         if len(conf) != 1: raise ProbeFailure('linux_xfconf_daemon_not_unique')
         conf = self._root_binary(conf[0])
-        if '--no-daemon' not in self.native.command([str(conf),'--help'], 'linux_xfconf_help_unavailable').stdout.decode():
-            raise ProbeFailure('linux_xfconf_foreground_unavailable')
+        conf_command = xfconf_foreground_command(conf,
+            self.native.command([str(conf),'--help'], 'linux_xfconf_help_unavailable').stdout.decode())
         self.progress['phase'] = 'linux_owned_xfconf_start'
-        conf_guardian = self._spawn([str(conf),'--no-daemon'])
+        conf_guardian = self._spawn(conf_command)
         wait_for(lambda: self.owner('org.xfce.Xfconf') is not None, 15, 'linux_owned_xfconf_not_ready')
         if self.owner('org.xfce.Xfconf') not in {pid for pid, _ in process_group_members(conf_guardian.pid)}:
             raise ProbeFailure('linux_xfconf_not_in_owned_group')

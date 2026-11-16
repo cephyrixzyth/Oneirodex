@@ -38,6 +38,13 @@ class RevealContracts(unittest.TestCase):
             with self.assertRaisesRegex(ProbeFailure, 'no_local_gui'): reveal.RevealContext(native,{})
         native.command.assert_not_called(); native.spawn.assert_not_called()
 
+    def test_xfconf_default_foreground_contract_does_not_invent_no_daemon_flag(self):
+        helper=getattr(reveal,'xfconf_foreground_command',None)
+        self.assertIsNotNone(helper,'use the installed Xfconf default-foreground contract')
+        binary=Path('/owned/xfconfd')
+        self.assertEqual(helper(binary,'--version --backends --daemon'),[str(binary)])
+        with self.assertRaises(ProbeFailure): helper(binary,'unknown CLI contract')
+
     def test_manager_failure_still_cleans_all_guardians_and_never_claims_success(self):
         context=reveal.RevealContext.__new__(reveal.RevealContext)
         context.closed=False; context.manager_handle=41; context.manager_attempted=True
