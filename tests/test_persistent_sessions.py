@@ -132,3 +132,30 @@ def test_classic_logout_revokes_identity_loaded_only_from_remember_cookie(app, d
     row = db_session.get(PersistentLoginSession, session_id)
     assert row is not None
     assert row.revoked_at is not None
+
+
+def test_rotating_the_secret_key_invalidates_existing_remember_cookies(app, db_session):
+    from oneirodex.runtime_native.auth_resolver import decode_remember_cookie, encode_remember_cookie
+
+    app.config["TESTING"] = False
+    user = User(name='remember-rotation-owner', email='remember-rotation@example.test', role='user', state=True)
+    user.set_password('correct horse battery staple')
+    db_session.add(user)
+    db_session.commit()
+
+    original_key = app.config['SECRET_KEY']
+    with app.app_context():
+        identity = issue_login_identity(user)
+        session_id = session_id_from_identity(identity)
+        remember_cookie = encode_remember_cookie(identity, original_key)
+
+    assert decode_remember_cookie(remember_cookie, original_key) == identity
+    rotated_key = 'rotated-' + hashlib.sha256(str(original_key).encode()).hexdigest()
+    assert decode_remember_cookie(remember_cookie, rotated_key) is None
+
+    # The stale cookie no longer identifies anyone, so logout has no session to revoke.
+    app.config['SECRET_KEY'] = rotated_key
+    client = app.test_client()
+    client.set_cookie(app.config.get('REMEMBER_COOKIE_NAME', 'remember_token'), remember_cookie)
+    assert client.post('/logout').status_code == 302
+    assert db_session.get(PersistentLoginSession, session_id).revoked_at is None

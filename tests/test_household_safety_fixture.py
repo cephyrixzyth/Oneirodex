@@ -91,3 +91,44 @@ def test_native_save_route_uses_real_child_acl_generation_and_scope_adapters(
     assert paths_before == {p: p.read_bytes() for p in household.root.rglob('*') if p.is_file()}
     assert household.legacy_path.read_bytes() == b'legacy-fixture'
     assert household.unrelated_path.read_bytes() == b'unrelated-fixture'
+
+
+def test_removing_child_library_access_between_saves_denies_the_next_write(
+    household, app, db_session, household_loop,
+):
+    """A parent changing the ACL mid-play takes effect on the next save request."""
+    from oneirodex.models import ApiToken, EmulatorSave, User, UserLibraryAccess
+    from oneirodex.runtime_native.emulator_mutations import create_emulator_mutations_router
+
+    api = FastAPI()
+    api.include_router(create_emulator_mutations_router(
+        app,
+        find_user=lambda user_id: db_session.get(User, user_id),
+        find_token=lambda prefix: db_session.query(ApiToken).filter_by(token_prefix=prefix).first(),
+        commit_token_touch=lambda token: db_session.commit(),
+    ))
+
+    async def upload(payload):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=api), base_url='http://fixture.invalid',
+        ) as client:
+            return await client.post(
+                f"/api/games/{household.games['allowed'].uuid}/saves",
+                headers={'Authorization': f"Bearer {household.bearers['child_save']}"},
+                data={'slot': 'progress'}, files={'file': ('progress.state', payload)},
+            )
+
+    child = household.users['child_some']
+    assert household_loop.run(upload(b'before-acl-change')).status_code == 201
+    saved = db_session.query(EmulatorSave).filter_by(user_id=child.id).one()
+    stored = Path(saved.storage_path)
+
+    removed = db_session.query(UserLibraryAccess).filter_by(user_id=child.id).delete()
+    db_session.commit()
+    assert removed == 1
+
+    denied = household_loop.run(upload(b'after-acl-change'))
+    assert denied.status_code == 403
+    db_session.expire_all()
+    assert db_session.query(EmulatorSave).filter_by(user_id=child.id).count() == 1
+    assert stored.read_bytes() == b'before-acl-change'
