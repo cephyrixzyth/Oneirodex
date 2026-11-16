@@ -7,7 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Child accounts can keep their own emulator saves for games they can currently access; other library writes stay denied.
+- Desktop companion: an Installed shelf that stays available offline for the previously verified account and device, with local Play and Reveal and a notice that local files remain reachable through the operating system.
+- Desktop companion: **Open full library** opens the server's own library in a separate site-only window; the API token is never placed in its address.
+- API tokens page lists browser sessions with sign-out for one device or all devices.
+- Support reports show a preview and the destination before anything is forwarded, and keep a local receipt.
+
+### Fixed
+- Cloud save slots no longer overwrite each other, and a failed write keeps the previous save. Earlier generations are retained and count toward quota.
+- Deleting an account with downloads, messages, saves or other history now completes; security audit records and anonymized household messages are kept.
+- Desktop companion: concurrent operations no longer lose install records; settings and lifecycle files are written atomically and write failures are shown.
+- Desktop companion: game archives are checked against size and entry limits and extracted to a staging folder, so a failed install leaves the previous one intact.
+- Desktop companion: launched games are tracked until they exit, including after the launcher wrapper closes and across a companion restart.
+- Desktop companion: a cold start from the cached Installed shelf now reads "Offline" instead of "Not connected".
+- Native installers build all five web interfaces with Node 22 and validate the current runtime. The Windows installer no longer stops at its Python check in Windows PowerShell 5.1.
+
 ### Security
+- Browser sessions end after 30 days, or after 7 days without use; signing out, changing a password or disabling an account revokes them on the server.
+- Stored store, indexer and operator credentials are encrypted at rest. Existing values are converted with the documented command; keep the key ring in your operator backup.
+- Encrypted saves use a dedicated versioned key ring bound to owner, game, slot and generation, with a restartable rotation command.
+- The VR page no longer installs a service worker, and previously cached private pages are removed.
+- The command palette no longer stores recently opened titles in the browser.
+- Uploaded and downloaded images are held to byte, format and dimension limits before decoding.
+- Support reports are redacted before forwarding and are sent only to the configured destination after an explicit choice.
+- The container image is built from digest-pinned bases with hash-locked Python and integrity-locked npm dependencies, and the publish workflow is set up to attach an SBOM and provenance. Pillow, Authlib, Vite and the Rust `zip` crate are at patched versions.
 - Validate Stage E metadata links against provider-specific HTTPS hosts before rendering them as clickable admin links.
 - Validate game-detail YouTube demo links by scheme and hostname before rendering provider-supplied URLs.
 
