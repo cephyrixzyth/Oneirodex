@@ -78,7 +78,7 @@ and startup initialization checks pass.
 ## Publish
 
 - [ ] Commit + push release branch / PR to `main`
-- [ ] Git tag `vX.Y.Z` matching `VERSION` and GitHub Release notes from CHANGELOG. Pushing the tag runs six OS/flavor builds and attaches eight assets (`.exe`, `.dmg`, `.deb` and `.AppImage` for both the full and thin clients; `desktop-build.yml`, `release` job). To attach builds manually, dispatch from the default branch or the matching tag, set `release_tag` to that tag, and ensure it points to the exact build commit reachable from the default branch and an existing GitHub Release. Confirm all eight files before announcing
+- [ ] Git tag `vX.Y.Z` matching `VERSION` and GitHub Release notes from CHANGELOG. Pushing the tag runs six OS/flavor builds and attaches eight assets (`.exe`, `.dmg`, `.deb` and `.AppImage` for both the full and thin clients; `desktop-build.yml`, `release` job). To attach builds manually, dispatch from the default branch or the matching tag, set `release_tag` to that tag, and ensure it points to the exact build commit reachable from the default branch and an existing GitHub Release. Create the GitHub Release as soon as the tag is pushed: the `release` job confirms it exists after the builds finish and stops if it does not (create it, then re-run the failed job). The job downloads only the installer artifacts and refuses to attach anything unless it finds exactly those eight files, so diagnostics uploaded by other jobs cannot reach a release. Confirm all eight files before announcing
 - [ ] Push Docker image tags `:X.Y.Z` and `:latest` (when publishing images). The Docker workflow requires the version tag to match `VERSION` and its commit to be reachable from the default branch.
 - [ ] Unraid / docs note if env vars changed
 

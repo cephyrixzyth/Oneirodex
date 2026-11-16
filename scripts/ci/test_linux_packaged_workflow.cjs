@@ -8,11 +8,37 @@ const current = yaml.load(fs.readFileSync(file,'utf8'));
 assert.equal(current.on.workflow_dispatch.inputs.linux_packaged_smoke_only?.default,false);
 assert.deepEqual(current.permissions,base.permissions);
 for(const event of ['push','pull_request']) assert.deepEqual(current.on[event],base.on[event]);
+// The release job's installer download was narrowed once the macOS probe began
+// uploading an `oneirodex-` diagnostics artifact on every push: one broad
+// pattern would have attached that file to the public release. Every other
+// release step, and every other job, is still held to the base contract.
+const installerDownloadSteps=['Download every installer','List what will be attached','Download full installers',
+  'Download thin installers','Confirm exactly the eight installers will be attached'];
 for(const name of Object.keys(base.jobs)) {
   const before={...base.jobs[name]}, after={...current.jobs[name]};
   delete before.if;delete after.if;
+  if(name==='release') {
+    const kept=step=>!installerDownloadSteps.includes(step.name);
+    assert.deepEqual(after.steps.filter(kept),before.steps.filter(kept),'Release steps outside the installer download preserved');
+    delete before.steps;delete after.steps;
+  }
   assert.deepEqual(after,before,'Existing job steps/permissions preserved: '+name);
 }
+const releaseSteps=current.jobs.release.steps;
+assert.deepEqual(releaseSteps.filter(s=>(s.uses||'').startsWith('actions/download-artifact@')).map(s=>s.with.pattern),
+  ['oneirodex-full-*','oneirodex-thin-*']);
+const uploadedNames=Object.values(current.jobs).flatMap(job=>job.steps||[])
+  .filter(s=>(s.uses||'').startsWith('actions/upload-artifact@')).map(s=>String(s.with.name));
+assert.deepEqual(uploadedNames.filter(n=>n.includes('matrix.flavor')),['oneirodex-${{ matrix.flavor }}-${{ matrix.label }}']);
+assert(uploadedNames.includes('oneirodex-macos-coalition-probe'));
+for(const name of uploadedNames.filter(n=>!n.includes('matrix.flavor')))
+  assert(!/^oneirodex-(full|thin)-/.test(name),'Diagnostics artifact would be attached to a release: '+name);
+const flavors=new Set(current.jobs.build.strategy.matrix.include.map(leg=>leg.flavor));
+assert.deepEqual([...flavors].sort(),['full','thin']);
+const guardIndex=releaseSteps.findIndex(s=>s.name==='Confirm exactly the eight installers will be attached');
+const attachIndex=releaseSteps.findIndex(s=>s.name==='Attach to the release');
+assert(guardIndex>0&&guardIndex<attachIndex,'Installer set is confirmed before anything is attached');
+assert(releaseSteps[guardIndex].run.includes('"$count" -ne 8')&&releaseSteps[guardIndex].run.includes('exit 1'));
 for(const [name,value] of Object.entries(base.on.workflow_dispatch.inputs)) {
   const before={...value},after={...current.on.workflow_dispatch.inputs[name]};
   if(['package_source_run','package_archive_digest'].includes(name)) {

@@ -636,14 +636,32 @@ jobs:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
         run: gh release view "$RELEASE_TAG" --json tagName
 
-      - name: Download every installer
+      # Only installer bundles are release assets. Other jobs upload diagnostics
+      # under the same `oneirodex-` prefix (the macOS coalition probe does on
+      # every push), so the installer artifacts are selected by flavor rather
+      # than with one broad pattern.
+      - name: Download full installers
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: installers
-          pattern: oneirodex-*
+          pattern: oneirodex-full-*
 
-      - name: List what will be attached
-        run: find installers -type f | sort
+      - name: Download thin installers
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: installers
+          pattern: oneirodex-thin-*
+
+      - name: Confirm exactly the eight installers will be attached
+        run: |
+          set -euo pipefail
+          find installers -type f | sort
+          count="$(find installers -type f | wc -l)"
+          unexpected="$(find installers -type f ! -name '*.exe' ! -name '*.dmg' ! -name '*.deb' ! -name '*.AppImage' | wc -l)"
+          if [ "$count" -ne 8 ] || [ "$unexpected" -ne 0 ]; then
+            echo "::error::Expected eight installer files and nothing else; found $count files, $unexpected of an unexpected type."
+            exit 1
+          fi
 
       # Installer names are unique per flavor (Oneirodex vs OneirodexThin) and
       # per platform extension, so they can sit side by side on one release.
