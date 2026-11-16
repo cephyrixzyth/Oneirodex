@@ -46,3 +46,38 @@ def test_native_spa_build_stages_five_outputs_and_promotes_only_after_validation
     assert 'validateManifest()\n  promoteGeneration({ current: distRoot, staged: stageRoot, backup: backupRoot })' in script
     for target in ('member-app', 'member-auth', 'admin-app', 'admin-pilot', 'ops-glance'):
         assert f"['{target}'" in script
+
+
+def _windows_inline_python_calls():
+    import re
+
+    windows = (ROOT / 'install-windows.ps1').read_text(encoding='utf-8')
+    calls = re.findall(r"\((& python -c .+?)\)\.Trim\(\)", windows)
+    assert len(calls) >= 2, 'expected the version and secret-key helpers'
+    return calls
+
+
+def test_windows_installer_inline_python_survives_windows_powershell_quoting():
+    """Windows PowerShell 5.1 drops embedded double quotes passed to python.exe."""
+    for call in _windows_inline_python_calls():
+        argument = call.split(' -c ', 1)[1]
+        if argument.startswith("'"):
+            assert '"' not in argument, call
+
+
+def test_windows_installer_inline_python_runs_in_windows_powershell():
+    import shutil
+    import subprocess
+    import sys
+
+    import pytest
+
+    shell = shutil.which('powershell.exe')
+    if sys.platform != 'win32' or shell is None or shutil.which('python') is None:
+        pytest.skip('requires Windows PowerShell and python.exe on PATH')
+    for call in _windows_inline_python_calls():
+        done = subprocess.run(
+            [shell, '-NoProfile', '-NonInteractive', '-Command', call],
+            capture_output=True, text=True, timeout=60,
+        )
+        assert done.returncode == 0 and done.stdout.strip(), call.split(' -c ', 1)[0]

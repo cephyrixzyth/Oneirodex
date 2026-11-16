@@ -114,7 +114,9 @@ function Test-Prerequisites {
         throw 'Python is required'
     }
 
-    $version = (& python -c 'import sys; print("%d.%d" % sys.version_info[:2])').Trim()
+    # Single quotes inside the Python source: Windows PowerShell 5.1 drops
+    # embedded double quotes when it passes an argument to python.exe.
+    $version = (& python -c "import sys; print('%d.%d' % sys.version_info[:2])").Trim()
     Write-Ok "Python $version at $python"
 
     $node = Get-CommandPath 'node'

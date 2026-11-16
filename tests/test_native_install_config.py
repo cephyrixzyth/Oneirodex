@@ -24,7 +24,7 @@ PRIOR = (
 def test_windows_installer_validates_effective_config_and_retains_operator_values(tmp_path, mode):
     stage, result = tmp_path / 'owned-install', tmp_path / 'result.json'
     command = [
-        POWERSHELL, '-NoProfile', '-NonInteractive', '-File',
+        POWERSHELL, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
         str(ROOT / 'tests/fixtures/native_installer_config.ps1'),
         '-InstallScript', str(ROOT / 'install-windows.ps1'),
         '-StageRoot', str(stage), '-ResultPath', str(result),
@@ -58,7 +58,7 @@ def test_windows_installer_validates_effective_config_and_retains_operator_value
 def test_native_installer_fixture_counts_hidden_configuration_backup(tmp_path):
     result = tmp_path / 'result.json'
     run = subprocess.run(
-        [POWERSHELL, '-NoProfile', '-NonInteractive', '-File',
+        [POWERSHELL, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
          str(ROOT / 'tests/fixtures/native_installer_config.ps1'),
          '-InstallScript', str(ROOT / 'install-windows.ps1'),
          '-StageRoot', str(tmp_path / 'owned-hidden-install'), '-ResultPath', str(result),
@@ -75,7 +75,7 @@ def test_native_installer_fixture_counts_hidden_configuration_backup(tmp_path):
 def test_windows_invalid_retained_config_stops_before_summary_without_repair(tmp_path):
     result = tmp_path / 'result.json'
     run = subprocess.run(
-        [POWERSHELL, '-NoProfile', '-NonInteractive', '-File',
+        [POWERSHELL, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
          str(ROOT / 'tests/fixtures/native_installer_config.ps1'),
          '-InstallScript', str(ROOT / 'install-windows.ps1'),
          '-StageRoot', str(tmp_path / 'owned-invalid-install'), '-ResultPath', str(result),
