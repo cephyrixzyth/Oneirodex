@@ -75,5 +75,39 @@ class OfflineContracts(unittest.TestCase):
                 with self.assertRaises(ProbeFailure): offline.require_local_shelf(native,'game','denied',report,'denied')
                 self.assertNotIn('PRIVATE',repr(report))
 
+    def _run_journey(self, **kwargs):
+        import contextlib
+        import linux_connected_journey as connected
+        import linux_installed_journey as installed
+        native=mock.Mock(); native.execute_js.return_value={'offline':True}
+        fixture=mock.Mock(); fixture.private_data={'installed_fixture':{'game_uuid':'game','manifest':{}},
+            'base_url':'PRIVATE','tokens':{'adult':'PRIVATE'},'ids':{'adult':1}}
+        progress={}; control=mock.Mock(); calls=[]
+        fixture.api.revoke.side_effect=lambda *_: calls.append('revoke')
+        fixture.api.stop_for_outage.side_effect=lambda: calls.append('outage')
+        with mock.patch.object(offline,'RevealContext') as context,              mock.patch.object(offline,'wait_for'),              mock.patch.object(offline,'require_local_shelf',side_effect=lambda *a: calls.append('shelf_'+a[4])),              mock.patch.object(offline,'install_record',return_value=(Path('entry'),Path('target'))),              mock.patch.object(offline,'play_local',side_effect=lambda *a: calls.append('play_'+a[4])),              mock.patch.object(connected,'ui_session',side_effect=lambda *a: contextlib.nullcontext()),              mock.patch.object(connected,'connect'),              mock.patch.object(installed,'check_native_install'):
+            offline.run_offline_journey(native,fixture,progress,control,**kwargs)
+        return context,progress,calls
+
+    def test_default_journey_plays_under_denial_and_outage_without_file_manager(self):
+        self.assertIsNotNone(offline,'actual local-access flow must exist')
+        context,progress,calls=self._run_journey()
+        context.assert_not_called()
+        self.assertEqual(calls,['revoke','shelf_denied','play_denied','outage',
+                                'shelf_outage_cold','shelf_outage_after_connect','play_offline'])
+        self.assertTrue(progress['denial_outage_play_journey_verified'])
+        self.assertNotIn('reveal_denial_outage_journey_verified',progress)
+        self.assertIn('Reveal was not exercised',progress['local_access_scope'])
+
+    def test_reveal_remains_selectable_and_claims_reveal_only_then(self):
+        self.assertIsNotNone(offline,'actual local-access flow must exist')
+        context,progress,calls=self._run_journey(reveal=True)
+        manager=context.return_value
+        manager.start.assert_called_once(); manager.close.assert_called_once()
+        self.assertEqual([c.args[2] for c in manager.reveal.call_args_list],['online','denied','offline'])
+        self.assertTrue(progress['denial_outage_play_journey_verified'])
+        self.assertTrue(progress['reveal_denial_outage_journey_verified'])
+        self.assertIn('genuine file-manager Reveal',progress['local_access_scope'])
+
 
 if __name__ == '__main__': unittest.main()

@@ -1,4 +1,4 @@
-"""Real reachable-denial/outage local Play and file-manager Reveal journey."""
+"""Real reachable-denial/outage local Play journey; file-manager Reveal is opt-in."""
 from pathlib import Path
 import time
 
@@ -93,27 +93,34 @@ def play_local(native, fixture, progress, control, label):
         label+'_held_kernel_family_exit':True})
 
 
-def run_offline_journey(native, fixture, progress, control):
+def run_offline_journey(native, fixture, progress, control, reveal=False):
+    """Play locally under reachable denial and backend outage.
+
+    Reveal needs a real file manager on the owned bus/display. That fixture is a
+    separate prerequisite, so it stays selectable and never gates local Play.
+    """
     from linux_connected_journey import STATE_SCRIPT, connect, ui_session
     from linux_installed_journey import check_native_install
     data = fixture.private_data
     game_uuid = data['installed_fixture']['game_uuid']
-    context = RevealContext(native, progress)
-    progress['phase'] = 'linux_reveal_denial_outage_journey'
+    context = RevealContext(native, progress) if reveal else None
+    def show(target, mode):
+        if context is not None: context.reveal(game_uuid, target, mode)
+    progress['phase'] = 'linux_reveal_denial_outage_journey' if reveal else 'linux_denial_outage_play_journey'
     error = None
     try:
-        context.start()
+        if context is not None: context.start()
         with ui_session(native, 9):
             wait_for(lambda: native.execute_js(STATE_SCRIPT).get('offline') is True, 30, 'linux_local_access_hydration_missing')
             connect(native, data['base_url'], data['tokens']['adult'], 'online', progress,
                     'adult_reveal_connect', private_visible=True)
             _, target = install_record(native, game_uuid)
-            context.reveal(game_uuid, target, 'online')
+            show(target, 'online')
             fixture.api.revoke(data['ids']['adult'])
             connect(native, data['base_url'], data['tokens']['adult'], 'denied', progress, 'revoked_installed_adult_denied')
             require_local_shelf(native, game_uuid, 'denied', progress, 'denied')
             check_native_install(native, game_uuid, data['installed_fixture']['manifest'])
-            context.reveal(game_uuid, target, 'denied')
+            show(target, 'denied')
             play_local(native, fixture, progress, control, 'denied')
             progress['phase'] = 'linux_owned_server_outage'
             fixture.api.stop_for_outage()
@@ -125,17 +132,21 @@ def run_offline_journey(native, fixture, progress, control):
             require_local_shelf(native, game_uuid, 'offline', progress, 'outage_after_connect')
             _, target = install_record(native, game_uuid)
             check_native_install(native, game_uuid, data['installed_fixture']['manifest'])
-            context.reveal(game_uuid, target, 'offline')
+            show(target, 'offline')
             play_local(native, fixture, progress, control, 'offline')
-        progress['reveal_denial_outage_journey_verified'] = True
-        progress['local_access_scope'] = ('Real installed synthetic Play and genuine file-manager Reveal with reachable token revocation '
-            'and owned-backend outage/cold reopen. No arbitrary-game/save/platform qualification or server reauthorization while offline.')
+        progress['denial_outage_play_journey_verified'] = True
+        if reveal: progress['reveal_denial_outage_journey_verified'] = True
+        progress['local_access_scope'] = ('Real installed synthetic Play '
+            + ('and genuine file-manager Reveal ' if reveal else '')
+            + 'with reachable token revocation and owned-backend outage/cold reopen. '
+            + ('' if reveal else 'Reveal was not exercised; only its enabled control was observed. ')
+            + 'No arbitrary-game/save/platform qualification or server reauthorization while offline.')
     except BaseException as failed:
         error = failed
         raise
     finally:
         cleanup_errors = []
-        for cleanup in (control.stop, context.close):
+        for cleanup in (control.stop,) + ((context.close,) if context is not None else ()):
             try: cleanup()
             except Exception as failed: cleanup_errors.append(failed)
         if cleanup_errors:
