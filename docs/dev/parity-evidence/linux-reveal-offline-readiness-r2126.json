@@ -1,0 +1,44 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2126",
+  "observed_utc": "2026-11-15T23:59:08.974516+00:00",
+  "base_commit": "540dfe6236b833daaa2a1add2d56674101931b9b",
+  "classification": "Pure readiness for actual file-manager Reveal and local Play under reachable denial and genuine backend outage; native runtime result pending.",
+  "implementation": [
+    "Add only ephemeral Linux file-manager/X11 prerequisites to the exclusive manual job. Inspect actual package versions, root-owned desktop entry/binaries and required foreground/quit CLI capabilities.",
+    "Start real Xfconf/Thunar helpers through held guardians on the existing owned bus/display/profile. Require genuine directory MIME handler, native Reveal button, visible manager window/PID and a clipboard challenge followed by the real canonical location-bar path. No dummy opener, local GUI or shipping-app modification.",
+    "Advance a game fixture generation only after held child/supervisor handles verify exit. Preserve prior control files and reject foreign/uncompleted state.",
+    "After online Reveal baseline, revoke adult token with production helper, require explicit reachable denial and identity-bound local shelf/OS-possession disclosure with server actions blocked. Genuine Reveal and actual detached-child Play must still work, disclose unavailable reporting and preserve server report counts.",
+    "Stop only the held backend after proving listener ownership and require port closure; retain the test database for read-only observations. Cold reopen plus genuine failed Connect must retain Offline shelf. Repeat real Reveal/Play with no new server reports and verified kernel-handle cleanup.",
+    "No network/firewall changes, fake server responses, injected client module, browser security disable flag, or new package substitution."
+  ],
+  "verification": {
+    "linux_methods": "76 passed in 0.342s; pure/fake/filesystem only",
+    "workflow_contexts": 13,
+    "pyflakes": "Seven changed/new Python files pass",
+    "native_status": "not run for this candidate",
+    "red_to_green": "Missing Reveal module and offline/generation/outage controls failed first; workflow failed until exclusive-job prerequisites were added. A Windows test fixture wrote CRLF while the Linux ownership contract expects LF; corrected its bytes, preserving strict ownership/history checks.",
+    "source_review": "Inspect actual connection labels and lifecycle panel; check all rendered server-action controls. Fixed stage markers added for native failure attribution. Shipping runtime/client/pins unchanged."
+  },
+  "source_sha256_git_normalized": {
+    ".github/workflows/desktop-build.yml": "8397bdc1b48e39f975e24a97b5215e3feeec1f1448531525302aac19807700fa",
+    "scripts/ci/test_linux_packaged_workflow.cjs": "fbeb631425c311c84136c798b66cde52810b7296130049b55a86257daf93b3d8",
+    "scripts/ci/linux_reveal_context.py": "56e6ed616ad78597c3810ee01aeffb67d21bb01c92ae915d5f99dfd802223aee",
+    "scripts/ci/test_linux_reveal_context.py": "0d5544f2fd3b7f3ef8477d3d1ff1d1c64ea45d213d4bc413f6444d9ac4be3e46",
+    "scripts/ci/linux_offline_journey.py": "d014c5ad8ba415dfbe312b560473bdb6e4c4fa4bbcf761aa07af09eff3a999b5",
+    "scripts/ci/test_linux_offline_journey.py": "0516a2bbaf5a155dfc4384dfcd528e4f36b925dd2883a0aced7bd73da34de3da",
+    "scripts/ci/linux_game_journey.py": "974aa899be00f620b8dae0ef172ddd9bd2e532aa34d6100f8bf24fe4fed0badb",
+    "scripts/ci/linux_connected_server.py": "3b89e393d036ce2c58c4e93b3d55472bca08f67ff8d87c6bae58c341e77c7d06",
+    "scripts/ci/linux_connected_journey.py": "34d1745f2b593360d032691a3d0ec303c23602b82f9a6f69546e2374d3925911"
+  },
+  "package_source": "ce8c35a6980891ef85c26cb64aa0d8a3ecc9e867",
+  "package_run": 43747390211,
+  "archive_sha256": "7e253a922f9481715b399b217821822cb317dff13e83192a0ce0c8e33b4d1749",
+  "qualified_previous": "R2125 actual Play/family/account restart scope remains verified; it does not qualify this new Reveal/denial/outage extension.",
+  "limits": [
+    "Actual file-manager capabilities/window/clipboard behavior, reachable-denial Play and network-outage Play are unknown until CI.",
+    "Single synthetic Linux fixture does not establish arbitrary game/platform/save/update/rollback/uninstall/AT/operator/paired-route/final/release acceptance."
+  ],
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: no UI markup/style changes; all actual native execution remains disposable CI only."
+}

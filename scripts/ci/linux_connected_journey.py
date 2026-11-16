@@ -19,6 +19,7 @@ STATE_SCRIPT = '''return (() => {
   });
   return {ready: status === 'Enter credentials and click Connect.',
     online: /\\bOnline\\b/.test(summary), denied: summary.includes('Server access denied'),
+    offline: summary.includes('Offline (server unreachable)'),
     network_error: /network|cors|tls/i.test(status), keyring_error: /keyring|credential store|secure.store/i.test(status),
     protocol_error: status.includes('Server API returned an unexpected response'),
     redirect_error: status.includes('Server API redirect refused'),
@@ -29,7 +30,7 @@ STATE_SCRIPT = '''return (() => {
     shared_visible: titles.includes('Synthetic CI Shared Game'),
     private_visible: titles.includes('Synthetic CI Adult Private Game')};
 })();'''
-STATE_FIELDS = ('ready','online','denied','network_error','keyring_error','protocol_error',
+STATE_FIELDS = ('ready','online','denied','offline','network_error','keyring_error','protocol_error',
                 'redirect_error','permission_error','connecting','connection_settled','identity_requested','search_requested',
                 'shared_visible','private_visible')
 

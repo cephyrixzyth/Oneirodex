@@ -539,10 +539,14 @@ jobs:
           native_driver_version=$(apt-cache policy webkit2gtk-driver | awk '/Candidate:/ {print $2; exit}')
           native_webview_version=$(apt-cache policy libwebkit2gtk-4.1-0 | awk '/Candidate:/ {print $2; exit}')
           native_keyring_version=$(apt-cache policy gnome-keyring | awk '/Candidate:/ {print $2; exit}')
+          native_thunar_version=$(apt-cache policy thunar | awk '/Candidate:/ {print $2; exit}')
+          native_xfconf_version=$(apt-cache policy xfconf | awk '/Candidate:/ {print $2; exit}')
           [[ "$native_driver_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
           [[ "$native_webview_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
           [[ "$native_keyring_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
-          sudo -n apt-get install -y "webkit2gtk-driver=$native_driver_version" "libwebkit2gtk-4.1-0=$native_webview_version" "gnome-keyring=$native_keyring_version" xvfb xauth dbus-x11
+          [[ "$native_thunar_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
+          [[ "$native_xfconf_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
+          sudo -n apt-get install -y "webkit2gtk-driver=$native_driver_version" "libwebkit2gtk-4.1-0=$native_webview_version" "gnome-keyring=$native_keyring_version" "thunar=$native_thunar_version" "xfconf=$native_xfconf_version" xvfb xauth dbus-x11 xdotool xclip xdg-utils x11-utils
       - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
       - name: Install pinned external native driver
         run: cargo install tauri-driver --version '=2.1.0' --locked --root "$RUNNER_TEMP/oneirodex-tauri-driver"

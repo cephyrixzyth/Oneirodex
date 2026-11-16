@@ -265,6 +265,15 @@ class NativeServerAPI:
         if self.internal('revoke',ids).get('revoked') is not True:
             raise ProbeFailure('linux_fixture_revocation_not_persisted')
 
+    def stop_for_outage(self):
+        require_backend_ci(self.root,os.environ,sys.platform,getattr(os,'geteuid',lambda:-1)())
+        from linux_packaged_native import listener_owned,port_closed,wait_for
+        if self.process is None or not listener_owned(self.port,self.process.pid,allow_wildcard=True):
+            raise ProbeFailure('linux_outage_backend_listener_not_owned')
+        self.stop()
+        wait_for(lambda:port_closed(self.port),10,'linux_outage_backend_port_not_closed')
+        self.progress['backend_intentionally_stopped_for_outage']=True
+
     def stop(self):
         if self.process is not None:
             from linux_packaged_native import NativeLinuxAPI

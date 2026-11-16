@@ -98,6 +98,22 @@ class GameFixture:
         text = path.read_text(encoding='ascii').strip()
         return int(text) if re.fullmatch(r'[1-9][0-9]{0,9}', text) else None
 
+    def reset(self):
+        if not self.cleaned or self.handles or self.progress.get('game_fixture_cleanup_verified') is not True:
+            raise ProbeFailure('linux_game_previous_generation_not_clean')
+        path = self.root/'next'
+        if (self.root.resolve(strict=True) != self.root or self.root.lstat().st_uid != os.geteuid()
+                or not stat.S_ISREG(path.lstat().st_mode) or path.lstat().st_uid != os.geteuid()
+                or path.stat().st_size > 64 or path.read_bytes() != (self.nonce+'\n').encode('ascii')):
+            raise ProbeFailure('linux_game_generation_control_not_owned')
+        history = self.root/('next-history-'+self.nonce)
+        if history.exists(): raise ProbeFailure('linux_game_control_history_collision')
+        path.rename(history)
+        self.nonce = secrets.token_hex(16)
+        with path.open('x', encoding='ascii') as output: output.write(self.nonce+'\n')
+        self.stopping, self.cleaned, self.launched = False, False, False
+        self.progress['game_fixture_cleanup_verified'] = False
+
     def attach_child(self, entry):
         wait_for(lambda: self.read_pid('child') is not None, 30, 'linux_game_child_marker_missing')
         pid = self.read_pid('child')
@@ -300,6 +316,8 @@ def run_game_journey(native, fixture, progress):
             progress['game_sessions_after_family_exit'] = observe_sessions(fixture)
             checks.update(child_and_supervisor_exit_verified_by_pidfds=True, family_exit_stops_playtime_reporting=True)
         progress['game_family_recovery_journey_verified'] = True
+        from linux_offline_journey import run_offline_journey
+        run_offline_journey(native, fixture, progress, control)
     except BaseException as failed:
         error = failed
         raise
