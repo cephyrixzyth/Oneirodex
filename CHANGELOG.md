@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API tokens page lists browser sessions with sign-out for one device or all devices.
 - Support reports show a preview and the destination before anything is forwarded, and keep a local receipt.
 
+### Changed
+Read these before updating an existing install.
+- Back up the database and appdata first. The first start applies ten database migrations. To go back to 1.1.9, restore that backup: 1.1.9 does start on the migrated database, but running it there is untested.
+- Everyone signs in again once. Sign-ins made on 1.1.9 are not carried over to the new server-side sessions.
+- The app now runs as a non-root user in every install type (`PUID`:`PGID`, default `99:100`). On the first start the container takes ownership of the library folder for that user. Game folders must be readable by it, and any other folder it writes to (for example a WebRetro cores mount) must be writable by it. `PUID=0` is refused when the database runs in a separate container.
+- Installs with a separate database (the Compose stack): the old default database password `postgres` is now refused at startup. Set `ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true` to start an existing stack, rotate the password, then turn the flag off. See [Upgrading an existing stack](docs/runbooks/docker-compose-deploy.md#upgrading-an-existing-stack). Single-container installs, including Unraid Community Apps, are not affected.
+- Linked store accounts pause until stored credentials are converted. Member store sign-in tokens saved by 1.1.9 are not used until you create a credential key ring and run the conversion, and new or changed tokens and admin integration secrets cannot be saved without the key ring. Admin integration secrets already saved keep working in the meantime. See [Convert existing credentials after upgrading](docs/runbooks/docker-compose-deploy.md#convert-existing-credentials-after-upgrading).
+- If save encryption is turned on, new saves need a save key ring. Saves already encrypted by 1.1.9 stay readable with the existing `SECRET_KEY`. See [Save keyring](docs/runbooks/docker-compose-deploy.md#save-keyring).
+- Each member's saved states are now capped at 1024 MB in total by default (`EMULATOR_SAVES_USER_QUOTA_MB`).
+
 ### Fixed
 - Cloud save slots no longer overwrite each other, and a failed write keeps the previous save. Earlier generations are retained and count toward quota.
 - Deleting an account with downloads, messages, saves or other history now completes; security audit records and anonymized household messages are kept.
