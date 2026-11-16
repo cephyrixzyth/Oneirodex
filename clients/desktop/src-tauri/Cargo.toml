@@ -26,7 +26,7 @@ fs2 = "0.4"
 # Already locked transitively; native launch identities must survive PID reuse.
 uuid = { version = "=1.24.0", features = ["v4"] }
 # Already locked; safe deterministic reporter paths must accept arbitrary game IDs.
-sha2 = "=0.10.9"
+sha2 = "=0.11.1"
 
 [dev-dependencies]
 # Real temp dirs for the path-traversal / zip-slip unit tests in src/lib.rs.
