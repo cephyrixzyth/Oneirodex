@@ -1,0 +1,111 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2129",
+  "observed_utc": "2026-11-16T05:08:43.152643+00:00",
+  "finding": "DT-002 (with DT-001 / DT-006 follow-through)",
+  "tested_harness_commit": "19376510af9174a6f20d80d8a851f4e12793dea9",
+  "native_run": 43807457231,
+  "native_job": 133101386586,
+  "classification": "Confirmed stale connection label after cached-shelf cold start, corrected. Confirmed actual installed Linux local Play under reachable token denial and under a real backend outage with cold reopen. File-manager Reveal not exercised.",
+  "raw_log": {
+    "path": "findings/DT-002/linux-denial-outage-play-run-43807457231-job-133101386586-r2129.log",
+    "sha256": "dedb2f681ae943bddc23ef87b90c05eee936e8b555eca9783045a727d9e70aff",
+    "bytes": 462756,
+    "private": true
+  },
+  "receipt": {
+    "status": "passed",
+    "phase": "complete",
+    "installed_runtime_acceptance": true,
+    "acceptance_scope": "linux_connected_accounts_and_credentials",
+    "source_commit": "dc8e0ddea9ef2e4b6ba3ba8a905021c5dc2674f3",
+    "source_run": 43803881137,
+    "artifact_id": 14197603603,
+    "archive_bytes": 85645912,
+    "archive_sha256": "106d0dd61f7aa59f385fdca74272ff39725fb9f604ef6c23e2be2ab754561270",
+    "deb_sha256": "6e1e8931752633323a8e28abaa8c17a5cdec2beda6c38c6857a24c1db284a297",
+    "deb_bytes": 3870350,
+    "installed_binary_sha256": "8f74ca079fb7344910206c738b2e49729c92255c82ef439f81ff713a7f21db19",
+    "source_and_digest_verified": true,
+    "backend_source_commit": "19376510af9174a6f20d80d8a851f4e12793dea9",
+    "backend_alembic_head": "a4b5c6d7e8f9",
+    "postgres_version_num": "160016",
+    "cleanup_errors": [],
+    "local_access_checks": {
+      "denied_verified_local_shelf": true,
+      "denied_real_play_and_detached_child": true,
+      "denied_reporting_unavailable_disclosed": true,
+      "denied_no_new_playtime_rows": true,
+      "denied_held_kernel_family_exit": true,
+      "outage_cold_verified_local_shelf": true,
+      "outage_after_connect_verified_local_shelf": true,
+      "offline_real_play_and_detached_child": true,
+      "offline_reporting_unavailable_disclosed": true,
+      "offline_no_new_playtime_rows": true,
+      "offline_held_kernel_family_exit": true
+    },
+    "revoked_installed_adult_denied": true,
+    "owned_server_outage_connect": true,
+    "backend_intentionally_stopped_for_outage": true,
+    "game_family_recovery_journey_verified": true,
+    "denial_outage_play_journey_verified": true,
+    "local_access_scope": "Real installed synthetic Play with reachable token revocation and owned-backend outage/cold reopen. Reveal was not exercised; only its enabled control was observed. No arbitrary-game/save/platform qualification or server reauthorization while offline."
+  },
+  "sequence": [
+    {
+      "commit": "92fdbcc8e757fbc775333cde651b5d5a0738ae06",
+      "change": "Harness: file-manager Reveal made opt-in so the denial/outage Play journey runs without the Xfconf/Thunar fixture. Two new methods failed first.",
+      "native_run": 43803027440,
+      "native_job": 133087411928,
+      "result": "failed",
+      "code": "linux_local_access_hydration_missing",
+      "cleanup_errors": []
+    },
+    {
+      "commit": "dc8e0ddea9ef2e4b6ba3ba8a905021c5dc2674f3",
+      "change": "Client: render the connection summary after cold-start hydration switches to offline mode. Mounted-app regression failed first (21 pass, 1 fail), then 379 desktop cases passed.",
+      "ci": {
+        "desktop_push_run": 43803881137,
+        "desktop_pr_run": 43803887249,
+        "core_run": 43803887219,
+        "result": "all success"
+      }
+    },
+    {
+      "commit": "19376510af9174a6f20d80d8a851f4e12793dea9",
+      "change": "Harness: pin the rebuilt package; retire the ce8c35a6 package with its own refusal regression.",
+      "native_run": 43807457231,
+      "native_job": 133101386586,
+      "result": "passed"
+    }
+  ],
+  "verification": {
+    "linux_methods": "80 passed in 0.112s on CI",
+    "locked_runtime_cors": "7 passed in 0.066s",
+    "locked_runtime_bearer_actual_handlers": "9 passed in 0.073s",
+    "desktop_local": "379 passed on Node 26.12.1 with built-in web storage disabled; not the Node 22 baseline. Node 22 confirmation is the CI runs listed for dc8e0dde.",
+    "package_hashing": "ZIP, .deb and installed-binary hashes computed in memory from the CI artifact on the workstation; nothing extracted to disk, installed or executed locally. ZIP hash equals the GitHub artifact digest.",
+    "aggregate_ci": "Core and desktop CI passed on dc8e0dde. Later commits are harness/test-only with [skip ci]; no aggregate CI claim on 19376510."
+  },
+  "measured_behavior": [
+    "Cold reopen of the installed package with a cached verified shelf now reports Offline (server unreachable) before any connection attempt.",
+    "After the adult token was revoked with the server reachable, Connect reported denial; the identity-bound shelf stayed with the OS-possession disclosure, server actions were blocked, the installed archive was unchanged, and real Play started a detached child that survived wrapper exit.",
+    "The owned backend was then stopped after proving listener ownership and port closure. A cold reopen showed the offline shelf, a real failed Connect kept it, and real Play ran again.",
+    "In both modes the app disclosed that playtime reporting was unavailable, no playtime rows were added, and child and supervisor exit was verified through held kernel handles."
+  ],
+  "limits": [
+    "One self-authored synthetic fixture on a disposable Ubuntu runner; not arbitrary games, launchers or other platforms.",
+    "Genuine file-manager Reveal was not exercised; only the enabled Reveal control was observed. The Reveal fixture remains opt-in and unproven (R2126, R2127).",
+    "No Windows or macOS packaged journey, saves, update, rollback, uninstall, OS reboot, assistive technology or operator-host qualification.",
+    "Workstation Python and Node versions differ from the review baseline; workstation results are supporting only."
+  ],
+  "native_job_timing": {
+    "started_utc": "2026-11-16T05:00:30Z",
+    "completed_utc": "2026-11-16T05:06:04Z",
+    "elapsed_seconds": 334,
+    "limits": "Remote job wall time including provisioning, build, tests and runtime; not inference time or billing."
+  },
+  "overall_goal": "active and incomplete",
+  "next": "Remaining release exit checks: shared-browser two-account run, companion full-library launch, keyboard pass, Windows installer run and aggregate CI on the merge candidate.",
+  "capture": "Skipped: one connection-label text correction; no populated instance capture was run."
+}
