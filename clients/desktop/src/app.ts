@@ -1313,6 +1313,7 @@ export async function mountApp(root: HTMLElement): Promise<void> {
       if (libraryGames.length > 0) {
         sessionActive = true
         setConnectionMode('offline')
+        renderAuthSummary()
         setStatus(
           'Offline Installed shelf loaded from this previously verified account and device.',
           'info',

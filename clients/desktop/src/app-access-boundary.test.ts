@@ -187,6 +187,11 @@ describe('actual companion connection orchestration', () => {
     expect(root.textContent).toContain('Private A Title')
     expect(root.querySelector<HTMLButtonElement>('[data-action="play"]')!.disabled).toBe(false)
   })
+  it('labels a cold start from the cached shelf as offline rather than not connected', () => {
+    const summary = field('#auth-summary').textContent ?? ''
+    expect(summary).toContain('Offline (server unreachable)')
+    expect(summary).not.toContain('Not connected')
+  })
   it('does not send server playtime from a cached identity before fresh verification', async () => {
     const network = vi.fn(async () => {
       throw new Error('No fresh account verification')
