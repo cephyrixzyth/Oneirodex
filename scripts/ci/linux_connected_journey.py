@@ -111,6 +111,8 @@ def run_connected_journey(native,fixture,progress):
         require_private_config(native,tokens,progress,'adult_persisted_json_has_no_plaintext_token')
         require_credentials(native,tokens['adult'],base,progress,'adult_os_credential_persisted')
         identity(native,base,ids['adult']['account_id'],progress,'adult_live_identity')
+        from linux_library_window import open_full_library
+        open_full_library(native,base,tokens['adult'],progress)
     with ui_session(native,4):
         wait_for(lambda:native.execute_js(STATE_SCRIPT).get('ready') is True,30,'linux_saved_ui_hydration_not_ready')
         hydrated=native.execute_js("return document.querySelector('#base-url').value===arguments[0] && document.querySelector('#token').value===arguments[1];",[base,tokens['adult']])
