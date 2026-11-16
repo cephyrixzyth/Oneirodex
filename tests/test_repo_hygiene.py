@@ -73,3 +73,31 @@ def test_gitignore_still_names_the_policy():
     text = (ROOT / '.gitignore').read_text(encoding='utf-8')
     for line in ('/AGENTS.md', '/CLAUDE.md', '.claude/', '.agents/', 'docs/_private/'):
         assert line in text, f'{line!r} missing from .gitignore'
+
+
+# Per-member state the running app writes into the library folder. Two such
+# files (one member's install states, another's wanted updates) were committed
+# from a development instance. The image build already excludes this folder
+# (.dockerignore); the repository must not carry it either.
+PER_MEMBER_RUNTIME_STATE = (
+    'oneirodex/static/library/client_lifecycle/',
+    'oneirodex/static/library/wanted_updates/',
+)
+
+
+def test_per_member_runtime_state_is_not_tracked():
+    try:
+        out = subprocess.run(
+            ['git', '-c', 'safe.directory=*', 'ls-files', '-z', '--', *PER_MEMBER_RUNTIME_STATE],
+            cwd=ROOT, check=True, capture_output=True,
+        ).stdout
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:  # pragma: no cover
+        pytest.skip(f'git unavailable for the hygiene check: {exc}')
+    offenders = sorted(p for p in out.decode('utf-8').split('\0') if p)
+    assert not offenders, (
+        'per-member runtime state is tracked in git. '
+        'Untrack it with `git rm --cached`:\n  ' + '\n  '.join(offenders)
+    )
+    text = (ROOT / '.gitignore').read_text(encoding='utf-8')
+    for line in PER_MEMBER_RUNTIME_STATE:
+        assert line in text, f'{line!r} missing from .gitignore'

@@ -170,6 +170,11 @@ oneirodex/static/library/fonts/
 # Art-studio output — generated per install, not source
 oneirodex/static/library/generated/
 
+# Per-member state written by the running app (install states, wanted
+# updates). Never source; guarded by tests/test_repo_hygiene.py.
+oneirodex/static/library/client_lifecycle/
+oneirodex/static/library/wanted_updates/
+
 # WebRetro libretro cores — operator-provisioned, not vendored (71MB of WASM).
 #
 # These were committed despite cores/README.md describing the directory as
