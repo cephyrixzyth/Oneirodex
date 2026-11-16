@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from oneirodex.runtime_native import account_stock_avatar
 from oneirodex.runtime_native.account_stock_avatar import create_account_stock_avatar_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -195,6 +196,23 @@ def test_invalid_body_matches_shared_validation_envelope():
     _assert_error(response, 422, 'unprocessable')
     assert response.json()['error'] == 'Invalid request.'
     assert 'id' in response.json()['detail']
+    assert data.calls == []
+
+
+def test_stock_avatar_caps_json_before_validation(monkeypatch):
+    monkeypatch.setattr(account_stock_avatar, '_MAX_JSON_BODY_BYTES', 8)
+    data = FakeStockAvatarData()
+    client = make_client(data=data)
+    cookie, csrf = signed_session()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/avatar/stock',
+        content=b'{"id":"oneirodex"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    _assert_error(response, 413, 'payload_too_large')
     assert data.calls == []
 
 

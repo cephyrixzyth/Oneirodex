@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class AdminGameSearchData:
@@ -93,7 +94,7 @@ def create_admin_search_router(
                 )
                 response = JSONResponse(payload, status_code=status)
             else:
-                query = request.query_params.get('q', '').strip()
+                query = first_query_value(request.query_params, 'q', '').strip()
                 if not query:
                     response = JSONResponse([])
                 elif len(query) > 100:

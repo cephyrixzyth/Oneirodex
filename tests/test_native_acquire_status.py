@@ -5,8 +5,10 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+from starlette.responses import Response
 
-from oneirodex.runtime_native.acquire_status import create_acquire_status_router
+from oneirodex.runtime_native.acquire_status import _set_session_cookie, create_acquire_status_router
+from oneirodex.runtime_native.oidc_status import _set_session_cookie as set_oidc_session_cookie
 from oneirodex.runtime_native.session_compat import dump_session_cookie, load_session_cookie
 
 
@@ -127,3 +129,68 @@ def test_status_head_matches_get_headers_without_a_body():
     assert head_response.content == b''
     assert head_response.headers['content-length'] == str(len(get_response.content))
 
+
+def test_session_cookie_is_not_written_twice_by_mixed_compatibility_adapters():
+    flask_app = Flask(__name__)
+    flask_app.config.update(SECRET_KEY='native-acquire-secret')
+    auth = SimpleNamespace(
+        session_data={'_flashes': [('message', 'Please log in to access this page.')]},
+        should_set_session_cookie=True,
+    )
+    response = Response(status_code=302, headers={'Vary': 'Accept-Encoding'})
+
+    set_oidc_session_cookie(response, flask_app, auth)
+    _set_session_cookie(response, flask_app, auth)
+
+    cookies = response.headers.getlist('set-cookie')
+    assert len(cookies) == 1
+    assert cookies[0].startswith('session=')
+    assert response.headers['Vary'] == 'Accept-Encoding, Cookie'
+
+
+def test_session_cookie_preserves_configured_samesite_spelling():
+    from oneirodex.runtime_native.browse import _set_session_cookie as set_browse_cookie
+    from oneirodex.runtime_native.release_calendar import _set_session_cookie as set_calendar_cookie
+    from oneirodex.runtime_native.trailers import _set_session_cookie as set_trailer_cookie
+
+    flask_app = Flask(__name__)
+    flask_app.config.update(
+        SECRET_KEY='native-acquire-secret',
+        SESSION_COOKIE_SAMESITE='Lax',
+    )
+    auth = SimpleNamespace(
+        session_data={'_fresh': True},
+        should_set_session_cookie=True,
+    )
+    for writer in (
+        _set_session_cookie,
+        set_browse_cookie,
+        set_calendar_cookie,
+        set_trailer_cookie,
+    ):
+        response = Response(status_code=302)
+        writer(response, flask_app, auth)
+        assert 'SameSite=Lax' in response.headers['set-cookie']
+
+
+def test_vary_header_merge_supports_starlette_and_werkzeug_responses():
+    from werkzeug.wrappers import Response as WerkzeugResponse
+
+    from oneirodex.runtime_native.response_compat import add_vary_header
+
+    starlette_response = Response(headers={'Vary': 'Origin, cookie'})
+    add_vary_header(starlette_response, 'Cookie')
+    add_vary_header(starlette_response, 'Accept-Encoding')
+    assert starlette_response.headers['Vary'] == 'Origin, cookie, Accept-Encoding'
+
+    werkzeug_response = WerkzeugResponse(
+        'ok', headers=[('Vary', 'Origin'), ('Vary', 'Accept-Encoding')],
+    )
+    add_vary_header(werkzeug_response, 'Cookie')
+    assert werkzeug_response.headers.getlist('Vary') == [
+        'Origin, Accept-Encoding, Cookie',
+    ]
+
+    wildcard_response = Response(headers={'Vary': '*'})
+    add_vary_header(wildcard_response, 'Cookie')
+    assert wildcard_response.headers['Vary'] == '*'

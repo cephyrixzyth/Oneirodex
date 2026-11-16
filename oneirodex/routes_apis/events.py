@@ -32,5 +32,8 @@ def events_publish_test():
     """Admin-only test event for verifying the bus."""
     if not is_admin(current_user):
         return api_error('Admin required', code='forbidden')
-    event = event_bus.publish('test', message='ping', user=current_user.name)
+    event = event_bus.publish(
+        'test', message='ping', user=current_user.name,
+        visibility_user_id=current_user.id,
+    )
     return jsonify(event.to_dict())

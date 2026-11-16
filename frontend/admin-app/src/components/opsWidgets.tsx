@@ -3,6 +3,7 @@
  * Keep presentation here; pages own fetch / poll cadence.
  */
 import type { Key, ReactNode, SVGProps } from 'react'
+import { AdminLink, isAdminAppPath } from './AdminLink'
 
 import {
   libraryHealthFactorsGradeClass,
@@ -57,7 +58,11 @@ function OpsIssueRows({
         className={`od-ops-issues__item od-ops-issues__item--${tone}`}
       >
         {item.href ? (
-          <a href={item.href as string}>{item.message as ReactNode}</a>
+          typeof item.href === 'string' && isAdminAppPath(item.href) ? (
+            <AdminLink to={item.href as string}>{item.message as ReactNode}</AdminLink>
+          ) : (
+            <a href={item.href as string}>{item.message as ReactNode}</a>
+          )
         ) : (
           <span>{item.message as ReactNode}</span>
         )}

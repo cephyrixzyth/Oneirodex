@@ -49,10 +49,6 @@
   color: var(--od-text-muted);
 }
 
-.od-delete-libraries__single {
-  margin: 0;
-}
-
 .od-delete-libraries__force {
   display: flex;
   align-items: center;
@@ -67,6 +63,11 @@
 
 .od-delete-libraries__progress p {
   margin: 0;
+}
+
+.od-delete-libraries__current-game {
+  color: var(--od-text);
+  font-weight: 600;
 }
 
 .od-delete-libraries__progress progress {

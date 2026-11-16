@@ -7,6 +7,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class IgdbAvailabilityData:
@@ -42,7 +43,7 @@ def create_igdb_availability_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                raw = request.query_params.get('igdb_id')
+                raw = first_query_value(request.query_params, 'igdb_id')
                 try:
                     igdb_id = int(raw) if raw is not None else None
                 except (TypeError, ValueError):
@@ -90,7 +91,7 @@ def create_igdb_availability_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                raw = request.query_params.get('igdb_id')
+                raw = first_query_value(request.query_params, 'igdb_id')
                 try:
                     igdb_id = int(raw) if raw is not None else None
                 except (TypeError, ValueError):

@@ -14,7 +14,12 @@ from oneirodex.runtime_native.db_session import (
     native_db,
     native_session_scope_key,
 )
-from oneirodex.runtime_native.runtime_context import NativeRuntimeContext, get_runtime_config
+from oneirodex.runtime_native.runtime_context import (
+    NativeRuntimeContext,
+    get_runtime_config,
+    install_flask_json_response_compat,
+    runtime_config_scope,
+)
 
 
 def test_native_runtime_context_preserves_required_flask_defaults(tmp_path):
@@ -58,6 +63,24 @@ def test_native_json_provider_matches_flask_default_json_contract(tmp_path):
     actual = context.json.response(payload).get_data()
 
     assert actual == expected
+
+
+def test_starlette_json_response_matches_flask_default_encoding():
+    from starlette.responses import JSONResponse
+
+    flask_app = Flask('starlette-json-response-compat')
+    config = NativeRuntimeContext({}, package_root=Path.cwd()).config
+    flask_app.config.update(config)
+    payload = {'z': 'café', 'a': {'value': True}}
+
+    install_flask_json_response_compat()
+    install_flask_json_response_compat()
+    with runtime_config_scope(config):
+        response = JSONResponse(payload)
+
+    assert response.body == flask_app.json.response(payload).get_data()
+    assert response.body == b'{"a":{"value":true},"z":"caf\\u00e9"}\n'
+    assert response.headers['content-length'] == str(len(response.body))
 
 
 def test_native_app_context_owns_a_scoped_session_without_flask_app_context(tmp_path):

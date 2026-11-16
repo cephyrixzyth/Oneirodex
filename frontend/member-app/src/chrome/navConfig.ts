@@ -220,6 +220,7 @@ export function getPageTitle(pathname: any, options: LooseProps = {}) {
   if (prefixed) return prefixed.label
 
   if (path.startsWith('/game_details')) return 'Game'
+  if (path === '/user/invites') return 'Invites'
   // A member profile is reached from Friends / Activity / Chat, none of which
   // is a nav entry pointing at it, so the tables above can never name it — it
   // was the one route in the SPA that put no heading on the bar at all, and

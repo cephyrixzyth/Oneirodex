@@ -1,6 +1,7 @@
 """Native FastAPI routes for store ownership connections and imports."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 import json
 from contextlib import nullcontext
 from typing import Any, Callable
@@ -11,6 +12,7 @@ from starlette.responses import JSONResponse
 
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from oneirodex.utils.store_ownership_limits import MAX_OWNERSHIP_CSV_REQUEST_BYTES
 
 
 _CONNECT_MODELS: dict[str, str] = {
@@ -100,50 +102,35 @@ def create_ownership_actions_router(
     router = APIRouter()
     data = data_access or OwnershipActionsData()
 
-    # Keep this exact route before the one-segment store route below.
-    @router.post('/api/ownership/sync-all')
-    async def sync_all_ownership(request: Request):
-        return await _handle_action(
-            request, flask_app, data, find_user=find_user, find_token=find_token,
-            commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-            login_manager=login_manager, database_scope=database_scope,
-            action='sync_all',
-        )
+    def endpoint(action, store=None):
+        async def handle(request: Request):
+            return await _handle_action(
+                request, flask_app, data, find_user=find_user, find_token=find_token,
+                commit_token_touch=commit_token_touch, load_user_id=load_user_id,
+                login_manager=login_manager, database_scope=database_scope,
+                action=action, store=store,
+            )
 
-    @router.post('/api/ownership/{store:str}')
-    async def connect_ownership(store: str, request: Request):
-        return await _handle_action(
-            request, flask_app, data, find_user=find_user, find_token=find_token,
-            commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-            login_manager=login_manager, database_scope=database_scope,
-            action='connect', store=store,
-        )
+        return handle
 
-    @router.delete('/api/ownership/{store:str}')
-    async def disconnect_ownership(store: str, request: Request):
-        return await _handle_action(
-            request, flask_app, data, find_user=find_user, find_token=find_token,
-            commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-            login_manager=login_manager, database_scope=database_scope,
-            action='disconnect', store=store,
+    router.add_api_route(
+        '/api/ownership/sync-all', endpoint('sync_all'), methods=['POST'],
+    )
+    # Explicit store paths keep reserved read/action names out of the dynamic
+    # method table, matching Flask's per-provider routes and its 405 behavior.
+    for store in sorted(_LIVE_STORES):
+        router.add_api_route(
+            f'/api/ownership/{store}', endpoint('connect', store), methods=['POST'],
         )
-
-    @router.post('/api/ownership/{store:str}/sync')
-    async def sync_ownership(store: str, request: Request):
-        return await _handle_action(
-            request, flask_app, data, find_user=find_user, find_token=find_token,
-            commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-            login_manager=login_manager, database_scope=database_scope,
-            action='sync', store=store,
+        router.add_api_route(
+            f'/api/ownership/{store}', endpoint('disconnect', store), methods=['DELETE'],
         )
-
-    @router.post('/api/ownership/{store:str}/csv')
-    async def import_ownership_csv(store: str, request: Request):
-        return await _handle_action(
-            request, flask_app, data, find_user=find_user, find_token=find_token,
-            commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-            login_manager=login_manager, database_scope=database_scope,
-            action='csv', store=store,
+        router.add_api_route(
+            f'/api/ownership/{store}/sync', endpoint('sync', store), methods=['POST'],
+        )
+    for store in sorted(_CSV_STORES):
+        router.add_api_route(
+            f'/api/ownership/{store}/csv', endpoint('csv', store), methods=['POST'],
         )
 
     return router
@@ -169,8 +156,13 @@ async def _handle_action(
         # Bearer writes need an explicit scope. Cookie writes retain CSRF.
         from .csrf_compat import csrf_error_response
 
-        if auth.token is not None and not auth.has_scope('write:library'):
-            response = _error(403, 'forbidden', 'Bearer token requires write:library scope')
+        if auth.user is not None and not auth.has_scope('write:library'):
+            message = (
+                'Bearer token requires write:library scope'
+                if auth.token is not None
+                else 'Missing scope: write:library'
+            )
+            response = _error(403, 'forbidden', message)
         else:
             response = (
                 None if auth.token is not None
@@ -210,10 +202,16 @@ async def _dispatch_action(request, flask_app, data, auth, action, store):
         try:
             account = data.connect(user_id, store, _connect_fields(store, body))
         except Exception as exc:
-            from oneirodex.utils.store_sync_errors import SyncOutcomeError
+            from oneirodex.utils.store_credentials import StoreCredentialError
+            from oneirodex.utils.store_sync_errors import (
+                SyncOutcomeError,
+                classify_sync_exception,
+            )
 
             if isinstance(exc, SyncOutcomeError):
                 return _outcome_error(store, exc.reason, exc.job)
+            if isinstance(exc, StoreCredentialError):
+                return _outcome_error(store, classify_sync_exception(exc))
             if isinstance(exc, ValueError):
                 return _error(400, 'bad_request', str(exc))
             raise
@@ -324,10 +322,10 @@ def _connect_fields(store, body):
     return body.model_dump(exclude_none=True)
 
 
-async def _json_body(request, config):
+async def _json_body(request, config, *, max_bytes=None):
     if not _is_json_request(request):
         return {}, None
-    raw, error = await _bounded_body(request, config)
+    raw, error = await _bounded_body(request, config, max_bytes=max_bytes)
     if error is not None:
         return None, error
     try:
@@ -340,25 +338,29 @@ async def _json_body(request, config):
 async def _read_csv_payload(request, flask_app):
     content_type = request.headers.get('content-type', '').lower()
     if _is_json_request(request):
-        payload, error = await _json_body(request, flask_app.config)
+        payload, error = await _json_body(
+            request, flask_app.config, max_bytes=MAX_OWNERSHIP_CSV_REQUEST_BYTES,
+        )
         if error is not None:
             return None, error
         value = payload.get('csv') or '' if isinstance(payload, dict) else ''
         return (value if isinstance(value, str) else ''), None
-    raw, error = await _bounded_body(request, flask_app.config)
+    raw, error = await _bounded_body(
+        request, flask_app.config, max_bytes=MAX_OWNERSHIP_CSV_REQUEST_BYTES,
+    )
     if error is not None:
         return None, error
     if content_type.startswith('multipart/form-data'):
         replayed = _request_with_body(request, raw)
         try:
             form = await replayed.form(max_files=1, max_fields=10)
-            upload = form.get('file')
+            upload = first_form_upload(form, 'file')
             if upload is not None and hasattr(upload, 'read'):
                 try:
                     return (await upload.read()).decode('utf-8', errors='replace'), None
                 finally:
                     await form.close()
-            value = form.get('csv') or ''
+            value = first_form_value(form, 'csv') or ''
             await form.close()
             return (value if isinstance(value, str) else ''), None
         except Exception:
@@ -369,7 +371,7 @@ async def _read_csv_payload(request, flask_app):
             form = await replayed.form(max_fields=10)
         except Exception:
             return None, _error(400, 'bad_request', 'Invalid form data')
-        value = form.get('csv') or ''
+        value = first_form_value(form, 'csv') or ''
         return (value if isinstance(value, str) else ''), None
     return '', None
 
@@ -381,12 +383,14 @@ def _is_json_request(request):
     )
 
 
-async def _bounded_body(request, config):
+async def _bounded_body(request, config, *, max_bytes=None):
     limit = _body_limit(config)
+    if max_bytes is not None:
+        limit = min(limit, max_bytes)
     content_length = request.headers.get('content-length')
     try:
         if content_length is not None and int(content_length) > limit:
-            return b'', _too_large(config)
+            return b'', _too_large(config, limit_bytes=limit)
     except ValueError:
         return b'', _error(400, 'bad_request', 'Invalid content length')
     chunks = []
@@ -394,7 +398,7 @@ async def _bounded_body(request, config):
     async for chunk in request.stream():
         size += len(chunk)
         if size > limit:
-            return b'', _too_large(config)
+            return b'', _too_large(config, limit_bytes=limit)
         chunks.append(chunk)
     return b''.join(chunks), None
 
@@ -420,8 +424,11 @@ def _body_limit(config):
     return max(0, value)
 
 
-def _too_large(config):
-    limit_mb = config.get('MAX_UPLOAD_MB', max(1, _body_limit(config) // (1024 * 1024)))
+def _too_large(config, *, limit_bytes=None):
+    if limit_bytes is None:
+        limit_mb = config.get('MAX_UPLOAD_MB', max(1, _body_limit(config) // (1024 * 1024)))
+    else:
+        limit_mb = max(1, (limit_bytes + 1024 * 1024 - 1) // (1024 * 1024))
     return _error(
         413, 'payload_too_large',
         f'The file you tried to upload is too large. Maximum size is {limit_mb}MB.',

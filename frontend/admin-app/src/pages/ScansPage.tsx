@@ -1,130 +1,73 @@
-import { useRef, useState, type ReactNode } from 'react'
-import { PageStatus, Button } from '@oneirodex/ui'
-import { getJson } from '../api/adminApi'
+import { Button, PageStatus } from '@oneirodex/ui'
+import { type ReactNode } from 'react'
 import { DataTable } from '../components/DataTable'
-import { DupeGlance } from '../components/DupeGlance'
-import { OpenPathModal } from '../components/OpenPathModal'
+import { formatScanJobCounters } from '../components/opsWidgets'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
-import {
-  isScanBusyStatus,
-  isScanQueuedStatus,
-  isScanRunning,
-  normalizeScanJobsList,
-  type ScanJobsPayload,
-} from '../components/scanQueuePolicy'
-import { formatScanJobCounters } from '../components/opsWidgets'
-import { scanJobsStructureSignature } from '../../../../oneirodex/setup/default_theme/js/scanJobsDom.js'
-import { useLibraryRefreshAll } from '../hooks/useLibraryRefreshAll'
-import { useLibraryScan } from '../hooks/useLibraryScan'
-import { useVisibilityPoll } from '../hooks/useVisibilityPoll'
+import { isScanBusyStatus, isScanQueuedStatus } from '../components/scanQueuePolicy'
 import './ScansPage.css'
-
-interface PathModalState {
-  path?: string
-  label?: string
-  matchReason?: string
-}
+import { useScans } from './useScans'
 
 export function ScansPage() {
-  const [status, setStatus] = useState<ScanJobsPayload>(null)
-  const [error, setError] = useState<unknown>(null)
-  const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
-  const [pathModal, setPathModal] = useState<PathModalState | null>(null)
-  const { conflictOpen, refreshing, startRefreshAll, onConflictChoose, onConflictClose } =
-    useLibraryRefreshAll()
   const {
-    conflictOpen: scanConflictOpen,
-    busyKey: scanBusyKey,
+    status,
+    error,
+    actionError,
+    actionMessage,
+    actionBusy,
+    busyJobKey,
+    statusFilter,
+    setStatusFilter,
+    jobQuery,
+    setJobQuery,
+    updatedAt,
+    conflictOpen,
+    refreshing,
+    startRefreshAll,
+    onConflictChoose,
+    onConflictClose,
+    scanConflictOpen,
+    scanBusyKey,
     startScan,
-    onConflictChoose: onScanConflictChoose,
-    onConflictClose: onScanConflictClose,
-  } = useLibraryScan()
+    onScanConflictChoose,
+    onScanConflictClose,
+    jobs,
+    running,
+    runningJob,
+    stoppingJob,
+    queuedJobs,
+    filteredJobs,
+    visibleJobs,
+    message,
+    scanMotifActive,
+    scanSummary,
+    statusCount,
+    cancelScanJob,
+    clearJobs,
+    exportCsv,
+  } = useScans()
 
-  const hasSnapshotRef = useRef(false)
-  const jobsSnapshotKeyRef = useRef('')
+  const conflictDialogs = (
+    <>
+      <ScanConflictModal
+        open={conflictOpen}
+        busy={refreshing}
+        onChoose={onConflictChoose}
+        onClose={onConflictClose}
+      />
+      <ScanConflictModal
+        open={scanConflictOpen}
+        busy={Boolean(scanBusyKey)}
+        onChoose={onScanConflictChoose}
+        onClose={onScanConflictClose}
+      />
+    </>
+  )
 
-  useVisibilityPoll(async ({ signal }) => {
-    try {
-      const data = await getJson('/api/scan_jobs_status', { signal })
-      const jobs = normalizeScanJobsList(data)
-      const busy = jobs.some((job) => isScanBusyStatus(job?.status))
-      // scanJobsProgressSignature folds processed / percentage / elapsed / eta —
-      // all of which tick every few seconds while a scan runs, so it re-rendered
-      // the (non-virtualized) job tables + DupeGlance every 4s and made a
-      // password-manager extension re-scan that subtree each tick. Bucket
-      // progress to 5% so a 41%→43% step is a no-op, but a ≥5% step, a stall, a
-      // status change or a structure change still lands. When nothing is busy,
-      // drop progress entirely — the structure signature already covers
-      // status / queue-position / cancellation changes.
-      const progressKey = busy
-        ? jobs
-            .map((job) => {
-              const pct = Number(job?.percentage ?? job?.progress ?? 0) || 0
-              return `${job?.id}:${Math.round(pct / 5)}:${job?.stalled ? 1 : 0}`
-            })
-            .join(',')
-        : ''
-      const key = `${scanJobsStructureSignature(jobs, { busy })}::${progressKey}`
-      if (key === jobsSnapshotKeyRef.current && hasSnapshotRef.current) {
-        return
-      }
-      jobsSnapshotKeyRef.current = key
-      setStatus(data)
-      setError(null)
-      setUpdatedAt(new Date())
-      hasSnapshotRef.current = true
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return
-      if (!hasSnapshotRef.current) setError(err)
-    }
-  }, 4000)
-
-  const jobs = normalizeScanJobsList(status)
-  // A bare `running` flag with no jobs behind it is a phantom scan (GT-B13).
-  const running = isScanRunning(status)
-  const queuedJobs = jobs.filter((job) => isScanQueuedStatus(job?.status))
-  const recentJobs = jobs.slice(0, 12)
-  const statusPayload = (status && !Array.isArray(status) ? status : {}) as Record<string, unknown>
-  const message =
-    statusPayload.message || statusPayload.status_message || statusPayload.phase || null
-  const scanMotifActive = running || queuedJobs.length > 0
-
-  /**
-   * One sentence answering "is anything happening, and if not, why not".
-   *
-   * The queued-but-not-running case is the one that matters and the one the old
-   * readout hid: it rendered as "Running: no · queued 1", which reads as idle.
-   * A queue with work in it and nothing running is either about to promote or
-   * is being held by a job that no longer has a worker — and the operator
-   * cannot tell those apart from a boolean. The Detail column carries the
-   * reclaim reason once the sweep has run; this line at least stops calling it
-   * idle.
-   */
-  const activeJob = jobs.find((job) => isScanBusyStatus(job?.status)) || null
-  let scanSummary
-  if (running && activeJob) {
-    const counters = formatScanJobCounters(activeJob)
-    const where = activeJob.library_name || activeJob.library || 'a library'
-    const eta = activeJob.eta_label ? ` · ~${activeJob.eta_label} left` : ''
-    scanSummary = `Scanning ${where} — ${counters}${eta}`
-  } else if (queuedJobs.length) {
-    scanSummary =
-      `${queuedJobs.length} scan${queuedJobs.length === 1 ? '' : 's'} queued, none running. ` +
-      'A queued scan starts when the current one finishes; if nothing is running, ' +
-      'the queue is waiting on a job that has not reported a result yet.'
-  } else if (jobs.length) {
-    scanSummary = 'No scan running.'
-  } else {
-    scanSummary = 'No scans have run yet.'
-  }
-
-  return (
-    <Page
-      title="Scan jobs"
-      lede="Review live scan progress, retry completed scans, and inspect unmatched folders."
-    >
+  const content = (
+    <>
       <PageStatus error={error} errorMessage="Unable to load scan status." />
+      <PageStatus error={actionError} />
       <div className="od-admin-panel">
         <div className="od-admin-panel__toolbar od-admin-panel__toolbar--row">
           <Button
@@ -143,7 +86,11 @@ export function ScansPage() {
               dataState={running ? 'running' : 'queued'}
             >
               <span className="od-spinner od-spinner--sm" aria-hidden="true" />
-              {running ? 'Scanning…' : `Queued… (${queuedJobs.length})`}
+              {runningJob
+                ? 'Scanning…'
+                : stoppingJob
+                  ? 'Stopping…'
+                  : `Queued… (${queuedJobs.length})`}
             </PageStatus>
           ) : null}
         </div>
@@ -159,17 +106,97 @@ export function ScansPage() {
                 reads as idle rather than stuck. */}
             <p className="od-scan-summary">{scanSummary}</p>
             {message ? <p className="od-admin-lede">{message as ReactNode}</p> : null}
+            {actionMessage ? (
+              <PageStatus announcement="status" inline>
+                {actionMessage}
+              </PageStatus>
+            ) : null}
+            <div className="od-admin-panel__toolbar od-admin-panel__toolbar--row">
+              <div
+                className="od-scan-status-filters"
+                role="group"
+                aria-label="Filter scan jobs by status"
+              >
+                {['All', 'Running', 'Queued', 'Completed', 'Failed', 'Cancelled', 'Scheduled'].map(
+                  (filter) => (
+                    <Button
+                      key={filter}
+                      type="button"
+                      size="sm"
+                      className={statusFilter === filter ? 'od-btn--accent' : 'od-btn--secondary'}
+                      aria-pressed={statusFilter === filter}
+                      onClick={() => setStatusFilter(filter)}
+                    >
+                      {filter} ({statusCount(filter)})
+                    </Button>
+                  ),
+                )}
+              </div>
+              <Button type="button" className="od-btn--secondary" onClick={exportCsv}>
+                Export CSV
+              </Button>
+              <Button
+                type="button"
+                className="od-btn--secondary"
+                disabled={actionBusy || statusCount('Completed') === 0}
+                onClick={() => void clearJobs('Completed')}
+              >
+                Clear completed
+              </Button>
+              <Button
+                type="button"
+                className="od-btn--secondary"
+                disabled={actionBusy || statusCount('Failed') === 0}
+                onClick={() => void clearJobs('Failed')}
+              >
+                Clear failed
+              </Button>
+              <Button
+                type="button"
+                className="od-btn--secondary"
+                disabled={
+                  actionBusy ||
+                  statusCount('Completed') + statusCount('Failed') + statusCount('Cancelled') === 0
+                }
+                onClick={() => void clearJobs('All')}
+              >
+                Clear all
+              </Button>
+            </div>
+            <div className="od-table-toolbar">
+              <label className="od-table-filter">
+                <span className="od-table-filter__label">Filter scan jobs</span>
+                <input
+                  type="search"
+                  value={jobQuery}
+                  onChange={(event) => setJobQuery(event.target.value)}
+                  placeholder="Library, path, status, or error…"
+                  aria-label="Filter scan jobs"
+                  autoComplete="off"
+                />
+              </label>
+              <span className="od-table-count" aria-live="polite">
+                {filteredJobs.length === jobs.length
+                  ? `${jobs.length} scan job${jobs.length === 1 ? '' : 's'}`
+                  : `${filteredJobs.length} of ${jobs.length} scan jobs`}
+              </span>
+            </div>
             {/* Scan jobs sort and filter like every other table now (W27-C2).
                 Each column declares `value` where what it renders is not what
                 it should sort on: Job renders a truncated code element, and
                 Status renders a queue position alongside the word — sorting on
                 the rendered markup would order by the wrong thing entirely. */}
             <DataTable
-              rows={recentJobs}
+              rows={visibleJobs}
               getRowKey={(job) => job.id}
-              caption="Recent scan jobs"
-              scrollLabel="Recent scan jobs table"
-              emptyMessage="No scan jobs yet."
+              caption="Scan jobs"
+              scrollLabel="Scan jobs table"
+              emptyMessage={
+                jobs.length === 0
+                  ? 'No scan jobs yet.'
+                  : `No ${statusFilter.toLowerCase()} scan jobs match this filter.`
+              }
+              toolbar={false}
               initialSort={{ key: 'status', dir: 'asc' }}
               dense
               columns={[
@@ -303,6 +330,39 @@ export function ScansPage() {
                     )
                   },
                 },
+                {
+                  key: 'action',
+                  label: 'Action',
+                  sortable: false,
+                  render: (job) => {
+                    const jobStatus = String(job.status || '').toLowerCase()
+                    if (jobStatus === 'stopping') {
+                      return <span className="od-admin-lede">Stopping…</span>
+                    }
+                    if (jobStatus !== 'running' && !isScanQueuedStatus(job.status)) {
+                      return <span className="od-admin-lede">—</span>
+                    }
+                    const queued = isScanQueuedStatus(job.status)
+                    return (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="od-btn--secondary"
+                        disabled={Boolean(busyJobKey) || actionBusy}
+                        title={queued ? 'Cancel queued scan before it starts' : 'Stop this scan'}
+                        onClick={() => void cancelScanJob(job)}
+                      >
+                        {busyJobKey === job.id
+                          ? queued
+                            ? 'Cancelling…'
+                            : 'Stopping…'
+                          : queued
+                            ? 'Cancel queue'
+                            : 'Stop'}
+                      </Button>
+                    )
+                  },
+                },
               ]}
             />
             {updatedAt ? (
@@ -315,34 +375,19 @@ export function ScansPage() {
               <strong>Queue</strong> (default) or <strong>Force parallel</strong> with an Unraid/NAS
               load warning.
             </p>
-            <p className="od-admin-lede">
-              <a href="/admin/scan-controls">Start or schedule a scan</a>
-              {' · '}
-              <a href="/scan_management?active_tab=manual">Open manual scan and identify</a>
-            </p>
           </>
         )}
       </div>
-      <DupeGlance onOpenPath={setPathModal} />
-      <OpenPathModal
-        open={Boolean(pathModal)}
-        path={pathModal?.path || ''}
-        label={pathModal?.label || 'Path'}
-        matchReason={pathModal?.matchReason || ''}
-        onClose={() => setPathModal(null)}
-      />
-      <ScanConflictModal
-        open={conflictOpen}
-        busy={refreshing}
-        onChoose={onConflictChoose}
-        onClose={onConflictClose}
-      />
-      <ScanConflictModal
-        open={scanConflictOpen}
-        busy={Boolean(scanBusyKey)}
-        onChoose={onScanConflictChoose}
-        onClose={onScanConflictClose}
-      />
+      {conflictDialogs}
+    </>
+  )
+  return (
+    <Page
+      title="Scan jobs"
+      documentTitle="Scan Jobs"
+      lede="Review live scan progress, retry completed scans, and inspect unmatched folders."
+    >
+      {content}
     </Page>
   )
 }

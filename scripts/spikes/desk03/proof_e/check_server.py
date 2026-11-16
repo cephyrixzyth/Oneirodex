@@ -13,9 +13,8 @@ import sys
 from pathlib import Path
 
 import psycopg2
-from cryptography.fernet import Fernet, InvalidToken
-
-from oneirodex_standalone.move import SAVE_MAGIC, save_key_for
+from oneirodex_standalone.move import _sha256
+from oneirodex.utils.save_crypto import maybe_decrypt
 
 LIBRARY = Path('/srv/library')
 MANIFEST = json.loads(Path('/move/bundle/manifest.json').read_text(encoding='utf-8'))
@@ -49,19 +48,16 @@ def moved(cur):
     saves = cur.fetchall()
     check(len(saves) == 10 and all(p.startswith(str(LIBRARY / 'saves') + '/') and Path(p).is_file() for p, _ in saves),
           'every save points into the server library and exists')
-    server = Fernet(save_key_for(os.environ['SECRET_KEY']).encode('ascii'))
-    standalone = Fernet(MANIFEST['save_key'].encode('ascii'))
-    encrypted = [Path(p) for p, enc in saves if enc]
-    check(len(encrypted) == 3, 'three encrypted saves carried')
-    for path in encrypted:
-        token = path.read_bytes()[len(SAVE_MAGIC):]
-        server.decrypt(token)
+    encrypted_entries = [entry for entry in MANIFEST['files'] if entry.get('save_key_id')]
+    check(len(encrypted_entries) == 3, 'three encrypted saves carried')
+    for entry in encrypted_entries:
+        path = LIBRARY / entry['path']
         try:
-            standalone.decrypt(token)
-            check(False, f'{path.name} still opens with the standalone key')
-        except InvalidToken:
-            pass
-    check(True, 'encrypted saves open with the server key and no longer with the standalone key')
+            plaintext = maybe_decrypt(path.read_bytes(), context=entry.get('save_context'))
+            check(_sha256(plaintext) == entry['plain_sha256'],
+                  f'{path.name} opens with the restored keyring and matches its plaintext digest')
+        except Exception:  # noqa: BLE001 - report only the synthetic filename
+            check(False, f'{path.name} is not readable with the restored keyring')
     wanted = {e['path'] for e in MANIFEST['files']}
     check(any(p.startswith('themes/proof-upload/') for p in wanted), 'uploaded theme carried')
     check(not any(p.startswith(('themes/default/', 'icon-themes/', 'fonts/')) for p in wanted),

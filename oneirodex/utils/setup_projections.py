@@ -4,6 +4,7 @@ from __future__ import annotations
 
 def state_settings() -> dict:
     from oneirodex.utils.global_settings import global_settings_row
+    from oneirodex.utils.secret_store import has_global_secret
 
     row = global_settings_row()
     if row is None:
@@ -15,7 +16,7 @@ def state_settings() -> dict:
         'smtp_default_sender': row.smtp_default_sender or '',
         'smtp_use_tls': bool(row.smtp_use_tls),
         'smtp_enabled': bool(row.smtp_enabled),
-        'smtp_password_configured': bool(row.smtp_password),
+        'smtp_password_configured': has_global_secret(row, 'smtp_password'),
         'features': {
             'enable_game_updates': bool(row.enable_game_updates),
             'enable_game_extras': bool(row.enable_game_extras),
@@ -25,9 +26,9 @@ def state_settings() -> dict:
             'enable_malware_scan': bool(row.enable_malware_scan),
         },
         'igdb_client_id': row.igdb_client_id or '',
-        'igdb_secret_configured': bool(row.igdb_client_secret),
+        'igdb_secret_configured': has_global_secret(row, 'igdb_client_secret'),
         'provider_keys': {
-            key: bool(getattr(row, key, None))
+            key: has_global_secret(row, key)
             for key in (
                 'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
                 'mobygames_api_key', 'thegamesdb_api_key',
@@ -40,7 +41,7 @@ def state_settings() -> dict:
             'redirect_uri': row.oidc_redirect_uri or '',
             'scopes': row.oidc_scopes or 'openid email profile',
             'role_claim': row.oidc_role_claim or '',
-            'secret_configured': bool(row.oidc_client_secret),
+            'secret_configured': has_global_secret(row, 'oidc_client_secret'),
             'enabled': False,
         },
     }

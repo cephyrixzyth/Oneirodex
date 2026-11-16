@@ -7,12 +7,14 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
 
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response as _csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+
+_MAX_INVITE_BODY_BYTES = 16 * 1024
 
 
 class AccountSummaryData:
@@ -28,6 +30,7 @@ class AccountSummaryData:
 
         unused = unused_invite_count(user)
         unlimited = invites_unlimited(user)
+        active_theme = getattr(getattr(user, 'preferences', None), 'theme', None) or 'default'
         return {
             'username': user.name,
             'email': user.email,
@@ -35,13 +38,13 @@ class AccountSummaryData:
             'avatar_path': user.avatarpath,
             'avatar_url': avatar_url(
                 user.avatarpath,
-                theme=getattr(getattr(user, 'preferences', None), 'theme', None) or 'default',
+                theme=active_theme,
                 static_url=static_url,
                 package_root=package_root,
             ),
             'stock_avatars': [
                 {**entry, 'url': avatar_url(
-                    entry['path'], theme='default', static_url=static_url,
+                    entry['path'], theme=active_theme, static_url=static_url,
                     package_root=package_root,
                 )}
                 for entry in STOCK_AVATARS
@@ -140,7 +143,7 @@ class AccountInvitesData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import InviteToken
-        from oneirodex.utils.account_invites import unused_invite_count
+        from oneirodex.utils.account_invites import invites_unlimited, unused_invite_count
 
         invite = db.session.execute(
             select(InviteToken).filter_by(token=token, creator_user_id=user.user_id)
@@ -156,7 +159,9 @@ class AccountInvitesData:
             return {'error': 'Could not revoke the invite.', 'code': 'internal'}
         return {
             'revoked': token,
-            'remaining': max(0, (user.invite_quota or 0) - unused_invite_count(user)),
+            'remaining': None if invites_unlimited(user) else max(
+                0, (user.invite_quota or 0) - unused_invite_count(user),
+            ),
         }
 
 
@@ -206,13 +211,14 @@ def create_account_summary_router(
             elif auth.token is not None:
                 response = _native_error(
                     'Sign in with your site account to manage invites', 'forbidden',
+                    config=flask_app.config,
                 )
             else:
                 payload = (
                     data.summary(auth.user, static_url=static_url, package_root=flask_app.root_path)
                     if uses_native_data else data.summary(auth.user)
                 )
-                response = _native_success(payload)
+                response = _native_success(payload, config=flask_app.config)
                 # Flask persists the session after remember-cookie login. The
                 # resolver marks that login as a session modification.
                 if auth.should_set_session_cookie:
@@ -247,21 +253,54 @@ def create_account_summary_router(
                 elif auth.token is not None:
                     response = _native_error(
                         'Sign in with your site account to manage invites', 'forbidden',
+                        config=flask_app.config,
                     )
                 else:
-                    body = _json_mapping(await request.body())
-                    raw_email = body.get('email') or ''
-                    email = raw_email.strip() or None
-                    from oneirodex.utils.public_origin import public_origin_for_request
+                    from oneirodex.runtime_native.bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
-                    result = mutations.create(
-                        auth.user, email,
-                        origin=public_origin_for_request(request, flask_app.config),
-                    )
-                    if 'error' in result:
-                        response = _native_error(result['error'], result['code'])
+                    raw_body = await read_bounded_body(request, _MAX_INVITE_BODY_BYTES)
+                    if raw_body is BODY_TOO_LARGE:
+                        response = _native_error(
+                            'Request body is too large.', 'payload_too_large',
+                            config=flask_app.config,
+                        )
                     else:
-                        response = _native_success(result, status=201)
+                        body = _json_mapping(raw_body)
+                        raw_email = body.get('email')
+                        email = None
+                        invalid_email = False
+                        if raw_email is not None:
+                            if not isinstance(raw_email, str):
+                                invalid_email = True
+                            else:
+                                email = raw_email.strip() or None
+                                if email:
+                                    from email_validator import EmailNotValidError, validate_email
+
+                                    try:
+                                        validate_email(email, check_deliverability=False)
+                                    except EmailNotValidError:
+                                        invalid_email = True
+
+                        if invalid_email:
+                            response = _native_error(
+                                'Invalid email.', 'bad_request', config=flask_app.config,
+                            )
+                        else:
+                            from oneirodex.utils.public_origin import public_origin_for_request
+
+                            result = mutations.create(
+                                auth.user, email,
+                                origin=public_origin_for_request(request, flask_app.config),
+                            )
+                            if 'error' in result:
+                                response = _native_error(
+                                    result['error'], result['code'], config=flask_app.config,
+                                )
+                            else:
+                                response = _native_success(
+                                    result, status=201, config=flask_app.config,
+                                )
                     if auth.should_set_session_cookie:
                         _set_session_cookie(response, flask_app, auth)
             elif auth.user is None:
@@ -269,6 +308,7 @@ def create_account_summary_router(
             elif auth.token is not None:
                 response = _native_error(
                     'Sign in with your site account to manage invites', 'forbidden',
+                    config=flask_app.config,
                 )
             else:
                 from oneirodex.utils.public_origin import public_origin_for_request
@@ -276,7 +316,7 @@ def create_account_summary_router(
                 response = _native_success(invite_data.invites(
                     auth.user,
                     origin=public_origin_for_request(request, flask_app.config),
-                ))
+                ), config=flask_app.config)
                 if auth.should_set_session_cookie:
                     _set_session_cookie(response, flask_app, auth)
 
@@ -308,13 +348,16 @@ def create_account_summary_router(
             elif auth.token is not None:
                 response = _native_error(
                     'Sign in with your site account to manage invites', 'forbidden',
+                    config=flask_app.config,
                 )
             else:
                 result = mutations.delete(auth.user, token)
                 if 'error' in result:
-                    response = _native_error(result['error'], result['code'])
+                    response = _native_error(
+                        result['error'], result['code'], config=flask_app.config,
+                    )
                 else:
-                    response = _native_success(result)
+                    response = _native_success(result, config=flask_app.config)
                 if auth.should_set_session_cookie:
                     _set_session_cookie(response, flask_app, auth)
 
@@ -342,16 +385,22 @@ def _json_mapping(raw_body: bytes) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
-def _native_success(payload, *, status=200):
+def _native_json_response(payload, *, status=200, config):
+    from oneirodex.runtime_native.runtime_context import NativeJSONProvider
+
+    provider = NativeJSONProvider(config)
+    body = (provider.dumps(payload, separators=(',', ':')) + '\n').encode('utf-8')
+    return Response(body, status_code=status, media_type=provider.mimetype)
+
+
+def _native_success(payload, *, status=200, config):
     from oneirodex.utils.api_contract import api_ok_payload
 
-    return JSONResponse(api_ok_payload(payload), status_code=status)
+    return _native_json_response(api_ok_payload(payload), status=status, config=config)
 
 
-def _native_error(message, code, *, detail=None):
+def _native_error(message, code, *, detail=None, config):
     from oneirodex.utils.api_contract import api_error_payload
 
     payload, status = api_error_payload(message, code=code, detail=detail)
-    return JSONResponse(payload, status_code=status)
-
-
+    return _native_json_response(payload, status=status, config=config)

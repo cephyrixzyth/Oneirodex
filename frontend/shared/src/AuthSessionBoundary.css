@@ -1,0 +1,16 @@
+.od-session-ended {
+  min-height: 100vh;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+  background: var(--od-bg, #0b1410);
+  color: var(--od-text, #e4eee8);
+}
+
+.od-session-ended__link {
+  color: var(--od-accent, #38dc83);
+  text-decoration: underline;
+}

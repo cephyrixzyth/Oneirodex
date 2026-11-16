@@ -34,10 +34,11 @@ with 503 responses even though the Docker image includes the bundles.
 
 The `--deselect` arguments remain a narrow, named exception list. Remove an
 entry when its test is fixed; do not add exclusions to turn a red run green.
-The current 35-minute timeout allows the marker suite and coverage reporting
-to finish on the hosted runner. Treat workflow evidence for the current commit
-as authoritative; older timing and coverage measurements below this section
-are historical and must not be presented as current results.
+The core job has a 90-minute timeout: run 42534095194 was canceled at the
+previous 35-minute deadline with pytest at 70%. This extends the observation
+window without changing test selection, exclusions or the 65% coverage floor.
+Treat workflow evidence for the current commit as authoritative; older timing
+and coverage measurements below this section are historical and must not be presented as current results.
 
 The 65% coverage floor and three ratchets are enforced after pytest succeeds.
 Thus a red pytest run provides no evidence that those later gates passed.

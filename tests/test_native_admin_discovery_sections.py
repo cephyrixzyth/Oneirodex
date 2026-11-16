@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_discovery_sections import (
     create_admin_discovery_sections_router,
 )
@@ -62,7 +64,7 @@ def _client(*, role='admin'):
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=18, user_id='discovery-user', role=role, is_active=True,
-        state=True, is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        state=True, is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -84,7 +86,7 @@ def _client(*, role='admin'):
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    session = {'_user_id': '18:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(18), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     client.cookies.set('session', dump_session_cookie(session, flask_app.config['SECRET_KEY']))
     return client, data, csrf
@@ -154,8 +156,47 @@ def test_discovery_section_validation_and_member_gate_do_not_mutate():
         '/admin/api/discovery_sections', json={'mode': 'manual'},
         headers={'X-CSRFToken': csrf},
     )
-    assert invalid.status_code == 400
-    assert invalid.json()['error_code'] == 'bad_request'
+    assert invalid.status_code == 422
+    assert invalid.json()['error_code'] == 'unprocessable'
+    assert invalid.json()['detail'] == {'name': 'Field required'}
+
+    blank_name = client.post(
+        '/admin/api/discovery_sections', json={'name': '   ', 'mode': 'manual'},
+        headers={'X-CSRFToken': csrf},
+    )
+    assert blank_name.status_code == 422
+    assert blank_name.json()['error_code'] == 'unprocessable'
+    assert blank_name.json()['detail'] == {
+        'name': 'String should have at least 1 character',
+    }
+
+    malformed = client.post(
+        '/admin/api/discovery_sections', data='{not-json',
+        headers={'X-CSRFToken': csrf, 'content-type': 'application/json'},
+    )
+    non_object = client.post(
+        '/admin/api/discovery_sections', json=[], headers={'X-CSRFToken': csrf},
+    )
+    root_error = {
+        '__root__': 'Input should be a valid dictionary or instance of DiscoveryShelfBody',
+    }
+    empty_object_errors = [
+        client.post(
+            '/admin/api/discovery_sections',
+            headers={'X-CSRFToken': csrf, 'content-type': 'application/json'},
+        ),
+        client.post('/admin/api/discovery_sections', json=None, headers={'X-CSRFToken': csrf}),
+        client.post('/admin/api/discovery_sections', json='scalar', headers={'X-CSRFToken': csrf}),
+        client.post('/admin/api/discovery_sections', json=7, headers={'X-CSRFToken': csrf}),
+        client.post('/admin/api/discovery_sections', json=True, headers={'X-CSRFToken': csrf}),
+    ]
+    assert malformed.status_code == 422
+    assert malformed.json()['detail'] == {'name': 'Field required'}
+    assert non_object.status_code == 422
+    assert non_object.json()['detail'] == root_error
+    assert all(response.status_code == 422 for response in empty_object_errors)
+    assert all(response.json()['detail'] == {'name': 'Field required'} for response in empty_object_errors[:2])
+    assert all(response.json()['detail'] == root_error for response in empty_object_errors[2:])
     assert data.calls == []
 
     member, member_data, _member_csrf = _client(role='user')

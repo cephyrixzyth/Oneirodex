@@ -12,15 +12,22 @@ import json
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+import requests
+
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from oneirodex.runtime_native.db_session import native_db as db
-from oneirodex.models import Game, GameURL, StoreAccount, UserOwnedTitle
+from oneirodex.models import Game, GameURL, StoreAccount, User, UserOwnedTitle
 from oneirodex.utils.global_settings import global_settings_row
-from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.http_safe import ResponseTooLarge, safe_request_limited
 from oneirodex.utils.security import validate_user_outbound_http_url
 from oneirodex.utils.store_capabilities import REGISTER_ACCOUNT_STORES
+from oneirodex.utils.store_ownership_limits import (
+    MAX_OWNED_TITLES_PER_USER,
+    OWNERSHIP_REGISTER_LIMIT_ERROR,
+)
+from oneirodex.utils.store_sync_errors import StoreSyncError
 
 
 # meta_quest = register-only ownership (CSV); never downloads DRM titles.
@@ -29,9 +36,11 @@ from oneirodex.utils.store_capabilities import REGISTER_ACCOUNT_STORES
 #   when ENABLE_UNOFFICIAL_STORE_SYNC names the store. Never downloads.
 VALID_STORES = REGISTER_ACCOUNT_STORES
 UNOFFICIAL_OPT_IN_STORES = frozenset({'xbox', 'psn'})
+MAX_STORE_PROVIDER_RESPONSE_BYTES = 64 * 1024 * 1024
 #: Width of UserOwnedTitle.external_app_id. Xbox package family names and
 #: Amazon product IDs run well past the original 32.
 EXTERNAL_APP_ID_MAX = 128
+_OWNERSHIP_QUOTA_SESSION_KEY = '_oneirodex_owned_title_quota'
 _CSV_ID_HEADERS = frozenset({
     'appid',
     'app_id',
@@ -86,8 +95,9 @@ def get_steam_web_api_key() -> str | None:
     if key:
         return key
     settings = global_settings_row()
-    if settings and settings.steam_web_api_key:
-        return settings.steam_web_api_key.strip()
+    if settings:
+        from oneirodex.utils.secret_store import read_global_secret
+        return (read_global_secret(settings, 'steam_web_api_key') or '').strip() or None
     return None
 
 
@@ -162,20 +172,31 @@ def get_amazon_api_token() -> str | None:
 
 def _outbound(method: str, url: str, **kwargs):
     kwargs.setdefault('timeout', 30)
-    return safe_request(
-        method,
-        url,
-        validator=validate_user_outbound_http_url,
-        **kwargs,
-    )
+    try:
+        with requests.Session() as session:
+            return safe_request_limited(
+                method,
+                url,
+                validator=validate_user_outbound_http_url,
+                max_response_bytes=MAX_STORE_PROVIDER_RESPONSE_BYTES,
+                session=session,
+                **kwargs,
+            )
+    except ResponseTooLarge as exc:
+        raise StoreSyncError(
+            'Store provider response exceeds the supported size limit',
+            'invalid_response',
+        ) from exc
 
 
 def _any_account_credential(store: str) -> bool:
     row = db.session.execute(
         select(StoreAccount.id).where(
             StoreAccount.store == store,
-            StoreAccount.credential.isnot(None),
-            StoreAccount.credential != '',
+            or_(
+                and_(StoreAccount.credential.isnot(None), StoreAccount.credential != ''),
+                and_(StoreAccount.credential_ciphertext.isnot(None), StoreAccount.credential_ciphertext != ''),
+            ),
         ).limit(1)
     ).first()
     return row is not None
@@ -303,6 +324,33 @@ def upsert_owned_title(
     if len(str(external_app_id)) > EXTERNAL_APP_ID_MAX:
         from oneirodex.utils.store_sync_errors import StoreSyncError
         raise StoreSyncError('A store returned an ID longer than Oneirodex records', 'invalid_response')
+    session = db.session()
+    transaction = session.get_nested_transaction() or session.get_transaction()
+    quota = session.info.get(_OWNERSHIP_QUOTA_SESSION_KEY)
+    if quota is None or quota['transaction'] is not transaction:
+        # Serialize writes for one account so parallel sync/import requests
+        # cannot all observe free capacity and exceed the persistent row cap.
+        session.execute(
+            select(User.id).where(User.id == user_id).with_for_update()
+        ).scalar_one_or_none()
+        count = session.execute(
+            select(func.count(UserOwnedTitle.id)).where(
+                UserOwnedTitle.user_id == user_id,
+            )
+        ).scalar_one()
+        transaction = session.get_nested_transaction() or session.get_transaction()
+        quota = {'transaction': transaction, 'counts': {user_id: count}}
+        session.info[_OWNERSHIP_QUOTA_SESSION_KEY] = quota
+    counts = quota['counts']
+    if user_id not in counts:
+        session.execute(
+            select(User.id).where(User.id == user_id).with_for_update()
+        ).scalar_one_or_none()
+        counts[user_id] = session.execute(
+            select(func.count(UserOwnedTitle.id)).where(
+                UserOwnedTitle.user_id == user_id,
+            )
+        ).scalar_one()
     name = str(name).strip()[:255] or None if name else None
     now = datetime.now(timezone.utc)
     # Only exact provider identifiers may auto-link. A name is a review hint,
@@ -326,6 +374,14 @@ def upsert_owned_title(
             existing.matched_game_uuid = matched_uuid
         existing.last_synced_at = now
         return existing
+    if counts[user_id] >= MAX_OWNED_TITLES_PER_USER:
+        # A batch may already have staged earlier new rows. Roll them back as
+        # one atomic operation before returning the bounded-capacity error.
+        session.rollback()
+        session.info.pop(_OWNERSHIP_QUOTA_SESSION_KEY, None)
+        from oneirodex.utils.store_sync_errors import StoreSyncError
+        raise StoreSyncError(OWNERSHIP_REGISTER_LIMIT_ERROR, 'ownership_limit')
+    counts[user_id] += 1
     row = UserOwnedTitle(
         user_id=user_id,
         store=store,
@@ -345,6 +401,8 @@ def connect_store_account(
     credential: str | None = None,
 ) -> StoreAccount:
     """Link a register-only store account (optional external ID / note / secret)."""
+    from oneirodex.utils.store_credentials import write_store_credential
+
     if store not in VALID_STORES:
         raise ValueError(f'Unsupported store: {store}')
     # The column holds 64 characters. An over-long note used to fail the INSERT,
@@ -365,7 +423,7 @@ def connect_store_account(
             account.updated_at = now
         account.external_account_id = external_account_id
         if credential:
-            account.credential = credential
+            write_store_credential(account, credential)
 
     account = existing()
     if account:
@@ -375,13 +433,14 @@ def connect_store_account(
             user_id=user_id,
             store=store,
             external_account_id=external_account_id,
-            credential=credential,
             # Naive UTC like every LIB-04 time. The model's aware default is
             # shifted to the session time zone by PostgreSQL on a non-UTC
             # server, and status compares this with job start times.
             created_at=now,
             updated_at=now,
         )
+        if credential:
+            write_store_credential(account, credential)
         db.session.add(account)
     try:
         db.session.commit()

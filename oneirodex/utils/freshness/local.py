@@ -167,6 +167,5 @@ def detect_local_facts(game, *, app=None) -> dict:
         'dlc_count_hint': dlc_count,
         'update_hints': update_hints[:20],
         'folder_mtime': _folder_mtime(path),
-        'path': path or None,
         'sources_tried': sources_tried,
     }

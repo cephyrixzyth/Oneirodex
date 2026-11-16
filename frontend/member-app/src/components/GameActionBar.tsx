@@ -28,6 +28,7 @@ export function GameActionBar({
   remotePlay: remotePlayProp,
   /** Override for tests; defaults to the seat this window was opened as. */
   thinSeat,
+  canDownload = true,
 }: LooseProps) {
   const isThin = thinSeat === undefined ? isThinSeat() : thinSeat
   const [busyAction, setBusyAction] = useState<any>(null)
@@ -35,6 +36,7 @@ export function GameActionBar({
   const [assistPack, setAssistPack] = useState(assistPackProp === undefined ? null : assistPackProp)
   const [remotePlay, setRemotePlay] = useState(remotePlayProp === undefined ? null : remotePlayProp)
   const updatesUrl = updateHref || `/game_details/${gameUuid}#updates`
+  const childActionDescriptionId = `game-action-child-restriction-${gameUuid || 'current'}`
   const compact = variant === 'compact'
 
   useEffect(() => {
@@ -85,11 +87,13 @@ export function GameActionBar({
     return () => controller.abort()
   }, [remotePlayProp])
 
-  const companionInstallReady = clientConnected && lifecycleState === 'downloaded'
-  const companionDownloadReady = clientConnected && lifecycleState === 'not_downloaded'
-  const companionUpdateReady = clientConnected && lifecycleState === 'update_available'
+  const companionInstallReady = canDownload && clientConnected && lifecycleState === 'downloaded'
+  const companionDownloadReady =
+    canDownload && clientConnected && lifecycleState === 'not_downloaded'
+  const companionUpdateReady =
+    canDownload && clientConnected && lifecycleState === 'update_available'
   const companionUninstallReady =
-    clientConnected && lifecycleState !== 'not_downloaded' && busyAction == null
+    canDownload && clientConnected && lifecycleState !== 'not_downloaded' && busyAction == null
 
   const installTitle = !clientConnected
     ? 'Open the Oneirodex companion while browsing to install'
@@ -144,6 +148,7 @@ export function GameActionBar({
   }
 
   function onInstallClick() {
+    if (!canDownload) return
     if (busyAction) return
     if (!clientConnected) {
       explain('Start the Oneirodex companion and keep it signed in, then try again.')
@@ -161,6 +166,10 @@ export function GameActionBar({
   }
 
   function onUpdateClick(event: any) {
+    if (!canDownload) {
+      event?.preventDefault?.()
+      return
+    }
     if (busyAction) {
       event?.preventDefault?.()
       return
@@ -181,6 +190,7 @@ export function GameActionBar({
   }
 
   function onUninstallClick() {
+    if (!canDownload) return
     if (busyAction) return
     if (!clientConnected) {
       explain('Start the Oneirodex companion to uninstall the local copy.')
@@ -194,7 +204,7 @@ export function GameActionBar({
   }
 
   async function onDownloadClick() {
-    if (!gameUuid || busyAction) {
+    if (!canDownload || !gameUuid || busyAction) {
       return
     }
     setBusyAction('download_file')
@@ -257,8 +267,16 @@ export function GameActionBar({
         data-lifecycle={lifecycleState}
         data-seat="thin"
       >
-        <span className="od-action-bar__status" role="status">
-          Browse &amp; social seat — download, install and update happen on the desktop companion.
+        <span
+          className={
+            canDownload ? 'od-action-bar__status' : 'od-action-bar__status visually-hidden'
+          }
+          id={childActionDescriptionId}
+          role="status"
+        >
+          {canDownload
+            ? 'Browse & social seat — download, install and update happen on the desktop companion.'
+            : 'Downloads and companion install actions are unavailable for child accounts.'}
         </span>
         {remotePlay ? (
           <button
@@ -299,11 +317,22 @@ export function GameActionBar({
           {clientConnected ? 'Companion online' : 'Companion offline'}
         </span>
       ) : null}
+      {!canDownload ? (
+        <span
+          className="od-action-bar__status visually-hidden"
+          id={childActionDescriptionId}
+          role="note"
+        >
+          Downloads and companion install actions are unavailable for child accounts.
+        </span>
+      ) : null}
       <button
         type="button"
         className="od-action-bar__btn od-action-bar__btn--primary"
         data-action="download"
-        disabled={busyAction === 'download_file'}
+        title={!canDownload ? 'Downloads are unavailable for child accounts' : undefined}
+        aria-describedby={!canDownload ? childActionDescriptionId : undefined}
+        disabled={!canDownload || busyAction === 'download_file'}
         onClick={() => {
           void onDownloadClick()
         }}
@@ -313,20 +342,24 @@ export function GameActionBar({
       <button
         type="button"
         className="od-action-bar__btn"
-        title={installTitle}
-        aria-disabled={!companionInstallReady && !companionDownloadReady}
+        title={!canDownload ? 'Companion install is unavailable for child accounts' : installTitle}
+        aria-disabled={!canDownload || (!companionInstallReady && !companionDownloadReady)}
+        aria-describedby={!canDownload ? childActionDescriptionId : undefined}
         data-action="install"
         onClick={onInstallClick}
       >
         {installLabel}
       </button>
-      {companionUpdateReady ? (
+      {clientConnected && lifecycleState === 'update_available' ? (
         <button
           type="button"
           className="od-action-bar__btn"
           title={updateTitle}
+          aria-disabled={!canDownload}
+          aria-describedby={!canDownload ? childActionDescriptionId : undefined}
           data-action="update"
           onClick={() => {
+            if (!canDownload) return
             void sendCommand('update')
           }}
         >
@@ -336,8 +369,9 @@ export function GameActionBar({
         <a
           className={`od-action-bar__btn${lifecycleState !== 'update_available' ? ' is-disabled' : ''}`}
           href={updatesUrl}
-          title={updateTitle}
-          aria-disabled={lifecycleState !== 'update_available'}
+          title={!canDownload ? 'Updates are unavailable for child accounts' : updateTitle}
+          aria-disabled={!canDownload || lifecycleState !== 'update_available'}
+          aria-describedby={!canDownload ? childActionDescriptionId : undefined}
           data-action="update"
           onClick={onUpdateClick}
         >
@@ -347,8 +381,11 @@ export function GameActionBar({
       <button
         type="button"
         className="od-action-bar__btn od-action-bar__btn--danger"
-        title={uninstallTitle}
-        aria-disabled={!companionUninstallReady}
+        title={
+          !canDownload ? 'Companion uninstall is unavailable for child accounts' : uninstallTitle
+        }
+        aria-disabled={!canDownload || !companionUninstallReady}
+        aria-describedby={!canDownload ? childActionDescriptionId : undefined}
         data-action="uninstall"
         onClick={onUninstallClick}
       >

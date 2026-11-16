@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { AuthSessionBoundary } from './AuthSessionBoundary.js'
 
 /**
  * Viewer identity + role predicates — `@oneirodex/ui`.
@@ -71,7 +72,11 @@ export function ViewerProvider({ value, children }: ViewerProviderProps) {
   // Accept either an already-normalised viewer or a raw shell slice; memoise so
   // a stable `value` prop does not remake the object every render.
   const viewer = useMemo(() => viewerFromConfig(value), [value])
-  return <ViewerContext.Provider value={viewer}>{children}</ViewerContext.Provider>
+  return (
+    <AuthSessionBoundary>
+      <ViewerContext.Provider value={viewer}>{children}</ViewerContext.Provider>
+    </AuthSessionBoundary>
+  )
 }
 
 export function useViewer(): Viewer {

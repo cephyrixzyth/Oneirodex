@@ -96,10 +96,17 @@ def test_steam_fetch_retries_a_rate_limit_then_succeeds(monkeypatch):
     body = {'123456': {'success': True, 'data': {'name': 'Redout', 'type': 'game'}}}
     answers = [Resp(429, headers={'Retry-After': '0'}), Resp(200, body)]
     seen = []
-    monkeypatch.setattr(steam_lookup.requests, 'get', lambda url, **kw: (seen.append(kw), answers.pop(0))[1])
+    def fake_request(method, url, **kwargs):
+        assert method == 'GET'
+        assert kwargs['validator'] is steam_lookup.validate_user_outbound_http_url
+        seen.append(kwargs)
+        return answers.pop(0)
+
+    monkeypatch.setattr(steam_lookup, 'safe_request', fake_request)
     monkeypatch.setattr(steam_lookup.time, 'sleep', lambda s: None)
 
     details = steam_lookup.fetch_steam_app_details(123456)
 
     assert details and details['name'] == 'Redout'
+    assert len(seen) == 2 and not answers
     assert 'User-Agent' in seen[0]['headers'], 'Steam throttles clients without a user agent'

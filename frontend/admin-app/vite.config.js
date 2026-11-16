@@ -2,11 +2,15 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+const nativeDistRoot = process.env.ONEIRODEX_NATIVE_DIST_ROOT
+
 export default defineConfig({
   plugins: [react()],
   base: '/static/dist/admin-app/',
   build: {
-    outDir: path.resolve(__dirname, '../../oneirodex/static/dist/admin-app'),
+    outDir: nativeDistRoot
+      ? path.resolve(nativeDistRoot, 'admin-app')
+      : path.resolve(__dirname, '../../oneirodex/static/dist/admin-app'),
     emptyOutDir: true,
     rollupOptions: {
       input: path.resolve(__dirname, 'index.html'),

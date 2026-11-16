@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { postJsonResult } from '../../api/adminApi'
+import { getJson, postJsonResult } from '../../api/adminApi'
 import { ADMIN_TOPBAR_TRAIL_ID } from '../../hooks/useLegacyContextbarPortal'
 import { CATALOG_REFRESH_FLAG, CATALOG_REFRESH_URL } from './librariesModel'
 import type { LibraryRow, PlatformSummary } from './librariesModel'
@@ -158,11 +158,11 @@ export function LibrariesTrailSummary({
 }
 
 export async function kickCatalogRefresh(rows: LibraryRow[] | null | undefined) {
-  if (typeof window === 'undefined') return
+  if (typeof window === 'undefined') return false
   try {
-    if (window.sessionStorage?.getItem(CATALOG_REFRESH_FLAG)) return
+    if (window.sessionStorage?.getItem(CATALOG_REFRESH_FLAG)) return false
   } catch {
-    return
+    return false
   }
   const keys = [
     ...new Set(
@@ -171,7 +171,21 @@ export async function kickCatalogRefresh(rows: LibraryRow[] | null | undefined) 
         .filter((key) => key && key !== 'PCWIN' && key !== 'PCDOS' && key !== 'MAC'),
     ),
   ].slice(0, 6)
-  if (!keys.length) return
+  if (!keys.length) return false
+  let settings: { settings?: { igdb_client_id?: unknown; secret_present?: unknown } }
+  try {
+    settings = await getJson('/api/admin/igdb/settings')
+  } catch {
+    return false
+  }
+  const igdb = settings?.settings
+  if (
+    typeof igdb?.igdb_client_id !== 'string' ||
+    !igdb.igdb_client_id.trim() ||
+    igdb.secret_present !== true
+  ) {
+    return false
+  }
   try {
     window.sessionStorage?.setItem(CATALOG_REFRESH_FLAG, '1')
   } catch {
@@ -184,4 +198,5 @@ export async function kickCatalogRefresh(rows: LibraryRow[] | null | undefined) 
       /* best-effort; estimates already color the table */
     }
   }
+  return true
 }

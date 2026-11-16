@@ -1,0 +1,105 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2073",
+  "observed_utc": "2026-11-13T22:15:29.846190+00:00",
+  "source_base": "d0ab26ec3d314c4dcc8dcfc26ba65c8221a4fa8f",
+  "scope": "Known-owned coalition counters from an outside controller and fresh process, using persisted nonce/case binding and per-observation UUID output.",
+  "local_checks": {
+    "observed_utc": "2026-11-13T22:14:14.913778+00:00",
+    "passed": true,
+    "platform": "Windows",
+    "results": [
+      {
+        "name": "baseline-controller",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "2af2acca4421fcb25099387d39134ceb5d686a2049699f2236c8400952e20d06"
+      },
+      {
+        "name": "family-controller",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "a7a378e8122e055525fb9dd7fa244f55cd10329bda1f94523f4ed1e9804442b8"
+      },
+      {
+        "name": "compile",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "nonmac-refusal",
+        "exit_code": 2,
+        "expected": 2,
+        "sha256": "27bbfa1d939179f665ba8cd54c0a1e17074fee9e07334c7ae16e591dfed60e34"
+      },
+      {
+        "name": "workflow",
+        "exit_code": 0,
+        "expected": 0,
+        "sha256": "a3920e33d33390a10400f771ff2be777b1762f5cdb59b5b15d3827996160cff9"
+      }
+    ],
+    "keeper_loss_mutation_red": true,
+    "source_sha256": {
+      "scripts/ci/probe-macos-coalition-family.py": "fdc436cf48ce525f9ee1bd6c0e451dc8d13eda468812f817713391cb58f37df9",
+      "scripts/ci/test_macos_coalition_family.py": "fcde952b19452ee3b46b7facfd2c19b29583531ae130ca1036c2cd8764a1bf8e",
+      ".github/workflows/desktop-build.yml": "40416c8bab3bb0bc5c996ec7fcf8d1f41c8dd190bba48c846986757fa539b61e"
+    },
+    "native_acceptance": "pending",
+    "family_recovery_acceptance": false,
+    "limits": "Mock/control and refusal checks only. Outside/fresh-process known-owned coalition queries, including live/retired groups after guardian loss, require native qualification."
+  },
+  "family_controller_methods": 20,
+  "baseline_controller_methods": 16,
+  "controls": [
+    "Only an initial verified owned coalition may be queried; no numeric CID/PID command-line input",
+    "Observer must be outside the owned coalition",
+    "Fresh request UUID/output binding rejects stale results",
+    "Live and retired leaf ground truth remains distinct from query failure",
+    "Expected active counts 2/1 with guardian live, 1/0 after guardian loss",
+    "Nonroot/macOS-only roles, unchanged exact-label cleanup and manual probe-only workflow guards"
+  ],
+  "test_evidence": "New observer behavior absent at baseline: missing-method scaffold RED. Removing observation UUID validation reproduces a false acceptance; restored source passes the full focused suites. These are fixture controls, not product vulnerability findings.",
+  "native_verification": {
+    "status": "phase_passed",
+    "source_head": "1ca0b913b77b951080745fc0ee5f07058a850972",
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43518024163",
+    "job_id": 132204884999,
+    "platform": "Darwin25.6.0 arm64",
+    "completed_utc": "2026-11-13T22:17:43Z",
+    "baseline_controller_methods": 16,
+    "family_controller_methods": 20,
+    "controller_fresh_process_pairs": 10,
+    "fresh_observation_UUIDs_unique": 10,
+    "active_counts_verified": [
+      0,
+      1,
+      2
+    ],
+    "normal_and_detached_cases": 4,
+    "guardian_loss_and_empty_retained_job_queries": true,
+    "cleanup": {
+      "attempted_jobs": 3,
+      "errors": []
+    },
+    "other_jobs_skipped": 3,
+    "raw_log_sha256": "6663b3ce0dbdfd21e19129722ccd586718135cede848e81e7e1375457eb73f89",
+    "private_native_receipt_sha256": "bcd3c0726288785bf63a020db29287bbeacf184f0685dccd2e39ff20d0f9df0e"
+  },
+  "fixture_family_lifetime_passed": true,
+  "outside_fresh_observation_passed": true,
+  "family_recovery_acceptance": false,
+  "production_tracking_changed": false,
+  "archive": {
+    "filename": "macos-fresh-owned-observer-r2073.zip",
+    "sha256": "bdf657026fa4ab14b999055b0b8e08940ca9357d6d497e61ec044b4877029c58",
+    "payload_files": 14,
+    "manifest_in_addition": true,
+    "bytes": 31294,
+    "storage": "Private canonical DT-006 artifacts; raw host paths/private brief withheld from Git."
+  },
+  "limits": "Known-owned foreign-coalition counter access qualified from an outside controller and fresh Python process on Darwin25.6arm64, within one boot, including guardian loss and valid zero counts. Synthetic leaf leases provide test ground truth only. Production Rust/Tauri ABI, boot/account/ACL binding, packaged restart/install/update/rollback, other runtimes, PID recycling and all original gates remain open.",
+  "capture": "Skipped: synthetic fixture/CI only.",
+  "evidence_selection": "Candidate archive pins source/local checks before native execution. Native raw log and terminal receipt are separate private canonical artifacts."
+}

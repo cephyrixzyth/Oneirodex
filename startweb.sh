@@ -7,18 +7,22 @@ if [[ "$1" == "--force-setup" || "$1" == "-fs" ]]; then
     FORCE_SETUP=true
 fi
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
+
+# Load dotenv data without evaluating paths or values as shell commands. Exec
+# re-enters this launcher once with the complete environment and original args.
+if [ "${ONEIRODEX_NATIVE_DOTENV_READY:-}" != "$$" ]; then
+    source venv/bin/activate || exit 1
+    if [ -f .env ]; then
+        exec python3 scripts/run_with_dotenv.py "${PWD}/${0##*/}" "$@"
+    fi
+fi
+unset ONEIRODEX_NATIVE_DOTENV_READY
 
 python3 -m scripts.startup_art splash
 
-source venv/bin/activate
-
-# Load .env file and export variables to shell environment
 if [ -f .env ]; then
-    echo "📌 Loading environment variables from .env..."
-    set -a  # automatically export all variables
-    source .env
-    set +a  # turn off automatic export
+    echo "📌 Environment variables loaded from .env."
 
     # Debug: Verify DATABASE_URL is loaded
     if [ -n "$DATABASE_URL" ]; then

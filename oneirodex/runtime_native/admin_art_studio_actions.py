@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
+from .bounded_request_body import BODY_TOO_LARGE
 from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
@@ -143,6 +144,10 @@ def create_admin_art_studio_action_router(
         if csrf is not None:
             return _finish(csrf, flask_app, auth, scope)
         body_data = await _json_object(request)
+        if body_data is BODY_TOO_LARGE:
+            return _finish(_api_error(
+                'Request body is too large.', 'payload_too_large', status=413,
+            ), flask_app, auth, scope)
         try:
             from oneirodex.schemas.admin_art_studio import ArtStudioGenerateBody
             body = ArtStudioGenerateBody.model_validate(body_data)
@@ -175,6 +180,10 @@ def create_admin_art_studio_action_router(
         if csrf is not None:
             return _finish(csrf, flask_app, auth, scope)
         body = await _json_object(request)
+        if body is BODY_TOO_LARGE:
+            return _finish(_api_error(
+                'Request body is too large.', 'payload_too_large', status=413,
+            ), flask_app, auth, scope)
         ids = body.get('ids')
         if isinstance(ids, str):
             ids = [item.strip() for item in ids.split(',') if item.strip()]
@@ -193,7 +202,9 @@ def create_admin_art_studio_action_router(
             response = _api_error('Failed to write stock packs', 'internal')
         return _finish(response, flask_app, auth, scope)
 
-    @router.get('/admin/api/art-studio/download/{pack_id}')
+    @router.api_route(
+        '/admin/api/art-studio/download/{pack_id}', methods=['GET', 'HEAD'],
+    )
     async def download(pack_id: str, request: Request):
         auth, denied, scope = _authorize(request, flask_app, find_user, find_token,
                                          commit_token_touch, load_user_id, login_manager,
@@ -204,7 +215,7 @@ def create_admin_art_studio_action_router(
             payload = service.download(pack_id, flask_app.root_path)
             response = Response(
                 payload, media_type='application/zip',
-                headers={'Content-Disposition': f'attachment; filename="oneirodex-art-{pack_id}.zip"'},
+                headers={'Content-Disposition': f'attachment; filename=oneirodex-art-{pack_id}.zip'},
             )
         except ValueError as exc:
             response = _api_error(str(exc), 'bad_request')
@@ -226,6 +237,10 @@ def create_admin_art_studio_action_router(
         if csrf is not None:
             return _finish(csrf, flask_app, auth, scope)
         body = await _json_object(request)
+        if body is BODY_TOO_LARGE:
+            return _finish(_api_error(
+                'Request body is too large.', 'payload_too_large', status=413,
+            ), flask_app, auth, scope)
         themes = _list_value(body.get('themes'))
         platforms = _list_value(body.get('platforms'))
         try:
@@ -275,7 +290,12 @@ def create_admin_art_studio_action_router(
             return _finish(csrf, flask_app, auth, scope)
         try:
             from oneirodex.schemas.admin_art_studio import ArtStudioApplyBody
-            body = ArtStudioApplyBody.model_validate(await _json_object(request))
+            body_data = await _json_object(request)
+            if body_data is BODY_TOO_LARGE:
+                return _finish(_api_error(
+                    'Request body is too large.', 'payload_too_large', status=413,
+                ), flask_app, auth, scope)
+            body = ArtStudioApplyBody.model_validate(body_data)
         except ValidationError as exc:
             return _finish(_validation_error(exc), flask_app, auth, scope)
         pack_id = (body.pack_id or body.id or '').strip()
@@ -288,7 +308,11 @@ def create_admin_art_studio_action_router(
             response = _api_error('game_uuid is required for game mode', 'bad_request')
         else:
             try:
-                result = service.apply(
+                from oneirodex.utils.image_upload_limits import (
+                    run_image_work_in_threadpool,
+                )
+
+                result = await run_image_work_in_threadpool(service.apply,
                     flask_app, pack_id, mode, game_uuid, library_uuid,
                     (body.filename or '').strip() or None,
                 )
@@ -296,12 +320,17 @@ def create_admin_art_studio_action_router(
                 response = JSONResponse(result)
             except LookupError as exc:
                 response = _api_error(str(exc), 'not_found')
-            except (ValueError, FileNotFoundError) as exc:
-                response = _api_error(str(exc), 'bad_request')
-            except (PermissionError, OSError):
-                response = _api_error('Failed to write cover art to disk', 'internal')
-            except Exception:
-                response = _api_error('Unexpected error applying pack', 'internal')
+            except Exception as exc:
+                from oneirodex.utils.image_upload_limits import ImageWorkBusy
+
+                if isinstance(exc, ImageWorkBusy):
+                    response = _api_error('Image processing is busy. Try again shortly.', 'unavailable', status=503)
+                elif isinstance(exc, (ValueError, FileNotFoundError)):
+                    response = _api_error(str(exc), 'bad_request')
+                elif isinstance(exc, (PermissionError, OSError)):
+                    response = _api_error('Failed to write cover art to disk', 'internal')
+                else:
+                    response = _api_error('Unexpected error applying pack', 'internal')
         return _finish(response, flask_app, auth, scope)
 
     @router.post('/admin/api/art-studio/batch-generate')
@@ -317,6 +346,10 @@ def create_admin_art_studio_action_router(
         if csrf is not None:
             return _finish(csrf, flask_app, auth, scope)
         body = await _json_object(request)
+        if body is BODY_TOO_LARGE:
+            return _finish(_api_error(
+                'Request body is too large.', 'payload_too_large', status=413,
+            ), flask_app, auth, scope)
         try:
             result = service.batch_generate(flask_app, body)
             _log_art_studio(
@@ -362,8 +395,15 @@ def _authorize(request, app, find_user, find_token, commit_token_touch,
 
 
 async def _json_object(request):
+    from .bounded_request_body import read_bounded_body
+
+    raw_body = await read_bounded_body(request, 64 * 1024)
+    if raw_body is BODY_TOO_LARGE:
+        return BODY_TOO_LARGE
     try:
-        body = await request.json()
+        import json
+
+        body = json.loads(raw_body or b'{}')
     except Exception:
         return {}
     return body if isinstance(body, dict) else {}
@@ -378,10 +418,10 @@ def _validation_error(exc):
     return JSONResponse(payload, status_code=status)
 
 
-def _api_error(message, code):
+def _api_error(message, code, *, status=None):
     from oneirodex.utils.api_contract import api_error_payload
-    payload, status = api_error_payload(message, code=code)
-    return JSONResponse(payload, status_code=status)
+    payload, resolved_status = api_error_payload(message, code=code, status=status)
+    return JSONResponse(payload, status_code=resolved_status)
 
 
 def _finish(response, app, auth, scope):

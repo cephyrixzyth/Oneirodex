@@ -10,9 +10,15 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
-from .csrf_compat import csrf_error_response as _csrf_error_response
+from .csrf_compat import (
+    csrf_error_response as _csrf_error_response,
+    csrf_html_error_response as _csrf_html_error_response,
+)
+from .form_compat import first_form_value, first_form_values
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+
+_MAX_JSON_BODY_BYTES = 64 * 1024
 
 
 class AccountPreferencesData:
@@ -67,16 +73,13 @@ class AccountPreferencesData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.forms_native import (
-            UserPreferencesForm, normalize_tile_percent, stored_preference_formdata,
+            UserPreferencesForm, normalize_tile_percent,
+            preference_update_formdata, stored_preference_formdata,
         )
         from oneirodex.models import UserPreference
 
         prefs = user.preferences
-        values = stored_preference_formdata(prefs)
-        for key in values:
-            if key in payload:
-                raw = payload[key]
-                values[key] = 'true' if raw is True else 'false' if raw is False else str(raw)
+        values = preference_update_formdata(prefs, payload)
         form = UserPreferencesForm(formdata=MultiDict(values), app=self.app)
         if not form.validate():
             return {'error': 'Preferences validation failed', 'errors': form.errors}, 400
@@ -153,38 +156,49 @@ def create_account_preferences_router(
                     from oneirodex.schemas.preferences import MemberPreferencesBody
                     from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
                     from oneirodex.utils.validation import format_validation_errors
+                    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
-                    try:
-                        body = MemberPreferencesBody.model_validate(
-                            _json_object(await request.body())
-                        )
-                    except ValidationError as exc:
+                    raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+                    if raw_body is BODY_TOO_LARGE:
                         response_payload, status = api_error_payload(
-                            'Invalid request.',
-                            code='unprocessable',
-                            detail=format_validation_errors(exc),
+                            'Request body is too large.',
+                            code='payload_too_large',
+                            status=413,
                         )
                     else:
-                        payload, status = data.update(
-                            auth.user, body.model_dump(exclude_unset=True)
-                        )
-                        if 'error' in payload:
+                        try:
+                            body = MemberPreferencesBody.model_validate(
+                                _json_object(raw_body)
+                            )
+                        except ValidationError as exc:
                             response_payload, status = api_error_payload(
-                                payload['error'],
-                                code='bad_request' if status == 400 else 'internal',
-                                **({'errors': payload['errors']} if 'errors' in payload else {}),
+                                'Invalid request.',
+                                code='unprocessable',
+                                detail=format_validation_errors(exc),
                             )
                         else:
-                            response_payload = api_ok_payload(payload)
+                            payload, status = data.update(
+                                auth.user, body.model_dump(exclude_unset=True)
+                            )
+                            if 'error' in payload:
+                                response_payload, status = api_error_payload(
+                                    payload['error'],
+                                    code='bad_request' if status == 400 else 'internal',
+                                    **({'errors': payload['errors']} if 'errors' in payload else {}),
+                                )
+                            else:
+                                response_payload = api_ok_payload(payload)
                     response = JSONResponse(response_payload, status_code=status)
                     if auth.should_set_session_cookie:
                         _set_session_cookie(response, flask_app, auth)
             elif auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                from oneirodex.utils.api_contract import api_ok_payload
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    from oneirodex.utils.api_contract import api_ok_payload
 
-                response = JSONResponse(api_ok_payload(data.choices(auth.user)))
+                    response = JSONResponse(api_ok_payload(data.choices(auth.user)))
 
             from oneirodex.utils.security_headers import security_header_values
 
@@ -208,8 +222,10 @@ def create_account_preferences_router(
             if response is None:
                 response = _csrf_error_response(
                     request, auth.session_data, flask_app.config,
-                    token=form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')),
+                    token=first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')),
                 )
+                if response is not None:
+                    response = _csrf_html_error_response(response)
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:
@@ -277,4 +293,4 @@ async def _legacy_form(request: Request):
         fields = parse_qs(bytes(body).decode('utf-8'), keep_blank_values=True)
     except UnicodeDecodeError:
         return {}, Response(status_code=400)
-    return {name: values[-1] for name, values in fields.items() if values}, None
+    return first_form_values(fields), None

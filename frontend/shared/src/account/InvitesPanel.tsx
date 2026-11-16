@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { createInvite, listInvites, revokeInvite } from '../accountApi.js'
 import type { ListInvitesResponse } from '../accountApi.js'
+import { confirmAction } from '../confirmDialog.js'
 import { copyText } from '../copyText.js'
 import { PageStatus } from '../pageStatus.js'
 import { formatWhen, messageOf } from './accountModalShared'
@@ -56,6 +57,13 @@ export function InvitesPanel(): ReactNode {
   async function handleRevoke(token: string) {
     setError('')
     setDone('')
+    const confirmed = await confirmAction({
+      title: 'Delete this invite?',
+      body: 'Anyone with this invite link will no longer be able to use it.',
+      confirmLabel: 'Delete invite',
+      cancelLabel: 'Keep invite',
+    })
+    if (!confirmed) return
     try {
       await revokeInvite(token)
       await load()
@@ -77,6 +85,18 @@ export function InvitesPanel(): ReactNode {
     <>
       <Note tone="error">{error}</Note>
       <Note tone="good">{done}</Note>
+      {!state.smtp_enabled ? (
+        <Note tone="warning">
+          SMTP is not configured. Invite links can still be copied and shared, but invited users
+          will not receive an email.
+        </Note>
+      ) : null}
+      {!state.site_url_configured ? (
+        <Note tone="warning">
+          Invite links use the address you are browsing from. Set a public Site URL so guests can
+          open them.
+        </Note>
+      ) : null}
 
       <form onSubmit={handleCreate}>
         <label className="od-acct__field">
@@ -119,7 +139,7 @@ export function InvitesPanel(): ReactNode {
 
       <ul className="od-acct__list od-acct__list--follow">
         {state.invites.length === 0 ? (
-          <p className="od-acct__empty">No open invites.</p>
+          <p className="od-acct__empty">No active invites yet.</p>
         ) : (
           state.invites.map((invite) => (
             <li key={invite.token} className="od-acct__row">

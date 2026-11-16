@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 
 from oneirodex.runtime_native.game_mods import create_game_mods_router
@@ -150,18 +153,18 @@ def runtime():
     )
     users = {
         'admin': SimpleNamespace(id=7, role='admin', state=True, is_active=True,
-                                 is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                 is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'librarian': SimpleNamespace(id=8, role='librarian', state=True, is_active=True,
-                                     is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                     is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'member': SimpleNamespace(id=9, role='user', state=True, is_active=True,
-                                  is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                  is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'child': SimpleNamespace(id=10, role='child', state=True, is_active=True,
-                                 is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                 is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
     }
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda identity: next(
-        (user for user in users.values() if identity == f'{user.id}:fp'), None,
+        (user for user in users.values() if identity.split(':', 1)[0] == str(user.id)), None,
     ))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     fake = FakeModsData()
@@ -175,7 +178,7 @@ def runtime():
         login_manager=manager, data_access=fake,
     ))
     cookies = {
-        name: dump_session_cookie({'_user_id': f'{user.id}:fp', '_fresh': True},
+        name: dump_session_cookie({'_user_id': login_identity_for(user.id), '_fresh': True},
                                   'game-mods-test-secret')
         for name, user in users.items()
     }
@@ -251,6 +254,54 @@ def test_librarian_catalog_and_mod_crud_validation(runtime):
     assert deleted.json()['id'] == 'mod-1'
 
 
+@pytest.mark.parametrize(
+    ('path', 'action'),
+    [
+        ('/api/games/game-1/mods/catalog', ('delete_mod', 'game-1', 'catalog')),
+        ('/api/games/game-1/mods/profiles', ('delete_mod', 'game-1', 'profiles')),
+        ('/api/games/game-1/mods/pack', ('delete_mod', 'game-1', 'pack')),
+        ('/api/games/game-1/mods/profiles/import', ('delete_profile', 'game-1', 'import')),
+    ],
+)
+def test_static_mod_paths_keep_legacy_dynamic_delete_dispatch(runtime, path, action):
+    """Static GET/POST/PATCH siblings must not swallow dynamic DELETE routes."""
+    app, _flask_app, data, _users, _tokens, cookies = runtime
+
+    response = _request(
+        app, path, cookie=cookies['librarian'], method='DELETE',
+    )
+
+    assert response.status_code == 404
+    assert data.calls[-1] == action
+
+
+def test_mod_create_accepts_vendor_json_like_legacy_validator(runtime):
+    app, flask_app, data, _users, _tokens, cookies = runtime
+    from oneirodex.schemas.game_mods import ModRowBody
+    from oneirodex.utils.validation import validate_body
+
+    @validate_body(ModRowBody)
+    def legacy_validator(body):
+        return {'payload': body.payload()}
+
+    flask_app.add_url_rule('/legacy-json-check', view_func=legacy_validator, methods=['POST'])
+    vendor_type = 'application/vnd.oneirodex+json'
+    vendor_body = {'id': 'vendor-mod', 'name': 'Vendor body'}
+    legacy = flask_app.test_client().post(
+        '/legacy-json-check', data=json.dumps(vendor_body), content_type=vendor_type,
+    )
+    current = _request(
+        app, '/api/games/game-1/mods', cookie=cookies['librarian'], method='POST',
+        json=vendor_body, headers={'Content-Type': vendor_type},
+    )
+
+    assert legacy.status_code == 200
+    assert legacy.json['payload'] == vendor_body
+    assert current.status_code == 201
+    assert current.json()['mod'] == vendor_body
+    assert ('create_mod', 'game-1', vendor_body) in data.calls
+
+
 def test_bulk_pack_profiles_import_export_activate_and_delete(runtime):
     app, _flask_app, data, _users, _tokens, cookies = runtime
     bulk = _request(
@@ -291,6 +342,21 @@ def test_bulk_pack_profiles_import_export_activate_and_delete(runtime):
     assert activated.json()['active_profile'] == 'default'
     assert deleted.json()['id'] == 'default'
     assert ('activate_profile', 'game-1', 'default') in data.calls
+
+
+def test_head_profiles_matches_get_without_creating_profile(runtime):
+    app, _flask_app, data, _users, _tokens, cookies = runtime
+
+    response = _request(
+        app, '/api/games/game-1/mods/profiles', cookie=cookies['member'],
+        method='HEAD',
+    )
+
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('application/json')
+    assert response.content == b''
+    assert ('load', 'game-1') not in data.calls
+    assert not any(call[0] == 'create_profile' for call in data.calls)
 
 
 def test_feature_gates_and_csrf_precedes_auth(runtime):
@@ -334,3 +400,31 @@ def test_bearer_librarian_requires_admin_scope_and_errors_hide_paths(runtime):
     broken = _request(app, '/api/games/io-error/mods', cookie=_cookies['member'])
     assert broken.status_code == 500
     assert 'C:/private' not in broken.text
+
+
+def test_oversized_write_body_is_rejected_before_schema_or_adapter(runtime):
+    app, _flask_app, data, _users, _tokens, cookies = runtime
+    response = _request(
+        app, '/api/games/game-1/mods', cookie=cookies['librarian'], method='POST',
+        json={'extra': 'x' * (512 * 1024)},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert not any(call[0] == 'create_mod' for call in data.calls)
+
+
+def test_mod_role_denial_still_follows_schema_validation(runtime):
+    app, _flask_app, _data, _users, _tokens, cookies = runtime
+
+    invalid = _request(
+        app, '/api/games/game-1/mods', cookie=cookies['member'], method='POST',
+        json={'unknown': True},
+    )
+    denied = _request(
+        app, '/api/games/game-1/mods', cookie=cookies['member'], method='POST',
+        json={'name': 'valid but unauthorized'},
+    )
+
+    assert invalid.status_code == 422
+    assert denied.status_code == 403

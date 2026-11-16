@@ -112,10 +112,16 @@ $(document).ready(function() {
             success: function(response) {
                 // Assume response is an array of suggestions
                 console.log("Search results:", response);
-                var html = response.map(function(item) {
-                    return `<div class="search-result" data-game-uuid="${item.uuid}" tabindex="0">${item.name}</div>`;
-                }).join('');
-                $('#searchResults').html(html);
+                var $results = $('#searchResults').empty();
+                response.forEach(function(item) {
+                    var $result = $('<div>', {
+                        class: 'search-result',
+                        tabindex: 0
+                    });
+                    $result.attr('data-game-uuid', item.uuid);
+                    $result.text(item.name);
+                    $results.append($result);
+                });
                 selectedIndex = -1; 
                 
                 $('#searchResults .search-result').on('focus', function() {

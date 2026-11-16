@@ -85,3 +85,12 @@ def test_distinct_failures_are_bounded_and_evict_oldest_key():
     assert len(lrl._hits) <= lrl._MAX_KEYS
     assert 'failure:0' not in lrl._hits
     assert 'failure:59999' in lrl._hits
+
+
+def test_password_reset_email_key_is_normalized_and_non_reversible():
+    first = lrl.password_reset_email_key('Member@Example.com', 'test-secret')
+    same_address = lrl.password_reset_email_key(' member@example.COM ', 'test-secret')
+
+    assert first == same_address
+    assert 'member@example.com' not in first
+    assert first != lrl.password_reset_email_key('member@example.com', 'other-secret')

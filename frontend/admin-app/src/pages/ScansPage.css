@@ -1,3 +1,9 @@
 .od-scan-job-id {
   white-space: nowrap;
 }
+
+.od-scan-status-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--od-space-2);
+}

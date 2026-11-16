@@ -52,32 +52,32 @@ test('dismissing one toast leaves the others alone', () => {
   expect(remaining[0].textContent).toContain('Second')
 })
 
-test('five info toasts stay individual', () => {
-  for (const label of ['One', 'Two', 'Three', 'Four', 'Five']) {
+test('three info toasts stay individual', () => {
+  for (const label of ['One', 'Two', 'Three']) {
     showToast(label, 'info')
   }
   const toasts = document.querySelectorAll('.od-toast')
-  expect(toasts).toHaveLength(5)
+  expect(toasts).toHaveLength(3)
   expect(toasts[0].textContent).toContain('One')
-  expect(toasts[4].textContent).toContain('Five')
+  expect(toasts[2].textContent).toContain('Three')
 })
 
-test('a sixth info toast collapses the stack to a count', () => {
-  for (const label of ['One', 'Two', 'Three', 'Four', 'Five', 'Six']) {
+test('a fourth info toast collapses the stack to a count', () => {
+  for (const label of ['One', 'Two', 'Three', 'Four']) {
     showToast(label, 'info')
   }
   const toasts = document.querySelectorAll('.od-toast')
   expect(toasts).toHaveLength(1)
-  expect(toasts[0].textContent).toContain('6 notifications')
+  expect(toasts[0].textContent).toContain('4 notifications')
 })
 
-test('a sixth success toast collapses the stack to a count', () => {
-  for (const label of ['One', 'Two', 'Three', 'Four', 'Five', 'Six']) {
+test('a fourth success toast collapses the stack to a count', () => {
+  for (const label of ['One', 'Two', 'Three', 'Four']) {
     showToast(label, 'success')
   }
   const toasts = document.querySelectorAll('.od-toast')
   expect(toasts).toHaveLength(1)
-  expect(toasts[0].textContent).toContain('6 notifications')
+  expect(toasts[0].textContent).toContain('4 notifications')
 })
 
 test('further info toasts increment the collapsed count', () => {
@@ -89,13 +89,13 @@ test('further info toasts increment the collapsed count', () => {
 })
 
 test('error toasts never join the info stack', () => {
-  for (const label of ['One', 'Two', 'Three', 'Four', 'Five', 'Six']) {
+  for (const label of ['One', 'Two', 'Three', 'Four']) {
     showToast(label, 'info')
   }
   showToast('Scan failed', 'error')
   const toasts = [...document.querySelectorAll('.od-toast')]
   expect(toasts).toHaveLength(2)
-  expect(toasts.some((el) => el.textContent!.includes('6 notifications'))).toBe(true)
+  expect(toasts.some((el) => el.textContent!.includes('4 notifications'))).toBe(true)
   expect(toasts.some((el) => el.textContent!.includes('Scan failed'))).toBe(true)
 })
 

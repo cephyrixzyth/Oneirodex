@@ -1,0 +1,122 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2084",
+  "observed_utc": "2026-11-14T19:34:33.730006+00:00",
+  "base_commit": "f6234cf94be515db217e5e595e5078cfa5bb9c16",
+  "classification": "Native same-user restricted process creation and token verification confirmed; embedded-browser initialization/CDP, UI/native IPC and overall runtime acceptance remain unknown.",
+  "preceding_native_failure": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43632448301",
+    "job_id": 132561849482,
+    "harness_source": "f6234cf94be515db217e5e595e5078cfa5bb9c16",
+    "raw_log_sha256": "539a0e79e8f1596d1f703c81808a8c91b8fc35375971b6faefa9689431f8b5fe",
+    "receipt": {
+      "observed_utc": "2026-11-14T19:30:54.337039+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_standard_user_launch",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "owned_application_uninstalled": true,
+      "code": "create_standard_child_winerror_5"
+    }
+  },
+  "change": "Use CreateProcessAsUserW for the restricted version of the caller primary token, as documented by Microsoft. Pass both security attributes null, handle inheritance false, suspended/Unicode flags, explicit executable and sanitized environment. Preserve actual child-token verification before resume and all existing handle/loopback/timeout/IPC/cleanup assertions. No fallback to an elevated app.",
+  "primary_source": "https://learn.microsoft.com/en-us/windows/win32/secauthz/restricted-tokens",
+  "api_reference": "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessasuserw",
+  "hypothesis": "The specifically documented same-user restricted-primary launch path can create the owned app where the WithTokenW path was denied. Only an actual native retry can settle this; no access-denied root-cause or successful launch claim.",
+  "local_verification": {
+    "binding_contract_red": "21 controls pass; one new binding test fails9arguments versus11",
+    "final_methods_passed": 22,
+    "binding_guards": "Explicit app path/quoted command; no security-attribute or handle inheritance; suspended Unicode creation; explicit environment and working directory; no native calls in local test.",
+    "python_compile": "passed",
+    "pyflakes": "passed",
+    "r1972_bundle": "Earlier unchanged-bundle check in this slice passed7reports/1545rows/160current-only and secret/path scan."
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "e352e2293aafddb24a572b8d56dc3bcdb66cd5bcb51e56419caba7f2ad38660c",
+    "scripts/ci/test_windows_packaged_probe.py": "a86a726c8e3c19f9d719d0a0b92cac1d4e254836f08b7a497c15ed1133319aa2"
+  },
+  "runtime_retry": "terminal failure at WebView/CDP observation; actual medium non-elevated process creation/token verification succeeded",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "No production/package/policy/ACL changes or local GUI/installer execution. Restricted same-account CI qualification is distinct from an ordinary non-admin installation. All original account/offline/game/restart/platform/route/operator/final-review/release gates remain open.",
+  "capture": "Skipped: CI harness only.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43632927405",
+    "job_id": 132563299443,
+    "harness_source": "94be9cbeaeba664a158e776641ba2550c3b5a5cb",
+    "raw_log_sha256": "7badf445a1fc4acb713f982939d76cd67682cb60ce1bbe6befc7dc77f9ee201e",
+    "receipt": {
+      "observed_utc": "2026-11-14T19:35:52.342143+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_webview_startup",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "suspended_creation_api": "CreateProcessAsUserW",
+      "app_launch_security": [
+        {
+          "round": 1,
+          "elevated": false,
+          "integrity_rid": 8192
+        }
+      ],
+      "startup_diagnostics": {
+        "product_window_title": false,
+        "visible_text_keywords": [],
+        "listeners": [],
+        "processes": [
+          {
+            "pid": 9620,
+            "parent": 1708,
+            "name": "oneirodex-desktop.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": false
+          }
+        ],
+        "devtools_policy_values": [],
+        "session_id": 2,
+        "root_alive": true,
+        "runtime_versions": [
+          "156.0.4314.58"
+        ],
+        "has_main_window": true,
+        "probe_webview_profile_created": true,
+        "parent_has_browser_folder_override": false
+      },
+      "last_owned_root_and_listener_cleanup_verified": true,
+      "owned_application_uninstalled": true,
+      "code": "webview_endpoint_not_ready"
+    },
+    "ci_guard_methods_passed": 22,
+    "job_elapsed_seconds": 92,
+    "package_step_elapsed_seconds": 70,
+    "timing_limit": "Provider wall time includes setup/observations; overlaps this root turn and is not inference timing or additional unique task time."
+  },
+  "hypothesis_outcome": "AsUserW successfully creates/resumes the same app with the required medium non-elevated token. This resolves the preceding process-creation prerequisite, while the exact reason WithTokenW denied access remains unknown. The missing embedded-browser endpoint persists, so elevated override suppression alone is insufficient to explain the full remaining failure.",
+  "next_action": "Add bounded sanitized native initialization observations: owned-window static error categories/HRESULTs and relevant event identifiers/exception codes, without raw UI text, paths, commands or credentials. Preserve exact package and timeout; avoid browser-security, registry/ACL or shipping-bundle changes. Then observe a focused CI retry before deciding the next fix."
+}

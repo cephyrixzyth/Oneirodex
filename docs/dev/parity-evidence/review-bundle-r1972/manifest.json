@@ -1,0 +1,118 @@
+{
+  "bundle_id": "R1967-R1972 exact-image parity evidence",
+  "generated_utc": "2026-11-06",
+  "redaction_policy": "Raw authorization, CSRF, cookie, secret, password, email, token-hash, and token-prefix string fields are omitted; absolute local paths are replaced; screenshot paths are withheld because captures include local app backgrounds. Derived outcomes, image hashes, route identifiers, status codes, cleanup, and assertion facts are retained.",
+  "uploaded_hash_semantics": "JSON report hashes are computed over UTF-8 text after normalizing CRLF to LF for cross-platform stability. The gzip matrix hash covers raw bytes.",
+  "files": {
+    "api-token-lifecycle-exact-r1967.json": {
+      "source_sha256": "d5ff6d5f9757b96ec32f14f14c4270e090cb3b6cca343722e786ac8d4ec5da13",
+      "bytes": 50484,
+      "uploaded_sha256_lf_normalized": "3e0c9dfa80346c32c53a3719c9230615a97c81ead634ee609f26519d143abe6b"
+    },
+    "api-token-ui-exact-r1969.json": {
+      "source_sha256": "30133aadbeb0c69b2a088d3264e24e815a41427c7838f55bfc1bc14cb5cd208d",
+      "bytes": 62933,
+      "uploaded_sha256_lf_normalized": "b17ec5f201d1361fea19de5a439c12910504d3c5b9f2d7be485d2d3f89b81bc8"
+    },
+    "token-ui-fresh-mobile-r1970.json": {
+      "source_sha256": "3656f505e050209442bf28f16eac36cb5138e7e2f681f62069845847317b0928",
+      "bytes": 6692,
+      "uploaded_sha256_lf_normalized": "fd446f4284955d81cbffcf19a6e7ec52f1ba732b021c9f9b67f64cc580fb087b"
+    },
+    "route-followups-r1967.json": {
+      "source_sha256": "f4de638c36ce872cda3c5f7df630de8bb0f1056faf77ffaabe7ac4ce401fe94b",
+      "bytes": 2164,
+      "uploaded_sha256_lf_normalized": "f0cddf067a823864a0099dc14b72c5c46679c40f811fd7253ae626604e142055"
+    },
+    "route-followups-r1969.json": {
+      "source_sha256": "d71eaf1db16dc48aa33a1ea71ef0f9952090765692f4c7e5a8acab50d72dbc95",
+      "bytes": 2135,
+      "uploaded_sha256_lf_normalized": "6efd246926c55ae9eaeed5009bb55528fc4e1cc48afde053156e68edeb63e8ee"
+    },
+    "route-followups-r1970.json": {
+      "source_sha256": "63f315ee7667d38d6cd95a4f3eb0afdffa7b081151eebe8144a1543dbe446489",
+      "bytes": 2017,
+      "uploaded_sha256_lf_normalized": "c2bfc013df6e5f3d803c06651b81c7d34e0b8d329d60744ed46267dfd3fb33b0"
+    },
+    "token-ui-lifecycle-r1972-full.json": {
+      "source_sha256": "9300750204ad0f17c19518d4cd74fe241afc5f5919049148c51e5c052cf22f35",
+      "bytes": 17345,
+      "uploaded_sha256_lf_normalized": "c202e3c3ba3d80d1341dab8650f3fffb14a75fb23a1c943ba15f10b7737e482b"
+    }
+  },
+  "matrix": {
+    "source_sha256": "9793588dfa5f6573abbbd1e6dc347a560ebe9790ad9e4bfdd07039029383d100",
+    "uploaded_gzip_sha256": "5f919796d3c660a3bdf5f7f30b825fd2a5d6e58ec57d3025a9ad5c2e2c820682",
+    "source_bytes": 8973729,
+    "uploaded_bytes": 705785,
+    "rows": 1545,
+    "current_only_operations": 160,
+    "counts": {
+      "legacy_shared_all_method_pairs": 1545,
+      "legacy_shared_explicit_method_pairs": 666,
+      "legacy_shared_synthesized_HEAD_OPTIONS_pairs": 879,
+      "current_dispatch_structural_coverage": 1545,
+      "unmatched_legacy_method_pairs": 0,
+      "current_head_behavior_verified_entries": 0,
+      "current_head_behavior_partially_verified_entries": 10,
+      "current_head_behavior_unverified_entries": 1535,
+      "current_only_all_method_pairs": 160,
+      "current_only_non_synthesized_pairs": 81,
+      "current_only_behavior_partially_verified_entries": 2,
+      "current_only_behavior_unverified_entries": 158
+    },
+    "round_trip_counts_match": true
+  },
+  "withheld_visual_captures": [
+    {
+      "artifact": "R1970 legacy account panel, 390x844",
+      "sha256": "8dd938b553b6ed6c08bfd6b494b5d9d7a08400898039ec3a105fbf1d39e6386c",
+      "visible_panel_bounds_xyxy_exclusive": [
+        16,
+        180,
+        374,
+        664
+      ],
+      "withheld_reason": "The public repository should not receive local application background imagery."
+    },
+    {
+      "artifact": "R1970 current account panel, 390x844",
+      "sha256": "e0c486897088c3efd864c38bd79220a60508e2c1e69ad0cb3ea59f1eda6afad1",
+      "visible_panel_bounds_xyxy_exclusive": [
+        16,
+        180,
+        374,
+        664
+      ],
+      "withheld_reason": "The public repository should not receive local application background imagery."
+    },
+    {
+      "artifact": "R1972 legacy account panel after revoke, 390x844",
+      "sha256": "f1111570bae18f83f96e448d3ce1813928ea79af3f17f0beaa12750e67812e59",
+      "visible_panel_bounds_xyxy_exclusive": [
+        16,
+        155,
+        374,
+        689
+      ],
+      "withheld_reason": "The public repository should not receive local application background imagery."
+    },
+    {
+      "artifact": "R1972 current account panel after revoke, 390x844",
+      "sha256": "b944fb25440b322c1f45e85994a7cf7073f6c3f1ef976c797110e5bfc83cd84b",
+      "visible_panel_bounds_xyxy_exclusive": [
+        16,
+        155,
+        374,
+        689
+      ],
+      "withheld_reason": "The public repository should not receive local application background imagery."
+    }
+  ],
+  "redactions": {
+    "sensitive_string_fields": 0,
+    "absolute_paths": 8,
+    "secret_patterns": 0,
+    "screenshots_withheld": 1
+  }
+}

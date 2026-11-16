@@ -66,9 +66,11 @@ beforeEach(() => {
   vi.mocked(getJson).mockReset()
   vi.mocked(postJsonResult).mockReset()
   vi.mocked(getJson).mockImplementation(async (url) =>
-    String(url).includes('/api/admin/library_platforms')
-      ? { platforms: [{ key: 'NES', label: 'Nintendo Entertainment System (NES)' }] }
-      : ROWS,
+    String(url).includes('/api/admin/igdb/settings')
+      ? { settings: { igdb_client_id: 'client-id-at-least-20chars', secret_present: true } }
+      : String(url).includes('/api/admin/library_platforms')
+        ? { platforms: [{ key: 'NES', label: 'Nintendo Entertainment System (NES)' }] }
+        : ROWS,
   )
   vi.mocked(postJsonResult).mockResolvedValue({ ok: true, status: 200, data: { ok: true } })
   document.getElementById('od-admin-topbar-trail')?.remove()
@@ -86,6 +88,33 @@ test('hides selected copy until a row is checked', async () => {
   render(<LibrariesPanel />)
   await screen.findByText('_pc')
   expect(screen.queryByText('0 selected')).toBeNull()
+})
+
+test('skips the automatic licensed-catalog refresh when IGDB credentials are not configured', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    String(url).includes('/api/admin/igdb/settings')
+      ? { settings: { igdb_client_id: '', secret_present: false } }
+      : ROWS,
+  )
+  render(<LibrariesPanel />)
+  await screen.findByText('_pc')
+  await waitFor(() => {
+    expect(getJson).toHaveBeenCalledWith('/api/admin/igdb/settings')
+  })
+  expect(postJsonResult).not.toHaveBeenCalledWith(
+    '/api/licensed-catalog/refresh',
+    expect.anything(),
+  )
+  expect(window.sessionStorage.getItem('od-libraries-catalog-refresh-v1')).toBeNull()
+})
+
+test('refreshes licensed-catalog estimates when saved IGDB credentials are present', async () => {
+  render(<LibrariesPanel />)
+  await waitFor(() => {
+    expect(postJsonResult).toHaveBeenCalledWith('/api/licensed-catalog/refresh', {
+      library_platform: 'NES',
+    })
+  })
 })
 
 test('keeps the native library error visible and retries the roster request', async () => {
@@ -113,7 +142,29 @@ test('the real Jinja libraries panel exposes the add-and-first-scan form', async
   expect(
     await screen.findByRole('option', { name: 'Nintendo Entertainment System (NES)' }),
   ).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Create library and start scan' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Create library' })).toBeDisabled()
+})
+
+test('keeps the create form before management actions, roster, and bulk tools', async () => {
+  render(
+    <LibrariesPanel managementActions={<button type="button">Refresh all libraries</button>} />,
+  )
+  const createHeading = await screen.findByRole('heading', { name: 'Add one library' })
+  const managementAction = screen.getByRole('button', { name: 'Refresh all libraries' })
+  const libraryName = await screen.findByText('_pc')
+  const libraryTable = libraryName.closest('table')
+  const bulkHeading = screen.getByRole('heading', { name: 'Add many libraries' })
+
+  expect(libraryTable).not.toBeNull()
+  expect(
+    createHeading.compareDocumentPosition(managementAction) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  expect(
+    managementAction.compareDocumentPosition(libraryTable!) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
+  expect(
+    libraryTable!.compareDocumentPosition(bulkHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
 })
 
 test('native libraries expose folder proposal and CSV/JSON import with previews before confirmation', async () => {
@@ -287,9 +338,14 @@ test('row Delete requires the exact library name and posts through the React con
   expect(row).toBeTruthy()
   fireEvent.click(within(row!).getByRole('button', { name: 'Delete _pc library' }))
   const dialog = await screen.findByRole('dialog', { name: 'Delete library' })
-  const confirm = within(dialog).getByRole('button', { name: 'Confirm delete' })
+  expect(
+    within(dialog).getByText(
+      'Delete library “_pc”? This removes the library record and cannot be undone.',
+    ),
+  ).toBeInTheDocument()
+  const confirm = within(dialog).getByRole('button', { name: 'Confirm Delete' })
   expect(confirm).toBeDisabled()
-  fireEvent.change(within(dialog).getByLabelText(/Type _pc to confirm/i), {
+  fireEvent.change(within(dialog).getByLabelText(/Type _pc to enable Confirm/i), {
     target: { value: '_pc' },
   })
   expect(confirm).toBeEnabled()

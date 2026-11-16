@@ -41,6 +41,22 @@
     border-radius: var(--od-radius-lg);
     overflow: hidden;
   }
+  /* On phones the real shell turns its rail into a fixed drawer. This chrome
+     specimen is deliberately bounded, so keep the rail inside its frame and
+     visible instead of letting the global drawer rule hide or cover the page. */
+  @media (max-width: 900px) {
+    .sg__chrome .od-rail {
+      position: relative;
+      inset: auto;
+      z-index: 2;
+      width: var(--od-rail-w);
+      height: 100%;
+      transform: none;
+      visibility: visible;
+      transition: none;
+      box-shadow: none;
+    }
+  }
   .sg__chrome-main { grid-area: main; padding: var(--od-gutter); color: var(--od-text-muted); font-size: var(--od-font-md); }
 </style>
 
@@ -100,47 +116,47 @@
       <span class="od-rail__brand"><span class="od-rail__brand-text">Oneirodex</span></span>
       <nav class="od-rail__nav" aria-label="Specimen">
         <ul class="od-rail__group od-rail__list">
-          
+
             <li>
               <a class="od-rail__link is-active" href="#sg-anchor">
                 <span class="od-rail__label">Discover</span>
               </a>
             </li>
-          
+
             <li>
               <a class="od-rail__link" href="#sg-anchor">
                 <span class="od-rail__label">Game Catalog</span>
               </a>
             </li>
-          
+
             <li>
               <a class="od-rail__link" href="#sg-anchor">
                 <span class="od-rail__label">Systems</span>
               </a>
             </li>
-          
+
             <li>
               <a class="od-rail__link" href="#sg-anchor">
                 <span class="od-rail__label">Downloads</span>
               </a>
             </li>
-          
+
         </ul>
         <ul class="od-rail__group od-rail__list">
           <li class="od-rail__group-label">Social</li>
-          
+
             <li>
               <a class="od-rail__link" href="#sg-anchor">
                 <span class="od-rail__label">Chat</span>
               </a>
             </li>
-          
+
             <li>
               <a class="od-rail__link" href="#sg-anchor">
                 <span class="od-rail__label">Friends</span>
               </a>
             </li>
-          
+
         </ul>
       </nav>
     </div>
@@ -281,217 +297,217 @@
 
   <h2>Colour tokens</h2>
   <div class="sg__swatches">
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-bg);"></i>
         <span>--od-bg</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-surface);"></i>
         <span>--od-surface</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-surface-2);"></i>
         <span>--od-surface-2</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-text);"></i>
         <span>--od-text</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-text-muted);"></i>
         <span>--od-text-muted</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-accent);"></i>
         <span>--od-accent</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-accent-2);"></i>
         <span>--od-accent-2</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-accent-contrast);"></i>
         <span>--od-accent-contrast</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-border);"></i>
         <span>--od-border</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-success);"></i>
         <span>--od-success</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-danger);"></i>
         <span>--od-danger</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-warning);"></i>
         <span>--od-warning</span>
       </div>
-    
+
       <div class="sg__swatch">
         <i style="background: var(--od-info);"></i>
         <span>--od-info</span>
       </div>
-    
+
   </div>
 
   <h2>Type scale</h2>
   <div class="sg__scale">
-    
+
       <div>
         <code>--od-font-xs</code>
         <span style="font-size: var(--od-font-xs);">Grid of games</span>
       </div>
-    
+
       <div>
         <code>--od-font-sm</code>
         <span style="font-size: var(--od-font-sm);">Grid of games</span>
       </div>
-    
+
       <div>
         <code>--od-font-md</code>
         <span style="font-size: var(--od-font-md);">Grid of games</span>
       </div>
-    
+
       <div>
         <code>--od-font-base</code>
         <span style="font-size: var(--od-font-base);">Grid of games</span>
       </div>
-    
+
       <div>
         <code>--od-font-lg</code>
         <span style="font-size: var(--od-font-lg);">Grid of games</span>
       </div>
-    
+
       <div>
         <code>--od-font-xl</code>
         <span style="font-size: var(--od-font-xl);">Grid of games</span>
       </div>
-    
+
       <div>
         <code>--od-font-2xl</code>
         <span style="font-size: var(--od-font-2xl);">Grid of games</span>
       </div>
-    
+
       <div>
         <code>--od-font-3xl</code>
         <span style="font-size: var(--od-font-3xl);">Grid of games</span>
       </div>
-    
+
       <div>
         <code>--od-font-4xl</code>
         <span style="font-size: var(--od-font-4xl);">Grid of games</span>
       </div>
-    
+
       <div>
         <code>--od-font-5xl</code>
         <span style="font-size: var(--od-font-5xl);">Grid of games</span>
       </div>
-    
+
       <div>
         <code>--od-font-6xl</code>
         <span style="font-size: var(--od-font-6xl);">Grid of games</span>
       </div>
-    
+
   </div>
 
   <h2>Radius scale</h2>
   <div class="sg__radii">
-    
+
       <figure>
         <i style="border-radius: var(--od-radius-xs);"></i>
         <figcaption>xs</figcaption>
       </figure>
-    
+
       <figure>
         <i style="border-radius: var(--od-radius-sm);"></i>
         <figcaption>sm</figcaption>
       </figure>
-    
+
       <figure>
         <i style="border-radius: var(--od-radius-md);"></i>
         <figcaption>md</figcaption>
       </figure>
-    
+
       <figure>
         <i style="border-radius: var(--od-radius-lg);"></i>
         <figcaption>lg</figcaption>
       </figure>
-    
+
       <figure>
         <i style="border-radius: var(--od-radius-xl);"></i>
         <figcaption>xl</figcaption>
       </figure>
-    
+
       <figure>
         <i style="border-radius: var(--od-radius-2xl);"></i>
         <figcaption>2xl</figcaption>
       </figure>
-    
+
       <figure>
         <i style="border-radius: var(--od-radius-3xl);"></i>
         <figcaption>3xl</figcaption>
       </figure>
-    
+
       <figure>
         <i style="border-radius: var(--od-radius-pill);"></i>
         <figcaption>pill</figcaption>
       </figure>
-    
+
       <figure>
         <i style="border-radius: var(--od-radius-circle);"></i>
         <figcaption>circle</figcaption>
       </figure>
-    
+
   </div>
 
   <h2>Spacing scale</h2>
   <div class="sg__scale">
-    
+
       <div>
         <code>--od-space-1</code>
         <i style="display: block; height: 12px; width: calc(var(--od-space-1) * 8); background: var(--od-accent);"></i>
       </div>
-    
+
       <div>
         <code>--od-space-2</code>
         <i style="display: block; height: 12px; width: calc(var(--od-space-2) * 8); background: var(--od-accent);"></i>
       </div>
-    
+
       <div>
         <code>--od-space-3</code>
         <i style="display: block; height: 12px; width: calc(var(--od-space-3) * 8); background: var(--od-accent);"></i>
       </div>
-    
+
       <div>
         <code>--od-space-4</code>
         <i style="display: block; height: 12px; width: calc(var(--od-space-4) * 8); background: var(--od-accent);"></i>
       </div>
-    
+
       <div>
         <code>--od-space-5</code>
         <i style="display: block; height: 12px; width: calc(var(--od-space-5) * 8); background: var(--od-accent);"></i>
       </div>
-    
+
       <div>
         <code>--od-space-6</code>
         <i style="display: block; height: 12px; width: calc(var(--od-space-6) * 8); background: var(--od-accent);"></i>
       </div>
-    
+
   </div>
 
   <p id="sg-anchor" class="sg__lede" style="margin-top: var(--od-space-6);">

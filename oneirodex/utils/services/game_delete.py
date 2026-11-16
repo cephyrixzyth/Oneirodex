@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 __all__ = ["remove_from_lib", "delete_game"]
 
 
-def remove_from_lib(game_uuid):
+def remove_from_lib(game_uuid, *, config=None):
     """
     Remove a game from the library and clean up associated files.
     
@@ -34,7 +34,10 @@ def remove_from_lib(game_uuid):
             return False
             
         # Delete associated images from disk
-        delete_game_images(game_uuid)
+        # Scan workers in the Flask-free ASGI runtime already have the active
+        # native database scope, but no Flask application context. Passing the
+        # runtime config keeps image cleanup on the same context-free path.
+        delete_game_images(game_uuid, config=config)
         
         # Delete the game (cascade will handle related records)
         db.session.delete(game)

@@ -5,9 +5,8 @@ from contextlib import nullcontext
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse
-
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
 
 
 class SetupPagesData:
@@ -57,13 +56,6 @@ def create_setup_pages_router(
         '/setup/integrations': 5,
         '/setup/library': 6,
     }
-    wrong_step_messages = {
-        '/setup/smtp': 'Please complete the admin account setup first.',
-        '/setup/features': 'Please complete the previous setup steps first.',
-        '/setup/igdb': 'Please complete the previous setup steps first.',
-        '/setup/integrations': 'Please complete the previous setup steps first.',
-    }
-
     @router.api_route('/setup', methods=['GET', 'HEAD'])
     def setup_home(request: Request):
         return _serve(request, '/setup')
@@ -83,13 +75,14 @@ def create_setup_pages_router(
                 load_user_id=load_user_id, login_manager=login_manager,
                 allow_bearer=False,
             )
+            had_flashes = bool(auth.session_data.get('_flashes'))
             if page == '/setup':
                 required = data.required()
                 if not required and data.in_progress():
-                    response = RedirectResponse(data.redirect_url(), status_code=302)
+                    response = flask_redirect_response(data.redirect_url(), status_code=302)
                 elif not required:
                     _flash(auth.session_data, 'warning', 'Setup has already been completed.')
-                    response = RedirectResponse('/login', status_code=302)
+                    response = flask_redirect_response('/login', status_code=302)
                 else:
                     data.start()
                     response = _shell(request, flask_app, auth)
@@ -97,27 +90,57 @@ def create_setup_pages_router(
                 step = data.current_step()
                 if step is None:
                     if page != '/setup/library':
-                        _flash(auth.session_data, 'warning', 'Setup already completed.')
-                        response = RedirectResponse('/login', status_code=302)
-                    else:
-                        response = RedirectResponse('/setup', status_code=302)
-                elif step != expected_steps[page]:
-                    message = wrong_step_messages.get(page)
-                    if message:
+                        message = (
+                            'Setup has already been completed.'
+                            if page in {'/setup/igdb', '/setup/integrations'}
+                            else 'Setup already completed.'
+                        )
                         _flash(auth.session_data, 'warning', message)
-                    response = RedirectResponse('/setup', status_code=302)
+                        response = flask_redirect_response('/login', status_code=302)
+                    else:
+                        response = flask_redirect_response('/setup', status_code=302)
+                elif step != expected_steps[page]:
+                    # Keep the shorter current hop to the active wizard step.
+                    # Legacy /setup/smtp and /setup/igdb bounce through /setup
+                    # here (unlike its other setup routes), so preserve their
+                    # warning while avoiding the extra request.
+                    if page == '/setup/smtp':
+                        _flash(
+                            auth.session_data, 'warning',
+                            'Please complete the admin account setup first.',
+                        )
+                    elif page == '/setup/igdb':
+                        _flash(
+                            auth.session_data, 'warning',
+                            'Please complete the previous setup steps first.',
+                        )
+                    response = flask_redirect_response(
+                        data.redirect_url(), status_code=302,
+                    )
                 elif auth.user is None or _role(auth.user) != 'admin':
+                    if auth.user is not None:
+                        # The login page redirects already-authenticated users
+                        # back to Discover. Clear a non-admin session first so
+                        # the admin can sign in without cycling through the
+                        # unfinished setup guard.
+                        for key in ('_user_id', '_fresh', '_id', 'next', '_remember_seconds'):
+                            auth.session_data.pop(key, None)
+                        auth.session_data['_remember'] = 'clear'
                     _flash(
                         auth.session_data, 'warning',
                         'Sign in with the admin account you just created to finish setup.',
                     )
-                    response = RedirectResponse(
-                        '/login?' + urlencode({'next': request.url.path}), status_code=302,
+                    response = flask_redirect_response(
+                        '/login?' + urlencode({'next': request.url.path}, safe='/'),
+                        status_code=302,
                     )
                 else:
                     response = _shell(request, flask_app, auth)
 
-            _finish_response(response, flask_app, auth)
+            _finish_response(
+                response, flask_app, auth,
+                session_changed=had_flashes or bool(auth.session_data.get('_flashes')),
+            )
             return response
 
     return router
@@ -141,12 +164,12 @@ def _shell(request, flask_app, auth):
     return _shell_response(flask_app, auth.session_data)
 
 
-def _finish_response(response, flask_app, auth):
+def _finish_response(response, flask_app, auth, *, session_changed=False):
     if auth.remember_action:
         from oneirodex.runtime_native.auth_login import _write_remember_cookie
 
         _write_remember_cookie(response, auth.session_data, flask_app.config)
-    if auth.should_set_session_cookie:
+    if auth.should_set_session_cookie or session_changed:
         from oneirodex.runtime_native.oidc_status import _set_session_cookie
 
         _set_session_cookie(response, flask_app, auth)

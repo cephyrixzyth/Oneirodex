@@ -1,0 +1,279 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2038",
+  "finding": "FE-007",
+  "classification": "Confirmed current initial-bootstrap identity display; bounded correction verified. Full finding/program acceptance remains open.",
+  "source_base": "5f35c6b0cbe0f3fe11c814f07e8c9f4a97072d7f",
+  "source_identity": "Working candidate fingerprints, committed with this report. Git may normalize line endings. Pinned R2030 image plus read-only relevant Python and all five SPA overlays; not a new release image.",
+  "candidate_sha256": {
+    "frontend/shared/src/authBoundary.ts": "03bf263b97f040e4f06c140dae885a5b1d3f0a068f882e4ff471dfbf85e2a3c4",
+    "frontend/shared/src/AuthSessionBoundary.tsx": "b404677d0b83dad6fa67e90a8b534b909784616e8f77244d00214819715c62f0",
+    "frontend/shared/src/AuthSessionBoundary.css": "8c5b5b5d9e846be4bfe8314ba4fe4a044770ad3f8461997b464e4e03672dd2cc",
+    "frontend/shared/src/authApi.ts": "64b7f0b66e2731e5206de414353af3b5250e61d7659aac4a2f0cb26abb18f0ba",
+    "frontend/shared/src/ViewerContext.tsx": "d316cff37a51e73de320e2eb47b7df50bc3fade8dcef0e9011eec36ef58d5fa5",
+    "frontend/shared/src/index.ts": "790d1a2a27cf35d56455119f9b98b8cef07389ae6846aaffc50dfa563a3e5d8f",
+    "frontend/admin-app/src/main.tsx": "78b5dd0a6331b151d658f4333f4c767616d889c825c103a9e4d29eb6c6601634",
+    "frontend/admin-app/src/staticPilot.tsx": "5ed014bb12ec6d279e2eed70f2d9bcb754776cda11303ec7169358c292b67d3d",
+    "frontend/ops-glance/src/main.tsx": "64c4d93bcf86b659ae4d7ca0aa6f5e450ffee8d5c01b0e8dbf63cbaa18f07565",
+    "frontend/member-app/src/main.tsx": "dafee076007237aea0da452aa954868d3807e6b239c9f1341472b59a2cf79482",
+    "frontend/member-app/src/VerifiedMemberBootstrap.tsx": "11bbd36420d30de9275b2d0f9a5a2cd00366788b83a3e816ef7a303d75917aed",
+    "frontend/member-app/src/api/vr.ts": "e095284d3939cfde97f98cf3ca96a6dee92d70950083f9dec4b3d488b3b488b9",
+    "oneirodex/runtime_native/member_shell.py": "fa99a9615a2b523b8d8f2480c4396f0abf1ff4603dec07e48b0ad14f60e97ac2",
+    "conftest.py": "7d3773ed35dd28579761d26de3d1fe0a765c5b0a2d6ef0f3aa26e7ac2f500a11",
+    "tests/test_native_member_shell.py": "2be35cc19345e73499dbbc1cc80f63d3d6b23a6b7ff5cfcd98878ff5f6ff9332",
+    "tests/test_native_client_reads.py": "b4d59b222ac68f009883cf967eafc2b613467a14f2873f0750c1dba2f6ace63e",
+    "tests/test_test_database_guard.py": "a88b0772e411f6f3feac97a6e310e4e2a00cec34c098541716ab7b9e956e7820",
+    "tests/test_test_harness_resources.py": "7f2684b5a4ce0c6305d870a415a07667b0cc3231f0ee380f3da1453d89e77abd",
+    "frontend/member-app/src/memberBootstrap.test.tsx": "dd214cae67f4a9fd4acb247b51c39cf44f45c6413d90d896918150eafa42fe6a"
+  },
+  "red": {
+    "actual_native_browser_seconds": 45.02,
+    "old_adult_html_entry_delayed_across_ui_logout_verified_child_login": true,
+    "old_account_name_rendered": true,
+    "child_server_search_denied_private_title": true,
+    "retained_archive_sha256": "ad83305bcfd9b63f503a33ca7faea912b7638536fa43cdd3186e858f0f492e43",
+    "entry_tdd": "Scratch RED6/controls2, expanded worker RED8/controls3, tracked RED9/controls3 then GREEN12. Overlapping selections, not additive.",
+    "native_html_red": {
+      "failed": 2,
+      "pytest_seconds": 4.81,
+      "runner_seconds": 7.95
+    }
+  },
+  "correction": [
+    "Same authenticated native user supplies separate stable public account-id and existing numeric user-id in escaped private HTML.",
+    "Subscribe outer shared boundary before cancellable live same-origin identity verification; cache:no-store, redirect:error, exact bounded ID match, no browser identity storage or old-bootstrap fallback.",
+    "Private member tree withheld for pending/failed/malformed/mismatched verification;10-second hung check and failures reuse focused sign-in recovery.",
+    "Known legacy VR controller honors existing retirement barrier before the identity read; unrelated optional worker installation does not block normal pages.",
+    "Config-only DB-guard stubs with db=None skip client teardown; real session/engine cleanup unchanged."
+  ],
+  "focused": {
+    "entry_plus_existing_vr": {
+      "passed": 16,
+      "runner_seconds": 5.74
+    },
+    "native_shell_and_client_reads": {
+      "passed": 32,
+      "pytest_seconds": 5.26,
+      "runner_seconds": 7.55,
+      "warnings": 1,
+      "warning_scope": "Existing Starlette per-request-cookie deprecation"
+    },
+    "fixture_teardown": {
+      "red_failed": 3,
+      "red_controls_passed": 24,
+      "red_runner_seconds": 4.65,
+      "green_passed": 29,
+      "green_pytest_seconds": 10.42,
+      "green_runner_seconds": 19.9,
+      "real_retained_app_normal_and_exception_client_absence": true,
+      "owned_db_removed_and_absence_verified": true
+    }
+  },
+  "owning_suites": [
+    {
+      "suite": "shared",
+      "exit_code": 0,
+      "seconds": 35.67,
+      "passed_tests": 188
+    },
+    {
+      "suite": "member-app",
+      "exit_code": 0,
+      "seconds": 230.26,
+      "passed_tests": 1266
+    },
+    {
+      "suite": "admin-app",
+      "exit_code": 0,
+      "seconds": 201.36,
+      "passed_tests": 714
+    },
+    {
+      "suite": "ops-glance",
+      "exit_code": 0,
+      "seconds": 7.14,
+      "passed_tests": 7
+    }
+  ],
+  "owning_suites_runner_seconds": 474.5,
+  "build": {
+    "passed": true,
+    "runner_seconds": 55.38,
+    "results": [
+      {
+        "kind": "types",
+        "target": "frontend/shared/tsconfig.json",
+        "exit_code": 0
+      },
+      {
+        "kind": "types",
+        "target": "frontend/member-app/tsconfig.build.json",
+        "exit_code": 0
+      },
+      {
+        "kind": "types",
+        "target": "frontend/admin-app/tsconfig.build.json",
+        "exit_code": 0
+      },
+      {
+        "kind": "types",
+        "target": "frontend/ops-glance/tsconfig.json",
+        "exit_code": 0
+      },
+      {
+        "kind": "build",
+        "target": "member-app",
+        "exit_code": 0
+      },
+      {
+        "kind": "build",
+        "target": "member-auth",
+        "exit_code": 0
+      },
+      {
+        "kind": "build",
+        "target": "admin-app",
+        "exit_code": 0
+      },
+      {
+        "kind": "build",
+        "target": "admin-pilot",
+        "exit_code": 0
+      },
+      {
+        "kind": "build",
+        "target": "ops-glance",
+        "exit_code": 0
+      }
+    ],
+    "source_fixed": true,
+    "private_outputs": true,
+    "envDir": false,
+    "dotenv_disabled": true,
+    "output_hashes_retained_privately": true
+  },
+  "actual_browser_green": {
+    "passed": true,
+    "runner_seconds": 49.08,
+    "original_trigger_no_longer_renders_old_account_name": true,
+    "live_current_child_identity_differs_from_old_html": true,
+    "child_search_still_denies_private_title": true,
+    "focused_sign_in_notice": true,
+    "fresh_full_navigation_renders_current_child": true,
+    "source_and_frontend_fixed": true,
+    "cleanup_and_all_resource_absences_verified": true,
+    "headless": true,
+    "external_issue_sent": false,
+    "base_image": "sha256:f63116797656d9cb79218410bf22dcabb497e37384b932eb8b16617aa47e7709"
+  },
+  "ratchets": {
+    "results": [
+      {
+        "check": "eslint",
+        "exit_code": 0
+      },
+      {
+        "check": "format",
+        "exit_code": 0
+      },
+      {
+        "check": "css-token-lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "any_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "component_size_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "od_btn_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "api-envelope",
+        "exit_code": 0
+      },
+      {
+        "check": "R1972-validator",
+        "exit_code": 0
+      },
+      {
+        "check": "diff-check",
+        "exit_code": 0
+      }
+    ],
+    "seconds": 48.67,
+    "passed": true,
+    "dotenv_disabled": true
+  },
+  "failed_baselines": {
+    "unrestricted": {
+      "source_head": "5f35c6b0cbe0f3fe11c814f07e8c9f4a97072d7f",
+      "failed": 3,
+      "passed": 8509,
+      "skipped": 101,
+      "warnings": 160,
+      "pytest_seconds": 2307.49,
+      "runner_seconds": 2338.93,
+      "source_fixed": true,
+      "owned_db_absence_verified": true,
+      "generated_synthetic_files_hash_preserved": true,
+      "archive_sha256": "8b5e2edf3d44399bd2181ca5eab972d86e20cf21f75ac18945e0f20e24853e11"
+    },
+    "ci": {
+      "run_id": 43127988397,
+      "source_head": "5f35c6b0cbe0f3fe11c814f07e8c9f4a97072d7f",
+      "conclusion": "failure",
+      "failed": 3,
+      "passed": 7872,
+      "skipped": 14,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 2387.34,
+      "other_jobs_succeeded": 8
+    },
+    "cause": "Same three config-only safe-URL fixture stub closes assumed app_context despite injected db=None. Corrected focused tests pass; no fresh full-suite pass is established.",
+    "desktop": {
+      "run_id": 43127988412,
+      "source_head": "5f35c6b0cbe0f3fe11c814f07e8c9f4a97072d7f",
+      "conclusion": "success",
+      "active_jobs_succeeded": 7,
+      "release_attachment": "skipped",
+      "installed_journey_claim": false
+    }
+  },
+  "screenshots": [
+    {
+      "name": "fe007-delayed-bootstrap-r2038-green-fresh-child.png",
+      "width": 1100,
+      "height": 850,
+      "sha256": "a8605da0e273dfaa905dbfe1d27c9f60bed32e05db185c6b775af915af6bc7b9",
+      "published": false
+    },
+    {
+      "name": "fe007-delayed-bootstrap-r2038-green-old-bootstrap.png",
+      "width": 1100,
+      "height": 850,
+      "sha256": "9508e5762a1dcfcacb559b2a633d330d558dfa014fa2c0a79c32661d70f86db8",
+      "published": false
+    }
+  ],
+  "private_archive": {
+    "filename": "browser-bootstrap-identity-r2038.zip",
+    "files_including_manifest": 93,
+    "bytes": 339171,
+    "sha256": "30a511caf098a4440f565c4a197ddedb8634e5fd5306d47e44123cba94a88e54"
+  },
+  "review": "Separate author boundary/caller/regression pass retained. Owner inline constraint honored; final original-program fresh independent review remains required.",
+  "limits": [
+    "Current Chromium on Windows; no legacy/current parity or full route promotion. R1972 validator still qualifies its pinned7 reports/1545 shared rows/160 current-only snapshot.",
+    "Classic/hybrid DOM, unused details island, classic/SSO callbacks without notification, server-only same-account role/ACL/session changes and stale content outside the protected React root remain separate.",
+    "Actual frozen/offline lifecycle combinations, other engines/headsets/installed platforms and whole original journeys remain unqualified.",
+    "Native component channel controls pass normal and blocked-storage/BroadcastChannel delivery; both-channels-blocked native blur is inconclusive because the headless probe emitted no blur/hidden event. Unit lifecycle tests are separate.",
+    "Only bounded current security correction, not full FE-007 acceptance, a new exact-head CI/full pass, default-branch alert closure, merge, release or deployment. Companion offline policy unchanged.",
+    "Test/build/browser durations overlap; selections overlap and are not unique combined coverage or model inference timing. No model winner or actual billing inference."
+  ]
+}

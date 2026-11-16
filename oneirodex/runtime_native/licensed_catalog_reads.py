@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class LicensedCatalogData:
@@ -74,8 +75,8 @@ def create_licensed_catalog_reads_router(
                 from oneirodex.utils.set_completion import REGION_LABELS, REGION_PREF_ORDER
 
                 platform = (
-                    request.query_params.get('library_platform')
-                    or request.query_params.get('platform')
+                    first_query_value(request.query_params, 'library_platform')
+                    or first_query_value(request.query_params, 'platform')
                     or ''
                 ).strip()
                 try:
@@ -126,8 +127,8 @@ def create_licensed_catalog_reads_router(
                 response = JSONResponse(body, status_code=status)
             else:
                 platform = (
-                    request.query_params.get('library_platform')
-                    or request.query_params.get('platform')
+                    first_query_value(request.query_params, 'library_platform')
+                    or first_query_value(request.query_params, 'platform')
                     or ''
                 ).strip()
                 if not platform:
@@ -191,7 +192,10 @@ def create_licensed_catalog_reads_router(
                 else:
                     try:
                         content_type = request.headers.get('content-type', '').lower()
-                        if 'application/json' in content_type:
+                        if content_type == 'application/json' or (
+                            content_type.startswith('application/')
+                            and content_type.endswith('+json')
+                        ):
                             raw = await request.json()
                         elif 'application/x-www-form-urlencoded' in content_type or 'multipart/form-data' in content_type:
                             raw = dict(await request.form())

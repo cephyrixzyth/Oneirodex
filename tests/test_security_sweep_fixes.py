@@ -145,10 +145,11 @@ def test_oidc_never_links_by_username_or_unverified_email(app, db_session):
     admin_email = admin.email
     by_name = provision_or_update_user(db_session, {'sub': 'idp-1', 'preferred_username': admin.name}, _oidc_config())
     assert by_name.id != admin.id
-    with pytest.raises(ValueError, match='already exists'):
+    with pytest.raises(ValueError, match='Unable to sign in with this SSO identity') as refused:
         provision_or_update_user(
             db_session, {'sub': 'idp-2', 'email': admin_email, 'email_verified': False, 'preferred_username': 'x'},
             _oidc_config())
+    assert admin_email not in str(refused.value)
     db_session.rollback()
     db_session.refresh(admin)
     assert admin.email == admin_email and admin.oidc_subject is None
@@ -175,6 +176,7 @@ def test_activity_events_reach_friends_who_share_not_everyone(app, db_session):
 
     player, friend, stranger = (_user(db_session, prefix=p) for p in ('player', 'friend', 'stranger'))
     admin = _user(db_session, role='admin', prefix='evadmin')
+    child = _user(db_session, role='child', prefix='evchild')
     db_session.add(UserFriendship(user_id=player.id, friend_user_id=friend.id, status='accepted'))
     db_session.commit()
     event = SimpleNamespace(type='activity', payload={'user_id': player.id, 'action': 'started'})
@@ -187,6 +189,14 @@ def test_activity_events_reach_friends_who_share_not_everyone(app, db_session):
     assert not event_visible_to(event, friend.id), 'the player turned sharing off'
     assert event_visible_to(SimpleNamespace(type='scan', payload={'progress': 3}), stranger.id)
     assert not event_visible_to(event, None)
+    test_event = SimpleNamespace(
+        type='test', payload={'message': 'ping', 'user': admin.name},
+        visibility_user_id=admin.id,
+    )
+    assert event_visible_to(test_event, admin.id)
+    assert not event_visible_to(test_event, player.id)
+    assert not event_visible_to(test_event, child.id)
+    assert event_visible_to(SimpleNamespace(type='scan', payload={'progress': 4}), child.id)
     download = SimpleNamespace(type='download', payload={'user_id': player.id, 'request_id': 7, 'status': 'available'})
     assert event_visible_to(download, player.id) and event_visible_to(download, admin.id)
     assert not event_visible_to(download, friend.id), "a member's downloads are theirs"
@@ -245,7 +255,8 @@ def test_mixed_case_registration_email_confirms_successfully(app, db_session, mo
     from oneirodex.models import InviteToken
     import oneirodex.routes_login as routes_login
 
-    monkeypatch.setattr(routes_login, 'send_email', lambda *a, **k: None)
+    sent = []
+    monkeypatch.setattr(routes_login, 'send_email', lambda *a, **k: sent.append(a))
     inviter = _user(db_session, prefix='mixed_case_inviter')
     invite = InviteToken(token=f'inv-{uuid4().hex}', creator_user_id=inviter.user_id)
     db_session.add(invite)
@@ -261,13 +272,31 @@ def test_mixed_case_registration_email_confirms_successfully(app, db_session, mo
     user = db_session.query(User).filter_by(name=username).one()
     assert user.email == email.lower()
     assert user.is_email_verified is False
+    assert len(sent) == 1
+    import re
+    match = re.search(r'/confirm/([^\s<>"&]+)', sent[0][2])
+    assert match is not None
+    verification_token = match.group(1)
+    from oneirodex.utils.tokens import email_verification_token_digest
+    assert user.email_verification_token == email_verification_token_digest(verification_token)
 
     # /confirm/<token> now serves the static React shell. The API owns the
     # one-time state transition; Flask's test client does not execute the SPA.
-    confirmed = app.test_client().get(f'/api/auth/confirm/{user.email_verification_token}')
+    client = app.test_client()
+    inspected = client.get(f'/api/auth/confirm/{verification_token}')
+    assert inspected.status_code == 200
+    assert inspected.get_json()['confirmed'] is False
+    db_session.expire_all()
+    assert db_session.query(User).filter_by(id=user.id).one().is_email_verified is False
+    confirmed = client.post(f'/api/auth/confirm/{verification_token}', json={
+        'password': 'mailbox-owner-password',
+        'confirm_password': 'mailbox-owner-password',
+    })
     assert confirmed.status_code == 200
     db_session.expire_all()
-    assert db_session.query(User).filter_by(id=user.id).one().is_email_verified is True
+    active_user = db_session.query(User).filter_by(id=user.id).one()
+    assert active_user.is_email_verified is True
+    assert active_user.check_password('mailbox-owner-password')
 
 
 def test_registration_confirmation_link_ignores_host_header(app, db_session, monkeypatch):
@@ -365,8 +394,9 @@ def test_an_operator_can_trust_a_provider_that_omits_email_verified(app, db_sess
 
     member = _user(db_session, prefix='ssolegacy')
     claims = {'sub': 'idp-legacy', 'email': member.email, 'preferred_username': member.name}
-    with pytest.raises(ValueError, match='already exists'):
+    with pytest.raises(ValueError, match='Unable to sign in with this SSO identity') as refused:
         provision_or_update_user(db_session, claims, _oidc_config())
+    assert member.email not in str(refused.value)
     db_session.rollback()
     monkeypatch.setitem(app.config, 'OIDC_TRUST_PROVIDER_EMAIL', True)
     assert provision_or_update_user(db_session, claims, _oidc_config()).id == member.id

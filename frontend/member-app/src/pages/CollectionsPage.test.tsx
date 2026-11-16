@@ -142,6 +142,21 @@ test('creates a collection and shows it in the list', async () => {
   )
 })
 
+test('explains when a whitespace-only collection name is submitted', async () => {
+  vi.mocked(collectionsApi.fetchCollections).mockResolvedValue({ collections: [] })
+
+  renderPage()
+
+  await screen.findByText('No collections yet. Create your first shelf with the form above.')
+  await userEvent.type(screen.getByLabelText('Name'), '   ')
+  await userEvent.click(screen.getByRole('button', { name: 'Create shelf' }))
+
+  expect(collectionsApi.createCollection).not.toHaveBeenCalled()
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Enter a shelf name before creating it.',
+  )
+})
+
 test('detail page renders items for the routed collection uuid', async () => {
   vi.mocked(collectionsApi.fetchCollection).mockResolvedValue({
     id: 1,

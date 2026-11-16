@@ -87,6 +87,20 @@ def test_invalid_add_rejected_without_database_write(harness, body):
     session.commit.assert_not_called()
 
 
+@pytest.mark.parametrize('pattern', [['GOG'], {'name': 'GOG'}, 7, True])
+def test_non_string_pattern_rejected_without_database_write(harness, pattern):
+    client, session, _, headers = harness
+    response = client.post(
+        '/api/admin/scan-filters',
+        json={'kind': 'name', 'pattern': pattern},
+        headers=headers,
+    )
+    assert response.status_code == 400
+    assert response.json['ok'] is False
+    session.add.assert_not_called()
+    session.commit.assert_not_called()
+
+
 def test_delete_and_missing_row(harness):
     client, session, row, headers = harness
     response = client.delete('/api/admin/scan-filters/9', headers=headers)

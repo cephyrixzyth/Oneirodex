@@ -1,7 +1,8 @@
 import type { LifecycleAction } from './lifecycle.js'
 
 /** Companion reachability relative to the last successful Connect. */
-export type ConnectionMode = 'disconnected' | 'online' | 'offline'
+export type ConnectionMode =
+  'disconnected' | 'connecting' | 'online' | 'offline' | 'denied' | 'error'
 
 export type CompanionUiAction =
   | LifecycleAction
@@ -35,7 +36,7 @@ export function offlineBlockReason(action: CompanionUiAction): string {
   if (!actionNeedsServer(action)) {
     return ''
   }
-  return 'Server offline — reconnect to download, update, or apply mods/patches. Play, Install, and Uninstall still work locally.'
+  return 'Server actions unavailable — reconnect to download, update, or apply mods/patches. Previously installed games can still Play or Reveal locally.'
 }
 
 export function connectionModeLabel(mode: ConnectionMode): string {
@@ -44,6 +45,12 @@ export function connectionModeLabel(mode: ConnectionMode): string {
       return 'Online'
     case 'offline':
       return 'Offline (server unreachable)'
+    case 'connecting':
+      return 'Connecting'
+    case 'denied':
+      return 'Server access denied'
+    case 'error':
+      return 'Connection failed'
     case 'disconnected':
       return 'Not connected'
     default: {

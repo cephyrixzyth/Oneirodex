@@ -45,8 +45,8 @@ faces chosen to *evoke* each era:
 | Step | What happens |
 |---|---|
 | Boot, phase 4 | `seed_builtin_fonts()` copies any missing bundled face into the fonts folder — same model as the icon packs beside it |
-| Face not in the bundle | Falls back to a background download from google/fonts; `FETCH_FONTS_ON_BOOT=false` disables that half only |
-| Copy fails | Logged, boot continues — a missing face degrades to the next family in its CSS stack |
+| Face not in the bundle | Falls back to a background download from google/fonts through the shared public-URL and redirect checks; responses are limited to 8 MiB. `FETCH_FONTS_ON_BOOT=false` disables that half only |
+| A bundled copy or fallback write fails | Logged, the affected face is skipped, and boot continues — a missing face degrades to the next family in its CSS stack |
 
 Runtime location is `oneirodex/static/library/fonts/` (override with
 `FONT_PATH`). Under Compose that lives inside the volume mounted at
@@ -91,9 +91,15 @@ every member's browser:
 
 - **Extension allowlist** — `.ttf`, `.otf`, `.woff`, `.woff2`
 - **Size cap** — `FONT_MAX_BYTES`, default 8MB
+- **Request cap** — the multipart body is limited to the font cap plus 64KiB
+  for boundaries and form fields. Oversized bodies return HTTP 413 before the
+  upload parser can spool an unbounded font file.
 - **Magic-byte check** — the leading bytes must match a real font container
   (`\x00\x01\x00\x00`, `true`, `ttcf`, `OTTO`, `wOFF`, `wOF2`). An extension on
   its own is not evidence.
+- **Storage errors** — a failed write returns a generic message rather than a
+  server path. Check that the configured `FONT_PATH` is writable and has free
+  space; the application log records the error class without the path.
 
 Anything you upload appears in the picker alongside the built-ins, labelled
 `(operator)`. If you hold a licence for a face closer to what you want, this is

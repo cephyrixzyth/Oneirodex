@@ -146,6 +146,28 @@
   margin-top: 0.25rem;
 }
 
+.od-report__github-opt-in {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-sm);
+  background: color-mix(in srgb, var(--od-surface-2) 75%, transparent);
+  color: var(--od-text);
+  font-size: var(--od-font-sm);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.od-report__github-opt-in input {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--od-accent);
+}
+
 .od-report__help-link {
   color: var(--od-text-muted);
   font-size: var(--od-font-md);
@@ -221,4 +243,19 @@
   grid-area: hint;
   font-size: var(--od-font-sm);
   color: var(--od-text-muted);
+}
+
+.od-report__preview {
+  padding: 1rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  background: var(--od-bg);
+  color: var(--od-text);
+}
+
+.od-report__preview-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 24rem;
+  overflow: auto;
 }

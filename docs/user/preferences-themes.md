@@ -67,7 +67,7 @@ Preferences is organized into **Library**, **Look & density**, **Play in browser
 
 ## Items per page
 
-- Preference: **items per page** for Library / similar browse grids.
+- Preference: **items per page** for Library, Favorites, and similar browse grids. New accounts start at **50** until they choose another value.
 - Allowed values: **20 / 50 / 100 / 200 / 300 / 400 / 500 / 1000** (API allowlist; other values are rejected).
 
 ## Preferred game language

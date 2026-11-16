@@ -24,7 +24,7 @@ from oneirodex.schemas.library_tools import (
     WriteProposalsBody,
 )
 from oneirodex.utils.auth import admin_required
-from oneirodex.utils.security import is_safe_path, get_allowed_base_directories
+from oneirodex.utils.security import get_allowed_base_directories, is_readable_game_path, is_safe_path
 from oneirodex.utils.disk_rename import apply_rename_plan, build_rename_plan, validate_plan_for_game
 from oneirodex.utils.path_repoint import _moved as path_moved, repoint_paths
 from oneirodex.utils.match_proposal import (
@@ -227,7 +227,7 @@ def link_existing_game_api(body: LinkExistingGameBody):
     safe, error = is_safe_path(body.full_disk_path, _allowed_bases())
     if not safe:
         return api_error(error or 'Unsafe path', code='forbidden')
-    if not os.path.isdir(body.full_disk_path) or not os.access(body.full_disk_path, os.R_OK):
+    if not is_readable_game_path(body.full_disk_path):
         return api_error('The selected folder does not exist or cannot be read', code='bad_request')
 
     game = db.session.get(Game, body.game_uuid)

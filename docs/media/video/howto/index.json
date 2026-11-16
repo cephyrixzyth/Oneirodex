@@ -286,7 +286,7 @@
       "Help is the in-app guide \u2014 pick a topic and the answer opens underneath.",
       "Expand all reads it straight through.",
       "Topics cover browser play, controllers, cheats, translations and the licence.",
-      "Report sends an issue to the admin's Support inbox, and on to GitHub when configured.",
+      "Report saves to the admin's Support inbox. Members can opt in to also send a report to the configured GitHub repository.",
       "That is help and reporting a problem. The written guide is in the docs folder, at docs/user/faq.md."
     ]
   },
@@ -366,7 +366,7 @@
       "Users lists every member with their role \u2014 admin, librarian, member or child.",
       "Invites are how people join: generate a link, set its quota, hand it over.",
       "Whitelist pre-approves addresses when registration is open.",
-      "Support inbox receives what members send from Report, and can mirror to GitHub Issues.",
+      "Support inbox receives what members send from Report; GitHub Issues sync runs only when the member opts in.",
       "That is users, invites and support. The written guide is in the docs folder, at docs/admin/support-inbox.md."
     ]
   },

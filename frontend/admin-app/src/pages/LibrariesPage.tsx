@@ -10,6 +10,8 @@ import { ScanConflictModal } from '../components/ScanConflictModal'
 import { useLibraryRefreshAll } from '../hooks/useLibraryRefreshAll'
 import { useLibraryScan } from '../hooks/useLibraryScan'
 
+import { AdminLink } from '../components/AdminLink'
+
 export function LibrariesPage() {
   const [rows, setRows] = useState<Record<string, unknown>[] | null>(null)
   const [error, setError] = useState<unknown>(null)
@@ -48,10 +50,10 @@ export function LibrariesPage() {
         </Button>
       ) : null}
       <p className="od-admin-lede">
-        Scan and schedule work from <a href="/admin/scan-controls">Scan controls</a>
+        Scan and schedule work from <AdminLink to="/admin/scan-controls">Scan controls</AdminLink>
         {' · '}
         Library hero image:{' '}
-        <a href="/admin/art_studio#stock">Choose image from Backup &amp; stock</a>
+        <AdminLink to="/admin/art_studio#stock">Choose image from Backup &amp; stock</AdminLink>
         {' · '}
         <a href="#propose-leaf">Propose leaf libraries</a>
         {' · '}

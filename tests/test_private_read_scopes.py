@@ -168,8 +168,8 @@ def test_child_profile_total_excludes_games_outside_their_library_allowlist(
     assert [game['game_uuid'] for game in payload['recent_games']] == [visible_game.uuid]
 
 
-def test_child_playtime_summary_hides_games_outside_library_allowlist(
-    client, db_session,
+def test_child_playtime_summary_requires_library_scope_and_hides_unshared_games(
+    app, client, db_session,
 ):
     suffix = uuid4().hex[:8]
     child = User(
@@ -198,16 +198,21 @@ def test_child_playtime_summary_hides_games_outside_library_allowlist(
     ])
     db_session.commit()
 
-    response = client.get('/api/playtime/me', headers=bearer(child, ['read:social']))
+    with app.app_context():
+        denied = client.get('/api/playtime/me', headers=bearer(child, ['read:social']))
+    assert denied.status_code == 403
 
-    assert response.status_code == 200
+    with app.app_context():
+        response = client.get('/api/playtime/me', headers=bearer(child, ['read:library']))
+
+    assert response.status_code == 200, response.get_json()
     payload = response.get_json()
     assert payload['total_seconds'] == 23
     assert [game['game_uuid'] for game in payload['games']] == [visible_game.uuid]
 
 
-def test_child_download_history_hides_games_outside_library_allowlist(
-    client, db_session,
+def test_child_download_history_requires_library_scope_and_hides_unshared_games(
+    app, client, db_session,
 ):
     suffix = uuid4().hex[:8]
     child = User(
@@ -235,9 +240,14 @@ def test_child_download_history_hides_games_outside_library_allowlist(
     ])
     db_session.commit()
 
-    response = client.get('/api/my_downloads', headers=bearer(child, ['read:social']))
+    with app.app_context():
+        denied = client.get('/api/my_downloads', headers=bearer(child, ['read:social']))
+    assert denied.status_code == 403
 
-    assert response.status_code == 200
+    with app.app_context():
+        response = client.get('/api/my_downloads', headers=bearer(child, ['read:library']))
+
+    assert response.status_code == 200, response.get_json()
     payload = response.get_json()
     assert len(payload) == 1
     assert payload[0]['game_name'] == 'Visible download game'
@@ -279,6 +289,23 @@ def test_read_social_token_cannot_mutate_social(client, private_data):
     for method, path, payload in requests:
         response = client.open(path, method=method, headers=read_headers, json=payload)
         assert response.status_code == 403, path
+
+
+def test_write_social_token_still_requires_read_scope_for_preferences(
+    client, private_data,
+):
+    owner, _, _, _, _ = private_data
+    headers = bearer(owner, ['write:social'])
+
+    response = client.post(
+        '/api/notifications/preferences',
+        headers=headers,
+        json={'share_activity': False},
+    )
+
+    assert response.status_code == 403
+    assert response.get_json()['error'] == 'Missing scope: read:social'
+    assert response.get_json()['detail'] == {'required_scope': 'read:social'}
 
 
 def test_write_social_token_can_mutate_social(client, private_data):

@@ -4,6 +4,8 @@ import { csrfHeaders, deleteJson, getJson, postJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { errorText } from '../utils/errorText'
 
+import { AdminLink } from '../components/AdminLink'
+
 const API = '/api/admin/reference-sets'
 type Platform = { id: string; label: string }
 type ReferenceSet = {
@@ -75,6 +77,7 @@ export function ReferenceSetsPage() {
   const [file, setFile] = useState<File | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const [rehashPlatform, setRehashPlatform] = useState('')
+  const [rehashStatus, setRehashStatus] = useState('')
   const [repairPlatform, setRepairPlatform] = useState('')
   const [repairRegion, setRepairRegion] = useState('')
   const [catalogPlatform, setCatalogPlatform] = useState('')
@@ -126,7 +129,7 @@ export function ReferenceSetsPage() {
       cancelled = true
     }
   }, [reload])
-  async function action(work: () => Promise<void>) {
+  async function action(work: () => Promise<void>, onError?: (message: string) => void) {
     if (loading || loadFailed || lock.current) return
     lock.current = true
     setBusy(true)
@@ -135,7 +138,9 @@ export function ReferenceSetsPage() {
     try {
       await work()
     } catch (err) {
-      setError(errorText(err) || 'Could not complete the action.')
+      const message = errorText(err) || 'Could not complete the action.'
+      if (onError) onError(message)
+      else setError(message)
     } finally {
       lock.current = false
       setBusy(false)
@@ -145,7 +150,7 @@ export function ReferenceSetsPage() {
     event.preventDefault()
     if (!file) return
     if (file.size > maxBytes) {
-      setError('DAT must be at most 32 MiB.')
+      setError('DAT too large (max 32 MiB)')
       return
     }
     void action(async () => {
@@ -190,7 +195,7 @@ export function ReferenceSetsPage() {
       if (fileInput.current) fileInput.current.value = ''
       setReport(null)
       setMessage(
-        `Uploaded ${row.name}: ${row.entry_count} entries for ${row.library_platform}/${row.region}.`,
+        `Uploaded ${row.name}: ${row.entry_count} entries for ${row.library_platform}/${row.region}`,
       )
     })
   }
@@ -306,7 +311,7 @@ export function ReferenceSetsPage() {
                 after confirmation.
               </p>
             </fieldset>
-            <Button type="submit" variant="primary" disabled={disabled || !file || !platform}>
+            <Button type="submit" variant="primary" disabled={disabled || !platform}>
               Upload / replace
             </Button>
           </form>
@@ -318,20 +323,26 @@ export function ReferenceSetsPage() {
             {platformSelect('Rehash platform selection', rehashPlatform, setRehashPlatform)}
             <Button
               disabled={disabled || !rehashPlatform}
-              onClick={() =>
+              onClick={() => {
+                setRehashStatus('Hashing…')
                 void action(async () => {
                   const result = await postJson('/api/reference-sets/rehash', {
                     library_platform: rehashPlatform,
                   })
                   setReport(null)
-                  setMessage(
-                    `Hashed ${result.hashed} / ${result.considered} (skipped ${result.skipped}).`,
+                  setRehashStatus(
+                    `Hashed ${result.hashed} / ${result.considered} (skipped ${result.skipped})`,
                   )
-                })
-              }
+                }, setRehashStatus)
+              }}
             >
               Rehash platform
             </Button>
+            {rehashStatus ? (
+              <PageStatus announcement="status" className="od-admin-hint">
+                {rehashStatus}
+              </PageStatus>
+            ) : null}
           </section>
           <section className="od-admin-panel">
             <h2>DAT repair preview</h2>
@@ -476,7 +487,7 @@ export function ReferenceSetsPage() {
               ]}
             />
           </section>
-          <a href="/admin/integrations">Back to Integrations</a>
+          <AdminLink to="/admin/integrations">Back to Integrations</AdminLink>
         </>
       ) : null}
     </Page>

@@ -64,6 +64,20 @@ test('an empty inbox is a good state, not an empty one', async () => {
   }
 })
 
+test('labels tickets kept on this server as Local only', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = mockFetch([
+    { id: 18, status: 'open', title: 'Local report', github_sync: 'local_only' },
+  ]) as unknown as typeof globalThis.fetch
+  try {
+    render(<SupportInboxPage />)
+    const row = await screen.findByRole('row', { name: /Local report/ })
+    expect(within(row).getByText('Local only')).toBeInTheDocument()
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 function jsonResponse(body: any, status = 200) {
   return {
     ok: status < 400,

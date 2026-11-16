@@ -4,7 +4,8 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
+import pytest
 
 from oneirodex.runtime_native.download_request_reads import create_download_request_read_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
@@ -36,11 +37,11 @@ class FakeDownloads:
         return request_id == 10
 
 
-def make_client(*, role='admin', data=None):
+def make_client(*, role='admin', data=None, csrf_enabled=False):
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY='native-download-reads-secret', TESTING=True,
-        WTF_CSRF_ENABLED=False,
+        WTF_CSRF_ENABLED=csrf_enabled,
     )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(id=7, role=role, is_active=True, state=True, is_authenticated=True)
@@ -95,6 +96,54 @@ def test_admin_delete_uses_csrf_and_reports_missing_requests():
     assert missing.json()['error_code'] == 'not_found'
 
 
+@pytest.mark.parametrize('request_id', ['-1', 'not-an-id'])
+def test_admin_delete_rejects_paths_outside_legacy_integer_converter(request_id):
+    response = make_client().delete(f'/api/delete_download/{request_id}')
+
+    assert response.status_code == 404
+
+
+def test_admin_delete_zero_id_logs_invalid_id_and_returns_bad_request(monkeypatch):
+    from oneirodex.utils import event_logging
+
+    events = []
+    monkeypatch.setattr(event_logging, 'log_system_event', lambda *args, **kwargs: events.append((args, kwargs)))
+
+    response = make_client().delete('/api/delete_download/0')
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'Invalid request ID'
+    assert events == [(('Invalid request ID: 0',), {'event_type': 'download_api', 'event_level': 'warning'})]
+
+
+def test_admin_bearer_delete_bypasses_csrf_but_still_requires_admin_scope(monkeypatch):
+    from oneirodex.runtime_native import download_request_reads
+
+    user = SimpleNamespace(id=7, role='admin', is_active=True, state=True, is_authenticated=True)
+
+    def set_bearer_scope(scope_allowed):
+        monkeypatch.setattr(download_request_reads, 'request_auth_context', lambda *_args, **_kwargs: SimpleNamespace(
+            user=user, token=object(), source='bearer', should_set_session_cookie=False,
+            has_scope=lambda scope: scope == 'admin' and scope_allowed,
+        ))
+
+    set_bearer_scope(True)
+    allowed = make_client(csrf_enabled=True)
+    allowed.cookies.clear()
+    deleted = allowed.delete('/api/delete_download/10', headers={'Authorization': 'Bearer synthetic-admin-token'})
+
+    assert deleted.status_code == 200
+    assert deleted.json()['message'] == 'Download request deleted successfully'
+
+    set_bearer_scope(False)
+    denied = make_client(csrf_enabled=True)
+    denied.cookies.clear()
+    rejected = denied.delete('/api/delete_download/10', headers={'Authorization': 'Bearer synthetic-read-token'})
+
+    assert rejected.status_code == 403
+    assert rejected.json()['error_code'] == 'forbidden'
+
+
 def test_member_download_status_preserves_success_and_error_contracts(monkeypatch):
     from oneirodex.utils import event_logging
 
@@ -133,6 +182,9 @@ def test_legacy_download_delete_form_is_user_scoped_and_redirects(monkeypatch):
 
     assert removed.status_code == 302
     assert removed.headers['location'] == '/downloads'
+    expected = flask_redirect('/downloads', code=302)
+    assert removed.headers['content-type'] == expected.headers['Content-Type']
+    assert removed.content == expected.get_data()
     assert removed.headers['cache-control'] == 'no-store'
     assert removed.cookies.get('session')
     assert missing.status_code == 404
@@ -155,6 +207,9 @@ def test_legacy_admin_download_delete_form_keeps_admin_gate_and_flash(monkeypatc
 
     assert removed.status_code == 302
     assert removed.headers['location'] == '/admin/manage-downloads'
+    expected = flask_redirect('/admin/manage-downloads', code=302)
+    assert removed.headers['content-type'] == expected.headers['Content-Type']
+    assert removed.content == expected.get_data()
     assert removed.headers['cache-control'] == 'no-store'
     assert missing.status_code == 302
     assert missing.headers['location'] == '/admin/manage-downloads'

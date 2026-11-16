@@ -1,0 +1,20 @@
+{
+  "review_id": "R1992",
+  "title": "Inject account-deletion transaction failures and verify cleanup convergence",
+  "classification": "No new implementation defect reproduced; staged account-deletion changes roll back before commit, and post-unlink cleanup retries converge after a failed job commit.",
+  "change": {
+    "verification": "Added parameterized failure injection at file-candidate discovery, audit anonymization, relation deletion, user flush, cleanup-job enqueue, and the database commit boundary.",
+    "recovery_case": "Added a failure after an owned file is unlinked but before the cleanup-job deletion commits; after rollback, the next retry sees the already-absent file and removes the retry row."
+  },
+  "verification": {
+    "command": "python -m pytest tests/test_admin_user_delete_retention.py tests/test_user_deletion_inventory.py tests/test_admin_user_mutation_concurrency.py -q",
+    "result": "passed: 19 tests on Python 3.14.10 and PostgreSQL 17.6.",
+    "schema": "Fresh uniquely named loopback PostgreSQL test database created and upgraded through Alembic revision d6e7f8a9b0c1 using scripts/upgrade_test_schema.py.",
+    "cleanup": "The disposable database was dropped after the passing run.",
+    "assertions": "Each pre-commit injected failure leaves the account, credential, and original audit text intact; preserves user-owned file bytes; and leaves no cleanup job. The post-unlink commit failure leaves a retryable job; a second processing pass removes the job without error."
+  },
+  "limits": [
+    "The fault injection exercises the deletion service and retry worker in-process; a prior separate R1978 test exercises retry during a fresh Uvicorn ASGI lifespan.",
+    "These checks use the current ORM/Alembic schema, not a deployed operator schema. Restore reapplication and production restart/retry qualification remain open."
+  ]
+}

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useShellConfig, useViewer } from '@oneirodex/ui'
 import { fetchDiscoverSections } from './api/discover'
 import { fetchDiscoverPins, saveDiscoverPins } from './api/discoverPins'
+import { useShelfGridNavigation } from './hooks/useShelfGridNavigation'
 import { ContextBar, Popover } from './chrome/ContextBar'
 import { DiscoverShelf, formatEventEnds, rowItems } from './components/DiscoverShelf'
 import { DiscoverRowSettings } from './components/DiscoverRowSettings'
@@ -39,6 +40,9 @@ export function arrangeDiscoverSections(
 }
 
 export function DiscoverApp() {
+  const shelfRootRef = useRef(null)
+  useShelfGridNavigation(shelfRootRef)
+
   const { isAdmin } = useViewer()
   const shellConfig = useShellConfig()
   const [sections, setSections] = useState<any[]>([])
@@ -216,12 +220,14 @@ export function DiscoverApp() {
 
   if (loading || error) {
     return (
-      <PageStatus
-        loading={loading}
-        error={error}
-        errorMessage="Unable to load Discover shelves."
-        loadingMessage="Loading Discover…"
-      />
+      <div ref={shelfRootRef}>
+        <PageStatus
+          loading={loading}
+          error={error}
+          errorMessage="Unable to load Discover shelves."
+          loadingMessage="Loading Discover…"
+        />
+      </div>
     )
   }
 
@@ -263,15 +269,15 @@ export function DiscoverApp() {
 
   if (!visible.length) {
     return (
-      <>
+      <div ref={shelfRootRef}>
         {bar}
         <PageStatus emptyMessage="No Discover shelves to show yet." />
-      </>
+      </div>
     )
   }
 
   return (
-    <>
+    <div ref={shelfRootRef}>
       {bar}
       {visible.map((section: any) => {
         const identifier = String(section.identifier || section.title || 'section')
@@ -289,7 +295,7 @@ export function DiscoverApp() {
           />
         )
       })}
-    </>
+    </div>
   )
 }
 

@@ -1,0 +1,101 @@
+{
+  "review_id": "R2008",
+  "title": "Python 3.12 native partitioned-cookie compatibility and revocation deletion flags",
+  "doc_status": "Reference",
+  "source_head_before_change": "9874a9f2b5c60499cf76653c92adf278533afbb7",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "oneirodex/runtime_native/account_sessions.py": "5810880f8cd3a00be86a0766876d62068f7056b43902f2bd15af59305916c625",
+    "oneirodex/runtime_native/acquire_status.py": "4d2c5c10566010d80f9829d7bce4cbccb54b489ddc275a94e8a1020da66fe12b",
+    "oneirodex/runtime_native/admin_pilot.py": "45f3bcf222193a3b2a7bac8fd0a5658e4ee42be752973f7808f4761af3fa54d1",
+    "oneirodex/runtime_native/auth_logout.py": "6551fce10dc19d53e98a4f97eda49fff08ea925486885a2beae343a9e3bc2e27",
+    "oneirodex/runtime_native/auth_runtime_bootstrap.py": "c6e31750d9d3a1050a04d866860bff770d2d575cbe5813fa0ccd5ae8c45ce8fb",
+    "oneirodex/runtime_native/browse.py": "718db62f38a7a1d7c1ffdfd3ec14a646ae878d6cabbec4aef5dcde102481f12e",
+    "oneirodex/runtime_native/oidc_status.py": "23da5d970c38e9b8f9f40334162498cea6311045457d00e0d41d6608ceaeefb5",
+    "oneirodex/runtime_native/release_calendar.py": "7ce8bedc342d30093279412663877ebcd4b2f73cf3ec1c0e333be7df02c2a13d",
+    "oneirodex/runtime_native/trailers.py": "844d84f62cb02da0c5bd5d830d3e4725f3d0c28c27d8721109dea98fa7823769",
+    "tests/test_asgi_native_browse.py": "f2f507f8dbf02c6352756f22be5b2b6cbc3b6918adaea81a8c403f6a187f66b2",
+    "oneirodex/runtime_native/cookie_compat.py": "2317949e4ffdbd436a60e10be894be1720b091bd9b8618b2887f8d7d6912f7d2",
+    "tests/cookie_helpers.py": "68e1dc8824ea7fee55c038634b4cf6cf40ab042a129aa9545e0ad75dd528fc77",
+    "tests/test_native_cookie_compat.py": "d4ef375ba71a1000b1876d517907d48a27b786e53fad5f14cf0aa975dad4a6fa"
+  },
+  "checks": {
+    "cookie-red": {
+      "status": "failed",
+      "exit_code": 1,
+      "seconds": 18.1,
+      "source_head_at_start": "9874a9f2b5c60499cf76653c92adf278533afbb7",
+      "disposable_database_removed": null,
+      "log_sha256": "b39de9d43fc39c807097a188123d41ce072ca194b4079fa2e6ca6b6d83f22dfe"
+    },
+    "cookie-delete-red": {
+      "status": "failed",
+      "exit_code": 1,
+      "seconds": 2.94,
+      "source_head_at_start": "9874a9f2b5c60499cf76653c92adf278533afbb7",
+      "disposable_database_removed": null,
+      "log_sha256": "c9415004123c6ce462f522c7c991c0ebe25649f4bdb9e272e168377bc10feaa2"
+    },
+    "cookie-delete-red-valid": {
+      "status": "failed",
+      "exit_code": 1,
+      "seconds": 6.41,
+      "source_head_at_start": "9874a9f2b5c60499cf76653c92adf278533afbb7",
+      "disposable_database_removed": null,
+      "log_sha256": "ac9fbeb7a74cfa53caa1600a5e71897228352ba5f69b137ee9e3a6742cf22def"
+    },
+    "cookie-expanded-green": {
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 12.2,
+      "source_head_at_start": "9874a9f2b5c60499cf76653c92adf278533afbb7",
+      "disposable_database_removed": null,
+      "log_sha256": "67481abf14bdccbf7f534d66096259cae81b44be77aace7f4ed85916a7204538"
+    },
+    "cookie-auth-postgres": {
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 20.72,
+      "source_head_at_start": "9874a9f2b5c60499cf76653c92adf278533afbb7",
+      "disposable_database_removed": true,
+      "log_sha256": "0aef47233a6753f47b672ccac84b544e898f0c845a4a37c7bea605d22592babd"
+    },
+    "cookie-ratchets": {
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 22.91,
+      "source_head_at_start": "9874a9f2b5c60499cf76653c92adf278533afbb7",
+      "disposable_database_removed": null,
+      "log_sha256": "bdd0cc3f8719933034f7c32f5e770cb278f4abb0df4dce7cb0e32ec4f6be503d"
+    },
+    "full-after-ci-repair": {
+      "status": "failed",
+      "exit_code": 1,
+      "seconds": 1134.25,
+      "source_head_at_start": "9874a9f2b5c60499cf76653c92adf278533afbb7",
+      "disposable_database_removed": true,
+      "log_sha256": "8a16c45bbd289d7adce1452e1c1e4963b468cf487d845b31a07db32749a67e95"
+    }
+  },
+  "classification": "Confirmed runtime and fixture compatibility defects repaired; full acceptance pending",
+  "red_harness_note": "cookie-delete-red initially failed because pytest-asyncio is absent; corrected to synchronous TestClient before the valid four-assertion RED run. Harness error is not vulnerability reproduction.",
+  "verification": {
+    "cookie_cases": 23,
+    "adjacent_authentication_session_cases": 44,
+    "python": "3.12.16",
+    "postgres": "17.6",
+    "settings": "Synthetic; dotenv disabled; non-loopback Python networking blocked",
+    "cleanup": "Owned disposable PostgreSQL database removed"
+  },
+  "ci": {
+    "run": 42534095194,
+    "core": "canceled at 35-minute deadline with progress at 70%; not a pass",
+    "timeout_change": "90 minutes; unchanged test selection/exclusions/coverage floor"
+  },
+  "limitations": [
+    "Deletion wire tests mock auth/revoke/commit; no claim of database coverage for those four cases.",
+    "Local full diagnostic stopped at maxfail=5 with 650 pass and 5 failures; no complete suite pass.",
+    "Admin component-size and broader original review acceptance remain open.",
+    "No new route coverage promoted; immutable R1972 preserved."
+  ]
+}

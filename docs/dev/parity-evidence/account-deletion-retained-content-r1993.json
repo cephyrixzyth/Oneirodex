@@ -1,0 +1,26 @@
+{
+  "review_id": "R1993",
+  "title": "Redact departing actor identifiers from retained feedback and notifications",
+  "classification": "Confirmed retained-content privacy issue reproduced in current source.",
+  "findings": [
+    {
+      "record": "user_notifications",
+      "reproduction": "A notification delivered to a surviving member retained the departing actor's name in its title/body and linked to /members/{deleted_user_id}; the actor FK was only nulled by the database.",
+      "fix": "Preserve the recipient's notification row, redact the departing account's name/email/UUID from title, body and string payload values, null actor identity values in payload, and clear a link to the deleted member profile. Notifications owned by the deleted account are still deleted with that account."
+    },
+    {
+      "record": "unmatched_folders.bad_match_note",
+      "reproduction": "The shared unmatched-folder feedback note survived with its author's email, name and absolute local path after the bad_match_by_user_id reference was cleared.",
+      "fix": "Keep the shared feedback row, reason and timestamp, but redact direct account identifiers and absolute paths from the departing author's note before deletion."
+    }
+  ],
+  "verification": {
+    "command": "python -m pytest tests/test_admin_user_delete_retention.py tests/test_user_deletion_inventory.py tests/test_admin_user_mutation_concurrency.py -q",
+    "result": "The final combined R1994 fresh-schema run passed 19 tests on Python 3.14.10 and PostgreSQL 17.6 through e1f2a3b4c5d6; the disposable database was dropped after the run.",
+    "assertions": "The deletion fixture confirms both shared rows survive with actor references cleared and that names, email, UUID, paths and the deleted member profile link do not remain in the tested fields. The explicit household ChatMessage body is preserved unchanged."
+  },
+  "limits": [
+    "The tests use synthetic current-schema PostgreSQL data; they do not scan an operator's retained production text.",
+    "Other shared authored catalog records remain shared content under the relation policy; this evidence does not claim arbitrary free text across all tables has been semantically scrubbed."
+  ]
+}

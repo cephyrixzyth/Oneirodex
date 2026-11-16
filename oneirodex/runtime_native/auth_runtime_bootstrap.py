@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import Request
 from starlette.responses import JSONResponse
 
+from .cookie_compat import set_cookie as set_response_cookie
 from .session_compat import dump_session_cookie, generate_csrf_token, load_session_cookie
 
 
@@ -86,7 +87,8 @@ def member_auth_runtime_bootstrap(
     expires = datetime.now(timezone.utc) + lifetime if permanent else None
     cookie_path = config.get('SESSION_COOKIE_PATH') or config.get('APPLICATION_ROOT') or '/'
     samesite = config.get('SESSION_COOKIE_SAMESITE')
-    response.set_cookie(
+    set_response_cookie(
+        response,
         cookie_name,
         cookie_value,
         expires=expires,
@@ -94,7 +96,7 @@ def member_auth_runtime_bootstrap(
         domain=config.get('SESSION_COOKIE_DOMAIN'),
         secure=bool(config.get('SESSION_COOKIE_SECURE', False)),
         httponly=bool(config.get('SESSION_COOKIE_HTTPONLY', True)),
-        samesite=str(samesite).lower() if samesite else None,
+        samesite=str(samesite) if samesite else None,
         partitioned=bool(config.get('SESSION_COOKIE_PARTITIONED', False)),
     )
     return response

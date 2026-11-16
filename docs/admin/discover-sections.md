@@ -8,7 +8,9 @@ Admin → **Discovery Sections Management** (`/admin/discovery_sections`) contro
 
 ## Optional native admin page
 
-This page uses the packaged admin React shell, shared forms, and named Edit/Delete controls through FastAPI. Move up/down buttons support keyboard ordering. Manual shelves support local game search, ordered selection and deduplicated UUID entry (maximum 60 games); filtered shelves retain library, platform and genre selection. Built-in shelves cannot be deleted or have their selection edited. Discovery-section reads and mutations also dispatch through FastAPI while preserving the existing admin session and CSRF contract. The application still has legacy Flask services and extensions during the runtime migration.
+This page uses the packaged admin React shell, shared forms, and named Edit/Delete controls through FastAPI. Move up/down buttons support keyboard ordering. Manual shelves support local game search, ordered selection and deduplicated UUID entry (maximum 60 distinct games; the API accepts up to 512 entries to normalize duplicate-heavy lists). Filtered shelves retain library, platform and genre selection. Built-in shelves cannot be deleted or have their selection edited. Discovery-section reads and mutations also dispatch through FastAPI while preserving the existing admin session and CSRF contract. The application still has legacy Flask services and extensions during the runtime migration.
+
+The Add shelf action sits beside the page heading, with a lede explaining the available shelf actions. Shelf cards use a compact responsive grid and collapse to one column on narrow screens. Pointer drag handles use the shared canonical grip icon and restore the v1.1.8 reorder affordance; named Move up/Move down controls remain available for keyboard users. Each handle identifies its shelf and announces the keyboard alternatives.
 
 Schedule controls save layout and UTC start/end dates together; an invalid window preserves the saved schedule. Pin rank has a separate Save action. Visibility and ordering refresh from persisted state. Delete requires confirmation; failed saves retain the draft and failed loading offers Retry. Flask retains the route and guarded API boundary.
 
@@ -161,6 +163,12 @@ every tile twice for no reader's benefit. On the client, `rowItems(section)` in
 
 Expired giveaways are dropped from the news row rather than shown — a "free now"
 row advertising a finished giveaway is worse than a shorter row.
+
+Discover shelves scroll horizontally with the row arrows or scrollbar. The arrows
+wrap at the edges: left from the first tile goes to the last, and right from the
+last tile returns to the first. Touch swipes that start at an edge and move
+outward wrap the same way, including when load-ahead extends the row mid-gesture.
+Horizontal wheel and drag continue to stop at the row ends.
 
 ## Row depth and the "see all" tile
 

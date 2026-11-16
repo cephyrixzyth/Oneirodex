@@ -450,6 +450,10 @@ def build_game_details_payload(game, user) -> dict:
     # mods, the headset record) was gated on `undefined` and could not appear.
     # Librarian or above, the same rule the routes behind those controls apply.
     can_edit = role_at_least(role, 'librarian')
+    # The details route has already enforced library access. Orphan-version
+    # cleanup uses the same librarian/admin role threshold and independently
+    # rechecks authorization on its mutation endpoint.
+    can_cleanup_versions = role_at_least(role, 'librarian')
     # Librarians/admins who can Edit Images also see full server disk paths.
     show_disk_paths = bool(user is not None and role_at_least(role, 'librarian'))
     payload = {
@@ -567,6 +571,7 @@ def build_game_details_payload(game, user) -> dict:
         'playtime': playtime,
         'is_admin': is_admin,
         'can_edit': can_edit,
+        'can_cleanup_versions': can_cleanup_versions,
         **browse_play_fields(game),
         **game_card_flags(game),
         # INSP-40 -- headset records behind the ways-to-play VR row (deep links only)

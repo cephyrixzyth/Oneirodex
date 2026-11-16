@@ -83,6 +83,7 @@ function focusGameFromQuery() {
 export function BigPicturePage() {
   const navigate = useNavigate()
   const shellConfig = useShellConfig()
+  const isChildAccount = String(shellConfig.role || '').toLowerCase() === 'child'
   const perPage = Number(shellConfig.perPage) || DEFAULT_PER_PAGE
   // Latched once per render rather than per press: the seat cannot change
   // while this page is mounted.
@@ -100,9 +101,11 @@ export function BigPicturePage() {
     index: number
     select: (nextIndex: number) => void
     download: (uuid: string) => void
-  }>({ games: [], index: 0, select: () => {}, download: () => {} })
+    toggleFriends: () => void
+  }>({ games: [], index: 0, select: () => {}, download: () => {}, toggleFriends: () => {} })
 
   const requestDownload = async (uuid: string) => {
+    if (isChildAccount) return
     try {
       await initiateGameDownload(uuid)
       navigate('/downloads')
@@ -161,7 +164,13 @@ export function BigPicturePage() {
   }
 
   useEffect(() => {
-    padState.current = { games: list, index, select, download: requestDownload }
+    padState.current = {
+      games: list,
+      index,
+      select,
+      download: requestDownload,
+      toggleFriends: () => setSocialOpen((value) => !value),
+    }
   })
 
   useEffect(() => {
@@ -181,16 +190,33 @@ export function BigPicturePage() {
     let axisLatch = 0
     let lastNav = 0
     let confirmLatch = false
+    let friendsLatch = false
 
     const poll = () => {
       const pad = (navigator.getGamepads() || [])[0]
       const { games: padGames, index: padIndex } = padState.current
-      if (!pad || !padGames.length) {
+      if (!pad) {
         frame = requestAnimationFrame(poll)
         return
       }
 
       const now = performance.now()
+      const friends = pad.buttons[3]?.pressed
+      if (friends) {
+        if (!friendsLatch && now - lastNav > GAMEPAD_REPEAT_MS) {
+          padState.current.toggleFriends()
+          lastNav = now
+        }
+        friendsLatch = true
+      } else {
+        friendsLatch = false
+      }
+
+      if (!padGames.length) {
+        frame = requestAnimationFrame(poll)
+        return
+      }
+
       const axisX = pad.axes[0] || 0
       const dpadLeft = pad.buttons[14]?.pressed
       const dpadRight = pad.buttons[15]?.pressed
@@ -277,7 +303,7 @@ export function BigPicturePage() {
       case 'd':
       case 'D':
         event.preventDefault()
-        if (!refuseOnThinSeat()) {
+        if (!isChildAccount && !refuseOnThinSeat()) {
           void requestDownload(list[index].uuid)
         }
         break
@@ -310,7 +336,7 @@ export function BigPicturePage() {
           <h1 className="od-bp__title">Big Picture</h1>
           <p className="od-bp__hint">
             {shellConfig.role === 'child'
-              ? 'Kid mode — library already filtered by parental ACL · ← → browse · Esc exit · Y friends'
+              ? 'Kid mode · ← → browse · A / Enter open · B attract · Y friends · Esc blur · Home first'
               : '← → browse · Enter / A open · D download · B attract · Y friends · Esc blur · Home first'}
           </p>
         </div>
@@ -360,25 +386,51 @@ export function BigPicturePage() {
             ) : null}
             {selected ? (
               <div className="od-bp__hero-actions">
+                {isChildAccount ? (
+                  <span
+                    className="visually-hidden"
+                    id={`big-picture-child-restriction-${selected.uuid}`}
+                    role="status"
+                  >
+                    Downloads and companion install actions are unavailable for child accounts.
+                  </span>
+                ) : null}
                 <Link className="od-bp__btn od-bp__btn--primary" to={gameDetailsUrl(selected.uuid)}>
                   Open
                 </Link>
-                {thinSeat ? null : (
+                {!thinSeat ? (
                   <button
                     type="button"
                     className="od-bp__btn"
+                    disabled={isChildAccount}
+                    title={
+                      isChildAccount ? 'Downloads are unavailable for child accounts' : undefined
+                    }
+                    aria-describedby={
+                      isChildAccount ? `big-picture-child-restriction-${selected.uuid}` : undefined
+                    }
                     onClick={() => void requestDownload(selected.uuid)}
                   >
                     Download
                   </button>
-                )}
+                ) : null}
                 {!thinSeat &&
                 selected.client_connected &&
                 selected.lifecycle_state === 'downloaded' ? (
                   <button
                     type="button"
                     className="od-bp__btn"
+                    disabled={isChildAccount}
+                    title={
+                      isChildAccount
+                        ? 'Companion actions are unavailable for child accounts'
+                        : undefined
+                    }
+                    aria-describedby={
+                      isChildAccount ? `big-picture-child-restriction-${selected.uuid}` : undefined
+                    }
                     onClick={() => {
+                      if (isChildAccount) return
                       void queueClientCommand(selected.uuid, 'install').then(() => {
                         showToast('Install queued for companion', 'success')
                       })

@@ -1,6 +1,8 @@
 import { Page } from '../components/Page'
 import './ThemeAuthoringPage.css'
 
+import { AdminLink } from '../components/AdminLink'
+
 export function ThemeAuthoringPage() {
   return (
     <Page
@@ -93,9 +95,9 @@ export function ThemeAuthoringPage() {
       <section className="od-admin-panel">
         <h2>Uploading your theme</h2>
         <p>Use the ZIP upload form on the Manage Themes page to install your theme.</p>
-        <a className="od-btn" href="/admin/themes">
+        <AdminLink className="od-btn" to="/admin/themes">
           Back to Themes
-        </a>
+        </AdminLink>
       </section>
     </Page>
   )

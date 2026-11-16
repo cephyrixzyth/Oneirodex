@@ -38,6 +38,20 @@
   align-items: center;
   gap: 0.5rem;
 }
+.od-themes-motif-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+  color: var(--od-accent);
+}
+.od-themes-motif-note {
+  flex-basis: 100%;
+  margin: 0.15rem 0 0;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-xs);
+}
 .od-themes-list {
   list-style: none;
   padding: 0;

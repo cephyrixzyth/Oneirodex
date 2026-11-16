@@ -663,6 +663,7 @@ class TestSecurityHelperFunctions:
         invalid_inputs = [
             None,
             '',
+            '.',
             'exe; DROP TABLE users;',
             '../../../etc/passwd',
             'very_long_extension_name',

@@ -4,11 +4,14 @@ import hashlib
 import hmac
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from http.cookies import SimpleCookie
 from types import SimpleNamespace
+
+from starlette.responses import Response
 
 from oneirodex.runtime_native.auth_resolver import session_identifier
 from oneirodex.runtime_native.request_auth import request_auth_context
-from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.runtime_native.session_compat import dump_session_cookie, load_session_cookie
 
 
 SECRET = "request-auth-test-secret"
@@ -54,6 +57,7 @@ def _auth(request, users, tokens=None, commits=None, **config):
         "SESSION_COOKIE_NAME": "session",
         "REMEMBER_COOKIE_NAME": "remember_token",
         "SESSION_REFRESH_EACH_REQUEST": True,
+        "TESTING": True,
         **config,
     }
     return request_auth_context(
@@ -178,6 +182,38 @@ def test_invalid_session_fingerprint_rejects_user():
     context = _auth(Request(cookies={"session": cookie}), {11: user})
     assert context.user is None
     assert context.source == "anonymous"
+
+
+def test_rejected_legacy_identity_is_not_upgraded_when_redirect_cookie_is_written():
+    from oneirodex.runtime_native.acquire_status import _set_session_cookie as acquire_writer
+    from oneirodex.runtime_native.browse import _set_session_cookie as browse_writer
+    from oneirodex.runtime_native.oidc_status import _set_session_cookie as oidc_writer
+    from oneirodex.runtime_native.release_calendar import _set_session_cookie as calendar_writer
+    from oneirodex.runtime_native.trailers import _set_session_cookie as trailer_writer
+
+    legacy_identity = f"17:{'a' * 16}"
+    config = {
+        "SECRET_KEY": SECRET,
+        "TESTING": False,
+        "PERSISTENT_SESSIONS_ENABLED": True,
+        "SESSION_COOKIE_NAME": "session",
+        "PERMANENT_SESSION_LIFETIME": timedelta(days=30),
+    }
+    for writer in (oidc_writer, acquire_writer, browse_writer, calendar_writer, trailer_writer):
+        auth = SimpleNamespace(
+            session_data={"_user_id": legacy_identity, "_fresh": True},
+            resolution=SimpleNamespace(user=None),
+        )
+        response = Response()
+
+        writer(response, SimpleNamespace(config=config), auth)
+
+        cookies = SimpleCookie()
+        cookies.load(response.headers["set-cookie"])
+        rewritten = load_session_cookie(
+            cookies["session"].value, SECRET, max_age=30 * 24 * 60 * 60
+        )
+        assert "_user_id" not in rewritten, writer.__module__
 
 
 def test_invalid_secret_fails_closed_and_numeric_lifetime_is_supported():

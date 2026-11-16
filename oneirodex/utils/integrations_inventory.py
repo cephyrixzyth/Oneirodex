@@ -58,10 +58,11 @@ def build_integrations_inventory() -> list[dict[str, Any]]:
         })
 
     # --- Metadata / artwork ---
+    from oneirodex.utils.secret_store import has_global_secret
     igdb_ok = bool(
         settings
         and getattr(settings, 'igdb_client_id', None)
-        and getattr(settings, 'igdb_client_secret', None)
+        and has_global_secret(settings, 'igdb_client_secret')
     )
     add(
         id='igdb',
@@ -141,19 +142,19 @@ def build_integrations_inventory() -> list[dict[str, Any]]:
         notes='Cover / hero art',
     )
 
-    gb_key = bool(settings and getattr(settings, 'giantbomb_api_key', None))
+    gb_key = has_global_secret(settings, 'giantbomb_api_key')
     try:
         from oneirodex.utils.providers.mobygames import get_mobygames_api_key
 
         moby_key = bool(get_mobygames_api_key())
     except Exception:
-        moby_key = bool(settings and getattr(settings, 'mobygames_api_key', None))
+        moby_key = has_global_secret(settings, 'mobygames_api_key')
     try:
         from oneirodex.utils.providers.thegamesdb import get_thegamesdb_api_key
 
         tgdb_key = bool(get_thegamesdb_api_key())
     except Exception:
-        tgdb_key = bool(settings and getattr(settings, 'thegamesdb_api_key', None))
+        tgdb_key = has_global_secret(settings, 'thegamesdb_api_key')
     try:
         from oneirodex.utils.retroachievements import configured as ra_configured
 

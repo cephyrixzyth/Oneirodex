@@ -3,13 +3,14 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
-from html import escape
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import Response
 
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
+from .query_compat import first_query_value
 
 
 class AuthPageData:
@@ -34,9 +35,12 @@ class AuthPageData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import User
+        from oneirodex.utils.tokens import password_reset_token_digest
 
         user = db.session.execute(
-            select(User).filter_by(password_reset_token=token)
+            select(User).where(User.password_reset_token.in_(
+                (password_reset_token_digest(token), token),
+            ))
         ).scalar_one_or_none()
         issued = user.token_creation_time if user else None
         if issued is None:
@@ -117,13 +121,13 @@ def create_auth_pages_router(
                 login_manager=login_manager,
                 allow_bearer=False,
             )
-            invite_token = request.query_params.get('token') if page == 'register' else None
+            invite_token = first_query_value(request.query_params, 'token') if page == 'register' else None
             if page == 'login' and auth.user is not None:
-                response = RedirectResponse('/discover', status_code=302)
+                response = flask_redirect_response('/discover', status_code=302)
             elif page in {'reset_request', 'reset'} and auth.user is not None:
-                response = RedirectResponse('/login', status_code=302)
+                response = flask_redirect_response('/login', status_code=302)
             elif page == 'register' and auth.user is not None and not invite_token:
-                response = RedirectResponse('/login', status_code=302)
+                response = flask_redirect_response('/login', status_code=302)
             else:
                 if page == 'register' and auth.user is not None and invite_token:
                     for key in ('_user_id', '_fresh', '_id', 'next', '_remember_seconds'):
@@ -138,7 +142,7 @@ def create_auth_pages_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append(invalid_message)
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse(
+                    response = flask_redirect_response(
                         '/register' if page == 'register' else '/login', status_code=302,
                     )
                 else:
@@ -161,6 +165,8 @@ def create_auth_pages_router(
 
 
 def _shell_response(app, session_data):
+    from oneirodex.utils.auth_notices import attach_auth_notices
+
     path = Path(app.static_folder or '') / 'dist' / 'member-auth' / 'auth.html'
     try:
         shell = path.read_text(encoding='utf-8')
@@ -168,19 +174,7 @@ def _shell_response(app, session_data):
         return Response(status_code=503)
     if shell.count('id="member-auth-root"') != 1 or '</body>' not in shell:
         return Response(status_code=503)
-    notices = []
-    for category, message in session_data.pop('_flashes', []) or []:
-        role = 'alert' if category in {'error', 'danger'} else 'status'
-        notices.append(
-            '<p class="auth-pilot__message" role="' + role + '">'
-            + escape(str(message), quote=True) + '</p>'
-        )
-    if notices:
-        shell = shell.replace(
-            '<div id="member-auth-root"></div>',
-            '<div class="auth-pilot__notices" aria-label="Messages">'
-            + ''.join(notices) + '</div><div id="member-auth-root"></div>', 1,
-        )
+    shell = attach_auth_notices(shell, session_data.pop('_flashes', []) or [])
     response = Response(content=shell, media_type='text/html')
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Vary'] = 'Cookie'

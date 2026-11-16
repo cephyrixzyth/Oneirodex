@@ -12,6 +12,7 @@ from oneirodex.models import Game, GameServer
 from oneirodex.utils.game_servers import probe_server_health
 from oneirodex.utils.rbac import is_admin, normalize_role
 from oneirodex.schemas.game_servers import CreateGameServerBody
+from oneirodex.utils.api_tokens import require_api_scope
 from oneirodex.utils.validation import validate_body
 
 from . import apis_bp
@@ -44,6 +45,7 @@ def _validate_game_uuid(game_uuid: str | None) -> str | None:
 
 @apis_bp.route('/game-servers', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def list_game_servers():
     servers = db.session.execute(
         select(GameServer).order_by(GameServer.display_name.asc())
@@ -56,6 +58,7 @@ def list_game_servers():
 
 @apis_bp.route('/game-servers/<server_uuid>', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def get_game_server(server_uuid: str):
     server = _server_or_404(server_uuid)
     if not server:
@@ -65,6 +68,7 @@ def get_game_server(server_uuid: str):
 
 @apis_bp.route('/game-servers/<server_uuid>/status', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def get_game_server_status(server_uuid: str):
     server = _server_or_404(server_uuid)
     if not server:
@@ -155,6 +159,7 @@ def delete_game_server(server_uuid: str):
 
 @apis_bp.route('/game-servers/acl-check', methods=['GET'])
 @login_required
+@require_api_scope('read:social')
 def game_servers_acl_check():
     """Lightweight role hint for UI (member read vs admin CRUD)."""
     role = normalize_role(getattr(current_user, 'role', None))

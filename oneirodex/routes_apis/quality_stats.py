@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.api_tokens import require_api_token_scope
 from flask import Response, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import select
@@ -128,6 +129,7 @@ def quality_profiles_score(body: ScoreReleaseBody):
 
 @apis_bp.route('/playtime/share/<game_uuid>.svg', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def playtime_share_card(game_uuid: str):
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game:

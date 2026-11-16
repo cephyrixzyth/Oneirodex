@@ -1,0 +1,99 @@
+{
+  "doc_status": "Reference",
+  "evidence_ids": [
+    "R2054",
+    "R2055"
+  ],
+  "scope": "Original account-dialog keyboard comparison follow-up and bounded current security-header observation",
+  "legacy_account": {
+    "source": "d437b44a525245b4dd5848987114aaf6d2646bb7",
+    "image": "sha256:edae8a3e17454fb07818c085947bf5ba5633584f72e89e1524fba0dc200519fe",
+    "viewport": "390x844",
+    "runner_seconds": 50.81,
+    "panels": [
+      {
+        "panel": "Profile",
+        "initial_focus_inside": false,
+        "forward_and_backward_tabs_escape": true,
+        "background_inert": false,
+        "escape_closes": true,
+        "launcher_focused_after_close": true
+      },
+      {
+        "panel": "Avatar",
+        "initial_focus_inside": true,
+        "forward_and_backward_tabs_escape": true,
+        "background_inert": false,
+        "escape_closes": true,
+        "launcher_focused_after_close": false
+      },
+      {
+        "panel": "Password",
+        "initial_focus_inside": true,
+        "forward_and_backward_tabs_escape": true,
+        "background_inert": false,
+        "escape_closes": true,
+        "launcher_focused_after_close": false
+      },
+      {
+        "panel": "Invites",
+        "initial_focus_inside": true,
+        "forward_and_backward_tabs_escape": true,
+        "background_inert": false,
+        "escape_closes": true,
+        "launcher_focused_after_close": false
+      },
+      {
+        "panel": "API tokens",
+        "initial_focus_inside": true,
+        "forward_and_backward_tabs_escape": true,
+        "background_inert": false,
+        "escape_closes": true,
+        "launcher_focused_after_close": false
+      }
+    ],
+    "classification": "Original focus isolation gap reproduced in separately identified official v1.1.8 image. Current five-panel R2048 behavior passes; retain correction.",
+    "restoration_limit": "Profile launcher happened to be focused after background tabbing; this single positive does not prove a restoration mechanism. Other four panels did not return focus.",
+    "visual_limit": "Only bounds observed; different fresh panel contents/heights do not qualify visual parity or R1972 token-state measurements.",
+    "historical_r1972_pin_restored": false
+  },
+  "current_headers": {
+    "source": "2e250493984ebdc8b33c763b73ac00d6799f4355",
+    "image": "sha256:bccf4d6f6dea15707eb30222462a9e4bc4d00d26d7a301f2ff2b384324ca154c",
+    "classification": "Suspected missing document CSP not reproduced; no code change.",
+    "http_200_checked": [
+      "/login",
+      "/library",
+      "/api/account/summary"
+    ],
+    "asserted": [
+      "Enforced Content-Security-Policy, not report-only",
+      "script-src self without unsafe-eval",
+      "nosniff, SAMEORIGIN, referrer and permissions policies"
+    ],
+    "limits": "HTTP observation inside owned actual container, not browser evaluator compatibility or a complete CSP audit."
+  },
+  "environment": {
+    "synthetic_authentication_session_writes": true,
+    "account_setting_token_or_save_writes": false,
+    "operator_data_used": false,
+    "screenshots": false,
+    "headless_browser": true,
+    "owned_cleanup_and_database_absence_verified": true
+  },
+  "retained_rework": [
+    "Initial legacy selector expected link Profile; actual role is menuitem.",
+    "String-form Playwright wait evaluator was blocked by legacy CSP; bounded host polling/direct function evaluation passed without bypassing CSP.",
+    "Initial current-header helper retained irrelevant keyboard labels; supplemental assertions define its actual HTTP scope."
+  ],
+  "private_archive": {
+    "files": 21,
+    "bytes": 47799,
+    "sha256": "7da65a7506b7e5843ae0e58b37c92c90a85ce5b7a5b0e5038ae8c1c217eeb54f"
+  },
+  "limits": [
+    "R1972 identity/coverage unchanged; no route promoted.",
+    "No screen-reader, other-engine/headset, full visual parity or fresh whole-program acceptance claim.",
+    "Do not attribute different evaluator behavior to a missing header; captured current enforcement disproves that suspicion."
+  ]
+}

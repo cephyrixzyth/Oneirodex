@@ -87,6 +87,24 @@ test('renders nothing when tracking is off, or when empty for a member', async (
   await waitFor(() => expect(second.container).toBeEmptyDOMElement())
 })
 
+test('keeps the section visible after a failed fetch and retries successfully', async () => {
+  let attempts = 0
+  stubFetch(async () => {
+    attempts += 1
+    if (attempts === 1) throw new Error('Mods service unavailable')
+    return { ok: true, status: 200, json: async () => PACK }
+  })
+  const user = userEvent.setup()
+  render(<ModsPanel gameUuid="g1" canEdit />)
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Mods service unavailable')
+  expect(screen.getByRole('heading', { name: 'Mods' })).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Try again' }))
+
+  expect(await screen.findByText('Configuration Manager')).toBeInTheDocument()
+  expect(attempts).toBe(2)
+})
+
 test('a librarian adds a catalogue hit as a tracked row with the registry page as its source', async () => {
   const calls = routeFetch()
   const user = userEvent.setup()
@@ -107,6 +125,26 @@ test('a librarian adds a catalogue hit as a tracked row with the registry page a
     loader: 'bepinex',
     source_url: 'https://thunderstore.io/c/x/p/bbepis/BepInExPack/',
   })
+})
+
+test('catalogue data with an unsafe URL is shown as text, not a clickable link', async () => {
+  const calls = routeFetch({
+    catalog: {
+      ...CATALOG,
+      hits: [{ ...CATALOG.hits[0], url: 'javascript:alert(1)' }],
+    },
+  })
+  const user = userEvent.setup()
+  render(<ModsPanel gameUuid="g1" canEdit />)
+  await screen.findByText('Configuration Manager')
+  await user.click(screen.getByRole('button', { name: 'Browse catalogue' }))
+  expect(await screen.findByText('BepInExPack')).toBeInTheDocument()
+  expect(screen.getByText('Registry link unavailable').tagName).toBe('SPAN')
+  expect(screen.queryByRole('link', { name: 'Registry page' })).toBeNull()
+  const addButton = screen.getByRole('button', { name: 'Add to list' })
+  expect(addButton).toBeDisabled()
+  await user.click(addButton)
+  expect(calls.some((call) => call.method === 'POST')).toBe(false)
 })
 
 test('the drawer says when a registry had no data rather than showing an empty list', async () => {

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { expect, test, vi } from 'vitest'
 
@@ -117,6 +117,13 @@ test('the rail toggle reports whether the rail is showing', () => {
     )
     unmount()
   }
+})
+
+test('logout is a button action in the account dropdown', () => {
+  renderTopBar()
+  fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+  expect(screen.getByRole('button', { name: 'Logout' })).toHaveAttribute('data-action', 'logout')
+  expect(document.querySelector('a[href="/logout"]')).toBeNull()
 })
 
 test('the toggle keeps one stable name across states', () => {

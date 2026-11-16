@@ -1,0 +1,248 @@
+{
+  "review_id": "R1970",
+  "scope": "Exact-image fresh mobile-context replay of GET /tokens and the account-menu API tokens panel at 390x844. No token is created.",
+  "images": {
+    "legacy": {
+      "tag": "oneirodex:parity-v1.1.8",
+      "id": "sha256:19648d0ed947d72ba0b74292ecd91b3d92d4a37be3ac8063ab16e80a43bc864e"
+    },
+    "current": {
+      "tag": "oneirodex:parity-current-00b0bf2a",
+      "id": "sha256:17a0bbdc97e24c51f6c30746b4af5f35151089361cb11428edb669451d6471d1"
+    }
+  },
+  "results": {
+    "legacy": {
+      "direct": {
+        "status": 200,
+        "path": "/tokens",
+        "headings": [
+          "API tokens",
+          "Create token",
+          "Your tokens",
+          "Warning!"
+        ],
+        "metrics": {
+          "viewportWidth": 390,
+          "documentScrollWidth": 390,
+          "bodyScrollWidth": 390
+        }
+      },
+      "account": {
+        "button_found": true,
+        "link_count": 0,
+        "label_fallback_count": 1,
+        "control_clicked": true,
+        "dialog_count": 1,
+        "dialog_heading": "API tokens",
+        "dialog_metrics": {
+          "rect": {
+            "x": 16,
+            "y": 180.21875,
+            "width": 358,
+            "height": 483.546875
+          },
+          "scrollWidth": 356,
+          "clientWidth": 356
+        },
+        "tab_metrics": {
+          "rect": {
+            "x": 33,
+            "width": 324
+          },
+          "scrollWidth": 324,
+          "clientWidth": 324,
+          "buttons": [
+            {
+              "text": "Profile",
+              "rect": {
+                "x": 33,
+                "right": 90.265625,
+                "y": 289.09375,
+                "width": 57.265625
+              },
+              "visible": true
+            },
+            {
+              "text": "Avatar",
+              "rect": {
+                "x": 96.65625,
+                "right": 153.859375,
+                "y": 289.09375,
+                "width": 57.203125
+              },
+              "visible": true
+            },
+            {
+              "text": "Password",
+              "rect": {
+                "x": 160.25,
+                "right": 234.765625,
+                "y": 289.09375,
+                "width": 74.515625
+              },
+              "visible": true
+            },
+            {
+              "text": "Invites",
+              "rect": {
+                "x": 241.15625,
+                "right": 298.765625,
+                "y": 289.09375,
+                "width": 57.609375
+              },
+              "visible": true
+            },
+            {
+              "text": "API tokens",
+              "rect": {
+                "x": 33,
+                "right": 116.703125,
+                "y": 325.078125,
+                "width": 83.703125
+              },
+              "visible": true
+            }
+          ]
+        },
+        "rail": {
+          "display": "flex",
+          "visibility": "visible",
+          "position": "fixed",
+          "left": "0px",
+          "rect": {
+            "x": 0,
+            "width": 216
+          },
+          "ariaHidden": null,
+          "role": null
+        },
+        "page_errors": []
+      }
+    },
+    "current": {
+      "direct": {
+        "status": 200,
+        "path": "/tokens",
+        "headings": [
+          "API tokens",
+          "Create token",
+          "Your tokens",
+          "Warning!"
+        ],
+        "metrics": {
+          "viewportWidth": 390,
+          "documentScrollWidth": 390,
+          "bodyScrollWidth": 390
+        }
+      },
+      "account": {
+        "button_found": true,
+        "link_count": 1,
+        "label_fallback_count": 0,
+        "control_clicked": true,
+        "dialog_count": 1,
+        "dialog_heading": "API tokens",
+        "dialog_metrics": {
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 844
+          },
+          "scrollWidth": 390,
+          "clientWidth": 390
+        },
+        "tab_metrics": {
+          "rect": {
+            "x": 33,
+            "width": 324
+          },
+          "scrollWidth": 324,
+          "clientWidth": 324,
+          "buttons": [
+            {
+              "text": "Profile",
+              "rect": {
+                "x": 33,
+                "right": 90.265625,
+                "y": 289.09375,
+                "width": 57.265625
+              },
+              "visible": true
+            },
+            {
+              "text": "Avatar",
+              "rect": {
+                "x": 96.65625,
+                "right": 153.859375,
+                "y": 289.09375,
+                "width": 57.203125
+              },
+              "visible": true
+            },
+            {
+              "text": "Password",
+              "rect": {
+                "x": 160.25,
+                "right": 234.765625,
+                "y": 289.09375,
+                "width": 74.515625
+              },
+              "visible": true
+            },
+            {
+              "text": "Invites",
+              "rect": {
+                "x": 241.15625,
+                "right": 298.765625,
+                "y": 289.09375,
+                "width": 57.609375
+              },
+              "visible": true
+            },
+            {
+              "text": "API tokens",
+              "rect": {
+                "x": 33,
+                "right": 116.703125,
+                "y": 325.078125,
+                "width": 83.703125
+              },
+              "visible": true
+            }
+          ]
+        },
+        "rail": {
+          "display": "flex",
+          "visibility": "hidden",
+          "position": "fixed",
+          "left": "0px",
+          "rect": {
+            "x": -216,
+            "width": 216
+          },
+          "ariaHidden": "true",
+          "role": null
+        },
+        "page_errors": []
+      }
+    }
+  },
+  "source_database_note": "pg_dump only read the shared source DB; all synthetic users and application activity were confined to per-image clones that cleanup dropped. No source content-hash claim is made.",
+  "source_database_written_by_harness": false,
+  "external_egress_blocked": true,
+  "provider_calls": false,
+  "production_or_unraid": false,
+  "cleanup": {
+    "apps_absent": true,
+    "proxies_absent": true,
+    "dbs_absent": true,
+    "volumes_absent": true,
+    "no_unexpected_volumes": true,
+    "source_db_present": true,
+    "network_absent": true
+  },
+  "error": null,
+  "assertions_passed": true
+}

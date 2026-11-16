@@ -74,6 +74,78 @@ def test_new_oidc_name_avoids_case_insensitive_password_login_collision(app, db_
     assert newcomer.name.lower() != existing.name.lower()
 
 
+def test_new_oidc_account_email_verification_requires_provider_or_operator_trust(app, db_session):
+    unverified = provision_or_update_user(db_session, {
+        'sub': 'unverified-email-subject',
+        'email': 'unverified-oidc@example.test',
+        'email_verified': False,
+        'preferred_username': 'unverified-email',
+    }, _config('https://trusted-idp.example'))
+    trusted = provision_or_update_user(db_session, {
+        'sub': 'operator-trusted-subject',
+        'email': 'operator-trusted@example.test',
+        'email_verified': False,
+        'preferred_username': 'operator-trusted',
+    }, _config('https://trusted-idp.example'), trust_provider_email=True)
+
+    assert unverified.is_email_verified is False
+    assert trusted.is_email_verified is True
+
+
+def test_existing_oidc_account_only_verifies_matching_trusted_email(app, db_session):
+    local = provision_or_update_user(db_session, {
+        'sub': 'email-verification-subject',
+        'email': 'first@example.test',
+        'email_verified': False,
+        'preferred_username': 'email-verification',
+    }, _config('https://trusted-idp.example'))
+    assert local.is_email_verified is False
+
+    # Repeated sign-in with an unverified assertion does not change state.
+    repeated = provision_or_update_user(db_session, {
+        'sub': 'email-verification-subject',
+        'email': 'first@example.test',
+        'email_verified': False,
+        'preferred_username': 'email-verification',
+    }, _config('https://trusted-idp.example'))
+    assert repeated.is_email_verified is False
+
+    # A verified replacement email does not verify the unchanged local email.
+    changed = provision_or_update_user(db_session, {
+        'sub': 'email-verification-subject',
+        'email': 'changed@example.test',
+        'email_verified': True,
+        'preferred_username': 'email-verification',
+    }, _config('https://trusted-idp.example'))
+    assert changed.email == 'first@example.test'
+    assert changed.is_email_verified is False
+
+    # The identity provider can verify the account after vouching for the same address.
+    verified = provision_or_update_user(db_session, {
+        'sub': 'email-verification-subject',
+        'email': 'first@example.test',
+        'email_verified': True,
+        'preferred_username': 'email-verification',
+    }, _config('https://trusted-idp.example'))
+    assert verified.is_email_verified is True
+
+
+def test_email_conflict_does_not_reveal_local_account_existence(app, db_session):
+    email = 'private-conflict@example.test'
+    _user(db_session, email=email)
+
+    with pytest.raises(ValueError) as caught:
+        provision_or_update_user(db_session, {
+            'sub': 'conflicting-oidc-subject',
+            'email': email,
+            'email_verified': False,
+            'preferred_username': 'conflicting-user',
+        }, _config('https://trusted-idp.example'))
+
+    assert 'already exists' not in str(caught.value).lower()
+    assert email not in str(caught.value).lower()
+
+
 def test_legacy_subject_collision_without_email_fails_closed(app, db_session):
     legacy = _user(db_session, role='admin', subject='shared-subject')
     with pytest.raises(ValueError, match='older account link with no recorded issuer'):
@@ -114,11 +186,13 @@ def test_verified_email_does_not_rebind_known_other_issuer(app, db_session):
     bound.oidc_issuer_url = 'https://first-idp.example'
     db_session.commit()
 
-    with pytest.raises(ValueError, match='review its SSO binding'):
+    with pytest.raises(ValueError) as caught:
         provision_or_update_user(db_session, {
             'sub': 'new-subject', 'email': bound.email,
             'email_verified': True,
         }, _config('https://second-idp.example'))
+    assert 'unable to sign in' in str(caught.value).lower()
+    assert bound.email.lower() not in str(caught.value).lower()
     db_session.refresh(bound)
     assert bound.oidc_issuer_url == 'https://first-idp.example'
 

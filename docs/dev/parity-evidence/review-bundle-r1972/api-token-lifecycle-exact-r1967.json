@@ -1,0 +1,1728 @@
+{
+  "scope": "Exact-image personal API-token lifecycle, role-scope, CSRF, malformed JSON, invalid field, and unknown-preset replay. Covers member/other/admin/child and owner-scoped revocation. One-time secret values are removed from artifacts immediately; no provider calls or production activity.",
+  "images": {
+    "legacy": "sha256:19648d0ed947d72ba0b74292ecd91b3d92d4a37be3ac8063ab16e80a43bc864e",
+    "current": "sha256:17a0bbdc97e24c51f6c30746b4af5f35151089361cb11428edb669451d6471d1"
+  },
+  "results": {
+    "legacy": {
+      "image_id": "sha256:19648d0ed947d72ba0b74292ecd91b3d92d4a37be3ac8063ab16e80a43bc864e",
+      "csrf_available": {
+        "ParityMember": true,
+        "ParityOther": true,
+        "ParityAdmin": true,
+        "ParityChild": true
+      },
+      "actions": {
+        "member_initial": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "other_initial": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "member_create_missing_csrf": {
+          "status": 400,
+          "body": {
+            "error": "The CSRF token is missing.",
+            "error_code": "bad_request",
+            "message": "The CSRF token is missing.",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_create_malformed_json": {
+          "status": 422,
+          "body": {
+            "detail": {
+              "__root__": "Input should be a valid dictionary or instance of CreateApiTokenBody"
+            },
+            "error": "Invalid request.",
+            "error_code": "unprocessable",
+            "message": "Invalid request.",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_create_invalid_name_type": {
+          "status": 422,
+          "body": {
+            "detail": {
+              "name": "Input should be a valid string"
+            },
+            "error": "Invalid request.",
+            "error_code": "unprocessable",
+            "message": "Invalid request.",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_create_unknown_preset": {
+          "status": 400,
+          "body": {
+            "error": "Unknown preset: not-a-real-preset",
+            "error_code": "bad_request",
+            "message": "Unknown preset: not-a-real-preset",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_after_invalid_create": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "member_create_read_token": {
+          "status": 201,
+          "body": {
+            "token": {
+              "expired": false,
+              "id": 12,
+              "name": "MemberRead",
+              "revoked": false,
+              "scopes": [
+                "read:library"
+              ]
+            },
+            "warning": "Store this secret now; it will not be shown again.",
+            "secret_present": true,
+            "secret_format_valid": true
+          },
+          "location": null
+        },
+        "member_delete_missing_csrf": {
+          "status": 400,
+          "body": {
+            "error": "The CSRF token is missing.",
+            "error_code": "bad_request",
+            "message": "The CSRF token is missing.",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_after_missing_csrf_delete": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 12,
+                "name": "MemberRead",
+                "revoked": false,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "other_after_member_create": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "other_delete_member_token": {
+          "status": 404,
+          "body": {
+            "error": "Token not found",
+            "error_code": "not_found",
+            "message": "Token not found",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_after_cross_delete": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 12,
+                "name": "MemberRead",
+                "revoked": false,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "member_create_admin_scope": {
+          "status": 403,
+          "body": {
+            "error": "admin scope requires admin role",
+            "error_code": "forbidden",
+            "message": "admin scope requires admin role",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_after_denied_scope": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 12,
+                "name": "MemberRead",
+                "revoked": false,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "other_create_default_token": {
+          "status": 201,
+          "body": {
+            "token": {
+              "expired": false,
+              "id": 13,
+              "name": "OtherDefault",
+              "revoked": false,
+              "scopes": [
+                "read:library"
+              ]
+            },
+            "warning": "Store this secret now; it will not be shown again.",
+            "secret_present": true,
+            "secret_format_valid": true
+          },
+          "location": null
+        },
+        "member_after_other_create": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 12,
+                "name": "MemberRead",
+                "revoked": false,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "child_initial": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [],
+            "valid_scopes": [
+              "read:library",
+              "read:social",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "child_create_read_token": {
+          "status": 201,
+          "body": {
+            "token": {
+              "expired": false,
+              "id": 14,
+              "name": "ChildRead",
+              "revoked": false,
+              "scopes": [
+                "read:library"
+              ]
+            },
+            "warning": "Store this secret now; it will not be shown again.",
+            "secret_present": true,
+            "secret_format_valid": true
+          },
+          "location": null
+        },
+        "child_create_write_token": {
+          "status": 403,
+          "body": {
+            "detail": {
+              "denied_scopes": [
+                "write:download"
+              ]
+            },
+            "error": "Those scopes are not allowed for this account",
+            "error_code": "forbidden",
+            "message": "Those scopes are not allowed for this account",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "child_after_denied_scope": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 14,
+                "name": "ChildRead",
+                "revoked": false,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "read:library",
+              "read:social",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "admin_create_admin_token": {
+          "status": 201,
+          "body": {
+            "token": {
+              "expired": false,
+              "id": 15,
+              "name": "AdminToken",
+              "revoked": false,
+              "scopes": [
+                "admin"
+              ]
+            },
+            "warning": "Store this secret now; it will not be shown again.",
+            "secret_present": true,
+            "secret_format_valid": true
+          },
+          "location": null
+        },
+        "member_delete_own_token": {
+          "status": 200,
+          "body": {
+            "error": null,
+            "error_code": null,
+            "ok": true,
+            "success": true
+          },
+          "location": null
+        },
+        "member_repeat_delete": {
+          "status": 404,
+          "body": {
+            "error": "Token not found",
+            "error_code": "not_found",
+            "message": "Token not found",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_after_revoke": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 12,
+                "name": "MemberRead",
+                "revoked": true,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "other_delete_own_token": {
+          "status": 200,
+          "body": {
+            "error": null,
+            "error_code": null,
+            "ok": true,
+            "success": true
+          },
+          "location": null
+        },
+        "other_final": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 13,
+                "name": "OtherDefault",
+                "revoked": true,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "admin_delete_own_token": {
+          "status": 200,
+          "body": {
+            "error": null,
+            "error_code": null,
+            "ok": true,
+            "success": true
+          },
+          "location": null
+        },
+        "admin_final": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 15,
+                "name": "AdminToken",
+                "revoked": true,
+                "scopes": [
+                  "admin"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        }
+      },
+      "page_errors": [],
+      "secret_count": 4,
+      "all_created_secrets_valid": true,
+      "semantic_checks": {
+        "member_and_other_lists_initially_empty": true,
+        "missing_csrf_and_invalid_create_rejected_without_state_change": true,
+        "missing_csrf_delete_preserves_owned_token": true,
+        "member_creation_returns_secret_once_and_stores_public_metadata": true,
+        "other_cannot_revoke_member_token": true,
+        "member_cannot_create_admin_scope": true,
+        "other_token_creation_isolated": true,
+        "child_read_scope_allowed_and_download_scope_denied": true,
+        "admin_scope_allowed_for_admin": true,
+        "member_revoke_marks_token_revoked_and_repeat_is_not_found": true,
+        "other_and_admin_can_revoke_only_their_own_tokens": true,
+        "created_secrets_valid_and_not_persisted_in_capture": true
+      }
+    },
+    "current": {
+      "image_id": "sha256:17a0bbdc97e24c51f6c30746b4af5f35151089361cb11428edb669451d6471d1",
+      "csrf_available": {
+        "ParityMember": true,
+        "ParityOther": true,
+        "ParityAdmin": true,
+        "ParityChild": true
+      },
+      "actions": {
+        "member_initial": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "other_initial": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "member_create_missing_csrf": {
+          "status": 400,
+          "body": {
+            "error": "The CSRF token is missing.",
+            "error_code": "bad_request",
+            "message": "The CSRF token is missing.",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_create_malformed_json": {
+          "status": 422,
+          "body": {
+            "detail": {
+              "__root__": "Input should be a valid dictionary or instance of CreateApiTokenBody"
+            },
+            "error": "Invalid request.",
+            "error_code": "unprocessable",
+            "message": "Invalid request.",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_create_invalid_name_type": {
+          "status": 422,
+          "body": {
+            "detail": {
+              "name": "Input should be a valid string"
+            },
+            "error": "Invalid request.",
+            "error_code": "unprocessable",
+            "message": "Invalid request.",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_create_unknown_preset": {
+          "status": 400,
+          "body": {
+            "error": "Unknown preset: not-a-real-preset",
+            "error_code": "bad_request",
+            "message": "Unknown preset: not-a-real-preset",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_after_invalid_create": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "member_create_read_token": {
+          "status": 201,
+          "body": {
+            "token": {
+              "expired": false,
+              "id": 12,
+              "name": "MemberRead",
+              "revoked": false,
+              "scopes": [
+                "read:library"
+              ]
+            },
+            "warning": "Store this secret now; it will not be shown again.",
+            "secret_present": true,
+            "secret_format_valid": true
+          },
+          "location": null
+        },
+        "member_delete_missing_csrf": {
+          "status": 400,
+          "body": {
+            "error": "The CSRF token is missing.",
+            "error_code": "bad_request",
+            "message": "The CSRF token is missing.",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_after_missing_csrf_delete": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 12,
+                "name": "MemberRead",
+                "revoked": false,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "other_after_member_create": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "other_delete_member_token": {
+          "status": 404,
+          "body": {
+            "error": "Token not found",
+            "error_code": "not_found",
+            "message": "Token not found",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_after_cross_delete": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 12,
+                "name": "MemberRead",
+                "revoked": false,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "member_create_admin_scope": {
+          "status": 403,
+          "body": {
+            "error": "admin scope requires admin role",
+            "error_code": "forbidden",
+            "message": "admin scope requires admin role",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_after_denied_scope": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 12,
+                "name": "MemberRead",
+                "revoked": false,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "other_create_default_token": {
+          "status": 201,
+          "body": {
+            "token": {
+              "expired": false,
+              "id": 13,
+              "name": "OtherDefault",
+              "revoked": false,
+              "scopes": [
+                "read:library"
+              ]
+            },
+            "warning": "Store this secret now; it will not be shown again.",
+            "secret_present": true,
+            "secret_format_valid": true
+          },
+          "location": null
+        },
+        "member_after_other_create": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 12,
+                "name": "MemberRead",
+                "revoked": false,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "child_initial": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [],
+            "valid_scopes": [
+              "read:library",
+              "read:social",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "child_create_read_token": {
+          "status": 201,
+          "body": {
+            "token": {
+              "expired": false,
+              "id": 14,
+              "name": "ChildRead",
+              "revoked": false,
+              "scopes": [
+                "read:library"
+              ]
+            },
+            "warning": "Store this secret now; it will not be shown again.",
+            "secret_present": true,
+            "secret_format_valid": true
+          },
+          "location": null
+        },
+        "child_create_write_token": {
+          "status": 403,
+          "body": {
+            "detail": {
+              "denied_scopes": [
+                "write:download"
+              ]
+            },
+            "error": "Those scopes are not allowed for this account",
+            "error_code": "forbidden",
+            "message": "Those scopes are not allowed for this account",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "child_after_denied_scope": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 14,
+                "name": "ChildRead",
+                "revoked": false,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "read:library",
+              "read:social",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "admin_create_admin_token": {
+          "status": 201,
+          "body": {
+            "token": {
+              "expired": false,
+              "id": 15,
+              "name": "AdminToken",
+              "revoked": false,
+              "scopes": [
+                "admin"
+              ]
+            },
+            "warning": "Store this secret now; it will not be shown again.",
+            "secret_present": true,
+            "secret_format_valid": true
+          },
+          "location": null
+        },
+        "member_delete_own_token": {
+          "status": 200,
+          "body": {
+            "error": null,
+            "error_code": null,
+            "ok": true,
+            "success": true
+          },
+          "location": null
+        },
+        "member_repeat_delete": {
+          "status": 404,
+          "body": {
+            "error": "Token not found",
+            "error_code": "not_found",
+            "message": "Token not found",
+            "ok": false,
+            "success": false
+          },
+          "location": null
+        },
+        "member_after_revoke": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 12,
+                "name": "MemberRead",
+                "revoked": true,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "other_delete_own_token": {
+          "status": 200,
+          "body": {
+            "error": null,
+            "error_code": null,
+            "ok": true,
+            "success": true
+          },
+          "location": null
+        },
+        "other_final": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 13,
+                "name": "OtherDefault",
+                "revoked": true,
+                "scopes": [
+                  "read:library"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        },
+        "admin_delete_own_token": {
+          "status": 200,
+          "body": {
+            "error": null,
+            "error_code": null,
+            "ok": true,
+            "success": true
+          },
+          "location": null
+        },
+        "admin_final": {
+          "status": 200,
+          "body": {
+            "scope_presets": {
+              "companion": {
+                "label": "Desktop companion",
+                "scopes": [
+                  "read:library",
+                  "write:download"
+                ]
+              },
+              "thin": {
+                "label": "Thin client",
+                "scopes": [
+                  "read:library",
+                  "read:social",
+                  "write:presence"
+                ]
+              }
+            },
+            "tokens": [
+              {
+                "expired": false,
+                "id": 15,
+                "name": "AdminToken",
+                "revoked": true,
+                "scopes": [
+                  "admin"
+                ]
+              }
+            ],
+            "valid_scopes": [
+              "admin",
+              "read:library",
+              "read:social",
+              "write:download",
+              "write:library",
+              "write:presence",
+              "write:social"
+            ]
+          },
+          "location": null
+        }
+      },
+      "page_errors": [],
+      "secret_count": 4,
+      "all_created_secrets_valid": true,
+      "semantic_checks": {
+        "member_and_other_lists_initially_empty": true,
+        "missing_csrf_and_invalid_create_rejected_without_state_change": true,
+        "missing_csrf_delete_preserves_owned_token": true,
+        "member_creation_returns_secret_once_and_stores_public_metadata": true,
+        "other_cannot_revoke_member_token": true,
+        "member_cannot_create_admin_scope": true,
+        "other_token_creation_isolated": true,
+        "child_read_scope_allowed_and_download_scope_denied": true,
+        "admin_scope_allowed_for_admin": true,
+        "member_revoke_marks_token_revoked_and_repeat_is_not_found": true,
+        "other_and_admin_can_revoke_only_their_own_tokens": true,
+        "created_secrets_valid_and_not_persisted_in_capture": true
+      }
+    }
+  },
+  "revoked_bearer_authorization": {
+    "legacy": {
+      "active_token_get_ownership": {
+        "status": 200,
+        "content_type": "application/json",
+        "location_path": null,
+        "body_contract": {
+          "ok": true,
+          "error_code": null,
+          "message": null,
+          "data_keys": [
+            "enabled",
+            "error",
+            "error_code",
+            "has_amazon_api_key",
+            "has_epic_api_key",
+            "has_gog_api_key",
+            "has_psn_api_key",
+            "has_steam_api_key",
+            "has_xbox_api_key",
+            "ok",
+            "stores",
+            "success",
+            "total_matched",
+            "total_owned",
+            "unofficial_opt_in"
+          ]
+        }
+      },
+      "revoked_token_get_ownership": {
+        "status": 302,
+        "content_type": "text/html",
+        "location_path": "/login",
+        "body_contract": {}
+      },
+      "revoked_public_state": true
+    },
+    "current": {
+      "active_token_get_ownership": {
+        "status": 200,
+        "content_type": "application/json",
+        "location_path": null,
+        "body_contract": {
+          "ok": true,
+          "error_code": null,
+          "message": null,
+          "data_keys": [
+            "enabled",
+            "error",
+            "error_code",
+            "has_amazon_api_key",
+            "has_epic_api_key",
+            "has_gog_api_key",
+            "has_psn_api_key",
+            "has_steam_api_key",
+            "has_xbox_api_key",
+            "ok",
+            "stores",
+            "success",
+            "total_matched",
+            "total_owned",
+            "unofficial_opt_in"
+          ]
+        }
+      },
+      "revoked_token_get_ownership": {
+        "status": 302,
+        "content_type": "text/html",
+        "location_path": "/login",
+        "body_contract": {}
+      },
+      "revoked_public_state": true
+    }
+  },
+  "comparisons": {
+    "member_initial": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "other_initial": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_create_missing_csrf": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_create_malformed_json": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_create_invalid_name_type": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_create_unknown_preset": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_after_invalid_create": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_create_read_token": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true,
+      "normalization_note": "Token prefix/timestamp and one-time secret are randomized; secret redacted before artifact."
+    },
+    "member_delete_missing_csrf": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_after_missing_csrf_delete": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "other_after_member_create": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "other_delete_member_token": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_after_cross_delete": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_create_admin_scope": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_after_denied_scope": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "other_create_default_token": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true,
+      "normalization_note": "Token prefix/timestamp and one-time secret are randomized; secret redacted before artifact."
+    },
+    "member_after_other_create": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "child_initial": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "child_create_read_token": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true,
+      "normalization_note": "Token prefix/timestamp and one-time secret are randomized; secret redacted before artifact."
+    },
+    "child_create_write_token": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "child_after_denied_scope": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "admin_create_admin_token": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true,
+      "normalization_note": "Token prefix/timestamp and one-time secret are randomized; secret redacted before artifact."
+    },
+    "member_delete_own_token": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_repeat_delete": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "member_after_revoke": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "other_delete_own_token": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "other_final": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "admin_delete_own_token": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    },
+    "admin_final": {
+      "status_equal": true,
+      "body_equal": true,
+      "location_equal": true
+    }
+  },
+  "secret_sanitization": "One-time raw token secrets and prefixes/timestamps are removed before artifact serialization; only format-valid booleans and public scope/name/ID/revocation facts are retained.",
+  "error": null,
+  "cleanup": {
+    "apps_absent": true,
+    "proxies_absent": true,
+    "databases_absent": true,
+    "volumes_absent": true,
+    "unexpected_volumes_absent": true,
+    "source_database_still_present": true,
+    "network_absent": true
+  },
+  "assertions": {
+    "image_pins_match": true,
+    "csrf_available_all_roles": true,
+    "all_paired_statuses_and_bodies_match": true,
+    "semantic_isolation_and_reset_pass_both": true,
+    "no_page_errors": true,
+    "active_read_library_bearer_can_read_ownership": true,
+    "revoked_bearer_cannot_read_ownership": true,
+    "cleanup_verified": true,
+    "no_harness_error": true,
+    "network_egress_blocked": true
+  },
+  "assertions_passed": true,
+  "source_database_written_by_harness": false,
+  "source_database_note": "Harness issues pg_dump only against the source database; all test mutations run in cloned databases, which cleanup drops. No source-content checksum claim is made.",
+  "loopback_relays": "Two fixed-target Nginx relays published only on 127.0.0.1; application containers had no published ports and were attached only to an internal, no-egress network.",
+  "source_database_used": {
+    "container": "od-parity-r1863-db",
+    "database": "oneirodex_legacy_test",
+    "read_with_pg_dump_only": true,
+    "test_clones_created_and_dropped": true
+  },
+  "external_egress_blocked": true,
+  "provider_calls": false,
+  "production_or_unraid": false
+}

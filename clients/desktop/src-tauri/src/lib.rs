@@ -1,13 +1,25 @@
+use fs2::{available_space, FileExt};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File};
-use std::io::{copy, Write};
+#[cfg(test)]
+use std::cell::Cell;
+use std::collections::HashMap;
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
-use tauri::Manager;
+use std::process::Child;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use tauri::{Emitter, Manager, State};
 use url::{Host, Url};
 use zip::ZipArchive;
+#[cfg(any(target_os = "macos", test))]
+mod app_bundle;
 mod install_recovery;
+mod launch_supervisor;
+mod launch_tracking;
 mod trusted_shares;
 
 /// Fallback service name for OS credential store entries when the bundle
@@ -83,11 +95,90 @@ pub struct ExtractZipResult {
     pub exe_path: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct GameArchiveProgress {
+    operation_id: String,
+    bytes_extracted: u64,
+    total_bytes: u64,
+}
+
+struct GameArchiveInstallOperations(Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>);
+
+impl Default for GameArchiveInstallOperations {
+    fn default() -> Self {
+        Self(Arc::new(Mutex::new(HashMap::new())))
+    }
+}
+
+struct GameArchiveOperationCleanup {
+    operations: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    operation_id: String,
+}
+
+impl Drop for GameArchiveOperationCleanup {
+    fn drop(&mut self) {
+        if let Ok(mut operations) = self.operations.lock() {
+            operations.remove(&self.operation_id);
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LaunchGameResult {
     pub pid: u32,
+    pub launch_id: String,
     pub exe_path: String,
     pub resolved_exe_path: Option<String>,
+}
+
+#[derive(Clone, Default)]
+struct ManagedProcessRegistry(Arc<Mutex<HashMap<String, u32>>>);
+
+#[derive(Debug, Serialize)]
+struct ManagedLaunchIdentity {
+    pid: u32,
+    launch_id: String,
+}
+
+impl ManagedProcessRegistry {
+    #[cfg(any(test, not(any(windows, target_os = "linux", target_os = "macos"))))]
+    fn track(&self, child: Child) -> Result<ManagedLaunchIdentity, String> {
+        let pid = child.id();
+        let launch_id = uuid::Uuid::new_v4().to_string();
+        self.track_identity(child, pid, launch_id)
+    }
+
+    fn track_identity(
+        &self,
+        mut child: Child,
+        pid: u32,
+        launch_id: String,
+    ) -> Result<ManagedLaunchIdentity, String> {
+        self.0
+            .lock()
+            .map_err(|_| "Process registry is unavailable".to_string())?
+            .insert(launch_id.clone(), pid);
+
+        let registry = Arc::clone(&self.0);
+        let completed_launch_id = launch_id.clone();
+        thread::spawn(move || {
+            // Waiting here reaps the direct child even when the webview is not
+            // polling. Remove only this launch: a later process can reuse its PID.
+            let _ = child.wait();
+            if let Ok(mut processes) = registry.lock() {
+                processes.remove(&completed_launch_id);
+            }
+        });
+        Ok(ManagedLaunchIdentity { pid, launch_id })
+    }
+
+    fn is_running(&self, pid: u32, launch_id: Option<&str>) -> Result<bool, String> {
+        let processes = self
+            .0
+            .lock()
+            .map_err(|_| "Process registry is unavailable".to_string())?;
+        Ok(launch_id.and_then(|id| processes.get(id)).copied() == Some(pid))
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -175,17 +266,28 @@ fn canonicalize_path(path: &Path, root: &Path) -> Result<PathBuf, String> {
         return path.canonicalize().map_err(|error| error.to_string());
     }
 
-    if let Some(parent) = path.parent() {
-        if parent.as_os_str().is_empty() {
+    // Staging paths commonly have multiple missing levels (for example,
+    // patches/<game>/<file>). Canonicalize the closest existing ancestor so
+    // existing symlinks/reparse points are resolved, then append the missing
+    // components for the containment check before the caller creates them.
+    let mut missing = Vec::new();
+    let mut ancestor = path;
+    while !ancestor.exists() {
+        let Some(name) = ancestor.file_name() else {
             return Ok(path.to_path_buf());
-        }
-        let canonical_parent = parent.canonicalize().map_err(|error| error.to_string())?;
-        if let Some(file_name) = path.file_name() {
-            return Ok(canonical_parent.join(file_name));
-        }
+        };
+        missing.push(name.to_os_string());
+        let Some(parent) = ancestor.parent() else {
+            return Ok(path.to_path_buf());
+        };
+        ancestor = parent;
     }
 
-    Ok(path.to_path_buf())
+    let mut canonical = ancestor.canonicalize().map_err(|error| error.to_string())?;
+    for component in missing.into_iter().rev() {
+        canonical.push(component);
+    }
+    Ok(canonical)
 }
 
 /// Canonicalize `path` and `root` and require `path` to sit inside `root`.
@@ -280,6 +382,12 @@ fn find_likely_exe_inner(dir: &Path, depth: u32, max_depth: u32) -> Option<Strin
         return None;
     }
 
+    #[cfg(target_os = "macos")]
+    if app_bundle::is_app_bundle(dir) {
+        return app_bundle::executable_path(dir, is_launchable_file)
+            .map(|path| path.to_string_lossy().into_owned());
+    }
+
     let entries = fs::read_dir(dir).ok()?;
     for entry in entries.flatten() {
         let path = entry.path();
@@ -303,43 +411,6 @@ fn find_likely_exe_inner(dir: &Path, depth: u32, max_depth: u32) -> Option<Strin
     }
 
     None
-}
-
-// Each `cfg` arm is a full `return` so the arms stay mutually exclusive without
-// tripping "unreachable expression" on the platform whose arm is compiled last;
-// clippy reads the explicit `return` as needless, but dropping it makes the
-// multi-arm shape fragile. Scoped allow rather than a crate-wide one.
-#[allow(clippy::needless_return)]
-fn check_process_running(pid: u32) -> bool {
-    if pid == 0 {
-        return false;
-    }
-
-    #[cfg(unix)]
-    {
-        use std::process::Command;
-        return Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false);
-    }
-
-    #[cfg(windows)]
-    {
-        use std::process::Command;
-        return Command::new("tasklist")
-            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
-            .output()
-            .map(|output| String::from_utf8_lossy(&output.stdout).contains(&pid.to_string()))
-            .unwrap_or(false);
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    {
-        let _ = pid;
-        false
-    }
 }
 
 /// Is this IPv4 address on the local machine or local network?
@@ -376,10 +447,10 @@ const PRIVATE_HOST_SUFFIXES: [&str; 5] =
 /// Does this host name a machine on the user's own network?
 ///
 /// Besides the literal local address ranges: the house-network suffixes
-/// (`*.local` mDNS, `*.lan`, `*.home.arpa`, `*.internal`, `*.localdomain`) and a
-/// bare single-label name such as `nas` or `localhost`, which only resolve
-/// through the local resolver / search domain. Anything with a public-looking
-/// dotted name is not local, however much like a LAN address it reads
+/// (`*.local` mDNS, `*.lan`, `*.home.arpa`, `*.internal`, `*.localdomain`) and
+/// `localhost`. Other bare names are not proof of a local destination: resolver
+/// search domains can send them elsewhere. Anything with a public-looking dotted
+/// name is not local, however much like a LAN address it reads
 /// (`192.168.1.1.evil.com`).
 fn is_private_or_loopback_host(host: &Host<&str>) -> bool {
     match host {
@@ -392,7 +463,7 @@ fn is_private_or_loopback_host(host: &Host<&str>) -> bool {
                 .find_map(|suffix| name.strip_suffix(suffix))
             {
                 Some(label) => !label.is_empty(),
-                None => !name.is_empty() && !name.contains('.'),
+                None => name == "localhost",
             }
         }
     }
@@ -426,7 +497,7 @@ fn validate_server_base_url(raw: &str) -> Result<(), String> {
                 return Ok(());
             }
             Err(format!(
-                "Refusing http:// for {}: your API token would be sent unencrypted. Use an https:// server URL (plain http:// is only allowed for localhost, private LAN or Tailscale addresses, and .local, .lan, .home.arpa, .internal or .localdomain names).",
+                "Refusing http:// for {}: your API token would be sent unencrypted. Use an https:// server URL (plain http:// is only allowed for localhost, private LAN or Tailscale addresses, and .local, .lan, .home.arpa, .internal or .localdomain names; bare host names other than localhost are refused because resolver search domains can send them elsewhere).",
                 url.host_str().unwrap_or("this server")
             ))
         }
@@ -475,7 +546,7 @@ fn save_config(app: tauri::AppHandle, config: AppConfig) -> Result<(), String> {
         token: None,
     };
     let data = serde_json::to_string_pretty(&sanitized).map_err(|error| error.to_string())?;
-    fs::write(path, data).map_err(|error| error.to_string())
+    install_recovery::atomic_write(&path, data.as_bytes()).map_err(|error| error.to_string())
 }
 
 fn secure_entry(app: &tauri::AppHandle, account: &str) -> Result<Entry, String> {
@@ -528,7 +599,7 @@ fn save_lifecycle_registry(
 ) -> Result<(), String> {
     let path = lifecycle_path(&app)?;
     let data = serde_json::to_string_pretty(&registry).map_err(|error| error.to_string())?;
-    fs::write(path, data).map_err(|error| error.to_string())
+    install_recovery::atomic_write(&path, data.as_bytes()).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -704,26 +775,79 @@ fn append_file_bytes(app: tauri::AppHandle, path: String, bytes: Vec<u8>) -> Res
 }
 
 #[tauri::command]
-fn extract_zip_archive(
+async fn extract_zip_archive(
     app: tauri::AppHandle,
     archive_path: String,
     dest_dir: String,
+    operation_id: String,
+    operations: State<'_, GameArchiveInstallOperations>,
 ) -> Result<ExtractZipResult, String> {
-    let downloads = resolve_subdir(&app, "downloads")?;
-    let installs = resolve_subdir(&app, "installs")?;
-    extract_zip_within_roots(
-        Path::new(&archive_path),
-        Path::new(&dest_dir),
-        &downloads,
-        &installs,
-    )
+    if operation_id.trim().is_empty() || operation_id.len() > 128 {
+        return Err("Invalid game archive operation id".into());
+    }
+    let cancellation = Arc::new(AtomicBool::new(false));
+    {
+        let mut active = operations
+            .0
+            .lock()
+            .map_err(|_| "Could not start game archive extraction".to_string())?;
+        if active.contains_key(&operation_id) {
+            return Err("Game archive operation is already active".into());
+        }
+        active.insert(operation_id.clone(), cancellation.clone());
+    }
+    let operations = operations.0.clone();
+    let progress_app = app.clone();
+    let progress_operation_id = operation_id.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _cleanup = GameArchiveOperationCleanup {
+            operations,
+            operation_id,
+        };
+        let downloads = resolve_subdir(&app, "downloads")?;
+        let installs = resolve_subdir(&app, "installs")?;
+        ensure_path_under_root(Path::new(&archive_path), &downloads)?;
+        ensure_path_strictly_under_root(Path::new(&dest_dir), &installs)?;
+        extract_zip_to_dir_with_configured_budget_and_control(
+            Path::new(&archive_path),
+            Path::new(&dest_dir),
+            &cancellation,
+            |bytes_extracted, total_bytes| {
+                let _ = progress_app.emit(
+                    "game-archive-progress",
+                    GameArchiveProgress {
+                        operation_id: progress_operation_id.clone(),
+                        bytes_extracted,
+                        total_bytes,
+                    },
+                );
+            },
+        )
+    })
+    .await
+    .map_err(|error| format!("Game archive extraction task failed: {error}"))?
+}
+
+#[tauri::command]
+fn cancel_game_archive_install(
+    operation_id: String,
+    operations: State<'_, GameArchiveInstallOperations>,
+) -> Result<bool, String> {
+    let active = operations
+        .0
+        .lock()
+        .map_err(|_| "Could not cancel game archive extraction".to_string())?;
+    Ok(active
+        .get(&operation_id)
+        .map(|cancellation| !cancellation.swap(true, Ordering::Relaxed))
+        .unwrap_or(false))
 }
 
 /// The containment rules of `extract_zip_archive`, without the `AppHandle`.
 ///
-/// `extract_zip_to_dir` deletes `destination` before extracting, so the
-/// destination must be strictly *below* the installs root: a destination equal
-/// to the root (a game id of `.`) would wipe every installed game.
+/// The destination must be strictly *below* the installs root: a destination
+/// equal to the root (a game id of `.`) would replace every installed game.
+#[cfg(test)]
 fn extract_zip_within_roots(
     archive: &Path,
     destination: &Path,
@@ -732,7 +856,322 @@ fn extract_zip_within_roots(
 ) -> Result<ExtractZipResult, String> {
     ensure_path_under_root(archive, downloads)?;
     ensure_path_strictly_under_root(destination, installs)?;
-    extract_zip_to_dir(archive, destination)
+    extract_zip_to_dir_with_configured_budget(archive, destination)
+}
+
+const MAX_GAME_ARCHIVE_FILE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
+const MAX_GAME_ARCHIVE_ENTRIES: u64 = 250_000;
+const MAX_GAME_ARCHIVE_EXPANDED_BYTES: u64 = 200 * 1024 * 1024 * 1024;
+const DEFAULT_GAME_ARCHIVE_RESERVE_BYTES: u64 = 1024 * 1024 * 1024;
+const GAME_INSTALL_READY_MARKER: &str = ".oneirodex-ready-";
+static NEXT_GAME_ARCHIVE_STAGE: AtomicU64 = AtomicU64::new(0);
+#[cfg(test)]
+thread_local! {
+    static GAME_ARCHIVE_TEST_ENOSPC_AFTER: Cell<Option<u64>> = const { Cell::new(None) };
+}
+
+fn game_install_lock(parent: &Path, name: &str) -> Result<File, String> {
+    let path = parent.join(format!(".{name}.install.lock"));
+    let lock = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(path)
+        .map_err(|error| format!("Could not open the game install lock: {error}"))?;
+    lock.lock_exclusive()
+        .map_err(|error| format!("Could not acquire the game install lock: {error}"))?;
+    Ok(lock)
+}
+
+fn remove_recovery_directory(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("Could not inspect interrupted game install: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("Interrupted game install path is not a real directory".into());
+    }
+    fs::remove_dir_all(path)
+        .map_err(|error| format!("Could not clean interrupted game install: {error}"))
+}
+
+fn recover_interrupted_install(destination: &Path) -> Result<(), String> {
+    let parent = destination
+        .parent()
+        .ok_or_else(|| "Install destination has no parent directory".to_string())?;
+    let name = destination
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("install");
+    let stage_prefix = format!(".{name}.staging-");
+    let previous_prefix = format!(".{name}.previous-");
+    let ready_prefix = format!(".{name}{GAME_INSTALL_READY_MARKER}");
+    let pending_prefix = format!(".{name}.ready-pending-");
+    let mut stages = Vec::new();
+    let mut previous = Vec::new();
+    let mut ready_markers = Vec::new();
+    let mut pending_markers = Vec::new();
+    for entry in fs::read_dir(parent).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let filename = entry.file_name();
+        let Some(filename) = filename.to_str() else {
+            continue;
+        };
+        let (prefix, kind) = if filename.starts_with(&stage_prefix) {
+            (&stage_prefix, 0)
+        } else if filename.starts_with(&previous_prefix) {
+            (&previous_prefix, 1)
+        } else if filename.starts_with(&ready_prefix) {
+            (&ready_prefix, 2)
+        } else if filename.starts_with(&pending_prefix) {
+            (&pending_prefix, 3)
+        } else {
+            continue;
+        };
+        let suffix = &filename[prefix.len()..];
+        let Some((process_id, counter)) = suffix.split_once('-') else {
+            return Err("Interrupted game install has an invalid recovery identifier".into());
+        };
+        if process_id.parse::<u32>().is_err() || counter.parse::<u64>().is_err() {
+            return Err("Interrupted game install has an invalid recovery identifier".into());
+        }
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(&path).map_err(|error| error.to_string())?;
+        if kind == 2 || kind == 3 {
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err("Game install recovery marker is not a regular file".into());
+            }
+            if kind == 2 && fs::read(&path).map_err(|error| error.to_string())? != suffix.as_bytes()
+            {
+                return Err("Game install recovery marker is invalid".into());
+            }
+            if kind == 2 {
+                ready_markers.push((suffix.to_string(), path));
+            } else {
+                pending_markers.push(path);
+            }
+        } else {
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err("Interrupted game install path is not a real directory".into());
+            }
+            if kind == 0 {
+                stages.push((suffix.to_string(), path));
+            } else {
+                previous.push((suffix.to_string(), path));
+            }
+        }
+    }
+
+    let destination_exists = match fs::symlink_metadata(destination) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err("Install destination is not a real directory".into());
+        }
+        Ok(_) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => return Err(format!("Could not inspect install destination: {error}")),
+    };
+    if ready_markers.len() > 1 || previous.len() > 1 {
+        return Err("Multiple interrupted game installs need manual recovery".into());
+    }
+    if let Some((ready_id, ready_marker)) = ready_markers.first() {
+        if previous.iter().any(|(id, _)| id != ready_id) {
+            return Err("Interrupted game install has conflicting previous data".into());
+        }
+        let ready_stage = stages
+            .iter()
+            .find(|(id, _)| id == ready_id)
+            .map(|(_, path)| path);
+        let matching_previous = previous
+            .iter()
+            .find(|(id, _)| id == ready_id)
+            .map(|(_, path)| path);
+        if let Some(stage) = ready_stage {
+            if destination_exists && matching_previous.is_some() {
+                return Err(
+                    "Interrupted game install has conflicting destination and previous data".into(),
+                );
+            }
+            if !destination_exists {
+                if let Some(old_install) = matching_previous {
+                    fs::rename(old_install, destination).map_err(|error| {
+                        format!("Could not restore the previous game install: {error}")
+                    })?;
+                } else {
+                    fs::rename(stage, destination).map_err(|error| {
+                        format!("Could not recover the completed game install: {error}")
+                    })?;
+                }
+            }
+            for (_, path) in &stages {
+                if path.exists() {
+                    remove_recovery_directory(path)?;
+                }
+            }
+            for (id, path) in &previous {
+                if id == ready_id && path.exists() {
+                    remove_recovery_directory(path)?;
+                }
+            }
+        } else if destination_exists {
+            for (_, path) in stages.iter().chain(previous.iter()) {
+                remove_recovery_directory(path)?;
+            }
+        } else if let Some((_, old_install)) = previous.first() {
+            fs::rename(old_install, destination)
+                .map_err(|error| format!("Could not restore the previous game install: {error}"))?;
+            for (_, path) in &stages {
+                remove_recovery_directory(path)?;
+            }
+        } else {
+            return Err(
+                "Completed game install data is missing; recovery files were preserved".into(),
+            );
+        }
+        fs::remove_file(ready_marker)
+            .map_err(|error| format!("Could not finalize recovered game install: {error}"))?;
+    } else if !destination_exists {
+        if let Some((_, old_install)) = previous.first() {
+            fs::rename(old_install, destination)
+                .map_err(|error| format!("Could not restore the previous game install: {error}"))?;
+        }
+        for (_, path) in &stages {
+            remove_recovery_directory(path)?;
+        }
+    } else {
+        if !previous.is_empty() {
+            return Err(
+                "Interrupted game install has conflicting destination and previous data".into(),
+            );
+        }
+        for (_, path) in &stages {
+            remove_recovery_directory(path)?;
+        }
+    }
+    for marker in pending_markers {
+        fs::remove_file(marker)
+            .map_err(|error| format!("Could not clean incomplete recovery marker: {error}"))?;
+    }
+    Ok(())
+}
+
+fn mark_install_stage_ready(parent: &Path, name: &str, suffix: &str) -> Result<PathBuf, String> {
+    let marker_path = parent.join(format!(".{name}{GAME_INSTALL_READY_MARKER}{suffix}"));
+    let pending_path = parent.join(format!(".{name}.ready-pending-{suffix}"));
+    let _pending_cleanup = RecoveryMarkerCleanup {
+        path: pending_path.clone(),
+        keep: false,
+    };
+    let mut marker = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .open(&pending_path)
+        .map_err(|error| format!("Could not mark game install stage complete: {error}"))?;
+    marker
+        .write_all(suffix.as_bytes())
+        .and_then(|_| marker.sync_all())
+        .map_err(|error| format!("Could not persist game install recovery marker: {error}"))?;
+    fs::rename(&pending_path, &marker_path)
+        .map_err(|error| format!("Could not publish game install recovery marker: {error}"))?;
+    Ok(marker_path)
+}
+
+#[cfg(test)]
+fn exit_at_archive_install_test_point(point: &str) {
+    if std::env::var("ONEIRODEX_ARCHIVE_CRASH_TEST_POINT").as_deref() == Ok(point) {
+        // `exit` skips Rust destructors, matching a process disappearing at
+        // this durable filesystem boundary without abort-dialog behavior.
+        std::process::exit(86);
+    }
+}
+
+fn configured_archive_limit(raw: Option<&str>, default: u64) -> u64 {
+    raw.and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(default)
+}
+
+fn configured_game_archive_entry_limit(raw: Option<&str>) -> u64 {
+    configured_archive_limit(raw, MAX_GAME_ARCHIVE_ENTRIES)
+}
+
+#[cfg(test)]
+fn extract_zip_to_dir_with_configured_budget(
+    archive: &Path,
+    destination: &Path,
+) -> Result<ExtractZipResult, String> {
+    extract_zip_to_dir_with_configured_budget_and_control(
+        archive,
+        destination,
+        &AtomicBool::new(false),
+        |_, _| {},
+    )
+}
+
+fn extract_zip_to_dir_with_configured_budget_and_control(
+    archive: &Path,
+    destination: &Path,
+    cancellation: &AtomicBool,
+    on_progress: impl FnMut(u64, u64),
+) -> Result<ExtractZipResult, String> {
+    let max_entries = configured_game_archive_entry_limit(
+        std::env::var("ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_ENTRIES")
+            .ok()
+            .as_deref(),
+    );
+    let max_expanded_bytes = configured_archive_limit(
+        std::env::var("ONEIRODEX_DESKTOP_MAX_GAME_ARCHIVE_EXPANDED_BYTES")
+            .ok()
+            .as_deref(),
+        MAX_GAME_ARCHIVE_EXPANDED_BYTES,
+    );
+    let reserve_bytes = std::env::var("ONEIRODEX_DESKTOP_GAME_ARCHIVE_RESERVE_BYTES")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_GAME_ARCHIVE_RESERVE_BYTES);
+    let mut on_progress = on_progress;
+    let mut control = GameArchiveExtractionControl {
+        cancellation: Some(cancellation),
+        on_progress: &mut on_progress,
+    };
+    extract_zip_to_dir_with_space_budget_and_control(
+        archive,
+        destination,
+        max_entries,
+        max_expanded_bytes,
+        reserve_bytes,
+        None,
+        &mut control,
+    )
+}
+
+fn validate_game_zip_limits(
+    zip: &mut ZipArchive<File>,
+    max_entries: u64,
+    max_expanded_bytes: u64,
+) -> Result<u64, String> {
+    let entry_count = zip.len() as u64;
+    if entry_count > max_entries {
+        return Err(format!(
+            "Game archive exceeds the {max_entries}-entry limit"
+        ));
+    }
+
+    let mut expanded_bytes = 0_u64;
+    for index in 0..zip.len() {
+        let entry = zip.by_index(index).map_err(|error| error.to_string())?;
+        if entry.enclosed_name().is_none() {
+            return Err("Game archive contains an unsafe entry path".into());
+        }
+        expanded_bytes = expanded_bytes
+            .checked_add(entry.size())
+            .ok_or_else(|| "Game archive expanded size overflow".to_string())?;
+        if expanded_bytes > max_expanded_bytes {
+            return Err(format!(
+                "Game archive exceeds the {} GiB expanded-size limit",
+                max_expanded_bytes / (1024 * 1024 * 1024)
+            ));
+        }
+    }
+    Ok(expanded_bytes)
 }
 
 /// Extract every entry of `archive` under `destination`, restoring unix
@@ -741,37 +1180,173 @@ fn extract_zip_within_roots(
 /// Split out from `extract_zip_archive` so the zip-slip / `enclosed_name()`
 /// handling is unit-testable without a `tauri::AppHandle`. The command wrapper
 /// still owns the app-root containment check on `archive` / `destination`.
+#[cfg(test)]
 fn extract_zip_to_dir(archive: &Path, destination: &Path) -> Result<ExtractZipResult, String> {
+    extract_zip_to_dir_with_limits(
+        archive,
+        destination,
+        MAX_GAME_ARCHIVE_ENTRIES,
+        MAX_GAME_ARCHIVE_EXPANDED_BYTES,
+    )
+}
+
+#[cfg(test)]
+fn extract_zip_to_dir_with_limits(
+    archive: &Path,
+    destination: &Path,
+    max_entries: u64,
+    max_expanded_bytes: u64,
+) -> Result<ExtractZipResult, String> {
+    extract_zip_to_dir_with_space_budget(
+        archive,
+        destination,
+        max_entries,
+        max_expanded_bytes,
+        0,
+        None,
+    )
+}
+
+#[cfg(test)]
+fn extract_zip_to_dir_with_space_budget(
+    archive: &Path,
+    destination: &Path,
+    max_entries: u64,
+    max_expanded_bytes: u64,
+    reserve_bytes: u64,
+    available_bytes_override: Option<u64>,
+) -> Result<ExtractZipResult, String> {
+    let mut on_progress = |_, _| {};
+    let mut control = GameArchiveExtractionControl {
+        cancellation: None,
+        on_progress: &mut on_progress,
+    };
+    extract_zip_to_dir_with_space_budget_and_control(
+        archive,
+        destination,
+        max_entries,
+        max_expanded_bytes,
+        reserve_bytes,
+        available_bytes_override,
+        &mut control,
+    )
+}
+
+struct GameArchiveExtractionControl<'a> {
+    cancellation: Option<&'a AtomicBool>,
+    on_progress: &'a mut dyn FnMut(u64, u64),
+}
+
+fn extract_zip_to_dir_with_space_budget_and_control(
+    archive: &Path,
+    destination: &Path,
+    max_entries: u64,
+    max_expanded_bytes: u64,
+    reserve_bytes: u64,
+    available_bytes_override: Option<u64>,
+    control: &mut GameArchiveExtractionControl<'_>,
+) -> Result<ExtractZipResult, String> {
     if !archive.is_file() {
         return Err(format!("Archive not found: {}", archive.display()));
     }
-
-    if destination.exists() {
-        remove_path_inner(destination)?;
+    let archive_size = fs::metadata(archive)
+        .map_err(|error| error.to_string())?
+        .len();
+    if archive_size > MAX_GAME_ARCHIVE_FILE_BYTES {
+        return Err("Game archive exceeds the 100 GiB download limit".into());
     }
-    fs::create_dir_all(destination).map_err(|error| error.to_string())?;
 
     let file = File::open(archive).map_err(|error| error.to_string())?;
     let mut zip = ZipArchive::new(file).map_err(|error| error.to_string())?;
+    // Validate the central directory and declared expanded sizes before
+    // removing an existing installation at the destination.
+    let declared_expanded_bytes =
+        validate_game_zip_limits(&mut zip, max_entries, max_expanded_bytes)?;
+    if control
+        .cancellation
+        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+    {
+        return Err("Game archive extraction canceled".into());
+    }
+
+    let parent = destination
+        .parent()
+        .ok_or_else(|| "Install destination has no parent directory".to_string())?;
+    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    let name = destination
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("install");
+    let _install_lock = game_install_lock(parent, name)?;
+    recover_interrupted_install(destination)?;
+    let required_bytes = declared_expanded_bytes
+        .checked_add(reserve_bytes)
+        .ok_or_else(|| "Game archive free-space requirement overflow".to_string())?;
+    let available_bytes = match available_bytes_override {
+        Some(bytes) => bytes,
+        None => available_space(parent).map_err(|_| {
+            "Could not determine free space for the install destination".to_string()
+        })?,
+    };
+    if available_bytes < required_bytes {
+        let gib = 1024 * 1024 * 1024;
+        let expanded_gib = declared_expanded_bytes / gib
+            + if declared_expanded_bytes % gib == 0 {
+                0
+            } else {
+                1
+            };
+        return Err(format!(
+            "Not enough free space for this game archive: needs {} GiB plus reserve, has {} GiB available",
+            expanded_gib,
+            available_bytes / gib,
+        ));
+    }
+    let (suffix, staging, backup) = loop {
+        let id = NEXT_GAME_ARCHIVE_STAGE.fetch_add(1, Ordering::Relaxed);
+        let suffix = format!("{}-{id}", std::process::id());
+        let staging = parent.join(format!(".{name}.staging-{suffix}"));
+        let backup = parent.join(format!(".{name}.previous-{suffix}"));
+        match fs::create_dir(&staging) {
+            Ok(()) => break (suffix, staging, backup),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        }
+    };
+    let _staging_cleanup = DirectoryCleanup(staging.clone());
+
+    let mut expanded_bytes = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    (control.on_progress)(0, declared_expanded_bytes);
 
     for index in 0..zip.len() {
+        if control
+            .cancellation
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+        {
+            return Err("Game archive extraction canceled".into());
+        }
         let mut entry = zip.by_index(index).map_err(|error| error.to_string())?;
         // `enclosed_name()` returns `None` for any entry name that would escape
-        // the destination (`..` segments, absolute paths, drive letters), so a
-        // zip-slip entry is skipped outright.
+        // the destination (`..` segments, absolute paths, drive letters). The
+        // preflight rejects these entries; keep the check here as defense in depth.
         let entry_path = match entry.enclosed_name() {
-            Some(path) => destination.join(path),
-            None => continue,
+            Some(path) => staging.join(path),
+            None => return Err("Game archive contains an unsafe entry path".into()),
         };
 
         // Defence in depth: `enclosed_name()` already blocks traversal, but a
         // future swap of the zip crate must not be able to silently reintroduce
-        // zip-slip. A join that lands outside `destination` is dropped.
-        if !entry_path.starts_with(destination) {
-            continue;
+        // zip-slip. A join that lands outside staging fails the whole operation.
+        if !entry_path.starts_with(&staging) {
+            return Err("Game archive entry escapes the install directory".into());
         }
 
-        if entry.name().ends_with('/') {
+        if entry
+            .name()
+            .map_err(|error| error.to_string())?
+            .ends_with('/')
+        {
             fs::create_dir_all(&entry_path).map_err(|error| error.to_string())?;
             continue;
         }
@@ -781,7 +1356,44 @@ fn extract_zip_to_dir(archive: &Path, destination: &Path) -> Result<ExtractZipRe
         }
 
         let mut out = File::create(&entry_path).map_err(|error| error.to_string())?;
-        copy(&mut entry, &mut out).map_err(|error| error.to_string())?;
+        loop {
+            if control
+                .cancellation
+                .is_some_and(|flag| flag.load(Ordering::Relaxed))
+            {
+                return Err("Game archive extraction canceled".into());
+            }
+            use std::io::Read;
+            let read = entry.read(&mut buffer).map_err(|error| error.to_string())?;
+            if read == 0 {
+                break;
+            }
+            expanded_bytes = expanded_bytes
+                .checked_add(read as u64)
+                .ok_or_else(|| "Game archive expanded size overflow".to_string())?;
+            if expanded_bytes > max_expanded_bytes {
+                return Err(format!(
+                    "Game archive exceeds the {} GiB expanded-size limit",
+                    max_expanded_bytes / (1024 * 1024 * 1024)
+                ));
+            }
+            #[cfg(test)]
+            if let Some(fail_after) = GAME_ARCHIVE_TEST_ENOSPC_AFTER.with(Cell::get) {
+                let before_chunk = expanded_bytes - read as u64;
+                if expanded_bytes > fail_after {
+                    let writable =
+                        fail_after.saturating_sub(before_chunk).min(read as u64) as usize;
+                    if writable > 0 {
+                        out.write_all(&buffer[..writable])
+                            .map_err(|error| error.to_string())?;
+                    }
+                    return Err("simulated disk full: no space left on device".into());
+                }
+            }
+            out.write_all(&buffer[..read])
+                .map_err(|error| error.to_string())?;
+            (control.on_progress)(expanded_bytes, declared_expanded_bytes);
+        }
 
         // Restore the archived permission bits on unix. Without this every
         // extracted file lands 0644 and `launch_game` fails with "permission
@@ -790,76 +1402,307 @@ fn extract_zip_to_dir(archive: &Path, destination: &Path) -> Result<ExtractZipRe
         // bit is the only thing that marks an entry point on a platform with
         // no `.exe` extension. Archives authored on Windows carry no unix mode
         // at all; those stay 0644, which is correct — a Windows build is not
-        // launchable here regardless.
+        // launchable here regardless. Never preserve SUID/SGID/sticky bits
+        // supplied by an archive; installed game files must not gain special
+        // privileges from untrusted ZIP metadata.
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             if let Some(mode) = entry.unix_mode() {
-                fs::set_permissions(&entry_path, fs::Permissions::from_mode(mode))
-                    .map_err(|error| error.to_string())?;
+                fs::set_permissions(
+                    &entry_path,
+                    fs::Permissions::from_mode(safe_archive_file_mode(mode)),
+                )
+                .map_err(|error| error.to_string())?;
             }
         }
     }
 
-    let exe_path = find_likely_exe(destination, 2);
+    #[cfg(test)]
+    exit_at_archive_install_test_point("after_extract_before_ready");
+    if control
+        .cancellation
+        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+    {
+        return Err("Game archive extraction canceled".into());
+    }
+    let ready_marker = mark_install_stage_ready(parent, name, &suffix)?;
+    let mut marker_cleanup = RecoveryMarkerCleanup {
+        path: ready_marker.clone(),
+        keep: false,
+    };
+    let staged_exe_path = find_likely_exe(&staging, 2).map(PathBuf::from);
+
+    if control
+        .cancellation
+        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+    {
+        return Err("Game archive extraction canceled".into());
+    }
+    let had_destination = destination.exists();
+    if had_destination {
+        fs::rename(destination, &backup).map_err(|error| error.to_string())?;
+        #[cfg(test)]
+        exit_at_archive_install_test_point("after_previous_rename");
+    }
+    if let Err(error) = fs::rename(&staging, destination) {
+        if had_destination && fs::rename(&backup, destination).is_err() {
+            return Err(format!(
+                "Could not promote the staged install ({error}); the previous install remains at {}",
+                backup.display()
+            ));
+        }
+        return Err(error.to_string());
+    }
+    #[cfg(test)]
+    exit_at_archive_install_test_point("after_stage_promotion");
+    marker_cleanup.keep = true;
+    let mut previous_removed = !had_destination;
+    if had_destination {
+        match remove_path_inner(&backup) {
+            Ok(()) => previous_removed = true,
+            Err(error) => {
+                eprintln!("[desktop] could not remove the superseded install directory: {error}");
+            }
+        }
+    }
+    if previous_removed {
+        match fs::remove_file(&ready_marker) {
+            Ok(()) => marker_cleanup.keep = false,
+            Err(error) => {
+                eprintln!("[desktop] could not remove the completed install marker: {error}");
+            }
+        }
+    }
+
+    let exe_path = staged_exe_path.map(|path| {
+        destination
+            .join(path.strip_prefix(&staging).unwrap_or(path.as_path()))
+            .to_string_lossy()
+            .into_owned()
+    });
     Ok(ExtractZipResult {
         extract_path: destination.to_string_lossy().into_owned(),
         exe_path,
     })
 }
 
-#[tauri::command]
-fn launch_game(
-    app: tauri::AppHandle,
-    game_uuid: String,
-    exe_path: Option<String>,
-    extract_path: String,
-) -> Result<LaunchGameResult, String> {
-    let _ = game_uuid;
-    let installs = installs_root(&app)?;
-    let extract = PathBuf::from(&extract_path);
-    ensure_path_under_root(&extract, &installs)?;
+struct DirectoryCleanup(PathBuf);
 
-    let had_exe_path = exe_path.is_some();
-    let resolved = if let Some(exe) = exe_path {
-        let candidate = PathBuf::from(&exe);
-        ensure_path_under_root(&candidate, &installs)?;
-        if !candidate.is_file() {
-            return Err(format!("Executable not found: {exe}"));
+impl Drop for DirectoryCleanup {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+struct RecoveryMarkerCleanup {
+    path: PathBuf,
+    keep: bool,
+}
+
+impl Drop for RecoveryMarkerCleanup {
+    fn drop(&mut self) {
+        if !self.keep {
+            let _ = fs::remove_file(&self.path);
         }
-        candidate
-    } else {
-        find_likely_exe(&extract, 2)
-            .map(PathBuf::from)
-            .ok_or_else(|| "No executable found in install directory".to_string())?
-    };
+    }
+}
 
-    ensure_path_under_root(&resolved, &installs)?;
-
-    let working_dir = resolved
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| extract.clone());
-
-    let child = std::process::Command::new(&resolved)
-        .current_dir(working_dir)
-        .spawn()
-        .map_err(|error| error.to_string())?;
-
-    Ok(LaunchGameResult {
-        pid: child.id(),
-        exe_path: resolved.to_string_lossy().into_owned(),
-        resolved_exe_path: if had_exe_path {
-            None
-        } else {
-            Some(resolved.to_string_lossy().into_owned())
-        },
-    })
+/// Keep ordinary read/write/execute bits from ZIP metadata while discarding
+/// SUID, SGID, and sticky bits that must never be applied to extracted files.
+#[cfg(any(unix, test))]
+fn safe_archive_file_mode(mode: u32) -> u32 {
+    mode & 0o777
 }
 
 #[tauri::command]
-fn is_process_running(pid: u32) -> Result<bool, String> {
-    Ok(check_process_running(pid))
+async fn launch_game(
+    app: tauri::AppHandle,
+    processes: tauri::State<'_, ManagedProcessRegistry>,
+    game_uuid: String,
+    exe_path: Option<String>,
+    extract_path: String,
+    profile_binding: Option<String>,
+) -> Result<LaunchGameResult, String> {
+    let processes = processes.inner().clone();
+    // The preparation handshake can wait on a failed helper. Keep both the
+    // webview thread and async executor free while waiting for its response.
+    tauri::async_runtime::spawn_blocking(move || {
+        let installs = installs_root(&app)?;
+        let extract = PathBuf::from(&extract_path);
+        ensure_path_under_root(&extract, &installs)?;
+
+        let had_exe_path = exe_path.is_some();
+        let resolved = if let Some(exe) = exe_path {
+            let candidate = PathBuf::from(&exe);
+            ensure_path_under_root(&candidate, &installs)?;
+            if !candidate.is_file() {
+                return Err(format!("Executable not found: {exe}"));
+            }
+            candidate
+        } else {
+            find_likely_exe(&extract, 2)
+                .map(PathBuf::from)
+                .ok_or_else(|| "No executable found in install directory".to_string())?
+        };
+
+        ensure_path_under_root(&resolved, &installs)?;
+
+        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+        let working_dir = resolved
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| extract.clone());
+
+        #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+        let identity = {
+            let launch = launch_supervisor::start(
+                &app_data_dir(&app)?.join("launches"),
+                &installs,
+                &resolved,
+                game_uuid,
+                profile_binding.as_deref(),
+            )
+            .map_err(|error| error.to_string())?;
+            processes.track_identity(launch.child, launch.pid, launch.launch_id)?
+        };
+        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+        let child = std::process::Command::new(&resolved)
+            .current_dir(working_dir)
+            .spawn()
+            .map_err(|error| error.to_string())?;
+        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+        let identity = {
+            let _ = (game_uuid, profile_binding);
+            processes.track(child)?
+        };
+
+        Ok(LaunchGameResult {
+            pid: identity.pid,
+            launch_id: identity.launch_id,
+            exe_path: resolved.to_string_lossy().into_owned(),
+            resolved_exe_path: if had_exe_path {
+                None
+            } else {
+                Some(resolved.to_string_lossy().into_owned())
+            },
+        })
+    })
+    .await
+    .map_err(|_| "Launch status is uncertain. Check the game before retrying.".to_string())?
+}
+
+#[tauri::command]
+fn is_process_running(
+    _app: tauri::AppHandle,
+    processes: tauri::State<'_, ManagedProcessRegistry>,
+    pid: u32,
+    launch_id: Option<String>,
+) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    let _ = &processes;
+    #[cfg(not(target_os = "macos"))]
+    if process_running_in_registry(processes.inner(), pid, launch_id.as_deref())? {
+        return Ok(true);
+    }
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+    return launch_supervisor::status(
+        &app_data_dir(&_app)?.join("launches"),
+        pid,
+        launch_id.as_deref(),
+    )
+    .map_err(|_| "Launch tracking is unavailable; running game state is unverified".to_string());
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    Ok(false)
+}
+
+#[cfg(any(test, not(target_os = "macos")))]
+fn process_running_in_registry(
+    processes: &ManagedProcessRegistry,
+    pid: u32,
+    launch_id: Option<&str>,
+) -> Result<bool, String> {
+    // A numeric PID can name an unrelated process after exit or restart.
+    // Only this registry's retained child is evidence of a running game.
+    processes.is_running(pid, launch_id)
+}
+
+#[tauri::command]
+fn begin_launch_reporting(
+    claims: State<'_, launch_tracking::TrackingClaims>,
+) -> Result<String, String> {
+    claims
+        .begin_client()
+        .map_err(|_| "Playtime reporter is unavailable".to_string())
+}
+
+#[tauri::command]
+fn list_launches(
+    app: tauri::AppHandle,
+    profile_binding: String,
+) -> Result<launch_tracking::LaunchInventory, String> {
+    let base = app_data_dir(&app)?.join("launches");
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+    let result = launch_tracking::list(
+        &base,
+        &profile_binding,
+        launch_supervisor::recovery_supported(),
+        launch_supervisor::live_record,
+    );
+    #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+    let result = launch_tracking::list(&base, &profile_binding, false, |_, _| Ok(None));
+    result.map_err(|_| "Verified launch recovery is unavailable".to_string())
+}
+
+#[tauri::command]
+fn acquire_launch_reporting(
+    app: tauri::AppHandle,
+    claims: State<'_, launch_tracking::TrackingClaims>,
+    profile_binding: String,
+    game_uuid: String,
+    client_id: String,
+) -> Result<Option<String>, String> {
+    claims
+        .acquire(
+            &app_data_dir(&app)?.join("launches"),
+            &profile_binding,
+            &game_uuid,
+            &client_id,
+        )
+        .map_err(|_| "Playtime reporter ownership is unavailable".to_string())
+}
+
+#[tauri::command]
+fn owns_launch_reporting(
+    claims: State<'_, launch_tracking::TrackingClaims>,
+    client_id: String,
+    claim_id: String,
+) -> Result<bool, String> {
+    claims
+        .owns(&client_id, &claim_id)
+        .map_err(|_| "Playtime reporter ownership is unavailable".to_string())
+}
+
+#[tauri::command]
+fn release_launch_reporting(
+    claims: State<'_, launch_tracking::TrackingClaims>,
+    claim_id: String,
+) -> Result<(), String> {
+    claims
+        .release(&claim_id)
+        .map_err(|_| "Playtime reporter could not be released".to_string())
+}
+
+#[tauri::command]
+fn forget_launch_bindings(
+    app: tauri::AppHandle,
+    claims: State<'_, launch_tracking::TrackingClaims>,
+) -> Result<(), String> {
+    claims
+        .release_all()
+        .map_err(|_| "Playtime reporter could not be released".to_string())?;
+    launch_tracking::forget(&app_data_dir(&app)?.join("launches"))
+        .map_err(|_| "Launch recovery bindings could not be cleared".to_string())
 }
 
 fn remove_path_inner(path: &Path) -> Result<(), String> {
@@ -1079,7 +1922,10 @@ fn extract_staged_mod_zip(
             Some(path) => path,
             None => continue,
         };
-        let is_directory = entry.name().ends_with('/');
+        let is_directory = entry
+            .name()
+            .map_err(|error| error.to_string())?
+            .ends_with('/');
         let entry_path = safe_mod_entry_path(destination_root, &relative, is_directory)?;
         if is_directory {
             continue;
@@ -1577,7 +2423,21 @@ fn reveal_path_in_os(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+    if let Some(code) = launch_supervisor::run_from_args() {
+        std::process::exit(code);
+    }
     tauri::Builder::default()
+        .manage(ManagedProcessRegistry::default())
+        .manage(launch_tracking::TrackingClaims::default())
+        .manage(GameArchiveInstallOperations::default())
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                if let Some(claims) = window.try_state::<launch_tracking::TrackingClaims>() {
+                    let _ = claims.release_all();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             load_config,
             save_config,
@@ -1595,11 +2455,18 @@ pub fn run() {
             write_file_bytes,
             append_file_bytes,
             extract_zip_archive,
+            cancel_game_archive_install,
             launch_game,
             reveal_path_in_os,
             load_trusted_shares,
             save_trusted_shares,
             is_process_running,
+            begin_launch_reporting,
+            list_launches,
+            acquire_launch_reporting,
+            owns_launch_reporting,
+            release_launch_reporting,
+            forget_launch_bindings,
             remove_path,
             rename_path,
             get_flips_path,
@@ -1617,7 +2484,212 @@ mod tests {
     // `Write` trait `write_zip` needs is already in scope here.
     use super::*;
     use std::fs;
+    use std::process::Command;
+    use std::time::{Duration, Instant};
     use tempfile::tempdir;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn discovery_finds_declared_bundle_main_from_extraction_root() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let work = tempdir().unwrap();
+        let app = work.path().join("Owned Game.app");
+        fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+        let main = app.join("Contents/MacOS/Main Game");
+        let helper = app.join("Contents/MacOS/AAA-helper");
+        for path in [&main, &helper] {
+            fs::write(path, b"owned discovery fixture; never executed").unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        fs::write(
+            app.join("Contents/Info.plist"),
+            br#"<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Main Game</string></dict></plist>"#,
+        )
+        .unwrap();
+        let found = find_likely_exe(work.path(), 2).map(PathBuf::from);
+        assert_eq!(found, Some(main));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn discovery_does_not_fall_back_to_a_broken_bundles_helper() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let work = tempdir().unwrap();
+        let app = work.path().join("Broken.app");
+        fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+        let helper = app.join("Contents/MacOS/helper");
+        fs::write(&helper, b"owned discovery fixture; never executed").unwrap();
+        fs::set_permissions(&helper, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::write(app.join("Contents/Info.plist"), b"malformed").unwrap();
+        assert_eq!(find_likely_exe(&app, 2), None);
+        assert_eq!(find_likely_exe(work.path(), 2), None);
+    }
+
+    #[test]
+    fn managed_child_fixture() {
+        if std::env::var_os("ONEIRODEX_LAUNCH_IDENTITY_PIPE").is_some() {
+            use std::io::Read;
+            std::io::stdin().read_to_end(&mut Vec::new()).unwrap();
+            return;
+        }
+        if std::env::var_os("ONEIRODEX_CHILD_REAP_TEST").is_some() {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    #[test]
+    fn managed_launch_receipt_contains_a_native_launch_identity() {
+        let child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "tests::managed_child_fixture", "--nocapture"])
+            .env("ONEIRODEX_CHILD_REAP_TEST", "1")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let registry = ManagedProcessRegistry::default();
+        let receipt = serde_json::to_value(registry.track(child).unwrap()).unwrap();
+        let launch_id = receipt.get("launch_id").and_then(|value| value.as_str());
+        assert!(
+            launch_id.is_some(),
+            "native launch must include an opaque identity"
+        );
+        assert_eq!(launch_id.unwrap().len(), 36);
+        assert_eq!(
+            receipt.get("pid").and_then(|value| value.as_u64()),
+            Some(pid as u64)
+        );
+    }
+
+    #[test]
+    fn archive_install_crash_fixture_child() {
+        let Ok(root) = std::env::var("ONEIRODEX_ARCHIVE_CRASH_TEST_ROOT") else {
+            return;
+        };
+        let root = PathBuf::from(root);
+        let archive = root.join("bundle.zip");
+        let destination = root.join("install");
+        let _ = extract_zip_to_dir(&archive, &destination);
+    }
+
+    #[test]
+    fn managed_process_waiter_reaps_a_short_lived_child() {
+        let child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "tests::managed_child_fixture", "--nocapture"])
+            .env("ONEIRODEX_CHILD_REAP_TEST", "1")
+            .spawn()
+            .unwrap();
+        let pid = child.id();
+        let registry = ManagedProcessRegistry::default();
+        let identity = registry.track(child).unwrap();
+        assert_eq!(identity.pid, pid);
+        assert!(registry.is_running(pid, Some(&identity.launch_id)).unwrap());
+        assert!(process_running_in_registry(&registry, pid, Some(&identity.launch_id)).unwrap());
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut observed = true;
+        while observed && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+            observed = registry.is_running(pid, Some(&identity.launch_id)).unwrap();
+        }
+
+        assert!(!observed);
+        assert!(!process_running_in_registry(&registry, pid, Some(&identity.launch_id)).unwrap());
+    }
+
+    #[test]
+    fn process_status_rejects_an_unregistered_live_pid() {
+        let registry = ManagedProcessRegistry::default();
+        // This test process is alive, but it was never launched as a game.
+        assert!(!process_running_in_registry(&registry, std::process::id(), None).unwrap());
+    }
+
+    #[test]
+    fn process_status_does_not_reattach_after_an_exit_was_observed() {
+        let registry = ManagedProcessRegistry::default();
+        let pid = std::process::id();
+        // Model a consumed game exit whose numeric PID now names an unrelated
+        // live process. This is deterministic identity substitution, not a
+        // claim that the kernel actually recycled a PID in this test.
+        let retired = uuid::Uuid::new_v4().to_string();
+        registry.0.lock().unwrap().insert(retired.clone(), pid);
+        assert!(process_running_in_registry(&registry, pid, Some(&retired)).unwrap());
+        registry.0.lock().unwrap().remove(&retired);
+        assert!(!process_running_in_registry(&registry, pid, Some(&retired)).unwrap());
+        assert!(!process_running_in_registry(&registry, pid, Some(&retired)).unwrap());
+    }
+
+    fn held_launch_fixture() -> (Child, std::process::ChildStdin) {
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "tests::managed_child_fixture", "--nocapture"])
+            .env("ONEIRODEX_LAUNCH_IDENTITY_PIPE", "1")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let release = child.stdin.take().unwrap();
+        (child, release)
+    }
+
+    fn wait_for_launch_exit(registry: &ManagedProcessRegistry, identity: &ManagedLaunchIdentity) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while registry
+            .is_running(identity.pid, Some(&identity.launch_id))
+            .unwrap()
+            && Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!registry
+            .is_running(identity.pid, Some(&identity.launch_id))
+            .unwrap());
+    }
+
+    #[test]
+    fn managed_launches_require_their_own_identity_and_retire_independently() {
+        let (child_a, release_a) = held_launch_fixture();
+        let (child_b, release_b) = held_launch_fixture();
+        let registry = ManagedProcessRegistry::default();
+        let a = registry.track(child_a).unwrap();
+        let b = registry.track(child_b).unwrap();
+        assert_ne!(a.launch_id, b.launch_id);
+        assert!(
+            uuid::Uuid::parse_str(&a.launch_id)
+                .unwrap()
+                .get_version_num()
+                == 4
+        );
+        assert!(process_running_in_registry(&registry, a.pid, Some(&a.launch_id)).unwrap());
+        assert!(process_running_in_registry(&registry, b.pid, Some(&b.launch_id)).unwrap());
+        assert!(!process_running_in_registry(&registry, a.pid, None).unwrap());
+        assert!(!process_running_in_registry(&registry, a.pid, Some(&b.launch_id)).unwrap());
+        assert!(!process_running_in_registry(&registry, b.pid, Some(&a.launch_id)).unwrap());
+        drop(release_a);
+        wait_for_launch_exit(&registry, &a);
+        assert!(process_running_in_registry(&registry, b.pid, Some(&b.launch_id)).unwrap());
+        drop(release_b);
+        wait_for_launch_exit(&registry, &b);
+        assert!(registry.0.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn old_waiter_cannot_retire_a_new_identity_with_the_same_numeric_pid() {
+        let (child, release) = held_launch_fixture();
+        let registry = ManagedProcessRegistry::default();
+        let old = registry.track(child).unwrap();
+        // Deliberately model PID reuse, then let the actual older waiter finish.
+        // The operating system did not recycle a PID in this controlled test.
+        let replacement = uuid::Uuid::new_v4().to_string();
+        registry
+            .0
+            .lock()
+            .unwrap()
+            .insert(replacement.clone(), old.pid);
+        drop(release);
+        wait_for_launch_exit(&registry, &old);
+        assert!(process_running_in_registry(&registry, old.pid, Some(&replacement)).unwrap());
+        assert!(!process_running_in_registry(&registry, old.pid, Some(&old.launch_id)).unwrap());
+        registry.0.lock().unwrap().remove(&replacement);
+    }
     use zip::write::{SimpleFileOptions, ZipWriter};
 
     #[test]
@@ -1657,6 +2729,33 @@ mod tests {
         let root = tempdir().unwrap();
         let target = root.path().join("archive.zip");
         assert!(ensure_path_under_root(&target, root.path()).is_ok());
+    }
+
+    #[test]
+    fn under_root_accepts_multiple_missing_staging_directories() {
+        let root = tempdir().unwrap();
+        let target = root.path().join("patches/game-1/nested/fix.bps");
+
+        assert!(ensure_path_under_root(&target, root.path()).is_ok());
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, b"patch").unwrap();
+        assert!(ensure_path_under_root(&target, root.path()).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn under_root_rejects_missing_path_below_existing_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let base = tempdir().unwrap();
+        let root = base.path().join("patches");
+        let outside = base.path().join("outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, root.join("linked-game")).unwrap();
+        let target = root.join("linked-game/nested/fix.bps");
+
+        assert!(ensure_path_under_root(&target, &root).is_err());
     }
 
     #[test]
@@ -1871,6 +2970,23 @@ mod tests {
     // extract_zip_to_dir — enclosed_name() / zip-slip handling
     // ---------------------------------------------------------------
 
+    struct ArchiveEnospcGuard;
+
+    impl ArchiveEnospcGuard {
+        fn after(bytes: u64) -> Self {
+            GAME_ARCHIVE_TEST_ENOSPC_AFTER.with(|limit| {
+                assert!(limit.replace(Some(bytes)).is_none());
+            });
+            Self
+        }
+    }
+
+    impl Drop for ArchiveEnospcGuard {
+        fn drop(&mut self) {
+            GAME_ARCHIVE_TEST_ENOSPC_AFTER.with(|limit| limit.set(None));
+        }
+    }
+
     fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
         let file = fs::File::create(path).unwrap();
         let mut zip = ZipWriter::new(file);
@@ -1884,6 +3000,64 @@ mod tests {
             }
         }
         zip.finish().unwrap();
+    }
+
+    fn write_zip_with_raw_unix_mode(path: &Path, name: &str, body: &[u8], mode: u32) {
+        write_zip(path, &[(name, body)]);
+        let mut archive = fs::read(path).unwrap();
+        let central_header = archive
+            .windows(4)
+            .position(|bytes| bytes == b"PK\x01\x02")
+            .expect("ZIP central directory entry");
+        // Mark the creator as Unix and put the hostile file mode in the
+        // central directory. zip::write::unix_permissions masks these bits,
+        // so patch the archive bytes as an attacker would instead.
+        archive[central_header + 4..central_header + 6]
+            .copy_from_slice(&((3_u16 << 8) | 20).to_le_bytes());
+        archive[central_header + 38..central_header + 42]
+            .copy_from_slice(&(mode << 16).to_le_bytes());
+        fs::write(path, archive).unwrap();
+    }
+
+    #[test]
+    fn archive_mode_filter_removes_setuid_setgid_and_sticky_bits() {
+        let work = tempdir().unwrap();
+        let hostile_modes = [0o104755, 0o102750, 0o101755];
+        for (index, hostile_mode) in hostile_modes.into_iter().enumerate() {
+            let archive = work.path().join(format!("hostile-{index}.zip"));
+            write_zip_with_raw_unix_mode(&archive, "game", b"payload", hostile_mode);
+            let mut zip = ZipArchive::new(fs::File::open(&archive).unwrap()).unwrap();
+            let parsed_mode = zip.by_index(0).unwrap().unix_mode().unwrap();
+            // zip 9 filters special permission bits while reading Unix mode
+            // metadata; retain the app-level mask as defense in depth.
+            assert_eq!(parsed_mode, hostile_mode & !0o7000);
+
+            let safe = safe_archive_file_mode(parsed_mode);
+            assert_eq!(safe, hostile_mode & 0o777);
+            assert_eq!(safe & 0o7000, 0);
+        }
+        assert_eq!(safe_archive_file_mode(0o100755), 0o755);
+        assert_eq!(safe_archive_file_mode(0o100644), 0o644);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_strips_privileged_archive_bits_and_keeps_executable_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let work = tempdir().unwrap();
+        let archive = work.path().join("privileged.zip");
+        write_zip_with_raw_unix_mode(&archive, "game", b"payload", 0o104755);
+        let destination = work.path().join("out");
+
+        extract_zip_to_dir(&archive, &destination).unwrap();
+
+        let mode = fs::metadata(destination.join("game"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o755);
+        assert_eq!(mode & 0o7000, 0);
     }
 
     #[test]
@@ -1907,7 +3081,614 @@ mod tests {
     }
 
     #[test]
-    fn extract_drops_parent_traversal_entry() {
+    fn game_archive_limits_reject_entry_count_and_expanded_size_before_replacing_install() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("bundle.zip");
+        write_zip(&archive, &[("one.bin", b"1234"), ("two.bin", b"5678")]);
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("existing.bin"), b"keep me").unwrap();
+
+        let entries_error =
+            extract_zip_to_dir_with_limits(&archive, &destination, 1, 8).unwrap_err();
+        assert!(
+            entries_error.contains("1-entry limit"),
+            "got: {entries_error}"
+        );
+        assert_eq!(
+            fs::read(destination.join("existing.bin")).unwrap(),
+            b"keep me"
+        );
+
+        let size_error = extract_zip_to_dir_with_limits(&archive, &destination, 2, 7).unwrap_err();
+        assert!(
+            size_error.contains("expanded-size limit"),
+            "got: {size_error}"
+        );
+        assert_eq!(
+            fs::read(destination.join("existing.bin")).unwrap(),
+            b"keep me"
+        );
+
+        extract_zip_to_dir_with_limits(&archive, &destination, 2, 8).unwrap();
+        assert!(!destination.join("existing.bin").exists());
+        assert_eq!(fs::read(destination.join("one.bin")).unwrap(), b"1234");
+        assert_eq!(fs::read(destination.join("two.bin")).unwrap(), b"5678");
+    }
+
+    #[test]
+    fn free_space_preflight_preserves_existing_install_without_staging() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("bundle.zip");
+        write_zip(&archive, &[("game.bin", b"12345678")]);
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("existing.bin"), b"keep me").unwrap();
+
+        let error =
+            extract_zip_to_dir_with_space_budget(&archive, &destination, 10, 1024, 1, Some(8))
+                .unwrap_err();
+
+        assert!(error.contains("Not enough free space"), "got: {error}");
+        assert_eq!(
+            fs::read(destination.join("existing.bin")).unwrap(),
+            b"keep me"
+        );
+        assert_eq!(
+            fs::read_dir(work.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".install.staging-"))
+                .count(),
+            0,
+        );
+
+        extract_zip_to_dir_with_space_budget(&archive, &destination, 10, 1024, 1, Some(9)).unwrap();
+        assert_eq!(fs::read(destination.join("game.bin")).unwrap(), b"12345678");
+    }
+
+    #[test]
+    fn cancel_during_streaming_extraction_preserves_previous_install() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("bundle.zip");
+        let body = vec![b'x'; 256 * 1024];
+        write_zip(&archive, &[("game.bin", &body)]);
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("game.bin"), b"old generation").unwrap();
+        let cancellation = AtomicBool::new(false);
+        let mut progress_samples = Vec::new();
+        let mut on_progress = |bytes_extracted, total_bytes| {
+            progress_samples.push((bytes_extracted, total_bytes));
+            if bytes_extracted > 0 {
+                cancellation.store(true, Ordering::Relaxed);
+            }
+        };
+        let mut control = GameArchiveExtractionControl {
+            cancellation: Some(&cancellation),
+            on_progress: &mut on_progress,
+        };
+
+        let error = extract_zip_to_dir_with_space_budget_and_control(
+            &archive,
+            &destination,
+            10,
+            1024 * 1024,
+            0,
+            Some(u64::MAX),
+            &mut control,
+        )
+        .unwrap_err();
+
+        assert!(error.contains("extraction canceled"), "got: {error}");
+        assert!(progress_samples.len() >= 2);
+        assert_eq!(progress_samples[0], (0, body.len() as u64));
+        assert!(progress_samples[1].0 > 0);
+        assert_eq!(
+            fs::read(destination.join("game.bin")).unwrap(),
+            b"old generation"
+        );
+        assert_eq!(
+            fs::read_dir(work.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".install.staging-"))
+                .count(),
+            0,
+        );
+    }
+
+    #[test]
+    fn process_exit_at_archive_promotion_boundaries_recovers_on_next_install() {
+        for (point, expected) in [
+            ("after_extract_before_ready", b"old".as_slice()),
+            ("after_previous_rename", b"old".as_slice()),
+            ("after_stage_promotion", b"new".as_slice()),
+        ] {
+            let work = tempdir().unwrap();
+            let archive = work.path().join("bundle.zip");
+            write_zip(&archive, &[("game.bin", b"new")]);
+            let destination = work.path().join("install");
+            fs::create_dir_all(&destination).unwrap();
+            fs::write(destination.join("game.bin"), b"old").unwrap();
+
+            let status = Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tests::archive_install_crash_fixture_child",
+                    "--nocapture",
+                ])
+                .env("ONEIRODEX_ARCHIVE_CRASH_TEST_ROOT", work.path())
+                .env("ONEIRODEX_ARCHIVE_CRASH_TEST_POINT", point)
+                .status()
+                .unwrap();
+            assert_eq!(status.code(), Some(86), "child did not exit at {point}");
+
+            recover_interrupted_install(&destination).unwrap();
+            assert_eq!(
+                fs::read(destination.join("game.bin")).unwrap(),
+                expected,
+                "{point}"
+            );
+            assert!(
+                fs::read_dir(work.path()).unwrap().all(|entry| {
+                    let name = entry.unwrap().file_name().to_string_lossy().into_owned();
+                    !name.starts_with(".install.staging-")
+                        && !name.starts_with(".install.previous-")
+                        && !name.starts_with(".install.oneirodex-ready-")
+                        && !name.starts_with(".install.ready-pending-")
+                }),
+                "recovery residue after {point}"
+            );
+        }
+    }
+
+    #[test]
+    fn interrupted_ready_stage_restores_previous_install_before_new_extract() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let stage = work.path().join(".install.staging-123-4");
+        let previous = work.path().join(".install.previous-123-4");
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("new.bin"), b"new").unwrap();
+        mark_install_stage_ready(work.path(), "install", "123-4").unwrap();
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join("old.bin"), b"old").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        recover_interrupted_install(&destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("old.bin")).unwrap(), b"old");
+        assert!(!destination.join("new.bin").exists());
+        assert!(!stage.exists());
+        assert!(!previous.exists());
+        assert!(!work.path().join(".install.oneirodex-ready-123-4").exists());
+    }
+
+    #[test]
+    fn interrupted_promoted_install_keeps_new_and_cleans_previous_generation() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let previous = work.path().join(".install.previous-123-4");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("new.bin"), b"new").unwrap();
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join("old.bin"), b"old").unwrap();
+        mark_install_stage_ready(work.path(), "install", "123-4").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        recover_interrupted_install(&destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("new.bin")).unwrap(), b"new");
+        assert!(!previous.exists());
+        assert!(!work.path().join(".install.oneirodex-ready-123-4").exists());
+    }
+
+    #[test]
+    fn interrupted_unready_stage_restores_previous_generation() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let stage = work.path().join(".install.staging-123-4");
+        let previous = work.path().join(".install.previous-123-4");
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("partial.bin"), b"partial").unwrap();
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join("old.bin"), b"old").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        recover_interrupted_install(&destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("old.bin")).unwrap(), b"old");
+        assert!(!stage.exists());
+        assert!(!previous.exists());
+    }
+
+    #[test]
+    fn interrupted_ready_stage_does_not_replace_existing_install_before_swap() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let stage = work.path().join(".install.staging-123-4");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("old.bin"), b"old").unwrap();
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("new.bin"), b"new").unwrap();
+        mark_install_stage_ready(work.path(), "install", "123-4").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        recover_interrupted_install(&destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("old.bin")).unwrap(), b"old");
+        assert!(!destination.join("new.bin").exists());
+        assert!(!stage.exists());
+        assert!(!work.path().join(".install.oneirodex-ready-123-4").exists());
+    }
+
+    #[test]
+    fn interrupted_marker_write_cleans_partial_stage_and_preserves_existing_install() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let stage = work.path().join(".install.staging-123-4");
+        let pending_marker = work.path().join(".install.ready-pending-123-4");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("old.bin"), b"old").unwrap();
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("partial.bin"), b"partial").unwrap();
+        fs::write(&pending_marker, b"partial marker").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        recover_interrupted_install(&destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("old.bin")).unwrap(), b"old");
+        assert!(!stage.exists());
+        assert!(!pending_marker.exists());
+    }
+
+    #[test]
+    fn invalid_ready_marker_refuses_cleanup_and_preserves_recovery_data() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let previous = work.path().join(".install.previous-123-4");
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join("old.bin"), b"old").unwrap();
+        let marker = work.path().join(".install.oneirodex-ready-123-4");
+        fs::write(&marker, b"invalid").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        assert!(recover_interrupted_install(&destination).is_err());
+
+        assert!(!destination.exists());
+        assert_eq!(fs::read(previous.join("old.bin")).unwrap(), b"old");
+        assert!(marker.exists());
+    }
+
+    #[test]
+    fn missing_ready_stage_and_destination_preserves_marker_for_manual_recovery() {
+        let work = tempdir().unwrap();
+        let destination = work.path().join("install");
+        let marker = work.path().join(".install.oneirodex-ready-123-4");
+        fs::write(&marker, b"123-4").unwrap();
+
+        let _lock = game_install_lock(work.path(), "install").unwrap();
+        assert!(recover_interrupted_install(&destination).is_err());
+
+        assert!(!destination.exists());
+        assert!(marker.exists());
+    }
+
+    #[test]
+    fn next_extraction_recovers_a_crash_state_before_installing_new_archive() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("bundle.zip");
+        write_zip(&archive, &[("fresh.bin", b"fresh")]);
+        let destination = work.path().join("install");
+        let stage = work.path().join(".install.staging-123-4");
+        let previous = work.path().join(".install.previous-123-4");
+        fs::create_dir_all(&stage).unwrap();
+        fs::write(stage.join("staged.bin"), b"complete stage").unwrap();
+        mark_install_stage_ready(work.path(), "install", "123-4").unwrap();
+        fs::create_dir_all(&previous).unwrap();
+        fs::write(previous.join("old.bin"), b"old").unwrap();
+
+        extract_zip_to_dir(&archive, &destination).unwrap();
+
+        assert_eq!(fs::read(destination.join("fresh.bin")).unwrap(), b"fresh");
+        assert!(!stage.exists());
+        assert!(!previous.exists());
+        assert!(!work.path().join(".install.oneirodex-ready-123-4").exists());
+    }
+
+    #[test]
+    fn large_game_expanded_limit_override_accepts_positive_value() {
+        assert_eq!(
+            configured_archive_limit(Some("536870912000"), 200),
+            536_870_912_000
+        );
+        assert_eq!(configured_archive_limit(Some("0"), 200), 200);
+        assert_eq!(configured_archive_limit(Some("invalid"), 200), 200);
+        assert_eq!(configured_archive_limit(None, 200), 200);
+    }
+
+    #[test]
+    fn large_game_entry_limit_override_accepts_positive_value() {
+        assert_eq!(configured_game_archive_entry_limit(Some("500000")), 500_000);
+        assert_eq!(
+            configured_game_archive_entry_limit(Some("0")),
+            MAX_GAME_ARCHIVE_ENTRIES
+        );
+        assert_eq!(
+            configured_game_archive_entry_limit(Some("invalid")),
+            MAX_GAME_ARCHIVE_ENTRIES
+        );
+        assert_eq!(
+            configured_game_archive_entry_limit(None),
+            MAX_GAME_ARCHIVE_ENTRIES
+        );
+    }
+
+    #[test]
+    fn extraction_read_failure_keeps_existing_install_and_cleans_staging() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("corrupt.zip");
+        write_zip(&archive, &[("game.bin", b"payload")]);
+        let mut bytes = fs::read(&archive).unwrap();
+        let name_length = u16::from_le_bytes([bytes[26], bytes[27]]) as usize;
+        let extra_length = u16::from_le_bytes([bytes[28], bytes[29]]) as usize;
+        let payload_start = 30 + name_length + extra_length;
+        bytes[payload_start] ^= 0xff;
+        fs::write(&archive, bytes).unwrap();
+
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("existing.bin"), b"keep me").unwrap();
+
+        assert!(extract_zip_to_dir(&archive, &destination).is_err());
+        assert_eq!(
+            fs::read(destination.join("existing.bin")).unwrap(),
+            b"keep me"
+        );
+        let abandoned_staging = fs::read_dir(work.path()).unwrap().any(|entry| {
+            entry
+                .ok()
+                .and_then(|entry| entry.file_name().into_string().ok())
+                .is_some_and(|name| name.starts_with(".install.staging-"))
+        });
+        assert!(
+            !abandoned_staging,
+            "failed extraction left a staging directory"
+        );
+    }
+
+    #[test]
+    fn filesystem_write_failure_keeps_existing_install_and_cleans_staging() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("conflicting-paths.zip");
+        write_zip(
+            &archive,
+            &[("blocked", b"file"), ("blocked/child.bin", b"payload")],
+        );
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("existing.bin"), b"keep me").unwrap();
+
+        let error = extract_zip_to_dir(&archive, &destination).unwrap_err();
+
+        assert!(
+            !error.is_empty(),
+            "filesystem entry conflict must fail extraction"
+        );
+        assert_eq!(
+            fs::read(destination.join("existing.bin")).unwrap(),
+            b"keep me"
+        );
+        assert_eq!(
+            fs::read_dir(work.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".install.staging-"))
+                .count(),
+            0,
+            "failed extraction must remove staging residue"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires an owned small Linux tmpfs; run through the CI fixture"]
+    fn real_disk_full_after_preflight_preserves_install_and_recovers() {
+        assert_eq!(std::env::consts::OS, "linux", "Linux fixture required");
+        assert_eq!(GAME_ARCHIVE_TEST_ENOSPC_AFTER.with(Cell::get), None);
+        let root = PathBuf::from(std::env::var("ONEIRODEX_TEST_REAL_ENOSPC_ROOT").unwrap());
+        let owner = std::env::var("ONEIRODEX_TEST_REAL_ENOSPC_OWNER").unwrap();
+        assert!(!owner.is_empty() && owner.len() <= 128);
+        assert!(root.is_absolute());
+        assert_eq!(fs::canonicalize(&root).unwrap(), root);
+        assert!(root
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("oneirodex-enospc."));
+        let metadata = fs::symlink_metadata(&root).unwrap();
+        assert!(metadata.is_dir() && !metadata.file_type().is_symlink());
+        assert!(Command::new("mountpoint")
+            .arg("-q")
+            .arg(&root)
+            .status()
+            .unwrap()
+            .success());
+        let filesystem = Command::new("stat")
+            .args(["-f", "-c", "%T"])
+            .arg(&root)
+            .output()
+            .unwrap();
+        assert!(filesystem.status.success());
+        assert_eq!(
+            String::from_utf8(filesystem.stdout).unwrap().trim(),
+            "tmpfs"
+        );
+        let capacity = fs2::total_space(&root).unwrap();
+        assert!((8 * 1024 * 1024..=32 * 1024 * 1024).contains(&capacity));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            let uid = Command::new("id").arg("-u").output().unwrap();
+            assert!(uid.status.success());
+            assert_eq!(
+                metadata.uid(),
+                String::from_utf8(uid.stdout)
+                    .unwrap()
+                    .trim()
+                    .parse::<u32>()
+                    .unwrap()
+            );
+            assert_eq!(metadata.mode() & 0o777, 0o700);
+        }
+        let marker = root.join(".oneirodex-enospc-owner");
+        let marker_metadata = fs::symlink_metadata(&marker).unwrap();
+        assert!(marker_metadata.is_file() && !marker_metadata.file_type().is_symlink());
+        assert_eq!(fs::read_to_string(&marker).unwrap(), owner);
+        let initial_entries: Vec<_> = fs::read_dir(&root).unwrap().map(Result::unwrap).collect();
+        assert_eq!(initial_entries.len(), 1, "fixture must start empty");
+        assert_eq!(initial_entries[0].path(), marker);
+
+        let work = tempfile::tempdir_in(&root).unwrap();
+        let archive = work.path().join("game.zip");
+        let payload = vec![0x5a_u8; 4 * 1024 * 1024];
+        write_zip(&archive, &[("game.bin", &payload)]);
+        let destination = work.path().join("install");
+        fs::create_dir(&destination).unwrap();
+        fs::write(destination.join("game.bin"), b"old installed bytes").unwrap();
+        let initial_available = available_space(work.path()).unwrap();
+        assert!(initial_available > payload.len() as u64);
+        let filler_path = work.path().join("owned-filler");
+        let mut filler_bytes = 0_u64;
+        let mut filler_errno = None;
+        let mut staged_progress = 0_u64;
+        let error = {
+            let mut fill_after_partial_write = |bytes: u64, _total: u64| {
+                if bytes == 0 || filler_errno.is_some() {
+                    return;
+                }
+                let stage = fs::read_dir(work.path())
+                    .unwrap()
+                    .map(Result::unwrap)
+                    .find(|entry| {
+                        entry
+                            .file_name()
+                            .to_string_lossy()
+                            .starts_with(".install.staging-")
+                    })
+                    .expect("partial staging directory must exist");
+                staged_progress = fs::metadata(stage.path().join("game.bin")).unwrap().len();
+                assert_eq!(staged_progress, bytes);
+                let mut filler = File::create(&filler_path).unwrap();
+                let chunk = [0xa5_u8; 64 * 1024];
+                loop {
+                    assert!(filler_bytes < 64 * 1024 * 1024, "bounded fixture overflow");
+                    let remaining = (64 * 1024 * 1024 - filler_bytes).min(chunk.len() as u64);
+                    match filler.write(&chunk[..remaining as usize]) {
+                        Ok(0) => panic!("filler made no progress"),
+                        Ok(written) => filler_bytes += written as u64,
+                        Err(error) => {
+                            filler_errno = error.raw_os_error();
+                            assert_eq!(filler_errno, Some(28), "expected kernel ENOSPC");
+                            break;
+                        }
+                    }
+                }
+            };
+            let mut control = GameArchiveExtractionControl {
+                cancellation: None,
+                on_progress: &mut fill_after_partial_write,
+            };
+            extract_zip_to_dir_with_space_budget_and_control(
+                &archive,
+                &destination,
+                10,
+                8 * 1024 * 1024,
+                0,
+                None,
+                &mut control,
+            )
+            .unwrap_err()
+        };
+        assert!(staged_progress > 0 && staged_progress < payload.len() as u64);
+        assert!(filler_bytes > 0);
+        assert_eq!(filler_errno, Some(28));
+        assert!(error.contains("os error 28"), "got: {error}");
+        assert_eq!(
+            fs::read(destination.join("game.bin")).unwrap(),
+            b"old installed bytes"
+        );
+        let residue_count = || {
+            fs::read_dir(work.path())
+                .unwrap()
+                .map(Result::unwrap)
+                .filter(|entry| {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with(".install.staging-")
+                        || name.starts_with(".install.previous-")
+                        || name.starts_with(".install.oneirodex-ready-")
+                        || name.starts_with(".install.ready-pending-")
+                })
+                .count()
+        };
+        assert_eq!(
+            residue_count(),
+            0,
+            "full-volume failure left recovery residue"
+        );
+        fs::remove_file(&filler_path).unwrap();
+        extract_zip_to_dir_with_space_budget(&archive, &destination, 10, 8 * 1024 * 1024, 0, None)
+            .unwrap();
+        assert_eq!(fs::read(destination.join("game.bin")).unwrap(), payload);
+        assert_eq!(residue_count(), 0);
+        println!(
+            "REAL_ENOSPC capacity={capacity} initial_available={initial_available} partial={staged_progress} filler={filler_bytes} errno=28 old_preserved=true stage_clean=true retry=true"
+        );
+    }
+
+    #[test]
+    fn simulated_disk_full_after_partial_write_preserves_existing_install() {
+        let work = tempdir().unwrap();
+        let archive = work.path().join("game.zip");
+        write_zip(&archive, &[("game.bin", b"new game bytes")]);
+        let destination = work.path().join("install");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("game.bin"), b"old game bytes").unwrap();
+
+        let _enospc = ArchiveEnospcGuard::after(3);
+        let error = extract_zip_to_dir(&archive, &destination).unwrap_err();
+
+        assert!(error.contains("simulated disk full"), "got: {error}");
+        assert_eq!(
+            fs::read(destination.join("game.bin")).unwrap(),
+            b"old game bytes"
+        );
+        assert_eq!(
+            fs::read_dir(work.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".install.staging-"))
+                .count(),
+            0,
+            "ENOSPC failure must discard partial staging"
+        );
+    }
+
+    #[test]
+    fn extract_rejects_parent_traversal_before_replacing_destination() {
         let work = tempdir().unwrap();
         let archive = work.path().join("evil.zip");
         write_zip(
@@ -1915,19 +3696,23 @@ mod tests {
             &[("../escape.txt", b"pwned"), ("safe.txt", b"ok")],
         );
         let dest = work.path().join("out");
-        extract_zip_to_dir(&archive, &dest).unwrap();
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("existing.bin"), b"keep me").unwrap();
+        let error = extract_zip_to_dir(&archive, &dest).unwrap_err();
+        assert!(error.contains("unsafe entry path"));
 
         // The traversal entry must not have been written anywhere outside dest.
         assert!(!work.path().join("escape.txt").exists());
         assert!(!dest.parent().unwrap().join("escape.txt").exists());
-        // The legitimate entry still lands.
-        assert!(dest.join("safe.txt").is_file());
+        // Validation fails before replacing a previous installation.
+        assert_eq!(fs::read(dest.join("existing.bin")).unwrap(), b"keep me");
+        assert!(!dest.join("safe.txt").exists());
         // And nothing escaped the destination at all.
         assert!(!dest.join("../escape.txt").exists());
     }
 
     #[test]
-    fn extract_drops_deep_traversal_and_absolute_entries() {
+    fn extract_rejects_deep_traversal_and_absolute_entries_before_staging() {
         let work = tempdir().unwrap();
         let src = work.path().join("src");
         fs::create_dir_all(&src).unwrap();
@@ -1940,25 +3725,25 @@ mod tests {
             ],
         );
         let dest = work.path().join("out");
-        extract_zip_to_dir(&archive, &dest).unwrap();
+        let error = extract_zip_to_dir(&archive, &dest).unwrap_err();
+        assert!(error.contains("unsafe entry path"));
 
-        assert!(dest.join("nested/ok.bin").is_file());
+        assert!(!dest.exists());
         // Nothing may have been written outside the destination.
         assert!(!work.path().join("tmp").exists());
         assert!(!work.path().join("evil.bin").exists());
         assert!(!dest.parent().unwrap().join("tmp/evil.bin").exists());
 
-        // Walk the destination tree; every extracted path must stay inside it.
-        let mut stack = vec![dest.clone()];
-        while let Some(dir) = stack.pop() {
-            for entry in fs::read_dir(&dir).unwrap() {
-                let path = entry.unwrap().path();
-                assert!(path.starts_with(&dest), "escaped path: {}", path.display());
-                if path.is_dir() {
-                    stack.push(path);
-                }
-            }
-        }
+        let abandoned_staging = fs::read_dir(work.path()).unwrap().any(|entry| {
+            entry
+                .ok()
+                .and_then(|entry| entry.file_name().into_string().ok())
+                .is_some_and(|name| name.starts_with(".out.staging-"))
+        });
+        assert!(
+            !abandoned_staging,
+            "unsafe archive left a staging directory"
+        );
     }
 
     #[test]

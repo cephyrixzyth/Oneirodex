@@ -270,6 +270,20 @@ def test_batch_freshness_rejects_over_limit(client, member_user):
     assert body['limit'] == 50
 
 
+def test_batch_freshness_rejects_oversized_json_before_processing(client, member_user):
+    from oneirodex.routes_apis.game_batch import BATCH_FRESHNESS_JSON_MAX_BYTES
+
+    _login(client, member_user)
+    body = b'{"uuids":[],"padding":"' + b'a' * BATCH_FRESHNESS_JSON_MAX_BYTES + b'"}'
+    resp = client.post(
+        '/api/games/batch/freshness/check', data=body,
+        content_type='application/json',
+    )
+
+    assert resp.status_code == 413
+    assert resp.get_json()['error_code'] == 'payload_too_large'
+
+
 def test_admin_freshness_refresh_still_works(client, db_session, admin_user, library, monkeypatch):
     """Regression: admin library-wide bulk must remain available."""
     game = _make_game(
@@ -621,6 +635,49 @@ def test_batch_refresh_images_queues_happy_path(
     assert len(started) == 1
     queued_func, queued_args = started[0]
     assert queued_args == (with_igdb.uuid,)
+
+
+def test_batch_refresh_images_reports_partial_queue_failure(
+    client, db_session, librarian_user, library, monkeypatch
+):
+    failed = _make_game(db_session, library, 'Refresh Queue Failure', igdb_id=_unique_igdb_id())
+    queued = _make_game(db_session, library, 'Refresh Queue Success', igdb_id=_unique_igdb_id())
+    started = []
+
+    def fake_run_in_background(app, func, *args, name=None, **kwargs):
+        if args == (failed.uuid,):
+            raise RuntimeError('postgres://private-user:private-password@db/private-db')
+        started.append((func, args))
+
+    monkeypatch.setattr(
+        'oneirodex.routes_apis.game_batch.run_in_background', fake_run_in_background
+    )
+    monkeypatch.setattr(
+        'oneirodex.routes_apis.game_batch.refresh_images_in_background',
+        lambda game_uuid: None,
+    )
+    _login(client, librarian_user)
+
+    resp = client.post(
+        '/api/games/batch/refresh_images',
+        json={'uuids': [failed.uuid, queued.uuid]},
+    )
+
+    assert resp.status_code == 202
+    body = resp.get_json()
+    assert body['ok'] is False
+    assert body['count'] == 1
+    assert body['queued'] == [
+        {'uuid': queued.uuid, 'name': 'Refresh Queue Success', 'status': 'queued'},
+    ]
+    assert body['errors'] == [{
+        'uuid': failed.uuid,
+        'name': 'Refresh Queue Failure',
+        'error': 'Could not queue the image refresh',
+    }]
+    assert len(started) == 1 and started[0][1] == (queued.uuid,)
+    assert 'private-password' not in resp.get_data(as_text=True)
+    assert 'postgres://' not in resp.get_data(as_text=True)
 
 
 def test_batch_refresh_images_skips_not_found_and_forbidden(

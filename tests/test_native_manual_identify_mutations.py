@@ -11,14 +11,19 @@ from oneirodex.runtime_native import manual_identify_mutations
 class MutationFake:
     def __init__(self):
         self.calls = []
+        self.image_refresh_started = False
 
     def create(self, app, body, actor, *, from_unmatched):
         self.calls.append(('create', body.name, actor.id, from_unmatched))
-        return {'game_uuid': 'game-created', 'redirect_url': '/admin/unmatched' if from_unmatched else '/libraries'}
+        return {'game_uuid': 'game-created', 'redirect_url': '/admin/unmatched' if from_unmatched else '/library'}
 
     def update(self, app, game_uuid, body, actor):
         self.calls.append(('update', game_uuid, body.name, actor.id))
-        return {'game_uuid': game_uuid, 'redirect_url': '/libraries'}
+        return {
+            'game_uuid': game_uuid,
+            'redirect_url': '/library',
+            'image_refresh_started': self.image_refresh_started,
+        }
 
 
 def _request(app, method, path, **kwargs):
@@ -36,11 +41,13 @@ def _admin():
     )
 
 
-def _build(monkeypatch, *, csrf=False):
+def _build(monkeypatch, *, csrf=False, auth=None):
     config = {'SECRET_KEY': 'manual-identify-test', 'WTF_CSRF_ENABLED': csrf}
     app = SimpleNamespace(config=config, logger=SimpleNamespace(exception=lambda *_: None))
     data = MutationFake()
-    monkeypatch.setattr(manual_identify_mutations, 'request_auth_context', lambda *a, **k: _admin())
+    auth = auth or _admin()
+    data.auth = auth
+    monkeypatch.setattr(manual_identify_mutations, 'request_auth_context', lambda *a, **k: auth)
     api = FastAPI()
     manual_identify_mutations.mount_manual_identify_mutation_routes(
         api, app, find_user=lambda _id: None, find_token=lambda _token: None,
@@ -76,10 +83,49 @@ def test_manual_identify_create_and_update_keep_contract_and_route_arguments(mon
     assert updated.status_code == 200
     assert updated.json()['ok'] is True
     assert updated.json()['game_uuid'] == 'game-42'
+    assert updated.headers.get('set-cookie', '').startswith('session=')
+    assert data.auth.session_data['_flashes'] == [
+        ('success', 'Game added successfully.'),
+        ('success', 'Game updated successfully.'),
+    ]
     assert data.calls == [
         ('create', 'Test Game', 17, True),
         ('update', 'game-42', 'Test Game', 17),
     ]
+
+
+def test_manual_identify_token_writes_do_not_create_browser_flash(monkeypatch):
+    auth = _admin()
+    auth.token = SimpleNamespace(scopes=['admin'])
+    app, data = _build(monkeypatch, auth=auth)
+
+    response = _request(app, 'PUT', '/api/admin/manual-identify/game-42', json=_valid_payload())
+
+    assert response.status_code == 200
+    assert '_flashes' not in auth.session_data
+    assert 'set-cookie' not in response.headers
+    assert data.calls == [('update', 'game-42', 'Test Game', 17)]
+
+
+def test_manual_identify_update_reports_image_refresh_to_browser_session(monkeypatch):
+    app, data = _build(monkeypatch)
+    data.image_refresh_started = True
+
+    response = _request(app, 'PUT', '/api/admin/manual-identify/game-42', json=_valid_payload())
+
+    assert response.status_code == 200
+    assert response.json()['image_refresh_started'] is True
+    assert response.headers.get('set-cookie', '').startswith('session=')
+    assert data.auth.session_data['_flashes'] == [
+        ('image-refresh', 'Game updated, downloading images'),
+    ]
+    assert data.auth.session_data['image_refresh_game_uuid'] == 'game-42'
+
+
+def test_manual_identify_duplicate_id_error_includes_conflicting_id():
+    assert manual_identify_mutations._duplicate_igdb_id_message(2_000_000_420) == (
+        'The IGDB ID 2000000420 is already used by another game.'
+    )
 
 
 def test_manual_identify_invalid_payload_and_csrf_never_call_mutation_data(monkeypatch):
@@ -93,6 +139,57 @@ def test_manual_identify_invalid_payload_and_csrf_never_call_mutation_data(monke
     rejected = _request(csrf_app, 'PUT', '/api/admin/manual-identify/game-42', json=_valid_payload())
     assert rejected.status_code == 400
     assert csrf_data.calls == []
+
+
+def test_manual_identify_image_refresh_uses_owned_worker_app_context(monkeypatch):
+    import oneirodex.utils.background as background
+    import oneirodex.utils.scanning as scanning
+
+    app = object()
+    game_uuid = '12345678-90ab-cdef-1234-567890abcdef'
+    sentinel = object()
+    calls = []
+
+    def fake_run_in_background(*args, **kwargs):
+        calls.append((args, kwargs))
+        return sentinel
+
+    monkeypatch.setattr(background, 'run_in_background', fake_run_in_background)
+    monkeypatch.setattr(scanning, 'refresh_images_in_background', sentinel)
+
+    result = manual_identify_mutations._queue_image_refresh(app, game_uuid)
+
+    assert result is sentinel
+    assert calls == [((app, sentinel, game_uuid), {
+        'app': app,
+        'name': 'oneirodex-refresh-images-12345678',
+    })]
+
+
+def test_background_worker_accepts_app_keyword_for_native_callbacks():
+    from contextlib import contextmanager
+
+    from oneirodex.utils.background import run_in_background
+
+    class NativeApp:
+        @contextmanager
+        def app_context(self):
+            yield self
+
+    app = NativeApp()
+    seen = {}
+
+    def callback(game_uuid, *, app):
+        seen['game_uuid'] = game_uuid
+        seen['app'] = app
+
+    thread = run_in_background(
+        app, callback, 'game-uuid', app=app, name='test-native-callback',
+    )
+    thread.join(timeout=2)
+
+    assert not thread.is_alive()
+    assert seen == {'game_uuid': 'game-uuid', 'app': app}
 
 
 def test_filesystem_helpers_accept_explicit_roots_without_flask_context(tmp_path, monkeypatch):

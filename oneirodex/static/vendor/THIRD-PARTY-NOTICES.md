@@ -20,8 +20,9 @@ project's canonical `LICENSE` file next to its code as well.
 | [jQuery](https://jquery.com/) | 3.7.1 | MIT | © OpenJS Foundation and other contributors |
 | [bootstrap-notify](https://github.com/mouse0270/bootstrap-notify) | 0.4.2 | MIT | **No banner** in the vendored copy; identifier from upstream |
 | [Sortable](https://github.com/SortableJS/Sortable) | 1.15.2 | MIT | All contributors to Sortable |
-| [WebRetro](https://github.com/BinBashBanana/webretro) | 6.5 | MIT | Copyright (c) 2021 BinBashBanana — from [upstream LICENSE](https://github.com/BinBashBanana/webretro/blob/master/LICENSE); the vendored JS has no banner |
+| [WebRetro](https://github.com/BinBashBanana/webretro) | 6.5 | MIT | Copyright (c) 2021 BinBashBanana — from [upstream LICENSE](https://github.com/BinBashBanana/webretro/blob/v6.5/LICENSE); the vendored JS has no banner |
 | [Nostalgist.js](https://github.com/arianrhodsandlot/nostalgist) | 0.21.1 | MIT | Copyright (c) 2023 arianrhodsandlot — from [upstream LICENSE](https://github.com/arianrhodsandlot/nostalgist/blob/v0.21.1/LICENSE) |
+| [EmulatorJS](https://github.com/EmulatorJS/EmulatorJS) | 4.2.3 | GPL-3.0 | EmulatorJS contributors — from the pinned [v4.2.3 LICENSE](https://github.com/EmulatorJS/EmulatorJS/blob/v4.2.3/LICENSE), also copied to [emulatorjs/LICENSE](emulatorjs/LICENSE) |
 
 ## The MIT licence
 
@@ -51,7 +52,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 `webretro/` is the browser-play front end. Two things about it are worth recording:
 
 1. **The front end is MIT.** Upstream
-   [LICENSE](https://github.com/BinBashBanana/webretro/blob/master/LICENSE) is MIT, Copyright (c)
+   [LICENSE](https://github.com/BinBashBanana/webretro/blob/v6.5/LICENSE) is MIT, Copyright (c)
    2021 BinBashBanana. A copy sits at [webretro/LICENSE](webretro/LICENSE). The vendored JS still
    has no banner; the identifier comes from that upstream file, not from a comment in the minified
    sources.
@@ -79,9 +80,8 @@ sample ROMs or cores from a CDN in our host: `play.html` points `rom` at same-or
 
 `emulatorjs/` holds Oneirodex's play shell (`play.html`, AGPL like the rest of the
 app) and the pinned EmulatorJS release fetched during Docker image build. The
-engine can be disabled in Admin → Emulators. EmulatorJS is
-GPL-3.0 (https://github.com/EmulatorJS/EmulatorJS, Copyright (c) EmulatorJS contributors); its
-licence text ships inside that release (`data/LICENSE`) and the libretro cores it bundles carry
+engine can be disabled in Admin → Emulators. EmulatorJS 4.2.3 is GPL-3.0; its
+tagged licence is checked into `emulatorjs/LICENSE`, and the libretro cores it bundles carry
 their own — use remains subject to those licences, exactly as with the WebRetro cores tree.
 The shell fetches nothing from a CDN: ROM over same-origin `/api/downloadrom/<uuid>`, loader
 and cores from `emulatorjs/data/` on this origin.

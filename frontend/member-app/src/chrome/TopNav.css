@@ -249,7 +249,7 @@
 }
 
 .od-topnav__dropdown-panel a,
-.od-topnav__dropdown-panel button[role='menuitem'] {
+.od-topnav__dropdown-panel button {
   display: block;
   width: 100%;
   padding: 0.4rem 0.6rem;
@@ -267,13 +267,13 @@
 .od-topnav__dropdown-panel a:hover,
 .od-topnav__dropdown-panel a:focus-visible,
 .od-topnav__dropdown-panel a.active,
-.od-topnav__dropdown-panel button[role='menuitem']:hover,
-.od-topnav__dropdown-panel button[role='menuitem']:focus-visible {
-  background: color-mix(in srgb, var(--od-accent) 16%, transparent);
-  color: var(--od-accent);
+.od-topnav__dropdown-panel button:hover,
+.od-topnav__dropdown-panel button:focus-visible {
+  background: color-mix(in srgb, var(--od-accent) 30%, var(--od-surface-2));
+  color: var(--od-text);
 }
 
-.od-topnav__dropdown-panel.od-menu-surface :is(a[role='menuitem'], button[role='menuitem']) {
+.od-topnav__dropdown-panel.od-menu-surface :is(a, button) {
   display: flex;
   align-items: center;
   min-height: var(--od-control-h, 2.25rem);
@@ -286,11 +286,10 @@
   text-align: start;
 }
 
-.od-topnav__dropdown-panel.od-menu-surface :is(a[role='menuitem'], button[role='menuitem']):hover,
-.od-topnav__dropdown-panel.od-menu-surface
-  :is(a[role='menuitem'], button[role='menuitem']):focus-visible {
-  background: color-mix(in srgb, var(--od-accent) 16%, transparent);
-  color: var(--od-accent);
+.od-topnav__dropdown-panel.od-menu-surface :is(a, button):hover,
+.od-topnav__dropdown-panel.od-menu-surface :is(a, button):focus-visible {
+  background: color-mix(in srgb, var(--od-accent) 30%, var(--od-surface-2));
+  color: var(--od-text);
 }
 
 .od-topnav__username {

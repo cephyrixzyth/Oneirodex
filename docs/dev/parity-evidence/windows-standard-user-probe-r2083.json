@@ -1,0 +1,77 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2083",
+  "observed_utc": "2026-11-14T19:29:04.071833+00:00",
+  "base_commit": "39fdbb81eaf3ed950e56b5cfa3d27a1b3927763c",
+  "classification": "CreateProcessWithTokenW observer attempt failed before app execution; owned uninstall succeeded. R2084 tests the documented same-user restricted-primary-token API.",
+  "product_package": {
+    "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+    "source_run": 43553756754,
+    "artifact_id": 14097212804,
+    "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+    "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+    "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9"
+  },
+  "mechanism": "CreateRestrictedToken uses LUA_TOKEN and DISABLE_MAX_PRIVILEGE, sets medium integrity, then CreateProcessWithTokenW creates the existing app suspended with an explicit sanitized Unicode environment. The actual child token must be non-elevated and have integrity RID8192 before ResumeThread. It inherits the existing interactive desktop without editing desktop ACLs. The controller retains the process handle through exit/termination and closes token/thread/process handles.",
+  "cleanup_fix": "A failing Playwright client.stop previously skipped owned-app termination. A focused fault test reproduced that path; nested finally blocks now reap/close the owned app even when browser-client shutdown fails.",
+  "local_verification": {
+    "original_guards_passed": 13,
+    "new_launch_contracts": 7,
+    "new_cleanup_fault_contract": 1,
+    "final_methods_passed": 21,
+    "red_sequence": [
+      "13 original pass,7 new launch failures on absent path",
+      "20 pass after candidate",
+      "20 pass,1 cleanup fault failure before nested cleanup",
+      "21 pass after nested cleanup"
+    ],
+    "python_compile": "passed",
+    "pyflakes": "passed",
+    "r1972_bundle": "7 reports/1545 shared route rows/160 current-only operations; validator and secret/path scan passed",
+    "native_api_executed_locally": false,
+    "gui_or_installer_executed_locally": false
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "f23a0b2f7df509d81dedb930d6dc7f3d701f4fc10d0a96fbdf86fe1b59a844e1",
+    "scripts/ci/test_windows_packaged_probe.py": "e32686a53944f20cf7f19d7191b56a1c2c719eb82832454aeeb90f29512ec61e"
+  },
+  "primary_sources": [
+    "https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/security#for-an-elevated-host-app-use-appropriate-override-flags",
+    "https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createrestrictedtoken",
+    "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-createprocesswithtokenw",
+    "https://learn.microsoft.com/en-us/windows/win32/secauthz/mandatory-integrity-control"
+  ],
+  "runtime_retry": "terminal failure at suspended child creation: Windows error5; app code never resumed",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Mocks verify launch sequencing/failure cleanup; actual Win32 ABI, token reduction, WebView2/CDP, genuine UI/IPC/reopen and marker retention still require native CI. Same-account restricted CI process does not qualify ordinary non-admin installation or a separately provisioned user. No product, package, registry, desktop ACL, browser security or workflow changes. Account/offline/game/restart/platform/route/operator/final-review/release gates remain open.",
+  "capture": "Skipped: no local GUI or product UI change.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43632448301",
+    "job_id": 132561849482,
+    "harness_source": "f6234cf94be515db217e5e595e5078cfa5bb9c16",
+    "raw_log_sha256": "539a0e79e8f1596d1f703c81808a8c91b8fc35375971b6faefa9689431f8b5fe",
+    "receipt": {
+      "observed_utc": "2026-11-14T19:30:54.337039+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_standard_user_launch",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "owned_application_uninstalled": true,
+      "code": "create_standard_child_winerror_5"
+    }
+  }
+}

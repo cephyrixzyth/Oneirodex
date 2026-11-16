@@ -1,10 +1,12 @@
 from flask import Blueprint, redirect, url_for, request, flash, current_app
-from flask_login import login_required, current_user, login_user
+from flask_login import login_required, current_user
 from oneirodex.forms import ChangePasswordForm, EditProfileForm, UserPreferencesForm
 from oneirodex.models import User, UserPreference
 from oneirodex.utils.api_response import api_error, api_ok
-from oneirodex.utils.avatar import DEFAULT_AVATAR, save_avatar
+from oneirodex.utils.avatar import DEFAULT_AVATAR, finalize_avatar_change, save_avatar
 from oneirodex import db
+from oneirodex.utils.auth import login_user
+from oneirodex.utils.user_deletion import enqueue_avatar_replacement_cleanup
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -32,10 +34,12 @@ def settings_profile_edit():
 
     if form.validate_on_submit():
         file = form.avatar.data
+        previous_path = current_user.avatarpath
+        new_path = None
         if file:
             # One implementation of "what is a valid avatar and what happens to
             # the old one", shared with POST /api/account/avatar.
-            _path, error = save_avatar(file, current_user, current_app)
+            new_path, error = save_avatar(file, current_user, current_app)
             if error:
                 flash(error, 'error')
                 return redirect(url_for('library.library', account='avatar'))
@@ -43,10 +47,18 @@ def settings_profile_edit():
             current_user.avatarpath = DEFAULT_AVATAR
 
         try:
+            if new_path:
+                enqueue_avatar_replacement_cleanup(
+                    db.session, current_app, current_user.id, previous_path, new_path,
+                )
             db.session.commit()
+            if new_path:
+                finalize_avatar_change(current_app, previous_path, new_path, committed=True)
             flash('Profile updated successfully!', 'success')
         except Exception as e:
             db.session.rollback()
+            if new_path:
+                finalize_avatar_change(current_app, previous_path, new_path, committed=False)
             print(f"Error updating profile: {e}")
             flash('Failed to update profile. Please try again.', 'error')
 

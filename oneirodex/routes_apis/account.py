@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from functools import wraps
 
 from flask import current_app, request, url_for
 from flask_login import current_user, login_required
@@ -27,6 +28,7 @@ from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.avatar import (
     STOCK_AVATARS,
     avatar_url,
+    finalize_avatar_change,
     save_avatar,
     set_stock_avatar,
 )
@@ -36,6 +38,7 @@ from oneirodex.utils.public_origin import (
     public_origin,
     site_url_is_configured,
 )
+from oneirodex.utils.user_deletion import enqueue_avatar_replacement_cleanup
 from oneirodex.utils.smtp import is_smtp_config_valid
 from oneirodex.utils.validation import validate_body
 
@@ -49,6 +52,36 @@ from . import apis_bp
 INVITE_TTL_HOURS = 48
 
 MIN_PASSWORD_LENGTH = 8
+PASSWORD_CHANGE_BODY_MAX_BYTES = 64 * 1024
+
+
+def _limit_password_change_body(view):
+    """Bound only the password-change JSON request before schema parsing."""
+
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        from werkzeug.exceptions import RequestEntityTooLarge
+
+        if (
+            request.content_length is not None
+            and request.content_length > PASSWORD_CHANGE_BODY_MAX_BYTES
+        ):
+            return api_error(
+                'Request body is too large.', code='payload_too_large', status=413,
+            )
+        configured_limit = request.max_content_length
+        request.max_content_length = min(
+            configured_limit if configured_limit is not None else PASSWORD_CHANGE_BODY_MAX_BYTES,
+            PASSWORD_CHANGE_BODY_MAX_BYTES,
+        )
+        try:
+            return view(*args, **kwargs)
+        except RequestEntityTooLarge:
+            return api_error(
+                'Request body is too large.', code='payload_too_large', status=413,
+            )
+
+    return wrapped
 
 
 def _smtp_ready() -> bool:
@@ -156,16 +189,23 @@ def account_avatar():
     if not file:
         return api_error('Choose an image first.', code='bad_request')
 
+    previous_path = current_user.avatarpath
     path, error = save_avatar(file, current_user, current_app)
     if error:
         return api_error(error, code='unprocessable')
 
     try:
+        enqueue_avatar_replacement_cleanup(
+            db.session, current_app, current_user.id, previous_path, path,
+        )
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
+        finalize_avatar_change(current_app, previous_path, path, committed=False)
         current_app.logger.warning('avatar commit failed: %s', exc)
         return api_error("Couldn't save that avatar. Try a different image.", code='internal')
+
+    finalize_avatar_change(current_app, previous_path, path, committed=True)
 
     # Cache-busted so the rail and the modal both show the new image
     # immediately; the filename is a fresh uuid, so this is belt and braces for
@@ -186,16 +226,23 @@ def account_stock_avatar(body: StockAvatarBody):
     arbitrary-file setter aimed at the static tree, and the whole point of a
     fixed set is that the server already knows every legal answer.
     """
+    previous_path = current_user.avatarpath
     path, error = set_stock_avatar(body.id, current_user, current_app)
     if error:
         return api_error(error, code='bad_request')
 
     try:
+        enqueue_avatar_replacement_cleanup(
+            db.session, current_app, current_user.id, previous_path, path,
+        )
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
+        finalize_avatar_change(current_app, previous_path, path, committed=False)
         current_app.logger.warning('stock avatar commit failed: %s', exc)
         return api_error("Couldn't save that avatar. Try a different image.", code='internal')
+
+    finalize_avatar_change(current_app, previous_path, path, committed=True)
 
     return api_ok({
         'avatar_path': path,
@@ -205,6 +252,7 @@ def account_stock_avatar(body: StockAvatarBody):
 
 @apis_bp.route('/account/password', methods=['POST'])
 @login_required
+@_limit_password_change_body
 @validate_body(ChangePasswordBody)
 def account_password(body: ChangePasswordBody):
     current = body.current_password
@@ -240,7 +288,7 @@ def account_password(body: ChangePasswordBody):
         return api_error('Could not change your password.', code='internal')
 
     # The new password ends every other session (User.get_id); keep this one.
-    from flask_login import login_user
+    from oneirodex.utils.auth import login_user
 
     login_user(user, remember=True)
     return api_ok({'changed': True})

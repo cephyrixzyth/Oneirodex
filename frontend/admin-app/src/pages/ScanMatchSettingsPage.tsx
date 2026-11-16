@@ -12,6 +12,8 @@ import { errorText } from '../utils/errorText'
 import { Page } from '../components/Page'
 import { AdminPageActions } from '../components/AdminPageActions'
 
+import { AdminLink } from '../components/AdminLink'
+
 function FieldNumber({
   id,
   label,
@@ -137,18 +139,19 @@ export function ScanMatchSettingsPage() {
       }
     >
       <AdminPageActions label="Scan and matching actions">
-        <a className="od-cbtn" href="/libraries">
+        <AdminLink className="od-cbtn" to="/libraries">
           Libraries
-        </a>
-        <a className="od-cbtn" href="/scan_management">
+        </AdminLink>
+        <AdminLink className="od-cbtn" to="/scan_management">
           Scan management
-        </a>
+        </AdminLink>
       </AdminPageActions>
       <PageStatus loading={loading} loadingMessage="Loading scan/match settings…" />
 
       {!loading && degradeReason ? (
         <PageStatus announcement="status" className={'od-admin-banner od-admin-banner--warn'}>
-          {degradeReason} <a href="/admin/new_server_settings">Open Server Settings</a> to configure
+          {degradeReason}{' '}
+          <AdminLink to="/admin/new_server_settings">Open Server Settings</AdminLink> to configure
           propose-only scanning.
         </PageStatus>
       ) : null}
@@ -281,12 +284,12 @@ export function ScanMatchSettingsPage() {
             <Button type="submit" disabled={!canSave}>
               {busy ? 'Saving…' : 'Save settings'}
             </Button>
-            <a className="od-btn od-btn--ghost" href="/admin/settings">
+            <AdminLink className="od-btn od-btn--ghost" to="/admin/settings">
               Settings hub
-            </a>
-            <a className="od-btn od-btn--ghost" href="/admin/new_server_settings">
+            </AdminLink>
+            <AdminLink className="od-btn od-btn--ghost" to="/admin/new_server_settings">
               Server Settings
-            </a>
+            </AdminLink>
           </div>
           {message ? (
             <PageStatus announcement="status" className="od-admin-lede od-admin-lede--ok">
@@ -301,15 +304,15 @@ export function ScanMatchSettingsPage() {
         <div className="od-admin-panel">
           <p className="od-admin-lede">
             Scan/match settings are unavailable. Configure propose-only scanning in{' '}
-            <a href="/admin/new_server_settings">Server Settings</a>.
+            <AdminLink to="/admin/new_server_settings">Server Settings</AdminLink>.
           </p>
           <div className="od-admin-actions-row">
-            <a className="od-btn" href="/admin/new_server_settings">
+            <AdminLink className="od-btn" to="/admin/new_server_settings">
               Open Server Settings
-            </a>
-            <a className="od-btn od-btn--ghost" href="/admin/settings">
+            </AdminLink>
+            <AdminLink className="od-btn od-btn--ghost" to="/admin/settings">
               Settings hub
-            </a>
+            </AdminLink>
           </div>
         </div>
       ) : null}

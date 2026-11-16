@@ -146,7 +146,7 @@ def create_admin_attract_mode_router(
                     settings_row = data.save(auth.user, model.model_dump())
                     response = JSONResponse(api_ok_payload({
                         'settings': data.state(settings_row),
-                        'message': 'Attract mode settings saved.',
+                        'message': 'Attract mode settings saved successfully',
                     }))
                 except ValidationError as exc:
                     fields = [

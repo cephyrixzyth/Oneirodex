@@ -178,9 +178,14 @@ def create_status_reads_router(
                 assert auth is not None
                 if auth.user is None:
                     response = _login_redirect(flask_app, request, login_manager, auth)
+                elif auth.token is not None and not auth.has_scope('read:social'):
+                    response = _status_error(
+                        'Missing scope: read:social', 'forbidden', 403,
+                        detail={'required_scope': 'read:social'},
+                    )
                 else:
                     response = await _rtc_token_request(
-                        request, flask_app, rtc, auth.user,
+                        request, flask_app, rtc, auth.user, auth=auth,
                     )
             if auth is not None and auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
@@ -200,10 +205,13 @@ def _flag(value) -> bool:
     return str(value or '').lower() in {'1', 'true', 'yes', 'on'}
 
 
-async def _rtc_token_request(request: Request, flask_app, data, user):
+async def _rtc_token_request(request: Request, flask_app, data, user, *, auth=None):
+    import json
+
     from oneirodex.utils.api_contract import api_error_payload
     from oneirodex.utils.role_catalog import normalize_role
     from oneirodex.utils.livekit_rtc import livekit_enabled
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
     from starlette.responses import JSONResponse
 
     if not livekit_enabled(config=flask_app.config):
@@ -211,16 +219,32 @@ async def _rtc_token_request(request: Request, flask_app, data, user):
     config = data.token_config()
     if not (config['url'] and config['api_key'] and config['api_secret']):
         return _status_error('LiveKit is not configured', 'unavailable', 503)
+    raw_body = await read_bounded_body(request, 8 * 1024)
+    if raw_body is BODY_TOO_LARGE:
+        payload, status = api_error_payload(
+            'Request body is too large.', code='payload_too_large',
+        )
+        return JSONResponse(payload, status_code=status)
     try:
-        body = await request.json()
-    except Exception:
+        body = json.loads(raw_body or b'{}')
+    except (TypeError, ValueError):
         body = {}
-    body = body if isinstance(body, dict) else {}
+    if not isinstance(body, dict):
+        payload, status = api_error_payload('Expected a JSON object', code='bad_request')
+        return JSONResponse(payload, status_code=status)
     room = data.normalize_room(body.get('room') or 'household:lobby')
     if not data.may_join(user, room):
         return _status_error('Forbidden for this room', 'forbidden', 403)
     role = normalize_role(getattr(user, 'role', None))
     spectator = bool(body.get('spectator'))
+    if (
+        auth is not None and auth.token is not None and not spectator
+        and not auth.has_scope('write:social')
+    ):
+        return _status_error(
+            'Missing scope: write:social', 'forbidden', 403,
+            detail={'required_scope': 'write:social'},
+        )
     if role == 'child' and bool(body.get('video') or body.get('screenshare')):
         return _status_error('Camera/screenshare disabled for child accounts', 'forbidden', 403)
     try:
@@ -244,9 +268,9 @@ async def _rtc_token_request(request: Request, flask_app, data, user):
     })
 
 
-def _status_error(message: str, code: str, status: int):
+def _status_error(message: str, code: str, status: int, *, detail=None):
     from oneirodex.utils.api_contract import api_error_payload
     from starlette.responses import JSONResponse
 
-    payload, _ = api_error_payload(message, code=code, status=status)
+    payload, _ = api_error_payload(message, code=code, status=status, detail=detail)
     return JSONResponse(payload, status_code=status)

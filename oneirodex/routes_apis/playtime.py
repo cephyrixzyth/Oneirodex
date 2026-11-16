@@ -57,6 +57,7 @@ def playtime_stop(session_id: int):
 
 @apis_bp.route('/playtime/me', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def playtime_me():
     rows = db.session.execute(
         select(UserGameProgress)
@@ -88,6 +89,7 @@ def playtime_me():
 
 @apis_bp.route('/playtime/games/<game_uuid>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def playtime_for_game(game_uuid: str):
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game or not user_can_access_game(current_user, game):

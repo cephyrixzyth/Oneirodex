@@ -82,6 +82,13 @@ def create_admin_policy_settings_router(
                 elif auth.token is not None and not auth.has_scope('admin'):
                     payload, status = api_error_payload('This token does not have the admin scope', code='forbidden')
                     response = JSONResponse(payload, status_code=status)
+                elif request.method == 'HEAD':
+                    from .runtime_context import native_json_response
+
+                    payload, status = api_error_payload('No fields to update', code='bad_request')
+                    response = native_json_response(
+                        payload, config=flask_app.config, status=status,
+                    )
                 elif request.method == 'PUT':
                     body = await _read_json(request)
                     if not body:

@@ -12,10 +12,11 @@ See [container-wont-start.md](../runbooks/container-wont-start.md) for SECRET_KE
 | Liveness only | `curl -f http://localhost:5006/pulse` — process up; does not prove DB |
 | Sidecars / queues look wrong | **Admin → Ops** (or Dashboard) observability console — status + two-fold `issues.items` (**Action required** = path/DB/awake; **Warning** = soft problem signals; **Info** = disk capacity even ≥95% — never Warning/Action) · silent ~15s poll + manual Refresh · load/RSS/db_ping/awake · LiveKit · malware · library watch (`ONEIRODEX_LIBRARY_WATCH`, default off) · companions by kind · queues · game servers; then `/awake` — field map: [ops-summary.md](ops-summary.md) |
 | Need server logs URL | **Admin → Ops** → **Full log** (or `/admin/ops?open=full-log`; old `/admin/server_logs` redirects) — [ops-summary.md](ops-summary.md) |
+| First-admin account save fails during setup | Check `docker compose logs app`. Account creation and setup-step advancement commit together, so a failed save leaves no partial admin account and setup can be retried at step 1 after the database recovers. |
 | Ops tiles show **n/a** for load / RSS / db_ping | Expected when OS denies load averages (Windows), psutil unavailable, or DB unreachable — not a broken UI |
 | Ops flags `DATA_FOLDER_GAMES` / `BASE_FOLDER_POSIX` / `BASE_FOLDER_WINDOWS` `not writable` | Expected on Unraid `:ro` games mount (and its base folder) only on **older** builds — current Ops treats games + base folder as read-OK; rebuild/restart app if still bad. `UPLOAD_FOLDER` / library must stay RW |
 | Scan progress looks stalled / want live counters | **Admin → Ops** **Scans** tile (polls `/admin/api/ops/summary` ~15s) shows processed (`success+failed`) / `total`, plus failed count, `current_processing`, status, elapsed/ETA when present (**ETA blank when stalled/unknown**) — [ops-summary.md](ops-summary.md#scans-key) · **Scan management** for status/library/path filters + Stop/detail |
-| Schema errors | Startup builds schema in `init_manager` Phase 2 (`create_all` + frozen `updateschema.py`); Alembic then owns forward change and a pre-Alembic DB is stamped at the baseline on first boot (`Stamped existing schema at Alembic baseline` in init logs). Verify a fresh DB with `python -m alembic upgrade head` · [alembic-baseline-notes.md](../dev/alembic-baseline-notes.md) · [local-postgres-pytest.md](../runbooks/local-postgres-pytest.md) for local tests |
+| Schema errors | Startup Phase 2 creates missing tables, runs the legacy schema pass, adopts pre-Alembic databases at the baseline, then upgrades to the declared head. Missing migration configuration or a failed upgrade stops initialization. Existing save revisions/history are preserved; incompatible save-history columns, keys or index require schema repair. Back up the database and save files before repair; do not stamp head to bypass failed DDL. See [Alembic notes](../dev/alembic-baseline-notes.md) and [isolated test setup](../runbooks/local-postgres-pytest.md). |
 | App loops waiting for DB: `no pg_hba … no encryption` | Postgres rejects non-SSL from Docker bridge — [container-wont-start §3b](../runbooks/container-wont-start.md#3b-postgres-up-but-pg_hba-rejects-app-no-encryption); recreate `db` with current Compose `pg_hba` mount |
 
 ## Frontend dist missing
@@ -63,6 +64,8 @@ sent and need no configuration. CSP **enforces** by default (`CSP_ENFORCE=true`)
 | Classic button does nothing after upgrade | `onclick=` was removed. Confirm `od_dom_actions.js` loads from `base.html` / `base_admin.html` |
 | Site pinned to HTTPS and now unreachable by IP | HSTS. It is only sent when `SESSION_COOKIE_SECURE=true`; set `HSTS_SECONDS=0` and clear the browser's HSTS entry |
 | Large firmware upload rejected with 413 | Global ceiling is `MAX_UPLOAD_MB` (default 128). Raise it *and* `EMULATOR_BIOS_MAX_BYTES` together — the per-route firmware limit is the tighter of the two |
+| Browser Play archive rejected with `archive_too_large` | Expansion is capped by `ONEIRODEX_ROM_MAX_OUTPUT_BYTES` (default 64 GiB) and by free space on the writable library volume after `ONEIRODEX_ROM_CACHE_RESERVE_BYTES` (default 1 GiB), plus an 8 MiB per-file CUE sheet limit. Lower the output cap on smaller volumes or free library storage before retrying; inspect an oversized CUE sheet and repair or split it rather than raising the file limit |
+| Browser Play says ROM conversion is busy | One archive conversion at a time is allowed per writable library volume, including across Uvicorn workers, to bound temporary output and keep archive work off the ASGI event loop. Retry after the active conversion finishes |
 | Firmware folder scan says the path is outside allowed directories | The folder must be under a library root or the path in `BIOS_IMPORT_SOURCE`. Set that env to the dump pack (and its subfolders) then Scan collection again — [emulator-bios.md](../runbooks/emulator-bios.md) |
 | A connector (qBittorrent, SABnzbd, Prowlarr, Ollama, ambient lighting…) fails with `URL host could not be resolved` | The server dials the address a host name resolves to and refuses a name it cannot resolve, so DNS from *inside the container* must answer for it (a compose service name needs the same network; a LAN name needs `extra_hosts` or the IP). It can still be saved while DNS is down. Acquire shows "Could not reach the download service" and the log has the exception type and host, never the URL's query string |
 | Firmware scan finds fewer files than the folder holds, or a game's NFO text or `version.txt` version is empty | Symbolic links inside the collection / game folder are skipped on purpose (see [libraries-and-scans.md](libraries-and-scans.md)); keep real files or hardlinks there |
@@ -83,6 +86,7 @@ sent and need no configuration. CSP **enforces** by default (`CSP_ENFORCE=true`)
 | Ownership poller skipped GOG, Epic, or Amazon | No per-account credential and no household env | Save a token on Ownership, or set `GOG_REFRESH_TOKEN` / `EPIC_DEVICE_AUTH` / `AMAZON_REFRESH_TOKEN` |
 | Connector or provider calls fail only behind `HTTP(S)_PROXY` | A proxy applies by the **host name** in the URL, and the name (not a pinned IP) goes to the proxy. Add LAN connector hosts (`nas.lan`, `.lan`, or an IP/CIDR) to `NO_PROXY`; see [settings-modules.md](settings-modules.md#outbound-proxies-and-url-forms). Through a proxy, DNS-rebinding protection rests with the proxy |
 | Connector URL refused as `Invalid URL` | Backslash, space or other characters RFC 3986 does not allow in the host part, or an impossible port. Percent-encode special characters in an embedded password (`@` → `%40`) or use the username/password fields |
+| Plugins or Integration inventory is missing a built-in connector | Rebuild and restart from the current image so its native runtime modules are present. The registry reports local capability/configuration; it does not call providers to verify credentials. |
 | Community chat | BYO Stoat/Matrix URL only |
 | Discord | **Removed** — use Support inbox + in-app admin alerts |
 | LiveKit | [livekit-unraid.md](../runbooks/livekit-unraid.md) · Plugins → `rtc.livekit` |
@@ -90,7 +94,7 @@ sent and need no configuration. CSP **enforces** by default (`CSP_ENFORCE=true`)
 
 ## Support tickets not on GitHub
 
-Expected if `SUPPORT_GITHUB_TOKEN` unset (`github_sync=skipped`). Ticket + admin notification still work — [support-inbox.md](support-inbox.md).
+Expected when the member leaves GitHub sync unchecked (`github_sync=local_only`), or opts in while `SUPPORT_GITHUB_TOKEN` is unset (`github_sync=skipped`). The local ticket and admin notification still work — [support-inbox.md](support-inbox.md).
 
 ## Voice
 

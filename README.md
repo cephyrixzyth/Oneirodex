@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1.9-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.1.9" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.0-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.2.0" /></a>
   <a href="https://github.com/cephyrixzyth/oneirodex"><img src="https://img.shields.io/badge/github-cephyrixzyth%2Foneirodex-141820?style=flat-square&logo=github&labelColor=0b0d10" alt="GitHub" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/port-5006-141820?style=flat-square&labelColor=0b0d10" alt="Port 5006" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/docker-compose-2496ED?style=flat-square&logo=docker&logoColor=white&labelColor=0b0d10" alt="Docker Compose" /></a>
@@ -44,8 +44,8 @@ Oneirodex is a **FastAPI + React** server you run at home or on a NAS. Point it 
 Every screenshot and clip on this page is **live UI** from a stock install seeded with five legal free ROMs: what you see is what ships.
 
 <table>
-<tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.1.9</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
-<tr><td>🐳 <b>Containers</b></td><td><code>oneirodex-app</code> · <code>oneirodex-db</code> · optional <code>oneirodex-livekit</code></td><td>🖼️ <b>Image</b></td><td>local Compose build <code>oneirodex:1.1.9</code></td></tr>
+<tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.2.0</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
+<tr><td>🐳 <b>Containers</b></td><td><code>oneirodex-app</code> · <code>oneirodex-db</code> · optional <code>oneirodex-livekit</code></td><td>🖼️ <b>Image</b></td><td>local Compose build <code>oneirodex:1.2.0</code></td></tr>
 <tr><td>📦 <b>Package</b></td><td><code>oneirodex/</code> — FastAPI under uvicorn</td><td>🧩 <b>Front ends</b></td><td>member · admin · ops-glance SPAs, Tauri desktop, Quest PWA</td></tr>
 </table>
 
@@ -83,7 +83,7 @@ Every screenshot and clip on this page is **live UI** from a stock install seede
 
 **Household access**
 - Invite-based membership with quotas and a whitelist; parental / library ACL; roles admin · librarian · member · child
-- **Store ownership registers** — Steam / GOG / Epic / Amazon, plus unofficial opt-in Xbox and PlayStation; CSV import always works. A register of what you own, never a store download
+- **Store ownership registers** — Steam / GOG / Epic / Amazon, plus unofficial opt-in Xbox and PlayStation; CSV import works without provider APIs. Per-account register limit: 100,000 titles. A register of what you own, never a store download
 - Colour themes **and** independent icon packs (Outline · Filled · Duotone · Pixel · Soft · Mono); **decade rooms** as scenery; **era fonts** that ship with Oneirodex and install themselves on boot — [preferences-themes.md](docs/user/preferences-themes.md) · [theme-fonts-and-images.md](docs/admin/theme-fonts-and-images.md)
 - Mobile density: hamburger nav, stacked filters, Chat touch targets ≤ 900 px
 
@@ -99,7 +99,7 @@ Every screenshot and clip on this page is **live UI** from a stock install seede
 - **Spaces** — servers with their own text *and* voice channels, household-wide or invite-only; presence, profiles, DMs, @mentions, reactions, threads — [social-and-voice.md](docs/user/social-and-voice.md)
 - **Friends dock** (rail · pinned · pop-out · Big Picture **Y** · desktop always-on-top)
 - Optional **LiveKit** voice and screenshare (`docker compose --profile livekit`) — [livekit-unraid.md](docs/runbooks/livekit-unraid.md)
-- In-app **Report issue** → admin **Support inbox** → GitHub Issues when configured — [support-inbox.md](docs/admin/support-inbox.md)
+- In-app **Report issue** → admin **Support inbox** → optional GitHub Issues sync after member opt-in — [support-inbox.md](docs/admin/support-inbox.md)
 
 **Admin & ops**
 - Libraries & scans, scan jobs, unmatched, filters, release filters, extensions, image queue

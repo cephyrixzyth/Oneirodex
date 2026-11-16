@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+from flask import request as flask_request
 from flask_login import LoginManager
 from types import SimpleNamespace
 
@@ -59,18 +63,18 @@ def runtime():
     users = {
         'admin': SimpleNamespace(id=1, name='Admin', role='admin', state=True,
                                  is_active=True, is_authenticated=True,
-                                 session_fingerprint=lambda: 'fp'),
+                                 session_fingerprint=lambda: '0123456789abcdef'),
         'librarian': SimpleNamespace(id=2, name='Librarian', role='librarian', state=True,
                                      is_active=True, is_authenticated=True,
-                                     session_fingerprint=lambda: 'fp'),
+                                     session_fingerprint=lambda: '0123456789abcdef'),
         'member': SimpleNamespace(id=3, name='Member', role='user', state=True,
                                   is_active=True, is_authenticated=True,
-                                  session_fingerprint=lambda: 'fp'),
+                                  session_fingerprint=lambda: '0123456789abcdef'),
     }
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda identity: next(
-        (user for user in users.values() if identity == f'{user.id}:fp'), None,
+        (user for user in users.values() if identity.split(':', 1)[0] == str(user.id)), None,
     ))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     data = FakeFeedbackData()
@@ -83,21 +87,21 @@ def runtime():
         login_manager=manager, data_access=data,
     ))
     cookies = {
-        name: dump_session_cookie({'_user_id': f'{user.id}:fp', '_fresh': True},
+        name: dump_session_cookie({'_user_id': login_identity_for(user.id), '_fresh': True},
                                   'unmatched-feedback-secret')
         for name, user in users.items()
     }
     return app, flask_app, data, users, cookies
 
 
-def request(app, path, *, cookie=None, method='GET', json=None):
+def request(app, path, *, cookie=None, method='GET', json=None, headers=None):
     async def perform():
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url='http://testserver',
         ) as client:
             if cookie:
                 client.cookies.set('session', cookie)
-            return await client.request(method, path, json=json, follow_redirects=False)
+            return await client.request(method, path, json=json, headers=headers, follow_redirects=False)
 
     return asyncio.run(perform())
 
@@ -163,6 +167,30 @@ def test_bad_match_sets_clears_and_rejects_invalid_feedback(runtime):
                       method='POST', json={'reason': None})
     assert cleared.status_code == 200 and cleared.json()['cleared'] is True
     assert data.row.bad_match_reason is None and data.row.bad_match_at is None
+
+
+def test_bad_match_accepts_vendor_json_like_legacy_request_parser(runtime):
+    app, flask_app, data, _users, cookies = runtime
+    vendor_type = 'application/vnd.oneirodex+json'
+    body = {'reason': 'other', 'note': 'Wrong release'}
+
+    with flask_app.test_request_context(
+        '/api/unmatched/existing/bad_match',
+        method='POST', data=json.dumps(body), content_type=vendor_type,
+    ):
+        legacy_body = flask_request.get_json(silent=True)
+
+    current = request(
+        app, '/api/unmatched/existing/bad_match', cookie=cookies['librarian'],
+        method='POST', json=body, headers={'Content-Type': vendor_type},
+    )
+
+    assert legacy_body == body
+    assert current.status_code == 200
+    assert current.json()['reason'] == 'other'
+    assert current.json()['note'] == 'Wrong release'
+    assert data.row.bad_match_reason == 'other'
+    assert data.row.bad_match_note == 'Wrong release'
 
 
 def test_role_and_csrf_gates_precede_data_access(runtime):

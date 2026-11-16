@@ -170,6 +170,7 @@ class EmulatorSave(db.Model):
     filename = db.Column(db.String(255), nullable=False)
     size_bytes = db.Column(db.Integer, nullable=False, default=0)
     storage_path = db.Column(db.String(1024), nullable=False)
+    revision = db.Column(db.Integer, nullable=False, default=1)
     encrypted = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(
         db.DateTime,
@@ -191,8 +192,27 @@ class EmulatorSave(db.Model):
             'filename': self.filename,
             'size_bytes': self.size_bytes,
             'encrypted': bool(self.encrypted),
+            'revision': self.revision,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class EmulatorSaveGeneration(db.Model):
+    """Prior committed blob generations retained for recovery; no automatic GC."""
+
+    __tablename__ = 'emulator_save_generations'
+    id = db.Column(db.Integer, primary_key=True)
+    save_id = db.Column(
+        db.Integer,
+        db.ForeignKey('emulator_saves.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    filename = db.Column(db.String(255), nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False, default=0)
+    storage_path = db.Column(db.String(1024), nullable=False)
+    encrypted = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 class PlaySession(db.Model):
     """Authoritative play session with heartbeat TTL."""
@@ -209,8 +229,18 @@ class PlaySession(db.Model):
     client = db.Column(db.String(64), nullable=True)  # web | desktop | etc.
     status = db.Column(db.String(16), default='active', nullable=False)  # active | ended | orphaned
 
-    user = db.relationship('User', backref=db.backref('play_sessions', lazy='dynamic'))
-    game = db.relationship('Game', backref=db.backref('play_sessions', lazy='dynamic'))
+    user = db.relationship(
+        'User',
+        backref=db.backref('play_sessions', lazy='dynamic', passive_deletes='all'),
+    )
+    game = db.relationship(
+        'Game',
+        backref=db.backref(
+            'play_sessions',
+            lazy='dynamic',
+            passive_deletes='all',
+        ),
+    )
 
     def to_dict(self):
         return {
@@ -309,6 +339,7 @@ __all__ = [
     "UnmatchedFolder",
     "DuplicateFixLog",
     "EmulatorSave",
+    "EmulatorSaveGeneration",
     "PlaySession",
     "GameServer",
     "UserGameProgress",

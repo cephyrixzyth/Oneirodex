@@ -2,12 +2,12 @@
 
 > **Doc status:** Active
 
-Near-zero standing cost: tickets land on GitHub; maintainers run Cursor skills on demand. No LLM keys inside Flask.
+Near-zero standing cost: members can opt in to send reports to GitHub; maintainers run Cursor skills on demand. No LLM keys inside Flask.
 
 ## Flow
 
 1. Teammate opens **Report issue** (`/report`) in the member app.
-2. `POST /api/support/tickets` saves a row, fans out admin in-app alerts, and creates a GitHub Issue when `SUPPORT_GITHUB_TOKEN` is set (otherwise `github_sync=skipped`).
+2. `POST /api/support/tickets` saves a row and fans out admin in-app alerts. It creates a GitHub Issue only when the member explicitly sets `sync_to_github=true` and `SUPPORT_GITHUB_TOKEN` is configured. Without opt-in, `github_sync=local_only`; opted-in reports remain local with `github_sync=skipped` when the token is missing.
 3. Maintainer opens the GitHub issue (or admin **Support inbox**).
 4. `issue-assess` — triage only (sev, area, repro gaps).
 5. `issue-fix` — implement, test, commit/PR. **Never** auto-merge.

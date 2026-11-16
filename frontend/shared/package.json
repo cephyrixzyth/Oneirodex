@@ -1,7 +1,7 @@
 {
   "name": "@oneirodex/ui",
   "private": true,
-  "version": "1.1.9",
+  "version": "1.2.0",
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
@@ -41,6 +41,6 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }

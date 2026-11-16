@@ -7,15 +7,18 @@ zero-Flask runtime.
 """
 from __future__ import annotations
 
+from html import escape
 import inspect
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 from urllib.parse import quote, urlencode
 
 from fastapi import FastAPI, Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import Response
 
 from . import ADMIN_STATIC_ROUTES, ADMIN_BOOTSTRAP_ROUTE
+from .cookie_compat import set_cookie as set_response_cookie
+from .form_compat import first_form_value
 
 
 def legacy_chrome_fields(user) -> dict:
@@ -27,7 +30,7 @@ def _native_legacy_chrome_fields(user) -> dict:
     """Build the same chrome payload without Flask request globals."""
     import os
 
-    from oneirodex.utils.asset_urls import asset_version
+    from oneirodex.utils.asset_urls import asset_version, theme_asset_url
     from oneirodex.utils.library_paths import library_dir
     from oneirodex.utils.preset_themes import canonical_theme_slug, era_for_theme
 
@@ -44,13 +47,8 @@ def _native_legacy_chrome_fields(user) -> dict:
         return value
 
     def theme_asset(path: str) -> str:
-        candidate = theme_root / theme / path
-        selected_theme = theme
-        if not candidate.is_file():
-            candidate = theme_root / 'default' / path
-            selected_theme = 'default'
-        return static(
-            f'library/themes/{selected_theme}/{path}', candidate
+        return theme_asset_url(
+            path, theme=theme, static_url_path='/static',
         )
 
     paths = [
@@ -119,6 +117,7 @@ def create_admin_pilot(
     shell_path: Path,
     chrome_fields: Callable[..., dict] | None = None,
     database_scope: Callable[[Any], Any] | None = None,
+    shell_entity_exists: Callable[[Request], bool] | None = None,
 ) -> FastAPI:
     """Create a local pilot; callers own routing, lifecycle and static assets.
 
@@ -149,6 +148,7 @@ def create_admin_pilot(
     def admin_shell(request: Request):
         from .acquire_status import _login_redirect, _set_session_cookie
         from .request_auth import request_auth_context
+        from .response_compat import flask_redirect_response
         from oneirodex.utils.security_headers import security_header_values
 
         with open_database_scope():
@@ -159,20 +159,32 @@ def create_admin_pilot(
                 find_token=find_token, commit_token_touch=commit_token_touch,
                 login_manager=manager,
             )
+            flashes = []
             if auth.user is None:
                 response = _login_redirect(flask_app, request, manager, auth)
             elif normalize_role(getattr(auth.user, 'role', None) or '') != 'admin':
                 flashes = list(auth.session_data.get('_flashes') or [])
                 flashes.append(('danger', 'You must be an admin to access this page.'))
                 auth.session_data['_flashes'] = flashes
-                response = RedirectResponse('/login', status_code=302)
+                response = flask_redirect_response('/login', status_code=302)
             elif not auth.has_scope('admin'):
                 response = _native_json_error(
                     'This token does not have the admin scope', 'forbidden', 403,
                 )
             else:
-                response = Response(shell, media_type='text/html')
-            if auth.should_set_session_cookie:
+                flashes = list(auth.session_data.pop('_flashes', []) or [])
+                response_shell = _shell_with_admin_flashes(shell, flashes)
+                exists = (
+                    shell_entity_exists(request)
+                    if shell_entity_exists is not None
+                    else _admin_shell_entity_exists(request)
+                )
+                response = Response(
+                    response_shell,
+                    status_code=200 if exists else 404,
+                    media_type='text/html',
+                )
+            if auth.user is not None and (auth.should_set_session_cookie or flashes):
                 _set_session_cookie(response, flask_app, auth)
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Vary'] = 'Cookie'
@@ -186,7 +198,7 @@ def create_admin_pilot(
         app.add_api_route(route, admin_shell, methods=['GET', 'HEAD'], response_class=Response)
 
     async def admin_manage_downloads_post(request: Request):
-        from .csrf_compat import csrf_error_response
+        from .csrf_compat import csrf_error_response, csrf_html_error_response
         from .request_auth import _lifetime_seconds
         from .session_compat import load_session_cookie
 
@@ -201,9 +213,10 @@ def create_admin_pilot(
         )
         csrf_response = csrf_error_response(
             request, session, flask_app.config,
-            token=str(form.get('csrf_token') or ''),
+            token=str(first_form_value(form, 'csrf_token') or ''),
         )
         if csrf_response is not None:
+            csrf_response = csrf_html_error_response(csrf_response)
             from oneirodex.utils.security_headers import security_header_values
 
             csrf_response.headers.setdefault('Cache-Control', 'no-store')
@@ -375,7 +388,8 @@ def create_admin_pilot(
             )
             lifetime = config['PERMANENT_SESSION_LIFETIME']
             expires = datetime.now(timezone.utc) + lifetime if session_data.get('_permanent') else None
-            response.set_cookie(
+            set_response_cookie(
+                response,
                 cookie_name,
                 cookie_value,
                 expires=expires,
@@ -390,6 +404,57 @@ def create_admin_pilot(
         return response
 
     return app
+
+
+def _admin_shell_entity_exists(request: Request) -> bool:
+    """Preserve legacy 404 status for dynamic editor shells with missing rows."""
+    import re
+
+    path = request.url.path
+    newsletter = re.fullmatch(r'/admin/newsletter/([0-9]+)', path)
+    library = re.fullmatch(r'/admin/library/edit/([^/]+)', path)
+    game = re.fullmatch(r'/(?:game_edit|edit_game_images)/([^/]+)', path)
+    if not any((newsletter, library, game)):
+        return True
+
+    from sqlalchemy import select
+    from oneirodex.models import Game, Library, Newsletter
+    from oneirodex.runtime_native.db_session import native_db as db
+
+    if newsletter:
+        return db.session.get(Newsletter, int(newsletter.group(1))) is not None
+    if library:
+        return db.session.execute(
+            select(Library).filter_by(uuid=library.group(1))
+        ).scalar_one_or_none() is not None
+    return db.session.execute(
+        select(Game).filter_by(uuid=game.group(1))
+    ).scalar_one_or_none() is not None
+
+
+def _shell_with_admin_flashes(shell: str, flashes) -> str:
+    """Render queued legacy flash notices into the React-owned admin shell."""
+    if not flashes:
+        return shell
+    notices = []
+    for item in flashes:
+        if not isinstance(item, (tuple, list)) or len(item) != 2:
+            continue
+        category, message = item
+        category = str(category or 'info').lower()
+        is_error = category in {'danger', 'error', 'warning'}
+        class_name = 'od-page-status--error' if is_error else 'od-page-status--empty'
+        role = 'alert' if is_error else 'status'
+        notices.append(
+            f'<div class="od-page-status {class_name}" role="{role}">'
+            f'<p class="od-page-status__message">{escape(str(message))}</p></div>'
+        )
+    root_marker = '<div id="admin-app-root"'
+    root_offset = shell.find(root_marker)
+    if root_offset < 0 or not notices:
+        return shell
+    container = '<div class="od-admin-session-flashes">' + ''.join(notices) + '</div>\n'
+    return shell[:root_offset] + container + shell[root_offset:]
 
 
 def _native_json_error(message: str, code: str, status: int) -> Response:

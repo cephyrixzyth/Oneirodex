@@ -130,6 +130,17 @@ def test_anonymous_request_redirects_with_next_and_login_flash():
         native_oidc.request_auth_context = original
     assert response.status_code == 302
     assert response.headers['location'] == '/login?next=%2Fapi%2Foidc%2Fstatus%3Ffrom%3Dadmin'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/login?next=%2Fapi%2Foidc%2Fstatus%3Ffrom%3Dadmin">'
+        '/login?next=%2Fapi%2Foidc%2Fstatus%3Ffrom%3Dadmin</a>. If not, click the link.\n'
+    )
+    assert len(response.headers.get_list('set-cookie')) == 1
     session = load_session_cookie(
         response.cookies['session'], 'native-oidc-secret', max_age=31_536_000
     )

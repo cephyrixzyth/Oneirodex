@@ -35,9 +35,18 @@ const request = createBrowserRequester({
   fetchImpl: (input, init) => fetch(input, init),
   csrfToken: getCsrfToken,
   onUnauthorized: () => {
-    window.location.href = '/login'
+    window.location.href = adminLoginUrl()
   },
 })
+
+export function adminLoginUrl(
+  pathname = window.location.pathname,
+  search = window.location.search,
+  hash = window.location.hash,
+) {
+  const next = `${pathname}${search}${hash}`
+  return `/login?next=${encodeURIComponent(next)}`
+}
 
 /**
  * Re-throw a failed `request()` call as the `adminError` shape (an `Error`

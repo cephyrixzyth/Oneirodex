@@ -23,7 +23,10 @@ from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.functions import read_first_nfo_content, sanitize_string_input
 from oneirodex.utils.game_core import check_existing_game_by_igdb_id, ensure_manual_identify_taxonomy
 from oneirodex.utils.item_kind import normalize_item_kind
-from oneirodex.utils.security import get_allowed_base_directories, is_safe_path, sanitize_path_for_logging
+from oneirodex.utils.security import (
+    get_allowed_base_directories, is_readable_game_path, is_safe_path,
+    sanitize_path_for_logging,
+)
 from oneirodex.utils.validation import validate_body
 
 from . import apis_bp
@@ -39,6 +42,9 @@ def _no_store(response):
 @admin_required
 def manual_identify_options():
     """Return the same library and taxonomy choices as the legacy form."""
+    from oneirodex.utils.rom_archive_types import (
+        ARCHIVE_EXTENSIONS, GZIP_EXTENSIONS, ROM_EXTENSIONS,
+    )
     taxonomies = {
         'genres': Genre,
         'game_modes': GameMode,
@@ -48,7 +54,7 @@ def manual_identify_options():
     }
     payload = {
         'libraries': [
-            {'uuid': row.uuid, 'name': row.name, 'platform_name': row.platform.name if row.platform else ''}
+            {'uuid': row.uuid, 'name': row.name, 'platform_name': row.platform.value if row.platform else ''}
             for row in db.session.execute(select(Library).order_by(Library.name)).scalars().all()
         ],
         'taxonomies': {
@@ -57,6 +63,7 @@ def manual_identify_options():
         },
         'categories': [{'value': value.name, 'label': value.value} for value in Category],
         'statuses': [{'value': value.name, 'label': value.value} for value in Status],
+        'file_extensions': sorted(ROM_EXTENSIONS | ARCHIVE_EXTENSIONS | GZIP_EXTENSIONS),
     }
     return _no_store(api_ok(payload))
 
@@ -119,8 +126,8 @@ def update_manual_identified_game(game_uuid: str, body: ManualIdentifyBody):
     safe, _path_error = is_safe_path(body.full_disk_path, allowed_bases)
     if not safe:
         return api_error('The selected game path is outside configured storage roots.', code='forbidden')
-    if not os.path.isdir(body.full_disk_path) or not os.access(body.full_disk_path, os.R_OK):
-        return api_error('The selected game folder does not exist or cannot be read.', code='bad_request')
+    if not is_readable_game_path(body.full_disk_path):
+        return api_error('The selected game file or folder does not exist or cannot be read.', code='bad_request')
     if body.igdb_id != game.igdb_id:
         duplicate = db.session.execute(
             select(Game).where(Game.igdb_id == body.igdb_id, Game.id != game.id).with_for_update()
@@ -197,7 +204,7 @@ def update_manual_identified_game(game_uuid: str, body: ManualIdentifyBody):
         from oneirodex.utils.background import run_in_background
         from oneirodex.utils.scanning import refresh_images_in_background
         run_in_background(current_app._get_current_object(), refresh_images_in_background, game_uuid, name=f'oneirodex-refresh-images-{game_uuid[:8]}')
-    return api_ok({'game_uuid': game_uuid, 'redirect_url': '/libraries'})
+    return api_ok({'game_uuid': game_uuid, 'redirect_url': '/library'})
 
 
 @apis_bp.route('/admin/manual-identify', methods=['POST'])
@@ -220,8 +227,8 @@ def create_manual_identified_game(body: ManualIdentifyBody):
             event_type='security', event_level='warning',
         )
         return api_error('The selected game path is outside configured storage roots.', code='forbidden')
-    if not os.path.isdir(body.full_disk_path) or not os.access(body.full_disk_path, os.R_OK):
-        return api_error('The selected game folder does not exist or cannot be read.', code='bad_request')
+    if not is_readable_game_path(body.full_disk_path):
+        return api_error('The selected game file or folder does not exist or cannot be read.', code='bad_request')
 
     is_custom_game = body.igdb_id >= 2_000_000_420
     if not is_custom_game and check_existing_game_by_igdb_id(body.igdb_id):
@@ -329,4 +336,4 @@ def create_manual_identified_game(body: ManualIdentifyBody):
         f"Game '{body.name}' added manually by admin {current_user.name}",
         event_type='game', event_level='information',
     )
-    return api_ok({'game_uuid': game_uuid, 'redirect_url': '/admin/unmatched' if request.args.get('from_unmatched') == 'true' else '/libraries'}, status=201)
+    return api_ok({'game_uuid': game_uuid, 'redirect_url': '/admin/unmatched' if request.args.get('from_unmatched') == 'true' else '/library'}, status=201)

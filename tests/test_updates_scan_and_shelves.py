@@ -14,11 +14,18 @@ could produce:
   answer has its own shelf.
 """
 
+import asyncio
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
+import httpx
 import pytest
+from fastapi import FastAPI
+from flask import Flask
+from flask_login import LoginManager
 from sqlalchemy import select
+from tests.fixtures.native_auth import persistent_login_store, login_identity_for  # noqa: F401
 
 from oneirodex import db
 from oneirodex.models import DiscoverySection, Game, Library, User
@@ -180,6 +187,65 @@ class TestUpdatesScanRoute:
         # Each title is a live store probe, so an unbounded sweep would sit on a
         # request thread for minutes and rate-limit the caller out of the stores.
         assert body['limit'] == UPDATES_SCAN_MAX
+
+    def test_native_scan_bounds_json_before_adapter_call(self):
+        from oneirodex.runtime_native.session_compat import dump_session_cookie
+        from oneirodex.runtime_native.updates_scan import create_update_scan_router
+
+        flask_app = Flask('native-updates-scan-body-limit-test')
+        flask_app.config.update(
+            SECRET_KEY='native-updates-scan-body-limit-test-secret',
+            SESSION_PROTECTION='none', SECURITY_HEADERS_ENABLED=True,
+            WTF_CSRF_ENABLED=False,
+        )
+        user = SimpleNamespace(
+            id=81, role='user', state=True, is_active=True, is_authenticated=True,
+            session_fingerprint=lambda: '0123456789abcdef',
+        )
+        manager = LoginManager(flask_app)
+        manager.login_view = 'login.login'
+        identity = login_identity_for(user.id)
+        manager.user_loader(lambda value: user if value == identity else None)
+        flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+
+        class FakeScan:
+            def __init__(self):
+                self.calls = []
+
+            def scan(self, _user, **kwargs):
+                self.calls.append(kwargs)
+                return {'checked': 0, 'limit': kwargs['limit']}
+
+        data = FakeScan()
+        native_app = FastAPI()
+        native_app.include_router(create_update_scan_router(
+            flask_app,
+            find_user=lambda user_id: user if user_id == user.id else None,
+            find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
+            load_user_id=lambda identity: manager.user_callback(identity),
+            login_manager=manager, data_access=data,
+        ))
+        cookie = dump_session_cookie(
+            {'_user_id': identity, '_fresh': True},
+            'native-updates-scan-body-limit-test-secret',
+        )
+
+        async def post(payload):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=native_app),
+                base_url='http://testserver',
+            ) as client:
+                client.cookies.set('session', cookie)
+                return await client.post('/api/updates/scan', json=payload)
+
+        oversized = asyncio.run(post({'extra': 'x' * (16 * 1024)}))
+        valid = asyncio.run(post({'limit': 3}))
+
+        assert oversized.status_code == 413
+        assert oversized.json()['error_code'] == 'payload_too_large'
+        assert valid.status_code == 200
+        assert valid.json()['checked'] == 0
+        assert data.calls == [{'limit': 3, 'library_uuid': None, 'only_stale': True}]
 
 
 class TestUpdatesStoreSearch:

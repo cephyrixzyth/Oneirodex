@@ -8,6 +8,8 @@ import pytest
 from fastapi import FastAPI
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 from oneirodex.runtime_native.support_reads import create_support_reads_router
 
@@ -39,22 +41,22 @@ def harness():
     app = Flask('native-support-reads')
     app.config.update(SECRET_KEY='support-reads-secret', SESSION_PROTECTION='none')
     users = {
-        7: SimpleNamespace(id=7, role='user', state=True, is_active=True),
-        8: SimpleNamespace(id=8, role='admin', state=True, is_active=True),
+        7: SimpleNamespace(id=7, role='user', state=True, is_active=True, session_fingerprint=lambda: '0123456789abcdef'),
+        8: SimpleNamespace(id=8, role='admin', state=True, is_active=True, session_fingerprint=lambda: '0123456789abcdef'),
     }
     data = FakeSupportData()
     runtime = FastAPI()
     runtime.include_router(create_support_reads_router(
         app, find_user=users.get, find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda value: users.get(int(value)) if value.isdigit() else None,
+        load_user_id=lambda value: users.get(int(value.split(':', 1)[0])) if value.split(':', 1)[0].isdigit() else None,
         data_access=data,
     ))
     return runtime, data
 
 
 def _cookie(user_id):
-    return dump_session_cookie({'_user_id': str(user_id), '_fresh': True}, 'support-reads-secret')
+    return dump_session_cookie({'_user_id': login_identity_for(user_id), '_fresh': True}, 'support-reads-secret')
 
 
 def _request(runtime, method, path, *, user_id=7):

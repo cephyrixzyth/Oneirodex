@@ -20,6 +20,7 @@ from oneirodex.utils.browse_query import run_browse_query
 from oneirodex.utils.filter_tree import FilterTreeError
 from oneirodex.utils.member_spa import render_member_spa
 from oneirodex.utils.pwa_manifest import build_app_manifest
+from oneirodex.utils.api_tokens import require_api_token_scope
 from oneirodex.utils.processors import get_global_settings
 
 member_bp = Blueprint('member', __name__)
@@ -27,6 +28,7 @@ member_bp = Blueprint('member', __name__)
 
 @member_bp.route('/browse_games')
 @login_required
+@require_api_token_scope('read:library')
 def browse_games():
     """Library grid for the member SPA.
 

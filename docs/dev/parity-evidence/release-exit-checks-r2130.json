@@ -1,0 +1,71 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2130",
+  "observed_utc": "2026-11-16",
+  "findings": ["FE-001", "FE-007", "OP-001", "BE-008", "BE-011", "QA-UI-01 (scoped)"],
+  "classification": "Bounded closing checks on the current review branch: real two-account shared-browser run, keyboard pass on the changed surfaces, and a complete staged Windows installer run. One installer defect confirmed and corrected. Whole-program acceptance remains incomplete.",
+  "shared_browser": {
+    "source_commit": "84974c2e",
+    "method": "Review image built from the current source and run on a loopback port against a clone of the populated capture database; two seeded synthetic accounts (administrator, then member) signed in one after the other in one Chromium profile through the real sign-in and sign-out controls.",
+    "observed": [
+      "Administrator on the VR page: no service worker registration, no controller, no Cache Storage entries.",
+      "After sign-out through the account menu: still none; the VR route redirects to sign-in and an API request is redirected.",
+      "Member afterwards: none; the command palette lists navigation only, with no recent-title group and no seeded title names; local storage holds only interface preferences and a session-boundary marker that changes per sign-in."
+    ],
+    "limits": [
+      "The seed has no VR-tagged games, so the VR list was empty and no private library data existed to be cached.",
+      "No legacy worker was present to retire; R2014 covers retirement synthetically.",
+      "One Chromium-based browser on Windows; no headset and no deployed instance.",
+      "A session-storage entry of generic Discover zone text survived sign-out; it contained no title names. Not classified as a defect."
+    ],
+    "earlier_evidence": "FE-007 already has real two-account browser evidence in R2035, R2037 and R2038."
+  },
+  "keyboard_pass": {
+    "method": "Keyboard only in the same instance; focus order recorded from focus events.",
+    "observed": [
+      "API tokens: name, preset, Create token and session controls are reached in order with a visible 2px focus outline. Creating a token announces a status message.",
+      "Revoke confirmation: a labelled and described modal dialog; initial focus on the safe choice; Tab stays inside across repeated cycles; Escape closes it, returns focus to Revoke and leaves the token in place.",
+      "Report form: every field has a label and is reached in order. With the GitHub option ticked and no destination configured, the action is named as a preview and the page announces that forwarding is unavailable; nothing is sent.",
+      "Mobile navigation at 375px: inert and hidden from assistive technology when closed; opening moves focus to Close and makes the main region inert; focus stays in the navigation across 45 Tab presses; Escape closes it and returns focus to the toggle."
+    ],
+    "limits": [
+      "No screen reader or other assistive technology.",
+      "The report preview with a configured destination was not exercised; R2032 covers it with a synthetic destination.",
+      "Only surfaces changed by this remediation; not a whole-application review."
+    ]
+  },
+  "windows_installer": {
+    "confirmed_defect": "In Windows PowerShell 5.1 the installer's Python version check passed a single-quoted argument containing double quotes to python.exe. That shell drops the embedded quotes, Python raised a SyntaxError, and the installer stopped at its first prerequisite step. The earlier staged run did not show this because Python was reached through a command wrapper.",
+    "correction": "Commit 7c6695ea uses single quotes inside the Python source. Two regressions failed first: a quoting rule for every inline Python call, and an execution of those calls in Windows PowerShell.",
+    "staged_run": {
+      "source": "git archive of 84974c2e with the corrected installer from 7c6695ea",
+      "platform": "Windows 11, Windows PowerShell 5.1",
+      "python": "3.12.16, isolated staging runtime",
+      "node": "22.23.4, isolated staging runtime",
+      "arguments": ["-GamesDir <staging>/user-data/Games", "-LibraryRoots Staged=<staging>/user-data/Library", "-Port 15006", "-SkipDb"],
+      "stages_passed": ["prerequisites", "virtual environment and Python dependencies", "npm install and five SPA builds", "configuration written", "native runtime and five asset manifests validated"],
+      "exit_code": 0,
+      "start_prompt": "answered no; the application was not started"
+    },
+    "related_test_fix": "Installer configuration tests now pass an explicit execution policy, so they run under the default Windows script policy; 24 installer tests pass locally.",
+    "limits": [
+      "Database creation was skipped and the installed application was not started.",
+      "npm itself ran from the workstation's newer Node installation; build scripts resolved Node 22 from the path.",
+      "No Linux or macOS installer run in this record."
+    ]
+  },
+  "new_tests": {
+    "commit": "96bcaa2a",
+    "cases": ["Removing a child's library access between two save writes denies the next write and leaves the earlier save intact.", "Rotating the secret key invalidates existing remember cookies."],
+    "result": "8 passed with the surrounding files on a fresh loopback test database upgraded to the current schema head."
+  },
+  "ci": {
+    "commit": "7c6695ea",
+    "core_run": 43810648620,
+    "desktop_run": 43810648623,
+    "result": "both success"
+  },
+  "workstation": "Python 3.14.10 and Node 26.12.1 are installed system-wide; they are not the review baseline, so workstation test results are supporting only.",
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: no markup or style changes."
+}

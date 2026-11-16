@@ -22,6 +22,25 @@ def test_installer_does_not_copy_example_config_and_preserves_secret_key():
     assert "grep -qF '# Added by Oneirodex installer'" in linux
 
 
+def test_native_installers_build_all_spas_with_node_22_and_validate_native_runtime():
+    linux = (ROOT / 'install-linux.sh').read_text(encoding='utf-8')
+    macos = (ROOT / 'install-macos.sh').read_text(encoding='utf-8')
+    windows = (ROOT / 'install-windows.ps1').read_text(encoding='utf-8')
+    builder = (ROOT / 'scripts/build-native-spas.mjs').read_text(encoding='utf-8')
+    validator = (ROOT / 'scripts/validate-native-install.py').read_text(encoding='utf-8')
+
+    assert 'build:native-spas' in linux and 'build:native-spas' in macos
+    assert 'build:native-spas' in windows
+    for source in (linux, macos, windows):
+        assert 'Node.js 22' in source or 'Node 22' in source
+    for workspace in ('member-app', 'admin-app', 'ops-glance'):
+        assert workspace in builder
+    assert 'build:auth-pilot' in builder and 'build:pilot' in builder
+    assert "'member-auth': 'auth.html'" in validator
+    assert 'NativeRuntimeContext' in validator
+    assert 'from oneirodex import create_app' not in linux + macos
+
+
 def test_targeted_log_system_event_calls_use_keyword_metadata():
     paths = (
         'oneirodex/routes_apis/download.py',

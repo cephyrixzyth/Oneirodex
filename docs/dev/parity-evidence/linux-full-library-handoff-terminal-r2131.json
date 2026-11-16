@@ -1,0 +1,80 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2131",
+  "observed_utc": "2026-11-16T08:24:06.229934+00:00",
+  "finding": "DT-007",
+  "tested_harness_commit": "5bcf619f8d0f4012e74075f6d8130ae269bf3294",
+  "native_run": 43830061018,
+  "native_job": 133172977159,
+  "classification": "Confirmed actual installed Linux Open full library handoff: a separate site-labelled window on the server origin, with no token in its address and no access to the companion's stored credential. The window showed the server sign-in page; catalog browsing after sign-in was not exercised.",
+  "raw_log": {
+    "path": "findings/DT-007/linux-full-library-run-43830061018-job-133172977159-r2131.log",
+    "sha256": "8de8bc01c7e80cea35fc4129b6795886f138f3ecd4695038efb0ab6d4603e559",
+    "bytes": 464445,
+    "private": true
+  },
+  "receipt": {
+    "status": "passed",
+    "phase": "complete",
+    "source_commit": "dc8e0ddea9ef2e4b6ba3ba8a905021c5dc2674f3",
+    "source_run": 43803881137,
+    "archive_sha256": "106d0dd61f7aa59f385fdca74272ff39725fb9f604ef6c23e2be2ab754561270",
+    "full_library_checks": {
+      "native_window_created_with_site_label": true,
+      "site_window_inspected": true,
+      "site_window_is_server_origin": true,
+      "site_window_address_has_no_token": true,
+      "site_window_cannot_read_native_secret": true,
+      "site_window_route": "/login",
+      "site_window_closed": true
+    },
+    "full_library_handoff_verified": true,
+    "game_family_recovery_journey_verified": true,
+    "denial_outage_play_journey_verified": true,
+    "cleanup_errors": []
+  },
+  "sequence": [
+    {
+      "commit": "2cc9e532",
+      "change": "Harness: click the real Open full library button in the connected adult session and inspect the new window.",
+      "native_run": 43829605580,
+      "native_job": 133171488682,
+      "result": "failed",
+      "code": "linux_library_window_not_closed",
+      "note": "Every handoff check had passed; the driver's close command left the native window record in place. Harness cleanup defect, not a product failure."
+    },
+    {
+      "commit": "5bcf619f",
+      "change": "Harness: close the probed window through the main window's own close permission.",
+      "native_run": 43830061018,
+      "native_job": 133172977159,
+      "result": "passed"
+    }
+  ],
+  "verification": {
+    "linux_methods": "84 passed on CI",
+    "locked_runtime_cors": "7 passed",
+    "locked_runtime_bearer_actual_handlers": "9 passed",
+    "aggregate_ci": "Harness-only commits with [skip ci]; shipping client unchanged from dc8e0dde, where core and desktop CI passed."
+  },
+  "measured_behavior": [
+    "Clicking Open full library in the installed companion, while connected as the adult account, created a native window labelled full-library and reported success in the status line.",
+    "The window loaded the configured server origin and was redirected to the server's sign-in route, because the companion passes no credential to it.",
+    "The API token did not appear in the window's path, query or fragment.",
+    "From inside that window, the companion's stored-credential command was not available.",
+    "The window was closed and the same run then completed the account, archive, Play, recovery, denial and outage journeys with clean cleanup."
+  ],
+  "limits": [
+    "The site window was not signed in, so catalog browsing beyond the twelve-title preview was not exercised in the packaged window; the destination is the existing member catalog covered by server and browser tests.",
+    "Linux package only; the Windows and macOS companions were not launched.",
+    "One synthetic server fixture on a disposable runner."
+  ],
+  "native_job_timing": {
+    "started_utc": "2026-11-16T08:17:41Z",
+    "completed_utc": "2026-11-16T08:23:10Z",
+    "elapsed_seconds": 329,
+    "limits": "Remote job wall time; not inference time or billing."
+  },
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: no markup or style changes."
+}

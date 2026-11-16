@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { createToken, extractOneTimeSecret, listTokens, revokeToken } from '../tokensApi.js'
 import type { ApiToken } from '../tokensApi.js'
@@ -17,6 +17,7 @@ export function TokensPanel(): ReactNode {
   const [secret, setSecret] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const nameInputRef = useRef<HTMLInputElement | null>(null)
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -61,6 +62,11 @@ export function TokensPanel(): ReactNode {
     }
   }
 
+  function dismissSecret() {
+    setSecret('')
+    nameInputRef.current?.focus()
+  }
+
   return (
     <>
       <Note tone="error">{error}</Note>
@@ -73,7 +79,7 @@ export function TokensPanel(): ReactNode {
             <button type="button" className="od-cbtn" onClick={() => copyText(secret)}>
               Copy token
             </button>
-            <button type="button" className="od-cbtn" onClick={() => setSecret('')}>
+            <button type="button" className="od-cbtn" onClick={dismissSecret}>
               Done
             </button>
           </div>
@@ -84,6 +90,7 @@ export function TokensPanel(): ReactNode {
         <label className="od-acct__field">
           <span className="od-acct__label">Token name</span>
           <input
+            ref={nameInputRef}
             className="od-acct__input"
             value={name}
             placeholder="Living room companion"

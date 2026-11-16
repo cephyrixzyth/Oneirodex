@@ -1,6 +1,7 @@
 # File: /oneirodex/igdb_api.py
 # This file contains functions for interacting with the IGDB API extracted from routes.py
 
+import logging
 import requests
 import time
 import threading
@@ -9,15 +10,34 @@ from oneirodex.models import GlobalSettings
 from oneirodex.utils.global_settings import global_settings_row
 from sqlalchemy import select
 
+from oneirodex.utils.http_safe import safe_request_limited
+from oneirodex.utils.security import validate_outbound_http_url
+
+MAX_IGDB_RESPONSE_BYTES = 16 * 1024 * 1024
+MAX_TWITCH_TOKEN_RESPONSE_BYTES = 64 * 1024
+
+
+logger = logging.getLogger(__name__)
+
+def _validate_igdb_url(url):
+    """Keep the configurable endpoint on Twitch's documented IGDB API host."""
+    return validate_outbound_http_url(url, allowed_hostnames={'api.igdb.com'})
+
+
+def _validate_twitch_url(url):
+    return validate_outbound_http_url(url, allowed_hostnames={'id.twitch.tv'})
+
 
 
 def make_igdb_api_request(endpoint_url, query_params):
     # Get IGDB settings from database
     settings = global_settings_row()
-    if not settings or not settings.igdb_client_id or not settings.igdb_client_secret:
+    from oneirodex.utils.secret_store import read_global_secret
+    secret = read_global_secret(settings, 'igdb_client_secret') if settings else None
+    if not settings or not settings.igdb_client_id or not secret:
         return {"error": "IGDB settings not configured in database"}
 
-    access_token = get_access_token(settings.igdb_client_id, settings.igdb_client_secret) 
+    access_token = get_access_token(settings.igdb_client_id, secret)
 
     if not access_token:
         return {"error": "Failed to retrieve access token"}
@@ -29,7 +49,12 @@ def make_igdb_api_request(endpoint_url, query_params):
 
     try:
         # print(f"make_igdb_api_request Attempting to make a request to {endpoint_url} with headers: {headers} and query: {query_params}")
-        response = requests.post(endpoint_url, headers=headers, data=query_params, timeout=20)
+        with requests.Session() as session:
+            response = safe_request_limited(
+                'POST', endpoint_url, validator=_validate_igdb_url,
+                max_response_bytes=MAX_IGDB_RESPONSE_BYTES, session=session,
+                headers=headers, data=query_params, timeout=20,
+            )
         response.raise_for_status()
         # print(f"make_igdb_api_request Response from IGDB API: {data}")
         return response.json()
@@ -69,7 +94,17 @@ def get_access_token(client_id, client_secret):
         'client_secret': client_secret,
         'grant_type': 'client_credentials'
     }
-    response = requests.post(url, params=params, timeout=15)
+    try:
+        with requests.Session() as session:
+            response = safe_request_limited(
+                'POST', url, validator=_validate_twitch_url,
+                max_response_bytes=MAX_TWITCH_TOKEN_RESPONSE_BYTES, session=session,
+                data=params, timeout=15,
+            )
+    except requests.RequestException:
+        # Keep transport exception text out of the request-level traceback log.
+        logger.warning('Failed to obtain access token')
+        return None
     if response.status_code == 200:
         payload = response.json()
         token = payload.get('access_token')

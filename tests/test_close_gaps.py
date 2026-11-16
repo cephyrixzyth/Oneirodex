@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -10,7 +11,7 @@ from flask_login import login_user
 from sqlalchemy import select
 
 from oneirodex import db
-from oneirodex.models import Game, GlobalSettings, Library, User
+from oneirodex.models import EmulatorSave, Game, GlobalSettings, Library, User
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils.quality_profiles import score_release_title
 from oneirodex.utils.rom_archive import ArchiveRomError, resolve_playable_rom_path
@@ -200,6 +201,11 @@ def test_resolve_7z_without_py7zr(tmp_path, monkeypatch):
 
 
 def test_encrypted_save_roundtrip(client, app, db_session, admin, tmp_path, monkeypatch):
+    from scripts.migrate_emulator_save_keys import initialize_keyring
+
+    keyring_path = tmp_path / 'synthetic-save-keyring.json'
+    initialize_keyring(keyring_path, app.config['SECRET_KEY'])
+    monkeypatch.setenv('ONEIRODEX_SAVE_KEYRING_FILE', str(keyring_path))
     lib = Library(name=f'EncLib_{uuid4().hex[:6]}', platform=LibraryPlatform.NES)
     db_session.add(lib)
     db_session.flush()
@@ -225,6 +231,12 @@ def test_encrypted_save_roundtrip(client, app, db_session, admin, tmp_path, monk
     assert resp.status_code == 201, resp.get_json()
     body = resp.get_json()
     assert body.get('encrypted') is True
+    saved = db_session.execute(select(EmulatorSave).where(
+        EmulatorSave.user_id == admin.id,
+        EmulatorSave.game_uuid == game.uuid,
+        EmulatorSave.slot_name == 'slot1',
+    )).scalar_one()
+    assert Path(saved.storage_path).read_bytes().startswith(b'GTENC3:')
 
     downloaded = client.get(f'/api/games/{game.uuid}/saves/slot1')
     assert downloaded.status_code == 200

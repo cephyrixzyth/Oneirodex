@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, confirmAction } from '@oneirodex/ui'
+import { Button, confirmAction, type AccountLoginSession } from '@oneirodex/ui'
 import { createToken, listTokens, revokeToken } from '../api/tokens'
+import {
+  listAccountLoginSessions,
+  revokeAccountLoginSession,
+  revokeAllAccountLoginSessions,
+} from '../api/sessions'
 import { PageStatus } from '../components/PageStatus'
 import { copyText } from '../utils/copyText'
 import { showToast } from '../utils/toast'
@@ -10,8 +15,8 @@ import './TokensPage.css'
 const PRESET_FALLBACK: Record<string, any> = {
   companion: {
     label: 'Desktop companion',
-    scopes: ['read:library', 'write:download'],
-    hint: 'Library browse + download for the full Tauri companion.',
+    scopes: ['read:library', 'write:download', 'write:presence'],
+    hint: 'Library browse, download and device heartbeat for the full Tauri companion.',
   },
   thin: {
     label: 'Thin client',
@@ -20,7 +25,7 @@ const PRESET_FALLBACK: Record<string, any> = {
   },
 }
 
-function formatWhen(iso: any) {
+function formatWhen(iso: string | null | undefined) {
   if (!iso) return '—'
   try {
     return new Date(iso).toLocaleString()
@@ -39,7 +44,11 @@ export function TokensPage() {
   const [createdSecret, setCreatedSecret] = useState<any>(null)
   const [copyState, setCopyState] = useState('idle')
   const [retryCount, setRetryCount] = useState(0)
-  const secretInputRef = useRef<any>(null)
+  const [sessions, setSessions] = useState<AccountLoginSession[]>([])
+  const [sessionsError, setSessionsError] = useState<any>(null)
+  const [sessionsBusy, setSessionsBusy] = useState(false)
+  const [sessionsRetry, setSessionsRetry] = useState(0)
+  const secretInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -65,6 +74,23 @@ export function TokensPage() {
       controller.abort()
     }
   }, [retryCount])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    let active = true
+    setSessionsError(null)
+    listAccountLoginSessions({ signal: controller.signal })
+      .then((data) => {
+        if (active) setSessions(Array.isArray(data.sessions) ? data.sessions : [])
+      })
+      .catch((err: any) => {
+        if (active && err.name !== 'AbortError') setSessionsError(err)
+      })
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [sessionsRetry])
 
   async function refresh() {
     const data = await listTokens()
@@ -105,7 +131,7 @@ export function TokensPage() {
     }
   }
 
-  async function onRevoke(tokenId: any, tokenName: any) {
+  async function onRevoke(tokenId: number, tokenName: string) {
     if (busy) return
     const ok = await confirmAction({
       title: `Revoke token “${tokenName}”?`,
@@ -123,6 +149,51 @@ export function TokensPage() {
       setError(err)
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function onRevokeSession(session: AccountLoginSession) {
+    if (sessionsBusy) return
+    const ok = await confirmAction({
+      title: session.current ? 'Sign out this browser?' : 'Revoke this browser session?',
+      body: 'That session will need to sign in again.',
+      confirmLabel: session.current ? 'Sign out' : 'Revoke session',
+      cancelLabel: 'Keep session',
+    })
+    if (!ok) return
+    setSessionsBusy(true)
+    setSessionsError(null)
+    try {
+      await revokeAccountLoginSession(session.id)
+      if (session.current) {
+        window.location.assign('/login')
+      } else {
+        setSessionsRetry((count) => count + 1)
+      }
+    } catch (err: any) {
+      setSessionsError(err)
+    } finally {
+      setSessionsBusy(false)
+    }
+  }
+
+  async function onRevokeAllSessions() {
+    if (sessionsBusy || sessions.length === 0) return
+    const ok = await confirmAction({
+      title: 'Sign out on all devices?',
+      body: 'All browser sessions, including this one, will need to sign in again.',
+      confirmLabel: 'Sign out everywhere',
+      cancelLabel: 'Keep sessions',
+    })
+    if (!ok) return
+    setSessionsBusy(true)
+    setSessionsError(null)
+    try {
+      await revokeAllAccountLoginSessions()
+      window.location.assign('/login')
+    } catch (err: any) {
+      setSessionsError(err)
+      setSessionsBusy(false)
     }
   }
 
@@ -315,6 +386,56 @@ export function TokensPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section className="od-tokens__list-wrap" aria-labelledby="od-sessions-heading">
+        <h2 id="od-sessions-heading">Browser sessions</h2>
+        <p className="od-more-page__lede">
+          Sessions expire after 7 days without activity and no later than 30 days after sign-in.
+          Signing out here revokes the server session.
+        </p>
+        {sessionsError ? (
+          <PageStatus
+            error={sessionsError}
+            errorMessage={sessionsError.message || 'Unable to load browser sessions.'}
+            onRetry={() => setSessionsRetry((count) => count + 1)}
+            retryLabel="Retry"
+          />
+        ) : sessions.length === 0 ? (
+          <p className="od-more-page__lede">No active browser sessions.</p>
+        ) : (
+          <>
+            <ul className="od-tokens__list">
+              {sessions.map((row) => (
+                <li key={row.id} className="od-tokens__row">
+                  <div className="od-tokens__row-main">
+                    <strong>{row.current ? 'This browser' : 'Browser session'}</strong>
+                    <span className="od-tokens__meta">Signed in {formatWhen(row.created_at)}</span>
+                    <span className="od-tokens__meta">
+                      Last active {formatWhen(row.last_seen_at)}
+                    </span>
+                    <span className="od-tokens__meta">Expires {formatWhen(row.expires_at)}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={sessionsBusy}
+                    onClick={() => void onRevokeSession(row)}
+                  >
+                    {row.current ? 'Sign out' : 'Revoke'}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={sessionsBusy}
+              onClick={() => void onRevokeAllSessions()}
+            >
+              Sign out on all devices
+            </Button>
+          </>
         )}
       </section>
     </div>

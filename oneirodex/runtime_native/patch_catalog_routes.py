@@ -99,8 +99,20 @@ def create_patch_catalog_router(
                 elif is_search:
                     response = _search(request, data, api_error_payload)
                 else:
-                    body = await _read_json(request)
-                    response = _attach(body, auth.user, data, api_error_payload, api_ok_payload)
+                    content_type = str(
+                        request.headers.get('content-type') or ''
+                    ).split(';', 1)[0].strip().lower()
+                    is_json_request = (
+                        content_type == 'application/json' or (
+                            content_type.startswith('application/')
+                            and content_type.endswith('+json')
+                        )
+                    )
+                    body = await _read_json(request) if is_json_request else {}
+                    response = _attach(
+                        body, auth.user, data, api_error_payload, api_ok_payload,
+                        concise_missing_fields=is_json_request,
+                    )
                     if auth.should_set_session_cookie:
                         _set_session_cookie(response, flask_app, auth)
 
@@ -140,7 +152,6 @@ def _search(request, data, api_error_payload):
     except (TypeError, ValueError):
         limit = 20
     hits = data.search(query, platform=platform, region=region, target_lang=target_lang, limit=limit)
-    from starlette.responses import JSONResponse
     return JSONResponse({'query': query, 'platform': platform, 'region': region,
                          'target_lang': target_lang, 'hits': [hit.to_dict() for hit in hits]})
 
@@ -162,12 +173,29 @@ async def _read_json(request):
     return value if isinstance(value, dict) else None
 
 
-def _attach(body, user, data, api_error_payload, api_ok_payload):
+def _attach(body, user, data, api_error_payload, api_ok_payload, *, concise_missing_fields=True):
+    from pydantic import ValidationError
     from oneirodex.schemas.patch_catalog import AttachPatchGuideBody
     try:
         model = AttachPatchGuideBody.model_validate(body)
-    except Exception:
-        payload, status = api_error_payload('Provide a game UUID and source URL.', code='bad_request')
+    except ValidationError as exc:
+        errors = exc.errors()
+        missing_required_fields = all(
+            error.get('type') == 'missing'
+            and tuple(error.get('loc') or ()) in {('game_uuid',), ('source_url',)}
+            for error in errors
+        )
+        if missing_required_fields and concise_missing_fields:
+            payload, status = api_error_payload(
+                'Provide a game UUID and source URL.', code='bad_request'
+            )
+        else:
+            from oneirodex.utils.validation import format_validation_errors
+
+            payload, status = api_error_payload(
+                'Invalid request.', code='unprocessable',
+                detail=format_validation_errors(exc),
+            )
         return JSONResponse(payload, status_code=status)
     game = data.game(model.game_uuid)
     if not game:

@@ -18,13 +18,26 @@ from oneirodex.utils.admin_invariant import lock_admin_mutation
 
 try:
     from authlib.integrations.flask_client import OAuth
-    from authlib.oauth2.rfc7636 import create_s256_code_challenge
-
-    AUTHLIB_AVAILABLE = True
-except ImportError:  # pragma: no cover - exercised when authlib missing
-    AUTHLIB_AVAILABLE = False
+except ImportError:  # pragma: no cover - runtime image intentionally has no Flask
     OAuth = None  # type: ignore[misc, assignment]
+
+try:
+    from authlib.integrations.starlette_client import OAuth as StarletteOAuth
+except ImportError:  # pragma: no cover - exercised when Authlib is unavailable
+    StarletteOAuth = None  # type: ignore[misc, assignment]
+
+try:
+    from authlib.oauth2.rfc7636 import create_s256_code_challenge
+except ImportError:  # pragma: no cover - exercised when Authlib is unavailable
     create_s256_code_challenge = None  # type: ignore[misc, assignment]
+
+AUTHLIB_FLASK_AVAILABLE = OAuth is not None
+AUTHLIB_NATIVE_AVAILABLE = (
+    StarletteOAuth is not None and create_s256_code_challenge is not None
+)
+# Keep the historical public flag for readiness callers, while each runtime
+# checks the integration it actually uses.
+AUTHLIB_AVAILABLE = AUTHLIB_NATIVE_AVAILABLE or AUTHLIB_FLASK_AVAILABLE
 
 OIDC_SESSION_STATE_KEY = 'oidc_auth_state'
 OIDC_SESSION_VERIFIER_KEY = 'oidc_code_verifier'
@@ -176,7 +189,7 @@ def oidc_readiness_report(settings_record=None) -> dict[str, Any]:
         missing.append('client_id')
     if not redirect_uri:
         missing.append('redirect_uri')
-    if not AUTHLIB_AVAILABLE:
+    if not AUTHLIB_NATIVE_AVAILABLE:
         missing.append('authlib package')
 
     ready = len(missing) == 0
@@ -185,7 +198,7 @@ def oidc_readiness_report(settings_record=None) -> dict[str, Any]:
         'live_verified': False,
         'env_enabled': env_enabled,
         'db_enabled': db_enabled,
-        'authlib_available': AUTHLIB_AVAILABLE,
+        'authlib_available': AUTHLIB_NATIVE_AVAILABLE,
         'has_issuer': bool(issuer),
         'has_client_id': bool(client_id),
         'has_redirect_uri': bool(redirect_uri),
@@ -218,8 +231,9 @@ def build_oidc_config(settings_record=None) -> OidcConfig | None:
         getattr(settings_record, 'oidc_client_id', None)
         or os.getenv('OIDC_CLIENT_ID', '')
     ).strip()
+    from oneirodex.utils.secret_store import read_global_secret
     client_secret = (
-        getattr(settings_record, 'oidc_client_secret', None)
+        read_global_secret(settings_record, 'oidc_client_secret')
         or os.getenv('OIDC_CLIENT_SECRET', '')
     ).strip()
     redirect_uri = (
@@ -270,7 +284,7 @@ def extract_user_identity(claims: dict[str, Any]) -> tuple[str, str]:
 
 def generate_pkce_pair() -> tuple[str, str]:
     code_verifier = secrets.token_urlsafe(64)
-    if AUTHLIB_AVAILABLE and create_s256_code_challenge is not None:
+    if create_s256_code_challenge is not None:
         code_challenge = create_s256_code_challenge(code_verifier)
     else:
         # Fallback stub when authlib is unavailable (tests / partial installs).
@@ -354,7 +368,7 @@ def get_oauth_client():
 def init_oauth(app) -> Any | None:
     """Register the OIDC client with Flask. Returns OAuth instance or None."""
     global _oauth
-    if not AUTHLIB_AVAILABLE:
+    if not AUTHLIB_FLASK_AVAILABLE:
         app.logger.warning('authlib is not installed; OIDC routes will return 503 until authlib is added.')
         return None
 
@@ -452,12 +466,11 @@ def provision_or_update_user(
     if user is None and email and db_session.execute(
         select(User.id).filter(func.lower(User.email) == email)
     ).first() is not None:
-        # The address belongs to a local account we may not link (the provider
-        # did not verify it, or it is already linked elsewhere). A second
-        # account cannot share it either.
+        # Do not disclose whether an email belongs to a local account through
+        # the OIDC callback's user-visible error message.
         raise ValueError(
-            'An account with this email already exists. Sign in with its password, '
-            'or ask an administrator to review its SSO binding and verified email.'
+            'Unable to sign in with this SSO identity. Please contact an '
+            'administrator if the problem continues.'
         )
 
     if user is None and db_session.execute(select(User.id).filter(
@@ -486,7 +499,9 @@ def provision_or_update_user(
             # Explicit: the column default only applies at INSERT, so the
             # disabled-account check below saw None and refused every new user.
             state=True,
-            is_email_verified=True,
+            is_email_verified=_email_verified(
+                claims, trust_provider_email=trust_provider_email,
+            ),
             created=datetime.now(timezone.utc),
         )
         user.set_password(secrets.token_urlsafe(32))
@@ -523,7 +538,15 @@ def provision_or_update_user(
                     if active_admins <= 1:
                         raise ValueError('Cannot change the role of the last active administrator.')
                 user.role = new_role
-        if not user.is_email_verified:
+        # A verified assertion only vouches for the email it names. This local
+        # account's email is intentionally not overwritten from OIDC claims, so
+        # an IdP email change must not verify the account's older local address.
+        if (
+            not user.is_email_verified
+            and email
+            and email == str(user.email or '').strip().lower()
+            and _email_verified(claims, trust_provider_email=trust_provider_email)
+        ):
             user.is_email_verified = True
 
     user.lastlogin = datetime.now(timezone.utc)

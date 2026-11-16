@@ -6,6 +6,8 @@ import { MetricStrip } from '../components/opsWidgets'
 import { showToast } from '../utils/toast'
 import { Page } from '../components/Page'
 
+import { AdminLink } from '../components/AdminLink'
+
 type ExtGroupId = 'archives' | 'disc' | 'cart' | 'other'
 
 interface ExtensionItem {
@@ -223,9 +225,9 @@ export function ExtensionsPage() {
     return (
       <Page title="File Extensions">
         <PageStatus error={error} />
-        <a className="od-btn" href="/libraries">
+        <AdminLink className="od-btn" to="/libraries">
           Back to libraries
-        </a>
+        </AdminLink>
       </Page>
     )
   }
@@ -384,12 +386,12 @@ export function ExtensionsPage() {
       ) : null}
 
       <div className="od-admin-actions-row">
-        <a className="od-btn" href="/libraries">
+        <AdminLink className="od-btn" to="/libraries">
           Libraries
-        </a>
-        <a className="od-btn od-btn--ghost" href="/scan_management">
+        </AdminLink>
+        <AdminLink className="od-btn od-btn--ghost" to="/scan_management">
           Scan jobs
-        </a>
+        </AdminLink>
       </div>
     </Page>
   )

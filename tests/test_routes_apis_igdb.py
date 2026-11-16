@@ -9,7 +9,10 @@ from oneirodex.models import User, Game, Library
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils.game_core import check_existing_game_by_igdb_id
 
-pytestmark = pytest.mark.integration  # A3.1: kept out of the fast `-m "not integration"` core -- IGDB provider API surface.
+pytestmark = [
+    pytest.mark.integration,  # A3.1: kept out of the fast `-m "not integration"` core -- IGDB provider API surface.
+    pytest.mark.usefixtures('reusable_secret_keyring'),
+]
 
 
 def safe_cleanup_database(db_session):

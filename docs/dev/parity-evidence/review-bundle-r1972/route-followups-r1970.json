@@ -1,0 +1,54 @@
+{
+  "review_id": "R1970",
+  "status": "partial",
+  "route": "GET /tokens",
+  "methods": [
+    "GET"
+  ],
+  "previous_route_status": "partially_verified",
+  "current_route_status": "partially_verified",
+  "route_status_promoted": false,
+  "exact_images": {
+    "legacy": {
+      "tag": "oneirodex:parity-v1.1.8",
+      "id": "sha256:19648d0ed947d72ba0b74292ecd91b3d92d4a37be3ac8063ab16e80a43bc864e"
+    },
+    "current": {
+      "tag": "oneirodex:parity-current-00b0bf2a",
+      "id": "sha256:17a0bbdc97e24c51f6c30746b4af5f35151089361cb11428edb669451d6471d1"
+    }
+  },
+  "viewport": "390x844 set on new browser context before navigation and login",
+  "paired_direct_statuses": {
+    "legacy": 200,
+    "current": 200
+  },
+  "matching_token_page_headings": true,
+  "empty_state_matches": true,
+  "page_errors": {
+    "legacy": 0,
+    "current": 0
+  },
+  "document_width_equals_viewport": true,
+  "account_panel": {
+    "opened_on_both": true,
+    "heading": "API tokens",
+    "all_five_tabs_inside_container_on_both": true
+  },
+  "rail_difference": {
+    "legacy": "visible and positioned at left 0 over page content (216px wide)",
+    "current": "hidden, aria-hidden, and positioned off-canvas at left -216px"
+  },
+  "classification": "Confirmed responsive shell difference. Recommendation: retain current mobile rail close behavior as the more usable presentation; owner approval is still required before marking it intentional.",
+  "evidence": ".artifacts/parity-v1.1.8/token-ui-fresh-mobile-r1970.json",
+  "cleanup_verified": true,
+  "external_egress_blocked": true,
+  "production_or_unraid": false,
+  "remaining": [
+    "Owner disposition for mobile rail behavior",
+    "Populated token row, create/secret/copy/dismiss, revoke confirmation/cancel/success/error states",
+    "Keyboard and screen-reader behavior",
+    "Database failure and expiry API cases"
+  ],
+  "screenshot_paths": "[local screenshots withheld; screenshots include local app background]"
+}

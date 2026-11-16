@@ -1,0 +1,144 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, expect, test, vi } from 'vitest'
+
+import { createInvite, listInvites, revokeInvite } from '../accountApi.js'
+import { confirmAction } from '../confirmDialog.js'
+import { InvitesPanel } from './InvitesPanel'
+
+vi.mock('../accountApi.js', () => ({
+  createInvite: vi.fn(),
+  listInvites: vi.fn(),
+  revokeInvite: vi.fn(),
+}))
+
+vi.mock('../confirmDialog.js', () => ({
+  confirmAction: vi.fn(),
+}))
+
+const invite = {
+  token: 'fixture-invite-token',
+  email: null,
+  url: 'https://oneirodex.invalid/register?token=fixture-invite-token',
+  expires_at: '2026-10-20T12:00:00Z',
+  expired: false,
+}
+
+const emptyState = {
+  invites: [],
+  quota: 5,
+  remaining: 5,
+  unlimited: false,
+  smtp_enabled: false,
+  ttl_hours: 48,
+  site_url_configured: false,
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
+
+test('creates a link without email, then refreshes and exposes it for copying', async () => {
+  vi.mocked(listInvites)
+    .mockResolvedValueOnce(emptyState)
+    .mockResolvedValueOnce({ ...emptyState, invites: [invite], remaining: 4 })
+  vi.mocked(createInvite).mockResolvedValue({
+    invite,
+    emailed: false,
+    remaining: 4,
+    unlimited: false,
+  })
+
+  render(<InvitesPanel />)
+
+  expect(await screen.findByRole('button', { name: 'Create invite link' })).toBeEnabled()
+  expect(screen.getByText(/Email is not configured on this server/)).toBeInTheDocument()
+  expect(screen.getByText(/Links use the address you are browsing from/)).toBeInTheDocument()
+  expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
+  fireEvent.click(screen.getByRole('button', { name: 'Create invite link' }))
+
+  await waitFor(() => expect(createInvite).toHaveBeenCalledWith({}))
+  expect(
+    await screen.findByText('Invite created. Copy the link below and pass it on.'),
+  ).toBeInTheDocument()
+  expect(screen.getByText(invite.url)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument()
+  expect(listInvites).toHaveBeenCalledTimes(2)
+})
+
+test('shows a quota denial when the invite allowance changes after loading', async () => {
+  vi.mocked(listInvites).mockResolvedValue({ ...emptyState, remaining: 1 })
+  vi.mocked(createInvite).mockRejectedValue(
+    new Error("You're out of invites. An admin can raise your limit."),
+  )
+
+  render(<InvitesPanel />)
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Create invite link' }))
+
+  expect(
+    await screen.findByText("You're out of invites. An admin can raise your limit."),
+  ).toBeInTheDocument()
+  expect(listInvites).toHaveBeenCalledTimes(1)
+})
+
+test('revokes an outstanding invite and refreshes the empty state', async () => {
+  vi.mocked(listInvites)
+    .mockResolvedValueOnce({ ...emptyState, invites: [invite], remaining: 4 })
+    .mockResolvedValueOnce(emptyState)
+  vi.mocked(revokeInvite).mockResolvedValue({ ok: true })
+  vi.mocked(confirmAction).mockResolvedValue(true)
+
+  render(<InvitesPanel />)
+  expect(await screen.findByText(invite.url)).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+
+  await waitFor(() => expect(revokeInvite).toHaveBeenCalledWith(invite.token))
+  expect(await screen.findByText('No active invites yet.')).toBeInTheDocument()
+  expect(listInvites).toHaveBeenCalledTimes(2)
+})
+
+test('keeps an invite when the confirmation is cancelled', async () => {
+  vi.mocked(listInvites).mockResolvedValue({ ...emptyState, invites: [invite], remaining: 4 })
+  vi.mocked(confirmAction).mockResolvedValue(false)
+
+  render(<InvitesPanel />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }))
+
+  await waitFor(() => expect(confirmAction).toHaveBeenCalled())
+  expect(revokeInvite).not.toHaveBeenCalled()
+  expect(screen.getByText(invite.url)).toBeInTheDocument()
+})
+
+test('reports when the email server accepted the invite', async () => {
+  const email = 'member@example.com'
+  const emailedInvite = { ...invite, email }
+  vi.mocked(listInvites)
+    .mockResolvedValueOnce(emptyState)
+    .mockResolvedValueOnce({ ...emptyState, invites: [emailedInvite], remaining: 4 })
+  vi.mocked(createInvite).mockResolvedValue({
+    invite: emailedInvite,
+    emailed: true,
+    remaining: 4,
+    unlimited: false,
+  })
+
+  render(<InvitesPanel />)
+  expect(await screen.findByRole('button', { name: 'Create invite link' })).toBeEnabled()
+  fireEvent.change(screen.getByLabelText('Email address (optional)'), { target: { value: email } })
+  fireEvent.click(screen.getByRole('button', { name: 'Send invite' }))
+
+  await waitFor(() => expect(createInvite).toHaveBeenCalledWith({ email }))
+  expect(await screen.findByText('Invite created and emailed.')).toBeInTheDocument()
+  expect(screen.getByText(email)).toBeInTheDocument()
+})
+
+test('prevents creating another invite when the quota is exhausted', async () => {
+  vi.mocked(listInvites).mockResolvedValue({ ...emptyState, remaining: 0 })
+
+  render(<InvitesPanel />)
+
+  expect(await screen.findByRole('button', { name: 'Create invite link' })).toBeDisabled()
+  expect(createInvite).not.toHaveBeenCalled()
+})

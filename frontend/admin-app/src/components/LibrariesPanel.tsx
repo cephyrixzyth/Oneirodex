@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { getJson, postJsonResult } from '../api/adminApi'
 import { DataTable, type DataTableColumn } from './DataTable'
 import { gameCountHeat } from './gameCountHeat'
@@ -24,7 +25,13 @@ import { ProposeLeafLibraries } from './ProposeLeafLibraries'
 import { ImportLeafLibraries } from './ImportLeafLibraries'
 import './LibrariesPanel.css'
 
-export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element | null }) {
+export function LibrariesPanel({
+  panelEl: _panelEl = null,
+  managementActions,
+}: {
+  panelEl?: Element | null
+  managementActions?: ReactNode
+}) {
   const [rows, setRows] = useState<LibraryRow[] | null>(null)
   const [error, setError] = useState<unknown>(null)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
@@ -52,7 +59,8 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
 
   useEffect(() => {
     if (!rows?.length) return undefined
-    void kickCatalogRefresh(rows).then(() => {
+    void kickCatalogRefresh(rows).then((refreshed) => {
+      if (!refreshed) return
       /* After a first-wave IGDB refresh, reload once so DAT/IGDB totals replace estimates. */
       const flagged = (() => {
         try {
@@ -379,46 +387,9 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
   return (
     <div className="od-libraries-react">
       <CreateLibraryForm onCreated={() => void reload()} />
-      <section
-        className="od-admin-panel od-libraries-add-many"
-        aria-labelledby="od-libraries-add-many-title"
-      >
-        <div className="od-libraries-add-many__header">
-          <div>
-            <h2 id="od-libraries-add-many-title" className="od-admin-panel-title">
-              Add many libraries
-            </h2>
-            <p className="od-admin-lede">
-              Preview and review candidates first. Libraries are created only after explicit
-              confirmation.
-            </p>
-          </div>
-          <div
-            className="od-libraries-add-many__actions"
-            role="group"
-            aria-label="Add many workflows"
-          >
-            <Button
-              type="button"
-              className={addManyMode === 'propose' ? 'od-btn--accent' : 'od-btn--secondary'}
-              aria-pressed={addManyMode === 'propose'}
-              onClick={() => setAddManyMode((mode) => (mode === 'propose' ? null : 'propose'))}
-            >
-              Propose from folder
-            </Button>
-            <Button
-              type="button"
-              className={addManyMode === 'import' ? 'od-btn--accent' : 'od-btn--secondary'}
-              aria-pressed={addManyMode === 'import'}
-              onClick={() => setAddManyMode((mode) => (mode === 'import' ? null : 'import'))}
-            >
-              Import CSV/JSON
-            </Button>
-          </div>
-        </div>
-        {addManyMode === 'propose' ? <ProposeLeafLibraries /> : null}
-        {addManyMode === 'import' ? <ImportLeafLibraries /> : null}
-      </section>
+      {managementActions ? (
+        <div className="od-admin-panel__toolbar">{managementActions}</div>
+      ) : null}
       <LibrariesTrailSummary
         libraryCount={libraryCount}
         totalGames={totalGames}
@@ -472,9 +443,50 @@ export function LibrariesPanel({ panelEl: _panelEl = null }: { panelEl?: Element
         columnFilters
         showCount={false}
         dense
-        emptyMessage="No libraries yet. Create one above to start scanning."
+        emptyMessage="No libraries yet. Create one below to start scanning."
         initialSort={{ key: 'name', dir: 'asc' }}
       />
+
+      <section
+        className="od-admin-panel od-libraries-add-many"
+        aria-labelledby="od-libraries-add-many-title"
+      >
+        <div className="od-libraries-add-many__header">
+          <div>
+            <h2 id="od-libraries-add-many-title" className="od-admin-panel-title">
+              Add many libraries
+            </h2>
+            <p className="od-admin-lede">
+              Preview and review candidates first. Libraries are created only after explicit
+              confirmation.
+            </p>
+          </div>
+          <div
+            className="od-libraries-add-many__actions"
+            role="group"
+            aria-label="Add many workflows"
+          >
+            <Button
+              type="button"
+              className={addManyMode === 'propose' ? 'od-btn--accent' : 'od-btn--secondary'}
+              aria-pressed={addManyMode === 'propose'}
+              onClick={() => setAddManyMode((mode) => (mode === 'propose' ? null : 'propose'))}
+            >
+              Propose from folder
+            </Button>
+            <Button
+              type="button"
+              className={addManyMode === 'import' ? 'od-btn--accent' : 'od-btn--secondary'}
+              aria-pressed={addManyMode === 'import'}
+              onClick={() => setAddManyMode((mode) => (mode === 'import' ? null : 'import'))}
+            >
+              Import CSV/JSON
+            </Button>
+          </div>
+        </div>
+        {addManyMode === 'propose' ? <ProposeLeafLibraries /> : null}
+        {addManyMode === 'import' ? <ImportLeafLibraries /> : null}
+      </section>
 
       <ScanConflictModal
         open={conflictOpen}

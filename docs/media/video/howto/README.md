@@ -236,7 +236,7 @@ Every line the voice says, in order — the same text as the `.vtt` tracks.
 2. Help is the in-app guide — pick a topic and the answer opens underneath.
 3. Expand all reads it straight through.
 4. Topics cover browser play, controllers, cheats, translations and the licence.
-5. Report sends an issue to the admin's Support inbox, and on to GitHub when configured.
+5. Report saves to the admin's Support inbox. Members can opt in to also send a report to the configured GitHub repository.
 6. That is help and reporting a problem. The written guide is in the docs folder, at docs/user/faq.md.
 
 </details>
@@ -288,7 +288,7 @@ Every line the voice says, in order — the same text as the `.vtt` tracks.
 2. Users lists every member with their role — admin, librarian, member or child.
 3. Invites are how people join: generate a link, set its quota, hand it over.
 4. Whitelist pre-approves addresses when registration is open.
-5. Support inbox receives what members send from Report, and can mirror to GitHub Issues.
+5. Support inbox receives what members send from Report; GitHub Issues sync runs only when the member opts in.
 6. That is users, invites and support. The written guide is in the docs folder, at docs/admin/support-inbox.md.
 
 </details>

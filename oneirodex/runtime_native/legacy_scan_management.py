@@ -1,11 +1,13 @@
 """FastAPI compatibility endpoint for the old scan-management form actions."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse
+from .csrf_compat import csrf_html_error_response
+from .response_compat import flask_redirect_response
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
@@ -86,7 +88,7 @@ class LegacyScanManagementData:
 
         return is_scan_busy()
 
-    def start_scan(self, *, library, folder, options, app):
+    def start_scan(self, *, library, folder, options, app, database_scope=None):
         from oneirodex.utils.scan_queue import start_or_queue_scan
 
         return start_or_queue_scan(
@@ -97,6 +99,7 @@ class LegacyScanManagementData:
             fetch_hltb=options['fetch_hltb'], force_hltb_refetch=options['force_hltb_refetch'],
             schedule=options.get('schedule'), schedule_fields=options.get('schedule_fields'),
             queue_policy=options['queue_policy'], allow_force=options['allow_force'], app=app,
+            database_scope=database_scope,
         )
 
     def scan_patterns(self):
@@ -182,8 +185,10 @@ def create_legacy_scan_management_router(
                 )
                 response = csrf_error_response(
                     request, session_data, app.config,
-                    token=str(form.get(str(app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')) or ''),
+                    token=str(first_form_value(form, str(app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token')) or ''),
                 )
+                if response is not None:
+                    response = csrf_html_error_response(response)
                 auth = None
                 if response is None:
                     auth = request_auth_context(
@@ -209,7 +214,10 @@ def create_legacy_scan_management_router(
                         response = JSONResponse(payload, status_code=status)
 
                 if response is None:
-                    response = await _apply_action(request, form, app, data, auth)
+                    response = await _apply_action(
+                        request, form, app, data, auth,
+                        database_scope=database_scope,
+                    )
                 if auth is not None and auth.should_set_session_cookie:
                     _set_session_cookie(response, app, auth)
                 from oneirodex.utils.security_headers import security_header_values
@@ -222,15 +230,15 @@ def create_legacy_scan_management_router(
     return router
 
 
-async def _apply_action(request, form, app, data, auth):
+async def _apply_action(request, form, app, data, auth, *, database_scope=None):
     from starlette.responses import JSONResponse
 
-    action = str(form.get('submit') or '')
+    action = str(first_form_value(form, 'submit') or '')
     flashes = auth.session_data.setdefault('_flashes', [])
-    library_uuid = str(form.get('library_uuid') or '').strip()
+    library_uuid = str(first_form_value(form, 'library_uuid') or '').strip()
     if action == 'AddReleaseGroup':
-        pattern = str(form.get('filter_pattern') or '').strip()
-        case_sensitive = str(form.get('case_sensitive') or 'no')
+        pattern = str(first_form_value(form, 'filter_pattern') or '').strip()
+        case_sensitive = str(first_form_value(form, 'case_sensitive') or 'no')
         if not pattern or len(pattern) > 200 or case_sensitive not in {'yes', 'no'}:
             flashes.append(('danger', 'Enter a valid scanning filter and case-sensitivity option.'))
         else:
@@ -241,7 +249,7 @@ async def _apply_action(request, form, app, data, auth):
                 flashes.append(('danger', 'Could not add scanning filter.'))
         location = '/scan_management?active_tab=scan_filters'
     elif action == 'DeleteReleaseGroup':
-        raw_id = str(form.get('filter_id') or '')
+        raw_id = str(first_form_value(form, 'filter_id') or '')
         try:
             deleted = data.delete_filter(int(raw_id)) if raw_id.isdigit() else False
         except Exception:
@@ -264,28 +272,35 @@ async def _apply_action(request, form, app, data, auth):
         auth.session_data['active_tab'] = 'unmatched'
         location = '/scan_management?active_tab=unmatched'
     elif action in {'AutoScan', 'ManualScan'}:
-        location = await _scan_action(form, app, data, auth, action, library_uuid)
+        location = await _scan_action(
+            form, app, data, auth, action, library_uuid,
+            database_scope=database_scope,
+        )
     else:
         flashes.append(('error', 'Unrecognized action.'))
         location = '/scan_management'
-    response = RedirectResponse(location, status_code=302)
+    response = flask_redirect_response(location, status_code=302)
     _set_session_cookie(response, app, auth)
     return response
 
 
-async def _scan_action(form, app, data, auth, action, library_uuid):
+async def _scan_action(form, app, data, auth, action, library_uuid, *, database_scope=None):
+    from urllib.parse import urlencode
     from oneirodex.utils.scan_queue import parse_force_parallel, parse_queue_policy
 
     manual = action == 'ManualScan'
     tab = 'manual' if manual else 'auto'
     redirect = f'/scan_management?active_tab={tab}'
+    redirect_with_library = '/scan_management?' + urlencode([
+        ('library_uuid', library_uuid), ('active_tab', tab),
+    ])
     flashes = auth.session_data.setdefault('_flashes', [])
     library = data.library(library_uuid) if library_uuid else None
     if library is None:
         flashes.append(('danger', 'Please select a valid library.'))
-        return redirect
-    folder = str(form.get('folder_path') or '').strip()
-    root = str(form.get('library_root') or '').strip() or None
+        return redirect_with_library if library_uuid else redirect
+    folder = str(first_form_value(form, 'folder_path') or '').strip()
+    root = str(first_form_value(form, 'library_root') or '').strip() or None
     resolved, root_error = data.resolve_path(app, folder, root)
     if root_error:
         flashes.append(('danger', f'Service configuration error: {root_error}'))
@@ -300,19 +315,28 @@ async def _scan_action(form, app, data, auth, action, library_uuid):
         return redirect
     if not data.readable(resolved):
         flashes.append(('danger', 'Folder does not exist or cannot be accessed.'))
-        return f'{redirect}&library_uuid={library_uuid}'
-    requested_mode = str(form.get('scan_mode') or 'auto')
+        return redirect_with_library
+    raw_mode = first_form_value(form, 'scan_mode')
+    requested_mode = 'auto' if raw_mode is None else str(raw_mode)
+    # AutoScanForm and ScanFolderForm are RadioFields with these exact choices.
+    # WTForms rejects unknown values; the native compatibility handler must not
+    # let resolve_scan_mode_for_path silently turn them into a folders scan.
+    if requested_mode not in {'auto', 'folders', 'files'}:
+        flashes.append(('danger', 'Not a valid choice.'))
+        return redirect_with_library
     scan_mode = data.scan_mode(resolved, requested_mode)
+    raw_schedule = first_form_value(form, 'schedule')
+    schedule = raw_schedule if raw_schedule and str(raw_schedule).strip() else None
     options = {
         'scan_mode': scan_mode,
-        'remove_missing': not manual and _flag(form.get('remove_missing')),
-        'download_missing_images': not manual and _flag(form.get('download_missing_images')),
-        'force_updates_extras': _flag(form.get('force_updates_extras_scan')),
-        'fetch_hltb': _flag(form.get('fetch_hltb')),
-        'force_hltb_refetch': _flag(form.get('force_hltb_refetch')),
-        'schedule': str(form.get('schedule') or '').strip() or None,
+        'remove_missing': not manual and _flag(first_form_value(form, 'remove_missing')),
+        'download_missing_images': not manual and _flag(first_form_value(form, 'download_missing_images')),
+        'force_updates_extras': _flag(first_form_value(form, 'force_updates_extras_scan')),
+        'fetch_hltb': _flag(first_form_value(form, 'fetch_hltb')),
+        'force_hltb_refetch': _flag(first_form_value(form, 'force_hltb_refetch')),
+        'schedule': schedule,
         'queue_policy': parse_queue_policy(
-            form.get('queue_policy'), force_parallel=form.get('force_parallel'),
+            first_form_value(form, 'queue_policy'), force_parallel=first_form_value(form, 'force_parallel'),
         ),
         'allow_force': getattr(auth.user, 'role', None) == 'admin',
     }
@@ -321,24 +345,29 @@ async def _scan_action(form, app, data, auth, action, library_uuid):
 
         options['schedule_fields'] = normalize_schedule_fields(
             options['schedule'],
-            interval_value=form.get('schedule_interval_value'),
-            interval_unit=form.get('schedule_interval_unit'),
-            cron_expr=form.get('schedule_cron'),
+            interval_value=first_form_value(form, 'schedule_interval_value'),
+            interval_unit=first_form_value(form, 'schedule_interval_unit'),
+            cron_expr=first_form_value(form, 'schedule_cron'),
         )
         if options['schedule_fields'].get('error'):
             flashes.append(('danger', options['schedule_fields']['error']))
+            if _schedule_form_validation_error(form):
+                return redirect_with_library
             return redirect
     if not manual or data.busy():
         try:
-            result = data.start_scan(library=library, folder=resolved, options=options, app=app)
+            result = data.start_scan(
+                library=library, folder=resolved, options=options, app=app,
+                database_scope=database_scope,
+            )
         except Exception:
             result = {'status': 'rejected', 'message': 'Scan request could not be queued.'}
         category = 'info' if result.get('status') in {'started', 'queued'} else 'danger'
-        if result.get('status') == 'started' and parse_force_parallel(form.get('force_parallel')):
+        if result.get('status') == 'started' and parse_force_parallel(first_form_value(form, 'force_parallel')):
             category = 'warning'
         flashes.append((category, result.get('message') or 'Scan request was rejected.'))
         auth.session_data['active_tab'] = tab
-        return f'{redirect}&library_uuid={library_uuid}'
+        return redirect_with_library
 
     if auth.session_data.get('game_paths') is not None:
         auth.session_data.pop('game_paths', None)
@@ -364,11 +393,42 @@ async def _scan_action(form, app, data, auth, action, library_uuid):
     auth.session_data['force_hltb_refetch'] = options['force_hltb_refetch']
     flashes.append(('info', 'Manual scan processed for folder: ' + resolved))
     auth.session_data['active_tab'] = 'manual'
-    return f'{redirect}&library_uuid={library_uuid}'
+    return redirect_with_library
+
+
+def _schedule_form_validation_error(form):
+    """Whether WTForms rejects the submitted schedule before legacy handling."""
+    choice = first_form_value(form, 'schedule')
+    if choice not in (None, '') and choice not in {
+        '8_hours', '24_hours', '48_hours', 'interval', 'cron',
+    }:
+        return True
+    if choice == 'interval':
+        raw_value = first_form_value(form, 'schedule_interval_value')
+        # WTForms Optional skips an explicitly blank value, so the later
+        # schedule normalizer owns that error and keeps its tab-only redirect.
+        if raw_value not in (None, ''):
+            try:
+                value = int(raw_value)
+            except (TypeError, ValueError):
+                return True
+            if value < 1 or value > 10080:
+                return True
+        unit = first_form_value(form, 'schedule_interval_unit')
+        if unit not in (None, '') and unit not in {'hours', 'minutes'}:
+            return True
+    if choice == 'cron':
+        expression = first_form_value(form, 'schedule_cron') or ''
+        if len(str(expression)) > 64:
+            return True
+    return False
 
 
 def _flag(value):
-    return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+    # WTForms BooleanField treats only False, 'false', and '' as unchecked.
+    # In particular its default checked value is 'y'; retain that meaning for
+    # direct compatibility posts from the v1.1.8 form.
+    return value not in (None, False, 'false', '')
 
 
 def _body_receive(raw):

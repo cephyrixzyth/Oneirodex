@@ -6,6 +6,7 @@ from oneirodex.models import Genre, Theme, GameMode, PlayerPerspective
 from oneirodex import cache, db
 from oneirodex.utils.api_response import api_error
 from oneirodex.utils.event_logging import log_system_event
+from oneirodex.utils.api_tokens import require_api_token_scope
 from oneirodex.utils.filter_catalog import (
     igdb_platforms_payload as _igdb_platforms_payload,
     libraries_payload as _libraries_payload_shared,
@@ -82,6 +83,7 @@ def get_player_perspectives() -> Tuple[Response, int]:
 
 @apis_bp.route('/library_platforms')
 @login_required
+@require_api_token_scope('read:library')
 def get_library_platforms():
     try:
         include_completion = request.args.get('include_completion', '0') in ('1', 'true', 'yes')
@@ -111,6 +113,7 @@ def _ownership_store_options():
 
 @apis_bp.route('/filters/bundle')
 @login_required
+@require_api_token_scope('read:library')
 def filters_bundle():
     """Single payload for FilterBar — replaces 7 parallel filter GETs."""
     try:

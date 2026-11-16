@@ -14,6 +14,7 @@ from oneirodex.runtime_native.session_compat import dump_session_cookie, generat
 class FakeQualityProfilesData:
     def __init__(self):
         self.calls = 0
+        self.create_calls = 0
         self.payload = {
             'version': 2,
             'active_id': 'balanced',
@@ -32,9 +33,12 @@ class FakeQualityProfilesData:
         return self.payload
 
     def create(self, payload):
+        self.create_calls += 1
         return {'id': payload.get('id', 'new'), 'name': payload.get('name', 'New')}
 
     def save(self, payload):
+        if not isinstance(payload, dict):
+            raise TypeError(f"'{type(payload).__name__}' object is not a mapping")
         return {'id': 'balanced', 'name': payload.get('name', 'Balanced')}
 
     def set_active(self, profile_id):
@@ -44,6 +48,10 @@ class FakeQualityProfilesData:
         return {'id': profile_id, 'name': 'Example'}
 
     def update(self, profile_id, payload):
+        if profile_id not in {profile['id'] for profile in self.payload['profiles']}:
+            raise KeyError(f'profile not found: {profile_id}')
+        if not isinstance(payload, dict):
+            raise TypeError(f"'{type(payload).__name__}' object is not a mapping")
         return {'id': profile_id, 'name': payload.get('name', 'Updated')}
 
     def delete(self, profile_id):
@@ -205,3 +213,126 @@ def test_quality_profile_crud_active_and_score_actions_preserve_contracts():
     assert updated.status_code == 200 and updated.json()['name'] == 'Very Strict'
     assert deleted.status_code == 200 and deleted.json()['deleted'] == 'strict'
     assert score.status_code == 200 and score.json()['size_bytes'] == 1000
+
+
+def test_score_non_finite_size_falls_back_without_server_error():
+    client = make_client()
+    response = client.post(
+        '/api/quality-profiles/score',
+        content='{"title":"Game 1080p","size_bytes":Infinity}',
+        headers={
+            'Content-Type': 'application/json',
+            'X-CSRFToken': client.csrf_token,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()['size_bytes'] is None
+
+
+def test_score_and_activate_non_object_json_keep_validation_contract():
+    client = make_client()
+    headers = {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': client.csrf_token,
+    }
+    score = client.post(
+        '/api/quality-profiles/score', content='["x"]', headers=headers,
+    )
+    activate = client.put(
+        '/api/quality-profiles/active', content='["x"]', headers=headers,
+    )
+
+    assert score.status_code == 422
+    assert activate.status_code == 422
+    for response, model_name in (
+        (score, 'ScoreReleaseBody'),
+        (activate, 'SetActiveQualityProfileBody'),
+    ):
+        assert response.json()['detail']['__root__'] == (
+            f'Input should be a valid dictionary or instance of {model_name}'
+        )
+
+
+def test_profile_create_rejects_non_object_json_without_writing():
+    data = FakeQualityProfilesData()
+    client = make_client(data=data)
+    response = client.post(
+        '/api/quality-profiles', content='["x"]',
+        headers={
+            'Content-Type': 'application/json',
+            'X-CSRFToken': client.csrf_token,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error'] == 'Invalid request.'
+    assert data.create_calls == 0
+
+
+def test_legacy_profile_put_keeps_bad_request_for_non_object_json():
+    client = make_client()
+    response = client.put(
+        '/api/quality-profiles', content='["x"]',
+        headers={
+            'Content-Type': 'application/json',
+            'X-CSRFToken': client.csrf_token,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {
+        'ok': False,
+        'error': "'list' object is not a mapping",
+        'error_code': 'bad_request',
+        'message': "'list' object is not a mapping",
+        'success': False,
+    }
+
+
+def test_profile_id_put_patch_keep_legacy_non_object_errors_and_missing_precedence():
+    client = make_client()
+    headers = {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': client.csrf_token,
+    }
+    put = client.put('/api/quality-profiles/balanced', content='["x"]', headers=headers)
+    patch = client.patch('/api/quality-profiles/balanced', content='"x"', headers=headers)
+    missing = client.put('/api/quality-profiles/missing', content='["x"]', headers=headers)
+
+    assert put.status_code == 400
+    assert put.json()['error'] == "'list' object is not a mapping"
+    assert put.json()['error_code'] == 'bad_request'
+    assert patch.status_code == 400
+    assert patch.json()['error'] == "'str' object is not a mapping"
+    assert patch.json()['error_code'] == 'bad_request'
+    assert missing.status_code == 404
+    assert missing.json()['error'] == "'profile not found: missing'"
+    assert missing.json()['error_code'] == 'not_found'
+
+
+def test_profile_id_put_patch_only_parse_json_content_types():
+    client = make_client()
+    csrf = {'X-CSRFToken': client.csrf_token}
+    base = '/api/quality-profiles/balanced'
+    for method in ('PUT', 'PATCH'):
+        plain = client.request(
+            method, base, content='{"name":"Ignored"}',
+            headers={**csrf, 'Content-Type': 'text/plain'},
+        )
+        form = client.request(
+            method, base, content='{"name":"Ignored"}',
+            headers={**csrf, 'Content-Type': 'application/x-www-form-urlencoded'},
+        )
+        missing_type = client.request(
+            method, base, content='{"name":"Ignored"}', headers=csrf,
+        )
+        json_suffix = client.request(
+            method, base, content='{"name":"Accepted"}',
+            headers={**csrf, 'Content-Type': 'application/merge-patch+json'},
+        )
+
+        assert plain.status_code == form.status_code == missing_type.status_code == 200
+        assert plain.json()['name'] == form.json()['name'] == missing_type.json()['name'] == 'Updated'
+        assert json_suffix.status_code == 200
+        assert json_suffix.json()['name'] == 'Accepted'

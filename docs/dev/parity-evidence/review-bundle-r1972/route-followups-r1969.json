@@ -1,0 +1,68 @@
+{
+  "review_id": "R1969",
+  "status": "partial",
+  "route": "GET /tokens",
+  "methods": [
+    "GET"
+  ],
+  "exact_images": {
+    "legacy": {
+      "tag": "oneirodex:parity-v1.1.8",
+      "id": "sha256:19648d0ed947d72ba0b74292ecd91b3d92d4a37be3ac8063ab16e80a43bc864e"
+    },
+    "current": {
+      "tag": "oneirodex:parity-current-00b0bf2a",
+      "id": "sha256:17a0bbdc97e24c51f6c30746b4af5f35151089361cb11428edb669451d6471d1",
+      "source_revision": "00b0bf2ab06b531938476d9d765c4c4e99a706b3"
+    }
+  },
+  "paired_contexts": 2,
+  "matched_entry_statuses": 2,
+  "page_errors": {
+    "legacy": 0,
+    "current": 0
+  },
+  "direct_entry": {
+    "legacy": {
+      "desktop": 200,
+      "mobile": 200
+    },
+    "current": {
+      "desktop": 200,
+      "mobile": 200
+    },
+    "headings_equal": true,
+    "empty_state_equal": true
+  },
+  "account_menu": {
+    "legacy": "visible API tokens item opened API tokens dialog by label",
+    "current": "API tokens link opened API tokens dialog",
+    "dialog_heading_equal": true
+  },
+  "layout": {
+    "viewport_widths": [
+      1440,
+      390
+    ],
+    "body_and_document_width_equal_viewport": true,
+    "legacy_mobile_rail": "open and overlaid page",
+    "current_mobile_rail": "closed",
+    "difference_disposition": "unresolved; rerun in fresh mobile-sized browser contexts and obtain owner disposition before classifying as intentional"
+  },
+  "evidence": ".artifacts/parity-v1.1.8/api-token-ui-exact-r1969.json",
+  "route_status_promoted": true,
+  "cleanup_verified": true,
+  "external_egress_blocked": true,
+  "production_or_unraid": false,
+  "remaining": [
+    "Fresh-context mobile shell capture and disposition of rail-state difference",
+    "Populated token row states",
+    "Create form validation and one-time secret copy/dismiss UI",
+    "Revoke confirmation/cancel/success/error UI",
+    "Keyboard and screen-reader behavior",
+    "Database failure states"
+  ],
+  "previous_route_status": "behavior_unverified",
+  "current_route_status": "partially_verified",
+  "route_status_promoted_to_complete": false
+}

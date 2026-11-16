@@ -69,15 +69,6 @@ export function VrPage() {
   }
 
   useEffect(() => {
-    if (!('serviceWorker' in navigator)) {
-      return
-    }
-    navigator.serviceWorker.register('/vr/sw.js', { scope: '/vr' }).catch(() => {
-      // The PWA shell is optional; browsing still works without it.
-    })
-  }, [])
-
-  useEffect(() => {
     const controller = new AbortController()
     let active = true
     setError(null)

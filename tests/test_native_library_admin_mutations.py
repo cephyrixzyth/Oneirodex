@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
+import struct
 from contextlib import nullcontext
 from io import BytesIO
 from types import SimpleNamespace
@@ -8,7 +11,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from fastapi import FastAPI
-from flask import Flask
+from flask import Flask, redirect as flask_redirect, request as flask_request
 from PIL import Image
 
 from oneirodex.runtime_native.library_admin_mutations import (
@@ -18,23 +21,56 @@ from oneirodex.runtime_native.library_admin_mutations import (
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie, generate_csrf_token,
 )
+from oneirodex.utils.persistent_sessions import issue_login_identity
+from tests.fixtures.native_auth import persistent_login_store
+
+LIBRARY_UUID = '00000000-0000-0000-0000-000000000001'
+
+
+def _png_header(width, height):
+    import zlib
+
+    header = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack('>I', len(data)) + body + struct.pack('>I', zlib.crc32(body))
+
+    return (
+        b'\x89PNG\r\n\x1a\n'
+        + chunk(b'IHDR', header)
+        + chunk(b'IDAT', zlib.compress(b''))
+        + chunk(b'IEND', b'')
+    )
 
 
 class FakeLibraryAdminMutations:
     def __init__(self):
         self.items = {
             'lib-1': SimpleNamespace(uuid='lib-1', name='Library One', last_scan_folder='/safe/root/one'),
+            LIBRARY_UUID: SimpleNamespace(uuid=LIBRARY_UUID, name='Library One', last_scan_folder='/safe/root/one'),
         }
         self.calls = []
+        self.adapter_had_running_loop = None
+
+    def _record_worker_context(self):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self.adapter_had_running_loop = False
+        else:
+            self.adapter_had_running_loop = True
 
     def library(self, library_uuid):
         return self.items.get(library_uuid)
 
     def create(self, **values):
+        self._record_worker_context()
         self.calls.append(('create', values))
         return {'library_uuid': 'new-lib', 'name': values['name']}
 
     def update(self, library, **values):
+        self._record_worker_context()
         self.calls.append(('update', library.uuid, values))
         return {
             'uuid': library.uuid, 'name': values['name'],
@@ -42,13 +78,23 @@ class FakeLibraryAdminMutations:
             'scan_depth': values['scan_depth'],
         }
 
-    def start_scan(self, *, library, folder, options, app):
-        self.calls.append(('scan', library.uuid, folder, options))
+    def start_scan(self, *, library, folder, options, app, database_scope=None):
+        self.calls.append(('scan', library.uuid, folder, options, database_scope))
         return {'status': 'queued', 'job_id': 'scan-job', 'position': 2, 'message': 'queued'}
+
+    def fail_scan_for_legacy_mode(self, *, library, folder, options):
+        self.calls.append(('fail_scan_mode', library.uuid, folder, options))
+        return {
+            'status': 'started', 'job_id': 'failed-scan-job', 'position': None,
+            'message': 'Scan started (job failed-s…).',
+        }
 
     def resolve_scan_path(self, app, folder, library_root):
         self.calls.append(('resolve', folder, library_root))
-        return folder or '/safe/root/one', None
+        resolved = folder or '/safe/root/one'
+        if not resolved.startswith('/'):
+            resolved = '/safe/root/' + resolved
+        return resolved, None
 
     def allowed_bases(self, _app):
         return ['/safe/root']
@@ -70,7 +116,8 @@ class FakeLibraryAdminMutations:
         self.calls.append(('enqueue_refresh', queue))
         return {'status': 'queued', 'jobs': [{'job_id': 'refresh-job', 'position': 1}]}
 
-    def promote_refresh(self, _app):
+    def promote_refresh(self, _app, *, database_scope=None):
+        self.calls.append(('promote_refresh', database_scope))
         return SimpleNamespace(id='refresh-job')
 
     def force_refresh(self, queue, _app, *, database_scope=None):
@@ -92,33 +139,41 @@ def native_client():
         WTF_CSRF_ENABLED=True, WTF_CSRF_SECRET_KEY='library-admin-secret',
         MAX_CONTENT_LENGTH=2 * 1024 * 1024,
     )
-    user = SimpleNamespace(id=7, name='Admin', role='admin', state=True, is_active=True)
+    users = {
+        7: SimpleNamespace(id=7, name='Admin', role='admin', state=True, is_active=True,
+                           session_fingerprint=lambda: '0123456789abcdef'),
+        8: SimpleNamespace(id=8, name='Member', role='user', state=True, is_active=True,
+                           session_fingerprint=lambda: '0123456789abcdef'),
+    }
     data = FakeLibraryAdminMutations()
     database_scope = lambda _app: nullcontext()
     runtime = FastAPI()
     runtime.include_router(create_library_admin_mutations_router(
-        flask_app, find_user=lambda _id: user, find_token=lambda _prefix: None,
+        flask_app, find_user=lambda user_id: users.get(user_id), find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: user if user_id == '7:fp' else None,
+        load_user_id=lambda user_id: users.get(int(user_id.split(':', 1)[0]))
+        if user_id.split(':', 1)[0] in ('7', '8') else None,
+        login_manager=SimpleNamespace(login_view='/login'),
         data_access=data,
         database_scope=database_scope,
     ))
     return runtime, data
 
 
-def _session_cookie():
-    session = {'_user_id': '7:fp', '_fresh': True}
+def _session_cookie(user_id=7):
+    user = SimpleNamespace(id=user_id, session_fingerprint=lambda: '0123456789abcdef')
+    session = {'_user_id': issue_login_identity(user), '_fresh': True}
     csrf = generate_csrf_token(session, 'library-admin-secret')
     return dump_session_cookie(session, 'library-admin-secret'), csrf
 
 
-def _request(runtime, method, path, *, json=None, headers=None, cookie=True, csrf_header=True, files=None, data=None):
+def _request(runtime, method, path, *, json=None, headers=None, cookie=True, csrf_header=True, files=None, data=None, user_id=7):
     async def send():
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=runtime), base_url='http://testserver') as client:
             request_headers = dict(headers or {})
             form_data = data
             if cookie:
-                session, csrf = _session_cookie()
+                session, csrf = _session_cookie(user_id)
                 request_headers['Cookie'] = f'session={session}'
                 if csrf_header:
                     request_headers['X-CSRFToken'] = csrf
@@ -126,6 +181,20 @@ def _request(runtime, method, path, *, json=None, headers=None, cookie=True, csr
                     form_data = {**form_data, 'csrf_token': csrf}
             return await client.request(method, path, json=json, headers=request_headers, files=files, data=form_data)
     return asyncio.run(send())
+
+
+def test_retired_session_identity_cannot_reach_library_mutation_adapter(native_client):
+    runtime, data = native_client
+    session = {'_user_id': '7:0123456789abcdef', '_fresh': True}
+    csrf = generate_csrf_token(session, 'library-admin-secret')
+    cookie = dump_session_cookie(session, 'library-admin-secret')
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries', cookie=False,
+        json={'name': 'Untrusted legacy login', 'platform': 'PCWIN'},
+        headers={'Cookie': f'session={cookie}', 'X-CSRFToken': csrf},
+    )
+    assert response.status_code == 401
+    assert data.calls == []
 
 
 def test_csrf_precedes_auth_and_create_validates_then_uses_fake(native_client):
@@ -147,6 +216,175 @@ def test_csrf_precedes_auth_and_create_validates_then_uses_fake(native_client):
     assert data.calls[0][1]['name'] == 'New Library'
     assert data.calls[0][1]['scan_depth'] == 2
     assert data.calls[0][1]['watch_enabled'] is False
+    assert data.adapter_had_running_loop is False
+
+
+@pytest.mark.parametrize(
+    ('payload', 'message'),
+    [
+        ({'name': ' ', 'platform': 'PCWIN'}, 'Library name is required'),
+        ({'name': 'x' * 256, 'platform': 'PCWIN'}, 'Library name is required'),
+        ({'name': 'Invalid platform', 'platform': 'NO_SUCH_PLATFORM'}, 'supported platform'),
+        ({'name': 'Invalid depth', 'platform': 'PCWIN', 'scan_depth': 3}, 'Scan depth must be 1 or 2'),
+        ({'name': 'Invalid watch', 'platform': 'PCWIN', 'watch_enabled': 'sometimes'}, 'watch setting'),
+    ],
+)
+def test_library_create_api_rejects_invalid_fields_without_adapter_calls(native_client, payload, message):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries', json=payload)
+
+    assert response.status_code == 400
+    assert message in response.json()['message']
+    assert data.calls == []
+
+
+def test_library_create_api_rejects_corrupt_image_without_adapter_call(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries',
+        data={'name': 'Broken image', 'platform': 'PCWIN'},
+        files={'image': ('broken.png', b'not an image', 'image/png')},
+    )
+
+    assert response.status_code == 400
+    assert 'could not be read' in response.json()['message']
+    assert data.calls == []
+
+
+def test_library_create_rejects_oversized_image_before_decode_or_adapter_call(
+    native_client, monkeypatch,
+):
+    runtime, data = native_client
+
+    def fail_if_decoded(*_args, **_kwargs):
+        raise AssertionError('oversized library image must be rejected before decode')
+
+    monkeypatch.setattr(Image.Image, 'convert', fail_if_decoded)
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries',
+        data={'name': 'Oversized library image', 'platform': 'PCWIN'},
+        files={'image': ('too-large.png', _png_header(5000, 5000), 'image/png')},
+    )
+
+    assert response.status_code == 400
+    assert 'dimensions are too large' in response.json()['message']
+    assert data.calls == []
+
+
+def test_library_update_rejects_oversized_image_before_decode_or_adapter_call(
+    native_client, monkeypatch,
+):
+    runtime, data = native_client
+
+    def fail_if_decoded(*_args, **_kwargs):
+        raise AssertionError('oversized library image must be rejected before decode')
+
+    monkeypatch.setattr(Image.Image, 'convert', fail_if_decoded)
+    response = _request(
+        runtime, 'PUT', f'/api/admin/libraries/{LIBRARY_UUID}',
+        data={'name': 'Oversized library image', 'platform': 'PCWIN'},
+        files={'image': ('too-large.png', _png_header(5000, 5000), 'image/png')},
+    )
+
+    assert response.status_code == 400
+    assert 'dimensions are too large' in response.json()['message']
+    assert data.calls == []
+
+
+def test_library_create_uses_decoded_format_instead_of_filename_suffix(native_client):
+    runtime, data = native_client
+    png = _png_header(10, 10)
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries',
+        data={'name': 'PNG with a JPEG suffix', 'platform': 'PCWIN'},
+        files={'image': ('cover.jpeg', png, 'image/jpeg')},
+    )
+
+    assert response.status_code == 200, response.text
+    assert data.calls[0][0] == 'create'
+    assert data.calls[0][1]['image_bytes'] == png
+
+
+def test_library_create_rejects_unsupported_decoded_format_before_adapter_call(native_client):
+    runtime, data = native_client
+    image = Image.new('RGB', (2, 2), 'green')
+    payload = BytesIO()
+    image.save(payload, format='TIFF')
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries',
+        data={'name': 'Unsupported image', 'platform': 'PCWIN'},
+        files={'image': ('image.png', payload.getvalue(), 'image/png')},
+    )
+
+    assert response.status_code == 400
+    assert 'supported library image format' in response.json()['message']
+    assert data.calls == []
+
+
+def test_library_preview_rejects_oversized_body_before_processing(native_client):
+    from oneirodex.utils.image_upload_limits import LIBRARY_PREVIEW_MAX_BODY_BYTES
+
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/api/library/preview-cropped-image',
+        json={'image_data': 'x' * LIBRARY_PREVIEW_MAX_BODY_BYTES},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'bad_request'
+    assert data.calls == []
+
+
+def test_library_preview_rejects_oversized_dimensions_before_conversion(monkeypatch):
+    data = LibraryAdminMutationData()
+
+    def fail_if_converted(*_args, **_kwargs):
+        raise AssertionError('oversized preview must be rejected before conversion')
+
+    monkeypatch.setattr(Image.Image, 'convert', fail_if_converted)
+    encoded = base64.b64encode(_png_header(5000, 5000)).decode('ascii')
+
+    with pytest.raises(ValueError, match='dimensions are too large'):
+        data.preview_image('data:image/png;base64,' + encoded)
+
+
+def test_library_create_form_and_api_keep_transport_specific_admin_denial(native_client):
+    runtime, data = native_client
+    current = _request(
+        runtime, 'POST', '/api/admin/libraries',
+        json={'name': 'Member attempt', 'platform': 'PCWIN'}, user_id=8,
+    )
+    legacy = _request(
+        runtime, 'POST', '/admin/library/add',
+        data={'csrf_token': '__csrf__', 'name': 'Member attempt',
+              'platform': 'PCWIN', 'scan_depth': '1', 'watch_enabled': 'default'},
+        csrf_header=False, user_id=8,
+    )
+
+    assert current.status_code == 403
+    assert current.json()['error_code'] == 'forbidden'
+    assert legacy.status_code == 302
+    assert legacy.headers['location'] == '/login'
+    assert data.calls == []
+
+
+def test_unauthenticated_library_api_returns_json_401_after_valid_csrf(native_client):
+    runtime, data = native_client
+    session = {}
+    csrf = generate_csrf_token(session, 'library-admin-secret')
+    session_cookie = dump_session_cookie(session, 'library-admin-secret')
+    response = _request(
+        runtime, 'PUT', f'/api/admin/libraries/{LIBRARY_UUID}', cookie=False,
+        headers={'Cookie': f'session={session_cookie}', 'X-CSRFToken': csrf},
+        data={
+            'csrf_token': csrf, 'name': 'Must not update', 'platform': 'PCWIN',
+            'scan_depth': '1', 'watch_enabled': 'default',
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()['error_code'] == 'unauthorized'
+    assert not any(call[0] == 'update' for call in data.calls)
 
 
 def test_legacy_library_create_form_uses_hidden_csrf_and_redirects(native_client):
@@ -166,7 +404,75 @@ def test_legacy_library_create_form_uses_hidden_csrf_and_redirects(native_client
     assert rejected.status_code == 400
     assert accepted.status_code == 302
     assert accepted.headers['location'] == '/libraries'
+    expected = flask_redirect('/libraries', code=302)
+    assert accepted.headers['content-type'] == expected.headers['Content-Type']
+    assert accepted.content == expected.get_data()
     assert [call[0] for call in data.calls] == ['create']
+
+
+@pytest.mark.parametrize(
+    ('form', 'message'),
+    [
+        ({'platform': 'PCWIN', 'scan_depth': '1', 'watch_enabled': 'default'},
+         'Please correct the errors below.'),
+        ({'name': 'Library', 'platform': 'NOT_A_PLATFORM', 'scan_depth': '1',
+          'watch_enabled': 'default'}, 'Please correct the errors below.'),
+        ({'name': 'Library', 'platform': 'PCWIN', 'scan_depth': '9',
+          'watch_enabled': 'default'}, 'Please correct the errors below.'),
+        ({'name': 'Library', 'platform': 'PCWIN', 'scan_depth': '1',
+          'watch_enabled': 'invalid'}, 'Please correct the errors below.'),
+        ({'name': 'Library', 'platform': 'PCWIN', 'scan_depth': '1',
+          'watch_enabled': 'false'}, 'Please correct the errors below.'),
+    ],
+)
+def test_legacy_library_invalid_create_form_renders_matching_error_page(native_client, form, message):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/admin/library/add',
+        data={'csrf_token': '__csrf__', **form},
+        csrf_header=False,
+    )
+
+    assert response.status_code == 200
+    assert 'id="admin-app-root"' in response.text
+    assert message in response.text
+    assert data.calls == []
+
+
+def test_legacy_library_edit_missing_record_matches_not_found(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/admin/library/edit/not-present',
+        data={'csrf_token': '__csrf__', 'name': 'Updated library',
+              'platform': 'PCWIN', 'scan_depth': '2', 'watch_enabled': 'off'},
+        csrf_header=False,
+    )
+
+    assert response.status_code == 404
+    assert response.headers['content-type'].startswith('text/html')
+    assert response.text == (
+        '<!doctype html>\n<html lang=en>\n'
+        '<title>404 Not Found</title>\n'
+        '<h1>Not Found</h1>\n'
+        '<p>The requested URL was not found on the server. If you entered the URL manually '
+        'please check your spelling and try again.</p>\n'
+    )
+    assert data.calls == []
+
+
+def test_legacy_library_create_matches_legacy_server_error_for_corrupt_image(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/admin/library/add',
+        data={'csrf_token': '__csrf__', 'name': 'Library', 'platform': 'PCWIN',
+              'scan_depth': '1', 'watch_enabled': 'default'},
+        files={'image': ('broken.png', b'not an image', 'image/png')},
+        csrf_header=False,
+    )
+
+    assert response.status_code == 500
+    assert 'Please correct the errors below.' in response.text
+    assert data.calls == []
 
 
 def test_legacy_library_edit_form_preserves_hidden_csrf_and_updates_adapter(native_client):
@@ -180,6 +486,9 @@ def test_legacy_library_edit_form_preserves_hidden_csrf_and_updates_adapter(nati
 
     assert response.status_code == 302
     assert response.headers['location'] == '/libraries'
+    expected = flask_redirect('/libraries', code=302)
+    assert response.headers['content-type'] == expected.headers['Content-Type']
+    assert response.content == expected.get_data()
     assert data.calls[0][0] == 'update'
     assert data.calls[0][1] == 'lib-1'
 
@@ -198,6 +507,43 @@ def test_batch_scan_keeps_aliases_queue_result_and_partial_rows(native_client):
     assert scan[2] == '/safe/root/one'
     assert scan[3]['remove_missing'] is True
     assert scan[3]['download_missing_images'] is True
+
+
+@pytest.mark.parametrize(('body', 'expected_folder'), [
+    ({'folder': '/safe/root/shared'}, '/safe/root/shared'),
+    ({'folders': {'lib-1': '/safe/root/mapped'}}, '/safe/root/mapped'),
+])
+def test_batch_scan_resolves_shared_and_per_library_folders(
+    native_client, body, expected_folder,
+):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries/batch/scan',
+        json={'uuids': ['lib-1'], **body},
+    )
+
+    assert response.status_code == 200
+    scan = next(call for call in data.calls if call[0] == 'scan')
+    assert scan[2] == expected_folder
+
+
+def test_batch_scan_rejects_out_of_root_path_without_queueing(native_client):
+    runtime, data = native_client
+    denied_path = '/outside/private'
+
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries/batch/scan',
+        json={'uuids': ['lib-1'], 'folder': denied_path},
+    )
+
+    assert response.status_code == 200
+    row = response.json()['results'][0]
+    assert response.json()['failed'] == 1
+    assert row['status'] == 'rejected'
+    assert row['error'] == 'forbidden'
+    assert 'Access denied' in row['message']
+    assert denied_path not in response.text
+    assert not any(call[0] == 'scan' for call in data.calls)
 
 
 def test_single_scan_resolves_location_and_preserves_scan_options(native_client):
@@ -220,6 +566,130 @@ def test_single_scan_resolves_location_and_preserves_scan_options(native_client)
     assert scan[3]['fetch_hltb'] is True
 
 
+def test_library_update_uuid_route_does_not_capture_static_scan_actions(native_client):
+    runtime, data = native_client
+
+    for path in ('/api/admin/libraries/scan', '/api/admin/libraries/refresh_all'):
+        response = _request(runtime, 'PUT', path, json={})
+        assert response.status_code == 405
+        assert 'POST' in response.headers.get('allow', '')
+    assert data.calls == []
+
+
+def test_single_scan_json_media_types_match_legacy_parser(native_client):
+    runtime, data = native_client
+    vendor_type = 'application/vnd.oneirodex+json'
+    scan_body = {'library_uuid': 'lib-1', 'folder': '/safe/root/one'}
+
+    with Flask('legacy-scan-parser').test_request_context(
+        '/api/admin/libraries/scan', method='POST',
+        data=json.dumps(scan_body), content_type=vendor_type,
+    ):
+        legacy_vendor_body = flask_request.get_json(silent=True)
+    with Flask('legacy-scan-parser').test_request_context(
+        '/api/admin/libraries/scan', method='POST',
+        data=json.dumps(scan_body), content_type='application/jsonp',
+    ):
+        legacy_jsonp_body = flask_request.get_json(silent=True)
+
+    vendor = _request(
+        runtime, 'POST', '/api/admin/libraries/scan', json=scan_body,
+        headers={'Content-Type': vendor_type},
+    )
+    assert vendor.status_code == 200 and legacy_vendor_body == scan_body
+    scan_count = sum(call[0] == 'scan' for call in data.calls)
+
+    jsonp = _request(
+        runtime, 'POST', '/api/admin/libraries/scan', json=scan_body,
+        headers={'Content-Type': 'application/jsonp'},
+    )
+    assert legacy_jsonp_body is None
+    assert jsonp.status_code == 400 and jsonp.json()['error'] == 'library_uuid is required'
+    assert sum(call[0] == 'scan' for call in data.calls) == scan_count
+
+
+def test_single_scan_stringifies_legacy_scalar_folder_without_weakening_root_allowlist(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': 123,
+    })
+
+    assert response.status_code == 200
+    assert response.json()['status'] == 'queued'
+    scan = next(call for call in data.calls if call[0] == 'scan')
+    assert scan[2] == '/safe/root/123'
+
+
+def test_single_scan_unknown_mode_preserves_legacy_accepted_then_failed_contract(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': '/safe/root/one', 'scan_mode': 'unknown',
+    })
+
+    assert response.status_code == 200
+    assert response.json()['status'] == 'started'
+    assert response.json()['position'] is None
+    assert response.json()['job_id'] == 'failed-scan-job'
+    assert any(call[0] == 'fail_scan_mode' for call in data.calls)
+    assert not any(call[0] == 'scan' for call in data.calls)
+
+
+@pytest.mark.parametrize('interval_unit', [' hours ', 'HOURS', 'Minutes'])
+def test_single_scan_rejects_non_choice_interval_unit(native_client, interval_unit):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': '/safe/root/one', 'schedule': 'interval',
+        'schedule_interval_value': 15, 'schedule_interval_unit': interval_unit,
+    })
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'Not a valid choice.'
+    assert not any(call[0] == 'scan' for call in data.calls)
+
+
+def test_single_scan_rejects_padded_schedule_choice(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': '/safe/root/one',
+        'schedule': ' interval ', 'schedule_interval_value': 15,
+        'schedule_interval_unit': 'minutes',
+    })
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'Not a valid choice.'
+    assert not any(call[0] == 'scan' for call in data.calls)
+
+
+def test_single_scan_uses_legacy_six_hour_default_when_interval_is_omitted(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': '/safe/root/one', 'schedule': 'interval',
+    })
+
+    assert response.status_code == 200
+    scan = next(call for call in data.calls if call[0] == 'scan')
+    assert scan[3]['schedule_fields']['schedule_interval_minutes'] == 360
+
+
+def test_single_scan_missing_folder_matches_legacy_rejection(native_client):
+    runtime, data = native_client
+    data.items['lib-no-folder'] = SimpleNamespace(
+        uuid='lib-no-folder', name='Library Without Folder', last_scan_folder=None,
+    )
+
+    response = _request(
+        runtime, 'POST', '/api/admin/libraries/scan',
+        json={'library_uuid': 'lib-no-folder'},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error'] == (
+        'No folder provided and library has no last_scan_folder. '
+        'Run one Auto Scan first or pass folder.'
+    )
+    assert not any(call[0] in {'resolve', 'scan'} for call in data.calls)
+
+
 def test_refresh_all_enqueues_and_promotes_fifo_job(native_client):
     runtime, data = native_client
     response = _request(runtime, 'POST', '/api/admin/libraries/refresh_all', json={})
@@ -230,6 +700,8 @@ def test_refresh_all_enqueues_and_promotes_fifo_job(native_client):
     assert body['job_id'] == 'refresh-job'
     assert body['jobs'][0]['status'] == 'started'
     assert body['jobs'][0]['position'] is None
+    promote_call = next(call for call in data.calls if call[0] == 'promote_refresh')
+    assert callable(promote_call[1])
     assert [call[0] for call in data.calls if call[0] in ('refresh_busy', 'enqueue_refresh')] == [
         'refresh_busy', 'enqueue_refresh',
     ]
@@ -250,7 +722,7 @@ def test_force_refresh_passes_native_database_scope_to_worker(native_client):
 def test_force_refresh_opens_native_scope_around_scan_worker(monkeypatch):
     from contextlib import contextmanager
     import threading
-    import oneirodex.utilities
+    import oneirodex.utils.services.scan_orchestration as scan_orchestration
 
     class NativeApp:
         config = {}
@@ -280,7 +752,7 @@ def test_force_refresh_opens_native_scope_around_scan_worker(monkeypatch):
 
     monkeypatch.setattr(threading, 'Thread', ImmediateThread)
     monkeypatch.setattr(
-        oneirodex.utilities, 'scan_and_add_games',
+        scan_orchestration, 'scan_and_add_games',
         lambda *args, **kwargs: scan_calls.append((args, kwargs, tuple(scope_events))),
     )
 
@@ -299,12 +771,12 @@ def test_single_library_update_preserves_json_and_bounded_image_form(native_clie
     runtime, data = native_client
     image = BytesIO()
     Image.new('RGB', (2, 2), color='green').save(image, format='PNG')
-    updated = _request(runtime, 'PUT', '/api/admin/libraries/lib-1', json={
+    updated = _request(runtime, 'PUT', f'/api/admin/libraries/{LIBRARY_UUID}', json={
         'name': 'Renamed library', 'platform': 'PCWIN', 'scan_depth': 2,
         'watch_enabled': 'off',
     })
     multipart = _request(
-        runtime, 'PUT', '/api/admin/libraries/lib-1',
+        runtime, 'PUT', f'/api/admin/libraries/{LIBRARY_UUID}',
         files={'image': ('library.png', image.getvalue())},
         data={'name': 'Image library', 'platform': 'PCWIN', 'scan_depth': '1'},
     )
@@ -313,7 +785,7 @@ def test_single_library_update_preserves_json_and_bounded_image_form(native_clie
     assert updated.json()['name'] == 'Renamed library'
     assert multipart.status_code == 200
     update_call = next(call for call in data.calls if call[0] == 'update')
-    assert update_call[1] == 'lib-1'
+    assert update_call[1] == LIBRARY_UUID
     assert update_call[2]['watch_enabled'] is False
     image_call = [call for call in data.calls if call[0] == 'update'][1]
     assert image_call[2]['image'][0] == 'library.png'
@@ -350,7 +822,6 @@ def test_single_library_delete_preserves_legacy_confirmation_and_form_csrf(nativ
     )
     assert missing_csrf.status_code == 400
     assert not any(call[0] == 'delete' for call in data.calls)
-
     # Existing classic clients rely on client-side typed confirmation and omit
     # the optional server-side force/confirm fields.
     accepted = _request(
@@ -360,6 +831,44 @@ def test_single_library_delete_preserves_legacy_confirmation_and_form_csrf(nativ
     assert accepted.status_code == 200
     assert accepted.json()['status'] == 'started'
     assert ('delete', 'lib-1', True) in data.calls
+
+
+def test_single_library_delete_form_csrf_failure_matches_legacy_html(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/delete_full_library/lib-1',
+        data={}, csrf_header=False,
+    )
+
+    assert response.status_code == 400
+    assert response.headers['content-type'].startswith('text/html')
+    assert data.calls == []
+
+
+def test_single_library_delete_vendor_json_csrf_failure_keeps_json_response(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/delete_full_library/lib-1',
+        json={}, headers={'Content-Type': 'application/vnd.oneirodex+json'},
+        csrf_header=False,
+    )
+
+    assert response.status_code == 400
+    assert response.headers['content-type'].startswith('application/json')
+    assert response.json()['error_code'] == 'bad_request'
+    assert data.calls == []
+
+
+def test_single_library_delete_form_member_denial_redirects_to_login(native_client):
+    runtime, data = native_client
+    response = _request(
+        runtime, 'POST', '/delete_full_library/lib-1',
+        data={'csrf_token': '__csrf__'}, csrf_header=False, user_id=8,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+    assert data.calls == []
 
 
 def test_single_library_delete_validates_explicit_confirmation(native_client):
@@ -425,7 +934,8 @@ def test_non_admin_rejected_and_no_adapter_calls(native_client):
     runtime, data = native_client
     # Remove the valid session, then send a valid member session under the same signature.
     from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
-    member = SimpleNamespace(id=9, name='Member', role='user', state=True, is_active=True)
+    member = SimpleNamespace(id=9, name='Member', role='user', state=True, is_active=True,
+                             session_fingerprint=lambda: '0123456789abcdef')
     # A second independently mounted app keeps this setup local and fake-only.
     other = Flask('native-library-member-tests')
     other.config.update(SECRET_KEY='member-secret', SESSION_PROTECTION='none',
@@ -434,10 +944,10 @@ def test_non_admin_rejected_and_no_adapter_calls(native_client):
     member_runtime.include_router(create_library_admin_mutations_router(
         other, find_user=lambda _id: member, find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: member if user_id == '9:fp' else None,
+        load_user_id=lambda user_id: member if user_id.split(':', 1)[0] == '9' else None,
         data_access=data,
     ))
-    session = {'_user_id': '9:fp', '_fresh': True}
+    session = {'_user_id': issue_login_identity(member), '_fresh': True}
     csrf = generate_csrf_token(session, 'member-secret')
     response = _request(member_runtime, 'POST', '/api/admin/libraries/batch/delete',
                         json={'uuids': ['lib-1'], 'force': True}, cookie=False,

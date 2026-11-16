@@ -1,10 +1,10 @@
 """DB-free route compatibility checks for native admin redirects."""
 import asyncio
 from contextlib import nullcontext
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 import httpx
-from flask import Flask
+from flask import Flask, redirect as flask_redirect
 from flask_login import LoginManager, UserMixin
 
 from oneirodex.runtime_native.admin_redirects import create_admin_redirect_router
@@ -27,6 +27,7 @@ def make_app():
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY='test-admin-redirect-secret',
+        TESTING=True,
         SESSION_COOKIE_SECURE=False,
         CSP_ENABLED=False,
         HSTS_SECONDS=0,
@@ -43,6 +44,7 @@ def make_app():
         commit_token_touch=lambda _token: None,
         login_manager=login_manager,
         database_scope=lambda _app: nullcontext(),
+        filter_exists=lambda filter_id: filter_id == 42,
     ))
     return flask_app, adapter, users
 
@@ -68,35 +70,24 @@ def test_admin_redirect_targets_and_query_compatibility():
     flask_app, app, users = make_app()
     cookie = signed_cookie(flask_app, users[7])
     cases = {
-        '/admin/help': '/help',
         '/admin/library_tools': '/scan_management?active_tab=tools',
         '/admin/server_logs': '/admin/ops?open=full-log',
         '/admin/system_logs': '/admin/ops?open=full-log',
         '/admin/server_status_page': '/admin/ops',
+        '/admin/scan_management': '/scan_management?active_tab=jobs',
+        '/admin/scan_management?other=x': '/scan_management?other=x&active_tab=jobs',
         '/admin/scan_management?active_tab=manual&other=x': '/scan_management?active_tab=manual&other=x',
     }
 
     for path, expected in cases.items():
         response = fetch(app, path, cookie)
+        expected_response = flask_redirect(expected, code=302)
         assert response.status_code == 302
         assert response.headers['location'] == expected
+        assert response.headers['content-type'] == expected_response.headers['Content-Type']
+        assert response.content == expected_response.get_data()
         assert response.headers['cache-control'] == 'no-store'
         assert response.headers['vary'] == 'Cookie'
-
-
-def test_admin_redirect_login_and_member_guards():
-    flask_app, app, users = make_app()
-    anonymous = fetch(app, '/admin/help')
-    assert anonymous.status_code == 302
-    assert urlsplit(anonymous.headers['location']).path == '/login'
-    assert parse_qs(urlsplit(anonymous.headers['location']).query)['next'] == ['/admin/help']
-    assert anonymous.headers.get('set-cookie')
-
-    member_cookie = signed_cookie(flask_app, users[8])
-    member = fetch(app, '/admin/help', member_cookie)
-    assert member.status_code == 302
-    assert member.headers['location'] == '/login'
-    assert member.headers.get('set-cookie')
 
 
 def test_admin_redirect_head_has_empty_body():
@@ -107,6 +98,13 @@ def test_admin_redirect_head_has_empty_body():
     assert response.status_code == 302
     assert response.content == b''
     assert response.headers['location'] == '/admin/ops'
+
+    scan_jobs = fetch(
+        app, '/admin/scan_management', signed_cookie(flask_app, users[7]), method='HEAD',
+    )
+    assert scan_jobs.status_code == 302
+    assert scan_jobs.content == b''
+    assert scan_jobs.headers['location'] == '/scan_management?active_tab=jobs'
 
 
 def test_get_delete_filter_redirects_admin_to_confirm_and_keeps_guards():
@@ -122,9 +120,30 @@ def test_get_delete_filter_redirects_admin_to_confirm_and_keeps_guards():
         'warning', 'Open Scan Filters and confirm removal there.',
     )]
 
+    head = fetch(app, '/delete_filter/42', signed_cookie(flask_app, users[7]), method='HEAD')
+    assert head.status_code == 302
+    assert head.headers['location'] == '/admin/edit_filters'
+    assert head.content == b''
+
     anonymous = fetch(app, '/delete_filter/42')
     assert anonymous.status_code == 302
     assert urlsplit(anonymous.headers['location']).path == '/login'
+    assert anonymous.headers['content-type'] == 'text/html; charset=utf-8'
+    assert len(anonymous.headers.get_list('set-cookie')) == 1
     member = fetch(app, '/delete_filter/42', signed_cookie(flask_app, users[8]))
     assert member.status_code == 302
     assert member.headers['location'] == '/login'
+
+
+def test_get_delete_filter_missing_id_matches_legacy_not_found_without_deleting():
+    flask_app, app, users = make_app()
+    cookie = signed_cookie(flask_app, users[7])
+
+    get_response = fetch(app, '/delete_filter/43', cookie)
+    head_response = fetch(app, '/delete_filter/43', cookie, method='HEAD')
+
+    assert get_response.status_code == head_response.status_code == 404
+    assert get_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert head_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert head_response.content == b''
+    assert head_response.headers['content-length'] == str(len(get_response.content))

@@ -27,17 +27,20 @@ def _settings_row() -> GlobalSettings | None:
 
 
 def _raw_arr_settings() -> dict[str, Any]:
+    from oneirodex.utils.secret_store import read_arr_settings
+
     row = _settings_row()
-    cfg = getattr(row, 'arr_settings', None) if row else None
-    return dict(cfg) if isinstance(cfg, dict) else {}
+    return read_arr_settings(row)
 
 
 def _save_raw_arr_settings(cfg: dict[str, Any]) -> None:
+    from oneirodex.utils.secret_store import write_arr_settings
+
     row = _settings_row()
     if not row:
         row = GlobalSettings()
         db.session.add(row)
-    row.arr_settings = cfg
+    write_arr_settings(row, cfg)
     db.session.commit()
 
 
@@ -81,8 +84,8 @@ def _new_id() -> str:
 
 
 def _validate_indexer_url(url: str) -> str:
-    """Native indexer hosts — never LAN even when ALLOW_PRIVATE_LAN_URLS is on."""
-    ok, result = validate_outbound_http_url(url, allow_http=True, allow_private_lan=False)
+    """Native indexers are public and require TLS to protect API keys in transit."""
+    ok, result = validate_outbound_http_url(url, allow_private_lan=False)
     if not ok:
         raise ValueError(result)
     return result.rstrip('/')

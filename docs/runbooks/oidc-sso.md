@@ -29,6 +29,7 @@ Copy from `.env.example`:
 | `OIDC_SCOPES` | Default: `openid email profile` |
 | `OIDC_ROLE_CLAIM` | Claim used for role mapping (default: `groups`) |
 | `OIDC_ROLE_MAP` | JSON object mapping IdP claim values → Oneirodex roles |
+| `OIDC_TRUST_PROVIDER_EMAIL` | Treat provider email claims as verified when the provider does not supply `email_verified: true`. Keep `false` unless administrators of the IdP control how user email addresses are assigned. |
 | `OIDC_DISPLAY_NAME` | Login button label (default: `Sign in with SSO`) |
 | `TRUSTED_PROXIES` | Number of forwarded proxy hops (`0` = off, `1` = typical single nginx/Caddy/Traefik). Forwarded headers are used only when `TRUSTED_PROXY_CIDRS` also matches the immediate peer. |
 | `TRUSTED_PROXY_CIDRS` | Comma-separated IPs/CIDRs for the immediate proxy source as seen by the Oneirodex container. Use the narrowest stable range possible. |
@@ -38,6 +39,12 @@ both variables above; Oneirodex applies forwarded values only after checking
 the actual connection peer against `TRUSTED_PROXY_CIDRS`.
 | `SESSION_COOKIE_SECURE` | `true` by default; `false` only for deliberate direct HTTP access (authentication cookies then cross the network) |
 | `REMEMBER_COOKIE_SECURE` | Same as above for remember-me cookies |
+
+When `SESSION_COOKIE_PARTITIONED` is enabled, native session creation and deletion
+preserve `Partitioned` and force `Secure`, including on Python 3.12. Current-device
+and all-device revocation clear the session using its configured path/domain and
+cookie flags. Partitioned cookies require HTTPS even if `SESSION_COOKIE_SECURE`
+is otherwise false.
 
 OIDC settings stored in `global_settings` may override OIDC env defaults when set. Proxy hop and peer trust remain container environment settings.
 
@@ -117,7 +124,7 @@ Both `OIDC_ENABLED=true` **and** the admin toggle must be on before the SSO butt
 }
 ```
 
-Unmapped users JIT-provision with role `user`. Identity is bound to the pair **(issuer URL, `sub`)** so two identity providers that both issue `sub=123` cannot share an account. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows that issuer and subject. Usernames never link accounts, and the local email is never overwritten. Existing subject-only rows are migrated with a null issuer and can be claimed through the same verified-email check; do not manually copy an issuer value between providers.
+Unmapped users JIT-provision with role `user`. Identity is bound to the pair **(issuer URL, `sub`)** so two identity providers that both issue `sub=123` cannot share an account. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); after that the account follows that issuer and subject. A new account's email is treated as verified only when the provider supplies `email_verified: true` or the operator enables `OIDC_TRUST_PROVIDER_EMAIL` for a provider whose administrators control address assignment. For an existing linked account, verification can advance only when a verified or explicitly trusted claim matches the local email already stored; changing the email at the IdP does not overwrite or verify the local address. Unverified addresses cannot receive account email notifications. Usernames never link accounts, and the local email is never overwritten. Existing subject-only rows are migrated with a null issuer and can be claimed through the same verified-email check; do not manually copy an issuer value between providers.
 
 ### 6. Reverse proxy and HTTPS
 
@@ -184,14 +191,14 @@ Default JSON role map (also configurable in admin):
 }
 ```
 
-JIT provisioning creates users with role `user` unless a mapped claim is present. Identity is bound to **(issuer URL, `sub`)**; a matching subject from a different issuer is a separate identity. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); the provider's issuer and subject are then stored together. Usernames never link accounts, and the local email is never overwritten. If a provider does not send `email_verified`, an existing account with that email is **refused** at SSO sign-in ("An account with this email already exists") rather than linked or duplicated. Fix it at the provider (send `email_verified: true`), or, if the provider's admins (not its users) set every address, set `OIDC_TRUST_PROVIDER_EMAIL=true`. Accounts created by SSO without any email link by name.
+JIT provisioning creates users with role `user` unless a mapped claim is present. Identity is bound to **(issuer URL, `sub`)**; a matching subject from a different issuer is a separate identity. Linking: an existing local account is linked on first sign-in only when the provider marks its **email as verified** (`email_verified: true`); the provider's issuer and subject are then stored together. New account email verification follows the same claim or explicit operator trust rule. For an existing linked account, verification can advance only when a verified or explicitly trusted claim matches the local email already stored; changing the email at the IdP does not overwrite or verify the local address. Usernames never link accounts, and the local email is never overwritten. If a provider email conflicts with a local account that cannot be safely linked, SSO returns a generic sign-in failure rather than disclosing whether that address is already registered. Fix the provider claim (send `email_verified: true`), or, if the provider's admins (not its users) set every address, set `OIDC_TRUST_PROVIDER_EMAIL=true`. Accounts created by SSO without any email link by name.
 
 ## Flow
 
 1. User clicks **Sign in with SSO** on `/login`.
 2. Oneirodex redirects to IdP with authorization code + PKCE.
 3. IdP redirects to `/login/oidc/callback` with `code` and `state`.
-4. Oneirodex exchanges code, reads claims, JIT-provisions user, establishes Flask-Login session.
+4. Oneirodex exchanges the code, validates the signed ID token against the configured issuer and client with the authorization nonce, and requires a nonempty subject before provisioning. UserInfo can supplement profile/role claims only when its subject matches the validated ID-token subject. Missing or invalid identity tokens return the user to login without provisioning or signing in.
 5. User lands on Discover (or `next` URL if safe).
 
 ## Troubleshooting
@@ -201,7 +208,7 @@ JIT provisioning creates users with role `user` unless a mapped claim is present
 | No SSO button | `OIDC_ENABLED=true` **and** admin toggle enabled; restart after env change |
 | Redirect URI mismatch | IdP client redirect must match `OIDC_REDIRECT_URI` exactly |
 | Callback uses `http://` behind TLS | Set `TRUSTED_PROXIES=1`, allowlist the immediate proxy peer in `TRUSTED_PROXY_CIDRS`, and ensure the proxy sends `X-Forwarded-Proto: https` |
-| 503 on SSO click | Install `authlib` (`pip install authlib`) and restart |
+| SSO reports Authlib unavailable | Rebuild the image from the repository's pinned `requirements.txt` and confirm the runtime includes `authlib==1.9.1` and `httpx2==2.13.1`. The FastAPI runtime uses Authlib's Starlette integration; it does not require Flask. |
 | Login succeeds but instant logout | `SESSION_COOKIE_SECURE` vs HTTP; fix proxy or cookie settings |
 | Wrong role | `OIDC_ROLE_CLAIM` and `OIDC_ROLE_MAP`; verify IdP group claims in token/userinfo |
 | SSO session expired flash | User took too long or retried callback; start SSO again from `/login` |

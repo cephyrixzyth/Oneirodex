@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-launch-reporting"
+description = "Allows the main companion to recover verified launches and own account-bound playtime reporting."
+commands.allow = ["begin_launch_reporting", "list_launches", "acquire_launch_reporting", "owns_launch_reporting", "release_launch_reporting", "forget_launch_bindings"]

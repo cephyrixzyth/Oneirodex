@@ -15,8 +15,6 @@ import hashlib
 import os
 import shutil
 
-from flask import g, has_request_context
-
 from oneirodex.utils.emulator_bios import (
     BIOS_HARD_REQUIRED_CORES,
     BIOS_REQUIREMENTS,
@@ -244,6 +242,14 @@ def _resolve_choice(sources: list[str], source_root: str, choice: str | None) ->
 
 
 def _clear_bios_file_cache() -> None:
+    # The cache lives on Flask's request-local ``g`` only for the legacy
+    # compatibility routes. Native ASGI routes intentionally run without
+    # Flask installed, and emulator_bios._request_cache() is already a no-op
+    # there.
+    try:
+        from flask import g, has_request_context
+    except ImportError:
+        return
     if has_request_context() and hasattr(g, '_bios_files_cache'):
         del g._bios_files_cache
 

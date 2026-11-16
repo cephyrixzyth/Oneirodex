@@ -1,6 +1,31 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 
-import { registerAccount, requestPasswordReset, resetPassword, signIn } from './authApi.js'
+import {
+  confirmEmail,
+  registerAccount,
+  requestPasswordReset,
+  resetPassword,
+  signIn,
+  signOut,
+} from './authApi.js'
+
+describe('signOut', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  test('posts same-origin with the shared CSRF token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('fetch', fetchMock)
+    document.head.innerHTML = '<meta name="csrf-token" content="csrf-value">'
+
+    await expect(signOut()).resolves.toBeUndefined()
+
+    expect(fetchMock).toHaveBeenCalledWith('/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRFToken': 'csrf-value' },
+    })
+  })
+})
 
 describe('signIn', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -76,5 +101,31 @@ describe('signIn', () => {
     expect(
       fetchMock.mock.calls.every(([, init]) => init.headers['X-CSRFToken'] === 'csrf-value'),
     ).toBe(true)
+  })
+
+  test('sets the mailbox owner password with a CSRF-protected email confirmation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ confirmed: true, already_confirmed: false }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    document.head.innerHTML = '<meta name="csrf-token" content="csrf-value">'
+
+    await expect(
+      confirmEmail('signed/token', {
+        password: 'mailbox-owner-password',
+        confirm_password: 'mailbox-owner-password',
+      }),
+    ).resolves.toEqual({ confirmed: true, already_confirmed: false })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/confirm/signed%2Ftoken', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRFToken': 'csrf-value', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        password: 'mailbox-owner-password',
+        confirm_password: 'mailbox-owner-password',
+      }),
+    })
   })
 })

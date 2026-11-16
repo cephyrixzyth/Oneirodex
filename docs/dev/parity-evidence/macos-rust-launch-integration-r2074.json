@@ -1,0 +1,157 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2074",
+  "observed_utc": "2026-11-14T01:58:58.785635+00:00",
+  "source_base": "369c1b3e1664b5d72d8f8ca9f85b224faf244697",
+  "implementation": "Mac GUI launchd jobs, boot/UUID/coalition receipts, inherited family counting, broker-aware handshake, kernel-backed status and existing profile recovery wiring. Windows/Linux continue using their existing family owners.",
+  "confirmed_followups": [
+    "Existing exclusive status-reader probes could mistake another reader for a guardian: focused RED before shared-lock fix.",
+    "New plist serializer normalized carriage returns instead of preserving the POSIX path: focused RED before numeric XML entity fix."
+  ],
+  "local_checks": {
+    "observed_utc": "2026-11-14T02:05:46.919104+00:00",
+    "passed": true,
+    "platform": "Windows",
+    "native_methods_passed": 122,
+    "ignored": 6,
+    "full_native_log_sha256": "e8198810beb9b9115194d9d9a3580d532037b1653ced03d25167c7bf84b740b6",
+    "clippy_log_sha256": "ee6bc7fd4f4dd609e87354228da0982307255b3d5428e450929f0f111ddad326",
+    "checks": [
+      {
+        "name": "rustfmt",
+        "exit_code": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "workflow",
+        "exit_code": 0,
+        "log_sha256": "f788081a635f6438c8c6d89799fa5f9920253df6c16bbe3e871a623e185ebe97"
+      }
+    ],
+    "source_sha256": {
+      "clients/desktop/src-tauri/src/lib.rs": "7860ed0ad08dc1fe74894ce014771e244f9e04db12a848746ac0ea94f070a7fd",
+      "clients/desktop/src-tauri/src/launch_supervisor.rs": "a2ac1de2a36961737da49f92b208fce00aa15626d1fbea87cd1b71d09fd1993e",
+      "clients/desktop/src-tauri/src/launch_supervisor/macos.rs": "55a8fdc1a07209fa0771ffd3898c673f38e1edfaef2f46d79248f0a5e622f6b5",
+      ".github/workflows/desktop-build.yml": "db033b42c2af4d393dff4b4a4781194b83d57d5ccb316566f4f0d8c3b64771ef"
+    },
+    "native_macos": "pending actual CI; Windows does not compile/execute Mac cfg",
+    "source_base": "369c1b3e1664b5d72d8f8ca9f85b224faf244697",
+    "family_recovery_acceptance": false,
+    "git_normalized_source_sha256": {
+      "clients/desktop/src-tauri/src/lib.rs": "7860ed0ad08dc1fe74894ce014771e244f9e04db12a848746ac0ea94f070a7fd",
+      "clients/desktop/src-tauri/src/launch_supervisor.rs": "a2ac1de2a36961737da49f92b208fce00aa15626d1fbea87cd1b71d09fd1993e",
+      "clients/desktop/src-tauri/src/launch_supervisor/macos.rs": "55a8fdc1a07209fa0771ffd3898c673f38e1edfaef2f46d79248f0a5e622f6b5",
+      ".github/workflows/desktop-build.yml": "47bf524e138adb2b50ae6a107fcc6eb213fb21f1826d2424323a77fa7d77f66d"
+    },
+    "unicode_baseline_preserved": true
+  },
+  "native_ci": {
+    "status": "native component passed; historical e97 main failures repaired on exact-tree68bdf03e baseline",
+    "tested_source": "e97f89b9c7cd156ff3dfb04c5e4ad1efb2c42d63",
+    "desktop_push_run": 43544623761,
+    "desktop_PR_run": 43544629249,
+    "each_matrix_active_jobs_passed": 8,
+    "six_installer_builds": "passed in each run; release attachment skipped",
+    "native_methods": {
+      "macos": {
+        "passed": 127,
+        "ignored": 6,
+        "job_id": 132292912013
+      },
+      "windows": {
+        "passed": 122,
+        "ignored": 6,
+        "job_id": 132292911841
+      },
+      "linux": {
+        "passed": 126,
+        "ignored": 6,
+        "job_id": 132292911652
+      }
+    },
+    "raw_log_sha256": {
+      "macos": "e03eeda1ccfa677334c3b31207c05740ab52b3f7c11d75b696eb52b8535a7447",
+      "windows": "c370c00dfe7f8e5d102396a5d76d58ca60cdac2796026682a0696619e6ce7205",
+      "linux": "170e5a08adc336abd2e3997fc75801cfb1d797d4e888c7fd0f883ea2dfed3a04"
+    },
+    "actual_mac_controls": [
+      "Rust boot-session UUID and coalition ABI",
+      "Fast detached child family, independent families, exact grant, stale PID/UUID rejection",
+      "Profile-bound cold reader and other-profile denial",
+      "Boot mismatch rejection before query; guardian SIGKILL preserves detached game and cold family recovery",
+      "Compatible shared observers and exact GUI job cleanup"
+    ],
+    "main_PR_run": 43544629215,
+    "main_member_job": 132292929686,
+    "main_member_result": "Historical e97:1265passed/1failed. R2075 repair passes exact-tree68bdf03e member1266/fulltypes; raw failures retained.",
+    "main_core_result": {
+      "source": "e97f89b9c7cd156ff3dfb04c5e4ad1efb2c42d63",
+      "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43544629215",
+      "job_id": 132292929766,
+      "conclusion": "failure",
+      "passed": 7948,
+      "failed": 1,
+      "skipped": 15,
+      "deselected": 548,
+      "pytest_seconds": 2276.62,
+      "failed_case": "tests/test_persistent_sessions.py::test_all_device_revocation_is_user_scoped",
+      "assertion": "len(active_login_sessions(owner.id)) == 2; actual 0",
+      "raw_log_sha256": "43a9bbac8d5816ab62bb9901caf310ab271a7fef61d8a4883d262af2157596cc",
+      "cause": "The fixture issues at Nov7 2026 UTC but active_login_sessions uses wall clock. On Nov14 the seven-day idle limit correctly excludes both sessions. No product expiry change is warranted.",
+      "local_verification": "Blocked: existing review DB is stopped; restarting it fails binding loopback port5432 with Windows access-permissions error. No replacement DB, port change, or root env change performed.",
+      "next_step": "Anchor this user-scoping fixture issuance to its observation clock, preserve age/idle boundary assertions in the adjacent test, then run the entire persistent-session file against a validated isolated test DB. No test repair has been applied in this checkpoint.",
+      "followup": "Exact-tree68bdf03e repaired baseline passes all9 main jobs, including7949 core methods; original e97 failure retained."
+    },
+    "repaired_source_baseline": {
+      "source": "68bdf03ed740628441cb03a476b42601ade62fee",
+      "checkout_commit": "a67f479a29a9ce5cfa17f9658ecf8472b7ebbdf2",
+      "checkout_tree": "df6c37208edaf2913c798e50b035b3792d93cf9f",
+      "whole_tree_identity_verified": true,
+      "main_run": 43549805060,
+      "main_jobs_passed": 9,
+      "core": {
+        "job_id": 132309380664,
+        "passed": 7949,
+        "skipped": 15,
+        "deselected": 548,
+        "warnings": 156,
+        "pytest_seconds": 2375.03,
+        "raw_log_sha256": "db2cf6e4efc01489bcd6cbc227bdbbb2cd669bdd386a820d8dec7661a12abad1"
+      },
+      "member": {
+        "job_id": 132309380647,
+        "files_passed": 131,
+        "methods_passed": 1266,
+        "full_types_passed": true,
+        "raw_log_sha256": "8e10072c21cd8129e147f90b0896041bad7894a389b782bfcc01691522f5cfb7"
+      },
+      "desktop": {
+        "run": 43549805049,
+        "active_jobs_passed": 8,
+        "installer_builds_passed": 6,
+        "release_attachment": "skipped",
+        "macos_methods_passed": 127,
+        "ignored": 6,
+        "macos_raw_log_sha256": "0fbb0384db9190e3ebcc9c05df95c34fb0107d59003f8305ca2f755038edb6a9"
+      },
+      "limits": "Exact repaired-source component/CI baseline only. R2078 candidate native checks and all original packaged/platform/route/operator/final-review/release gates remain open."
+    }
+  },
+  "family_recovery_acceptance": false,
+  "archive": {
+    "filename": "macos-rust-integration-git-ready-r2074.zip",
+    "sha256": "a6c73ec585306e713b3d4cf5aadb9c96b9244a42fcef0e76e9ec8d29a6ed3050",
+    "payload_files": 15,
+    "manifest_in_addition": true,
+    "bytes": 85627,
+    "storage": "Private canonical DT-006 artifacts; raw host paths/private brief withheld from Git."
+  },
+  "primary_sources": [
+    "https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/kern_sysctl.c#L2735",
+    "https://github.com/apple-oss-distributions/dyld/blob/main/include/dlfcn.h#L91"
+  ],
+  "limits": "Native component and exact-tree repaired68bdf03e CI qualification only. Historical e97 main failures remain recorded; R2075/R2077 repairs pass the new baseline. Later R2078 discovery edits require their own native/main checks. Real packaged UI/account/offline/revocation/discovery/update/rollback, older/Intel Mac runtime and all original gates remain open. No overall parity/release gate promotion.",
+  "rework": "New contract scaffold had expected missing-symbol errors. One UTF-8 source edit helper used the Windows default codepage and stopped after the parent edit; resumed explicitly as UTF-8 and verified final source. A failed patch context was corrected without reverting others. A literal-wildcard docs lookup was corrected to scoped rg files. All failures retained as verification/workflow rework, not extra product vulnerabilities. Final diff additionally caught silent CP1252 mojibake in lib.rs from the same helper. Original Unicode was recovered while retaining intended Mac edits; all122 Windows tests, Clippy and fmt were repeated. Original candidate archive retained; selected Git-ready archive records normalized Git source hashes.",
+  "capture": "Skipped: native Rust/CI only; no member/admin UI change.",
+  "evidence_selection": "Selected Git-ready archive pins checked source/local data; original encoding-correction candidate retained privately. Later native logs and terminal matrix receipt are separate canonical artifacts."
+}

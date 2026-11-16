@@ -177,6 +177,37 @@ class TestCheckUsernameEndpoint:
         data = json.loads(response.data)
         assert data['exists'] is True
 
+    def test_check_username_bearer_requires_social_read_scope(
+        self, client, regular_user, monkeypatch,
+    ):
+        # The Flask compatibility route runs under global CSRF protection;
+        # this test disables that global preflight to isolate the scope gate.
+        client.application.config['WTF_CSRF_ENABLED'] = False
+        from types import SimpleNamespace
+        from oneirodex.utils import api_tokens
+
+        scopes = {'write:presence'}
+        token = SimpleNamespace(has_scope=lambda scope: scope in scopes)
+        monkeypatch.setattr(
+            api_tokens, 'verify_bearer_token_detailed',
+            lambda _raw: (regular_user, token, None),
+        )
+        denied = client.post(
+            '/api/check_username', json={'username': regular_user.name},
+            headers={'Authorization': 'Bearer gt_00000000_scope-test'},
+        )
+        assert denied.status_code == 403
+        assert denied.get_json()['error_code'] == 'forbidden'
+        assert denied.get_json()['detail'] == {'required_scope': 'read:social'}
+
+        scopes.add('read:social')
+        allowed = client.post(
+            '/api/check_username', json={'username': regular_user.name},
+            headers={'Authorization': 'Bearer gt_00000000_scope-test'},
+        )
+        assert allowed.status_code == 200, allowed.get_json()
+        assert allowed.get_json() == {'exists': True}
+
 
 class TestCheckFavoriteEndpoint:
     """Test the /api/check_favorite/<game_uuid> endpoint."""
@@ -211,6 +242,29 @@ class TestCheckFavoriteEndpoint:
         
         data = json.loads(response.data)
         assert data['is_favorite'] is False
+
+    def test_check_favorite_hides_child_inaccessible_game(
+        self, client, db_session, sample_game,
+    ):
+        from oneirodex.utils.library_acl import set_user_library_allowlist
+
+        child = User(
+            name=f'fav-child-{uuid4().hex[:8]}',
+            email=f'fav-child-{uuid4().hex[:8]}@example.com',
+            password_hash='unused', role='child', user_id=str(uuid4()),
+            avatarpath='newstyle/avatar_default.jpg', state=True,
+        )
+        db_session.add(child)
+        db_session.commit()
+        set_user_library_allowlist(child.id, [])
+        db_session.commit()
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(child.id)
+            sess['_fresh'] = True
+
+        response = client.get(f'/api/check_favorite/{sample_game.uuid}')
+        assert response.status_code == 404
+        assert response.get_json()['error'] == 'Game not found'
     
     def test_check_favorite_is_favorited(self, client, regular_user, sample_game, db_session):
         """Test check_favorite when game is in user's favorites."""
@@ -250,6 +304,31 @@ class TestToggleFavoriteEndpoint:
         data = json.loads(response.data)
         assert 'error' in data
         assert data['error'] == 'Game not found'
+
+    def test_toggle_favorite_hides_child_inaccessible_game(
+        self, client, db_session, sample_game,
+    ):
+        from oneirodex.utils.library_acl import set_user_library_allowlist
+
+        child = User(
+            name=f'fav-child-{uuid4().hex[:8]}',
+            email=f'fav-child-{uuid4().hex[:8]}@example.com',
+            password_hash='unused', role='child', user_id=str(uuid4()),
+            avatarpath='newstyle/avatar_default.jpg', state=True,
+        )
+        db_session.add(child)
+        db_session.commit()
+        set_user_library_allowlist(child.id, [])
+        db_session.commit()
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(child.id)
+            sess['_fresh'] = True
+
+        response = client.post(f'/api/toggle_favorite/{sample_game.uuid}')
+        assert response.status_code == 404
+        assert response.get_json()['error'] == 'Game not found'
+        db_session.refresh(child)
+        assert sample_game not in child.favorites
     
     def test_toggle_favorite_add_to_favorites(self, client, regular_user, sample_game, db_session):
         """Test toggle_favorite adding a game to favorites."""
@@ -384,6 +463,39 @@ def test_read_only_bearer_cannot_connect_store_ownership(client, regular_user):
         '/api/ownership/steam', json={'steam_id': '123'},
         headers={'Authorization': f'Bearer {read_token}'},
     )
+    assert denied.status_code == 403
+    assert denied.get_json()['error_code'] == 'forbidden'
+
+
+def test_child_session_cannot_connect_store_ownership(client, regular_user, db_session):
+    regular_user.role = 'child'
+    db_session.commit()
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(regular_user.id)
+        sess['_fresh'] = True
+
+    denied = client.post(
+        '/api/ownership/steam', json={'steam_id': '123'},
+    )
+
+    assert denied.status_code == 403
+    assert denied.get_json()['error_code'] == 'forbidden'
+
+
+def test_child_bearer_with_write_scope_cannot_connect_store_ownership(
+    client, regular_user, db_session,
+):
+    _, write_token = generate_api_token(
+        regular_user, 'child-ownership-write', ['read:library', 'write:library'],
+    )
+    regular_user.role = 'child'
+    db_session.commit()
+
+    denied = client.post(
+        '/api/ownership/steam', json={'steam_id': '123'},
+        headers={'Authorization': f'Bearer {write_token}'},
+    )
+
     assert denied.status_code == 403
     assert denied.get_json()['error_code'] == 'forbidden'
 

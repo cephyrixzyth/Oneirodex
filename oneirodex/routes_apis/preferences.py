@@ -35,6 +35,15 @@ def account_preferences(body: MemberPreferencesBody):
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
         )
+    if (
+        request.method == 'GET'
+        and getattr(g, 'api_token', None) is not None
+        and not user_has_scope('read:library')
+    ):
+        return api_error(
+            'Missing scope: read:library', code='forbidden',
+            detail={'required_scope': 'read:library'},
+        )
     form = UserPreferencesForm(formdata=None)
     prefs = current_user.preferences
     if request.method == 'GET':

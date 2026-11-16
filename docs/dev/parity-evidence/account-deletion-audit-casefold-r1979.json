@@ -1,0 +1,22 @@
+{
+  "review_id": "R1979",
+  "title": "Case-insensitive account identifier removal from retained audit text",
+  "classification": "Confirmed privacy leak fixed: an unlinked PostgreSQL audit event containing a case-variant account email escaped the prior case-sensitive selector.",
+  "change": "Retained audit event lookup now uses SQLAlchemy icontains with autoescape, so case variants are selected while SQL wildcard characters in identifiers remain literal. Matching identifier text is then replaced case-insensitively.",
+  "verification": {
+    "reproduction": "The new PostgreSQL regression failed before the fix because the case-variant email remained in retained SystemEvents.event_text after account deletion.",
+    "command": "python -m pytest tests/test_admin_user_delete_retention.py -q",
+    "result": "passed: 5 tests on Python 3.14.10 and PostgreSQL 17.6",
+    "database": "Fresh oneirodexr1978test database upgraded from Alembic baseline through head; dropped after verification. TEST_DATABASE_URL and DATABASE_URL were process-scoped overrides; root .env unchanged."
+  },
+  "coverage": [
+    "the existing audit event remains but no longer contains the deleted user's name, email or user ID",
+    "an unlinked security event with the email in different letter case is also anonymized",
+    "absolute Windows, UNC and POSIX paths in retained audit text are redacted",
+    "the account-deletion module's Flask, native mutation, file cleanup and ASGI restart cases pass"
+  ],
+  "limits": [
+    "The PostgreSQL test uses the current Alembic schema, not a deployed operator schema.",
+    "The review covers retained SystemEvents text; other retained user-authored free-text fields still need classification."
+  ]
+}

@@ -14,6 +14,7 @@ import { BadgeStack } from './BadgeStack'
 import { GamePreviewPopup } from './GamePreviewPopup'
 import { HOVER_TRAILER_MS, TileHoverTrailer } from './TileHoverTrailer'
 import { firmwareBlockMessage, isFirmwarePlayBlocked } from '../utils/playHonesty'
+import { showToast } from '../utils/toast'
 
 const DEFAULT_COVER = DEFAULT_COVER_URL
 
@@ -209,6 +210,8 @@ export function GameCard({
       const result = await toggleFavorite(game.uuid)
       setIsFavorite(Boolean(result.is_favorite))
       onToggleFavorite?.(game.uuid, Boolean(result.is_favorite))
+    } catch {
+      showToast('Could not update favorite. Please try again.', 'error')
     } finally {
       setFavoritePending(false)
     }
@@ -224,6 +227,8 @@ export function GameCard({
     try {
       const result = await setGameStatus(game.uuid, nextStatus)
       setStatus(result.status || '')
+    } catch {
+      showToast('Could not update game status. Please try again.', 'error')
     } finally {
       setStatusPending(false)
     }
@@ -437,19 +442,9 @@ export function GameCard({
           <span aria-hidden="true">☰</span>
         </button>
 
-        <GameCardAdminMenu
-          enableDeleteOnDisk={enableDeleteOnDisk}
-          game={game}
-          igdbUrl={igdbUrl}
-          isAdmin={isAdmin}
-          menuOpen={menuOpen}
-          setMenuOpen={setMenuOpen}
-          steamRunUrl={steamRunUrl}
-          steamStoreUrl={steamStoreUrl}
-        />
-
-        {/* The actions disclosure is followed by its native controls in Tab
-            order; Preview remains the next separate tile action. */}
+        {/* Keep the separate Preview action before the opened menu contents in
+            DOM order. Legacy users reach Preview first after opening a tile's
+            actions; its absolute styling keeps its visual position unchanged. */}
         <button
           type="button"
           className="od-tile-preview-hint"
@@ -463,6 +458,17 @@ export function GameCard({
         >
           Preview
         </button>
+
+        <GameCardAdminMenu
+          enableDeleteOnDisk={enableDeleteOnDisk}
+          game={game}
+          igdbUrl={igdbUrl}
+          isAdmin={isAdmin}
+          menuOpen={menuOpen}
+          setMenuOpen={setMenuOpen}
+          steamRunUrl={steamRunUrl}
+          steamStoreUrl={steamStoreUrl}
+        />
 
         {/* The clip lives here now, not on .game-card — the card was clipping
             its own popup menu. See .game-card__cover-link in components.css. */}

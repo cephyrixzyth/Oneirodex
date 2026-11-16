@@ -1,6 +1,7 @@
 """Native FastAPI routes for the member UI locale preference."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 import json
 import logging
 from contextlib import nullcontext
@@ -9,6 +10,7 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, FastAPI, Request
+from starlette.exceptions import HTTPException
 from starlette.responses import JSONResponse
 
 from oneirodex.utils.locale_core import SUPPORTED_LOCALES, normalize_locale
@@ -20,6 +22,13 @@ from .request_auth import request_auth_context
 
 
 _logger = logging.getLogger(__name__)
+LOCALE_REQUEST_MAX_BYTES = 64 * 1024
+LOCALE_FORM_MAX_FIELDS = 16
+LOCALE_FORM_MAX_FILES = 8
+
+
+class _LocalePayloadTooLarge(ValueError):
+    pass
 
 
 class LocaleData:
@@ -86,26 +95,36 @@ def create_locale_router(
                 elif auth.user is None:
                     response = _login_redirect(flask_app, request, login_manager, auth)
                 else:
-                    chosen = normalize_locale(await _locale_from_request(request))
                     try:
-                        data.set(auth.user, chosen)
-                    except Exception:
-                        _logger.exception('Failed to save UI locale')
+                        chosen = normalize_locale(await _locale_from_request(request))
+                    except _LocalePayloadTooLarge:
                         from oneirodex.utils.api_contract import api_error_payload
 
                         payload, status = api_error_payload(
-                            'Locale could not be saved.', code='internal',
+                            'Request body is too large.', code='payload_too_large',
+                            limit=LOCALE_REQUEST_MAX_BYTES,
                         )
                         response = JSONResponse(payload, status_code=status)
                     else:
-                        auth.session_data['locale'] = chosen
-                        response = JSONResponse(_payload(chosen))
-                        response.set_cookie(
-                            'gt_locale', chosen,
-                            max_age=365 * 24 * 3600,
-                            samesite='Lax',
-                        )
-                        _set_session_cookie(response, flask_app, auth)
+                        try:
+                            data.set(auth.user, chosen)
+                        except Exception:
+                            _logger.exception('Failed to save UI locale')
+                            from oneirodex.utils.api_contract import api_error_payload
+
+                            payload, status = api_error_payload(
+                                'Locale could not be saved.', code='internal',
+                            )
+                            response = JSONResponse(payload, status_code=status)
+                        else:
+                            auth.session_data['locale'] = chosen
+                            response = JSONResponse(_payload(chosen))
+                            response.set_cookie(
+                                'gt_locale', chosen,
+                                max_age=365 * 24 * 3600,
+                                samesite='Lax',
+                            )
+                            _set_session_cookie(response, flask_app, auth)
             elif auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
@@ -131,23 +150,73 @@ def mount_locale_routes(app: FastAPI, flask_app, **kwargs):
 
 async def _locale_from_request(request: Request) -> str | None:
     content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    raw = await _read_bounded_body(request)
     if content_type == 'multipart/form-data':
         try:
-            form = await request.form()
+            return await _locale_from_bounded_multipart(request, raw)
+        except _LocalePayloadTooLarge:
+            raise
         except (ValueError, RuntimeError):
             return None
-        return form.get('locale')
 
-    raw = await request.body()
-    if content_type == 'application/json':
+    if content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    ):
         try:
             payload = json.loads(raw or b'{}')
         except (TypeError, ValueError):
             payload = {}
         return payload.get('locale') if isinstance(payload, Mapping) else None
 
-    values = parse_qs(raw.decode('utf-8', 'replace'), keep_blank_values=True)
+    try:
+        values = parse_qs(
+            raw.decode('utf-8', 'replace'), keep_blank_values=True,
+            max_num_fields=LOCALE_FORM_MAX_FIELDS,
+        )
+    except ValueError as exc:
+        raise _LocalePayloadTooLarge from exc
     return values.get('locale', [None])[0]
+
+
+async def _read_bounded_body(request: Request) -> bytes:
+    declared = request.headers.get('content-length')
+    if declared is not None:
+        try:
+            if int(declared) > LOCALE_REQUEST_MAX_BYTES:
+                raise _LocalePayloadTooLarge
+        except ValueError as exc:
+            if isinstance(exc, _LocalePayloadTooLarge):
+                raise
+            # Malformed lengths are still constrained by the streamed check.
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > LOCALE_REQUEST_MAX_BYTES:
+            raise _LocalePayloadTooLarge
+        body.extend(chunk)
+    return bytes(body)
+
+
+async def _locale_from_bounded_multipart(request: Request, raw: bytes):
+    sent = False
+
+    async def receive():
+        nonlocal sent
+        if not sent:
+            sent = True
+            return {'type': 'http.request', 'body': raw, 'more_body': False}
+        return {'type': 'http.disconnect'}
+
+    bounded_request = Request(request.scope, receive)
+    try:
+        async with bounded_request.form(
+            max_files=LOCALE_FORM_MAX_FILES,
+            max_fields=LOCALE_FORM_MAX_FIELDS,
+        ) as form:
+            return first_form_value(form, 'locale')
+    except HTTPException as exc:
+        if exc.status_code == 400 and str(exc.detail).startswith(('Too many files.', 'Too many fields.')):
+            raise _LocalePayloadTooLarge from exc
+        raise
 
 
 def _payload(locale: str) -> dict[str, Any]:

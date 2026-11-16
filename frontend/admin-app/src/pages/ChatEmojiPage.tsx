@@ -6,6 +6,8 @@ import { DataTable } from '../components/DataTable'
 import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 
+import { AdminLink } from '../components/AdminLink'
+
 type Emoji = { id: number; slug: string; label: string; emoji: string; url: string }
 const API = '/api/admin/chat-emoji'
 export function ChatEmojiPage() {
@@ -239,9 +241,9 @@ export function ChatEmojiPage() {
               />
             </section>
           ) : null}
-          <a className="od-cbtn" href="/admin/integrations">
+          <AdminLink className="od-cbtn" to="/admin/integrations">
             Back to Integrations
-          </a>
+          </AdminLink>
         </>
       ) : null}
     </Page>

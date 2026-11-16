@@ -1,11 +1,12 @@
 """Native admin read for the custom chat emoji catalogue."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
@@ -52,6 +53,40 @@ class ChatEmojiData:
             slug=slug, label=label, file=file, uploader=uploader,
             upload_folder=upload_folder,
         )
+
+    def discard_upload(self, row, *, upload_folder: str | None):
+        from oneirodex.utils.custom_emoji import discard_custom_emoji_upload
+
+        return discard_custom_emoji_upload(
+            row.id, row.file_name, upload_folder=upload_folder,
+        )
+
+
+async def _upload_custom_emoji_cancellable(
+    data, *, slug, label, file, uploader, upload_folder, logger=None,
+):
+    """Roll back the committed image and row if the request is cancelled."""
+    from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
+    def discard(row):
+        try:
+            data.discard_upload(row, upload_folder=upload_folder)
+        except Exception:
+            from oneirodex.runtime_native.db_session import native_db
+
+            native_db.session.rollback()
+            if logger:
+                logger.warning('Cancelled custom emoji upload cleanup failed')
+
+    return await run_image_work_in_threadpool(
+        data.upload,
+        slug=slug,
+        label=label,
+        file=file,
+        uploader=uploader,
+        upload_folder=upload_folder,
+        on_cancel=discard,
+    )
 
 
 def create_chat_emoji_router(
@@ -238,7 +273,7 @@ def create_chat_emoji_router(
         from .csrf_compat import csrf_error_response
         from .request_auth import _lifetime_seconds
         from .session_compat import load_session_cookie
-        from oneirodex.utils.custom_emoji import MAX_UPLOAD_BYTES
+        from oneirodex.utils.custom_emoji import MAX_UPLOAD_BODY_BYTES, MAX_UPLOAD_BYTES
         from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
         from oneirodex.utils.role_catalog import normalize_role
 
@@ -280,9 +315,19 @@ def create_chat_emoji_router(
                     )
                     response = JSONResponse(body, status_code=status)
             if response is None:
-                form = await request.form()
+                form = None
                 try:
-                    upload = form.get('file')
+                    from .bounded_multipart import (
+                        InvalidContentLength, RequestBodyTooLarge,
+                        bounded_multipart_form,
+                    )
+                    from oneirodex.utils.image_upload_limits import ImageWorkBusy
+
+                    form = await bounded_multipart_form(
+                        request, max_body_bytes=MAX_UPLOAD_BODY_BYTES,
+                        max_files=1, max_fields=12, max_part_size=MAX_UPLOAD_BYTES + 1,
+                    )
+                    upload = first_form_upload(form, 'file')
                     file = None
                     if isinstance(upload, StarletteUploadFile):
                         raw = await upload.read(MAX_UPLOAD_BYTES + 1)
@@ -290,18 +335,29 @@ def create_chat_emoji_router(
                             stream=BytesIO(raw), filename=upload.filename,
                             content_type=upload.content_type,
                         )
-                    slug = str(form.get('slug') or '')
-                    label = str(form.get('label') or '')
-                finally:
-                    await form.close()
-                try:
-                    row = data.upload(
+                    slug = str(first_form_value(form, 'slug') or '')
+                    label = str(first_form_value(form, 'label') or '')
+                    row = await _upload_custom_emoji_cancellable(data,
                         slug=slug, label=label, file=file, uploader=auth.user,
                         upload_folder=flask_app.config.get('UPLOAD_FOLDER'),
+                        logger=getattr(flask_app, 'logger', None),
                     )
                     response = JSONResponse(api_ok_payload({
                         'emoji': row.to_dict(), 'message': 'Custom emoji uploaded.',
                     }), status_code=201)
+                except RequestBodyTooLarge:
+                    body, status = api_error_payload(
+                        'Emoji upload exceeds the size limit.', code='payload_too_large',
+                    )
+                    response = JSONResponse(body, status_code=status)
+                except InvalidContentLength:
+                    body, status = api_error_payload(
+                        'Invalid request size.', code='bad_request',
+                    )
+                    response = JSONResponse(body, status_code=status)
+                except ImageWorkBusy as exc:
+                    body, status = api_error_payload(str(exc), code='unavailable')
+                    response = JSONResponse(body, status_code=status)
                 except ValueError as exc:
                     message = str(exc)
                     if message.startswith('Invalid image:'):
@@ -319,6 +375,9 @@ def create_chat_emoji_router(
                         'Could not upload custom emoji', code='internal',
                     )
                     response = JSONResponse(body, status_code=status)
+                finally:
+                    if form is not None:
+                        await form.close()
             if auth is not None and auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 
@@ -341,12 +400,12 @@ def create_chat_emoji_router(
         from .request_auth import _lifetime_seconds
         from .session_compat import load_session_cookie
         from .oidc_status import _set_session_cookie
-        from oneirodex.utils.custom_emoji import MAX_UPLOAD_BYTES
+        from oneirodex.utils.custom_emoji import MAX_UPLOAD_BODY_BYTES, MAX_UPLOAD_BYTES
         from oneirodex.utils.role_catalog import normalize_role
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
-            form = await request.form(max_files=1, max_fields=12, max_part_size=64 * 1024)
+            form = None
             try:
                 cookie_name = str(flask_app.config.get('SESSION_COOKIE_NAME') or 'session')
                 session_data = load_session_cookie(
@@ -356,42 +415,74 @@ def create_chat_emoji_router(
                     ),
                     fallback_secret_keys=flask_app.config.get('SECRET_KEY_FALLBACKS') or (),
                 )
-                response = csrf_error_response(
-                    request, session_data, flask_app.config,
-                    token=str(form.get('csrf_token') or ''),
+                auth = request_auth_context(
+                    request, flask_app.config, find_user=find_user, find_token=find_token,
+                    commit_token_touch=commit_token_touch, load_user_id=load_user_id,
+                    login_manager=login_manager,
                 )
-                auth = None
-                if response is None:
-                    auth = request_auth_context(
-                        request, flask_app.config, find_user=find_user, find_token=find_token,
-                        commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-                        login_manager=login_manager,
+                user = auth.user
+                response = None
+                if user is None:
+                    response = _login_redirect(
+                        flask_app, request, login_manager, auth,
+                        message=getattr(login_manager, 'login_message', None),
+                        category=getattr(login_manager, 'login_message_category', 'message'),
+                        include_next=True,
                     )
-                    user = auth.user
-                    if user is None:
-                        response = _login_redirect(
-                            flask_app, request, login_manager, auth,
-                            message=getattr(login_manager, 'login_message', None),
-                            category=getattr(login_manager, 'login_message_category', 'message'),
-                            include_next=True,
+                elif normalize_role(getattr(user, 'role', None) or '') != 'admin':
+                    response = _login_redirect(
+                        flask_app, request, login_manager, auth,
+                        message='You must be an admin to access this page.',
+                        category='danger', include_next=False,
+                    )
+                elif auth.token is not None and not auth.has_scope('admin'):
+                    from oneirodex.utils.api_contract import api_error_payload
+
+                    body, status = api_error_payload(
+                        'This token does not have the admin scope', code='forbidden',
+                    )
+                    response = JSONResponse(body, status_code=status)
+                if response is None:
+                    from .bounded_multipart import (
+                        InvalidContentLength, RequestBodyTooLarge,
+                        bounded_multipart_form,
+                    )
+
+                    try:
+                        form = await bounded_multipart_form(
+                            request, max_body_bytes=MAX_UPLOAD_BODY_BYTES,
+                            max_files=1, max_fields=12, max_part_size=MAX_UPLOAD_BYTES + 1,
                         )
-                    elif normalize_role(getattr(user, 'role', None) or '') != 'admin':
-                        response = _login_redirect(
-                            flask_app, request, login_manager, auth,
-                            message='You must be an admin to access this page.',
-                            category='danger', include_next=False,
-                        )
-                    elif auth.token is not None and not auth.has_scope('admin'):
+                    except RequestBodyTooLarge:
                         from oneirodex.utils.api_contract import api_error_payload
 
                         body, status = api_error_payload(
-                            'This token does not have the admin scope', code='forbidden',
+                            'Emoji upload exceeds the size limit.', code='payload_too_large',
+                        )
+                        response = JSONResponse(body, status_code=status)
+                    except InvalidContentLength:
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        body, status = api_error_payload(
+                            'Invalid request size.', code='bad_request',
+                        )
+                        response = JSONResponse(body, status_code=status)
+                    except Exception:
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        body, status = api_error_payload(
+                            'Invalid multipart form data.', code='bad_request',
                         )
                         response = JSONResponse(body, status_code=status)
                 if response is None:
-                    action = str(form.get('action') or 'upload').strip()
+                    response = csrf_error_response(
+                        request, session_data, flask_app.config,
+                        token=str(first_form_value(form, 'csrf_token') or ''),
+                    )
+                if response is None:
+                    action = str(first_form_value(form, 'action') or 'upload').strip()
                     if action == 'delete':
-                        slug = str(form.get('slug') or '')
+                        slug = str(first_form_value(form, 'slug') or '')
                         try:
                             deleted = data.delete(
                                 slug, upload_folder=flask_app.config.get('UPLOAD_FOLDER'),
@@ -401,7 +492,7 @@ def create_chat_emoji_router(
                         except ValueError:
                             message, category = 'Invalid emoji slug', 'error'
                     else:
-                        upload = form.get('file')
+                        upload = first_form_upload(form, 'file')
                         file = None
                         if isinstance(upload, StarletteUploadFile):
                             raw = await upload.read(MAX_UPLOAD_BYTES + 1)
@@ -410,13 +501,18 @@ def create_chat_emoji_router(
                                 content_type=upload.content_type,
                             )
                         try:
-                            row = data.upload(
-                                slug=str(form.get('slug') or ''),
-                                label=str(form.get('label') or ''), file=file,
+                            from oneirodex.utils.image_upload_limits import ImageWorkBusy
+
+                            row = await _upload_custom_emoji_cancellable(data,
+                                slug=str(first_form_value(form, 'slug') or ''),
+                                label=str(first_form_value(form, 'label') or ''), file=file,
                                 uploader=auth.user,
                                 upload_folder=flask_app.config.get('UPLOAD_FOLDER'),
+                                logger=getattr(flask_app, 'logger', None),
                             )
                             message, category = f'Uploaded {row.reaction_key()}', 'success'
+                        except ImageWorkBusy as exc:
+                            message, category = str(exc), 'error'
                         except ValueError as exc:
                             message, category = str(exc), 'error'
                         except Exception:
@@ -430,11 +526,14 @@ def create_chat_emoji_router(
                     flashes = list(auth.session_data.get('_flashes') or [])
                     flashes.append((category, message))
                     auth.session_data['_flashes'] = flashes
-                    response = RedirectResponse('/admin/chat_emoji', status_code=302)
+                    from .response_compat import flask_redirect_response
+
+                    response = flask_redirect_response('/admin/chat_emoji', status_code=302)
                     _set_session_cookie(response, flask_app, auth)
                 return response
             finally:
-                await form.close()
+                if form is not None:
+                    await form.close()
 
     return router
 

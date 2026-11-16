@@ -3,6 +3,7 @@ import {
   burstToastMessages,
   groupLibraryScanToasts,
   markLibraryScanToastSeen,
+  MAX_NARROW_INDIVIDUAL_TOASTS,
   pickUnseenLibraryScanToasts,
 } from '@oneirodex/ui'
 import { showToast } from '../utils/toast'
@@ -37,13 +38,25 @@ export function useLibraryScanToasts({ enabled = true, intervalMs = POLL_MS } = 
           : Array.isArray(data)
             ? data
             : []
+        const maxIndividual = window.matchMedia?.('(max-width: 40rem)').matches
+          ? MAX_NARROW_INDIVIDUAL_TOASTS
+          : undefined
         for (const burst of burstToastMessages(
           groupLibraryScanToasts(pickUnseenLibraryScanToasts(rows)),
+          { maxIndividual },
         )) {
           if (burst.count > 1) {
-            showToast(burst.message, 'success', { count: burst.count })
-          } else {
+            showToast(
+              burst.message,
+              'success',
+              maxIndividual === undefined
+                ? { count: burst.count }
+                : { count: burst.count, maxIndividual },
+            )
+          } else if (maxIndividual === undefined) {
             showToast(burst.message, 'success')
+          } else {
+            showToast(burst.message, 'success', { maxIndividual })
           }
           for (const row of burst.rows) {
             markLibraryScanToastSeen(row.id ?? row.uuid ?? row.created_at ?? row.title)

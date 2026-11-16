@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.metadata_providers_read import (
     create_metadata_providers_read_router,
 )
@@ -35,7 +37,7 @@ def _client():
     user = SimpleNamespace(
         id=82, user_id='metadata-admin', name='metadata-admin', role='admin',
         is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -57,7 +59,7 @@ def _client():
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    session = {'_user_id': '82:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(82), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     cookie = dump_session_cookie(session, flask_app.config['SECRET_KEY'])
     return client, data, cookie, csrf
@@ -91,3 +93,14 @@ def test_metadata_provider_put_keeps_validated_admin_write_contract():
     assert response.json()['ok'] is True
     assert response.json()['providers']['steam'] is False
     assert data.saved == [{'providers': {'steam': False}}]
+
+
+def test_metadata_provider_head_preserves_legacy_non_get_validation():
+    client, _data, cookie, _csrf = _client()
+    client.cookies.set('session', cookie)
+
+    response = client.head('/api/admin/integrations/metadata-providers')
+
+    assert response.status_code == 400
+    assert response.content == b''
+    assert response.headers['content-length'] == '118'

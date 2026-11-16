@@ -1,4 +1,5 @@
 import os, sys
+from datetime import timedelta
 
 from dotenv import load_dotenv
 
@@ -119,6 +120,10 @@ class Config(object):
     # which mounts are libraries. See docs/runbooks/remote-scan-locations.md.
     LIBRARY_ROOTS = _parse_library_roots(getenv_product('LIBRARY_ROOTS'))
 
+    # Read-only operator-managed key-ring file, mounted separately from DB and
+    # backup storage. Store-provider credentials never derive from SECRET_KEY.
+    STORE_CREDENTIAL_KEYRING_FILE = getenv_product('STORE_CREDENTIAL_KEYRING_FILE')
+
     # YOU CAN LEAVE ALL THESE SETTINGS AT DEFAULT:
     UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'oneirodex/static/library')
     SECRET_KEY = _load_secret_key()
@@ -134,6 +139,9 @@ class Config(object):
     REMEMBER_COOKIE_SECURE = _env_bool('REMEMBER_COOKIE_SECURE', True)
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SAMESITE = os.getenv('REMEMBER_COOKIE_SAMESITE', 'Lax')
+    REMEMBER_COOKIE_DURATION = timedelta(days=30)
+    PERMANENT_SESSION_LIFETIME = timedelta(days=30)
+    PERSISTENT_SESSIONS_ENABLED = True
 
     # HTTP security response headers — see oneirodex/utils/security_headers.py.
     # CSP enforces by default. Classic onclick= is gone; WebRetro WASM is a
@@ -184,6 +192,12 @@ class Config(object):
     # Development mode - forces theme files to be recopied on startup (helpful for theme development)
     DEV_MODE = _env_bool('DEV_MODE', False)
 
+    # Browser Play archive expansion. Operators may lower the per-request
+    # ceiling for smaller hosts; a free-space reserve is kept on the writable
+    # library volume. A zero reserve is allowed when storage policy requires it.
+    ROM_MAX_OUTPUT_BYTES = _env_int('ONEIRODEX_ROM_MAX_OUTPUT_BYTES', 64 * 1024**3) or (64 * 1024**3)
+    ROM_CACHE_RESERVE_BYTES = _env_int('ONEIRODEX_ROM_CACHE_RESERVE_BYTES', 1024**3)
+
     # Reverse proxy / HTTPS termination — number of trusted proxy hops (0 = disabled).
     # Set to the forwarded hop count when behind a proxy; forwarded values are
     # honored only when that peer also matches TRUSTED_PROXY_CIDRS below.
@@ -214,6 +228,12 @@ class Config(object):
     # Emulator save-state sync (WebRetro / companion)
     ENABLE_EMULATOR_SAVE_SYNC = _env_bool('ENABLE_EMULATOR_SAVE_SYNC', True)
     ENCRYPT_EMULATOR_SAVES = _env_bool('ENCRYPT_EMULATOR_SAVES', False)
+    try:
+        EMULATOR_SAVES_USER_QUOTA_MB = max(
+            1, int(os.getenv('EMULATOR_SAVES_USER_QUOTA_MB', '1024')),
+        )
+    except (TypeError, ValueError):
+        EMULATOR_SAVES_USER_QUOTA_MB = 1024
     # Optional private BIOS/firmware dir (operator upload or host volume). Never vendor blobs.
     # When unset, bios_root() falls back to static/library/bios.
     EMULATOR_BIOS_PATH = os.getenv('EMULATOR_BIOS_PATH') or None

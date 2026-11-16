@@ -3,6 +3,8 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ShellConfigProvider, ViewerProvider, viewerFromConfig } from '@oneirodex/ui'
 import { App } from './App'
+import { AppErrorBoundary, AuthSessionBoundary } from '@oneirodex/ui'
+import { VerifiedMemberBootstrap } from './VerifiedMemberBootstrap'
 import { installUnauthorizedRedirect } from './api/http'
 import { GameDetailsApp, parseGameDetailsRootConfig } from './GameDetailsApp'
 
@@ -149,7 +151,7 @@ export function parseShellConfig(rootElement: HTMLElement): MemberShellConfig {
     username: rootElement.dataset.username || '',
     avatar: rootElement.dataset.avatar || '',
     locale: rootElement.dataset.locale || 'en',
-    perPage: Number(rootElement.dataset.perPage) || 20,
+    perPage: Number(rootElement.dataset.perPage) || 50,
     defaultSort: rootElement.dataset.defaultSort || 'name',
     defaultSortOrder: rootElement.dataset.defaultSortOrder || 'asc',
     libraryCount: Number(rootElement.dataset.libraryCount) || 0,
@@ -180,21 +182,29 @@ if (memberAppRoot) {
   // instead of the object being threaded down as a prop through 40+ routes.
   const viewerFromShell = viewerFromConfig(shellConfig)
   createRoot(memberAppRoot).render(
-    <BrowserRouter>
-      <ViewerProvider value={viewerFromShell}>
-        <ShellConfigProvider value={shellConfig}>
-          <QueryClientProvider client={queryClient}>
-            <App />
-          </QueryClientProvider>
-        </ShellConfigProvider>
-      </ViewerProvider>
-    </BrowserRouter>,
+    <AuthSessionBoundary>
+      <VerifiedMemberBootstrap accountId={memberAppRoot.dataset.accountId}>
+        <BrowserRouter>
+          <AppErrorBoundary>
+            <ViewerProvider value={viewerFromShell}>
+              <ShellConfigProvider value={shellConfig}>
+                <QueryClientProvider client={queryClient}>
+                  <App />
+                </QueryClientProvider>
+              </ShellConfigProvider>
+            </ViewerProvider>
+          </AppErrorBoundary>
+        </BrowserRouter>
+      </VerifiedMemberBootstrap>
+    </AuthSessionBoundary>,
   )
 }
 
 const detailsRootElement = document.getElementById('game-details-react-root')
 if (detailsRootElement) {
   createRoot(detailsRootElement).render(
-    <GameDetailsApp {...parseGameDetailsRootConfig(detailsRootElement)} />,
+    <AppErrorBoundary>
+      <GameDetailsApp {...parseGameDetailsRootConfig(detailsRootElement)} />
+    </AppErrorBoundary>,
   )
 }

@@ -8,7 +8,7 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class GameHealthData:
@@ -64,6 +64,8 @@ def create_game_health_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
+                response = require_bearer_scope(auth, 'read:library')
+            if auth.user is not None and response is None:
                 from oneirodex.utils.api_contract import api_error_payload
 
                 game = data.find(game_uuid)

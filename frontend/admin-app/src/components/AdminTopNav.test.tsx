@@ -61,10 +61,14 @@ function renderTopBar({
   )
 }
 
-function renderRail({ at = '/admin/ops', railState = 'expanded' } = {}) {
+function renderRail({
+  at = '/admin/ops',
+  railState = 'expanded',
+  onCloseDrawer,
+}: { at?: string; railState?: string; onCloseDrawer?: () => void } = {}) {
   return render(
     <MemoryRouter initialEntries={[at]}>
-      <AdminSideRail railState={railState} />
+      <AdminSideRail railState={railState} onCloseDrawer={onCloseDrawer} />
     </MemoryRouter>,
   )
 }
@@ -287,7 +291,7 @@ test('rail sub-links carry an icon like the member rail', () => {
 test('the ways out of admin survive, and live in exactly one place', () => {
   const rail = renderRail()
   expect(screen.getByRole('link', { name: 'Library' })).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: 'Log out' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Log out' })).toBeInTheDocument()
   rail.unmount()
 
   // They were briefly in both the rail and the bar during the migration.
@@ -301,6 +305,15 @@ test('the rail brand is the mark only', () => {
   const brand = container.querySelector('.od-rail__brand')
   expect(brand).toHaveClass('od-rail__brand--mark-only')
   expect(brand!.querySelector('.od-rail__brand-role')).toBeNull()
+})
+
+test('the rail brand closes the mobile drawer when navigating home', () => {
+  const onCloseDrawer = vi.fn()
+  renderRail({ at: '/admin/ops', railState: 'open', onCloseDrawer })
+
+  fireEvent.click(screen.getByRole('link', { name: 'Oneirodex Admin' }))
+
+  expect(onCloseDrawer).toHaveBeenCalledOnce()
 })
 
 test('collapsed rail keeps accessible names', () => {

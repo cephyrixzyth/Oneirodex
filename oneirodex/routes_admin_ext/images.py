@@ -27,6 +27,7 @@ from oneirodex.utils.image_kinds import (
     image_kinds_error_message,
     parse_image_kind,
 )
+from oneirodex.utils.image_paths import image_path_under_save_dir
 from oneirodex.utils.validation import validate_body
 from . import admin2_bp
 
@@ -247,7 +248,11 @@ def delete_image(image_id):
             return api_error('Image not found', code='not_found')
 
         if image.is_downloaded and image.url:
-            file_path = os.path.join(current_app.config['IMAGE_SAVE_PATH'], image.url)
+            file_path = image_path_under_save_dir(
+                image.url, current_app.config['IMAGE_SAVE_PATH'],
+            )
+            if file_path is None:
+                raise ValueError('Stored image path is invalid')
             if os.path.exists(file_path):
                 os.remove(file_path)
 
@@ -530,7 +535,8 @@ def theme_font_upload():
     except ValueError as exc:
         return api_error(str(exc), code='bad_request')
     except OSError as exc:
-        return api_error(f'Could not write to the font folder: {exc}', code='unavailable')
+        _logger.warning('Theme font upload write failed (%s)', type(exc).__name__)
+        return api_error('Could not write the font file.', code='unavailable')
     return api_ok(stored, status=201)
 
 

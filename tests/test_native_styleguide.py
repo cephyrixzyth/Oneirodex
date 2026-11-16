@@ -11,6 +11,16 @@ from fastapi.testclient import TestClient
 from oneirodex.runtime_native import styleguide
 
 
+def test_styleguide_mobile_chrome_specimen_keeps_rail_inside_its_frame():
+    source = (Path(__file__).resolve().parents[1] / 'oneirodex' / 'ui' / 'styleguide_body.html').read_text(encoding='utf-8')
+
+    mobile_rule = source.split('@media (max-width: 900px)', 1)[1].split('</style>', 1)[0]
+    assert '.sg__chrome .od-rail' in mobile_rule
+    assert 'position: relative' in mobile_rule
+    assert 'transform: none' in mobile_rule
+    assert 'visibility: visible' in mobile_rule
+
+
 def test_native_styleguide_keeps_admin_gate_theme_assets_flash_and_csrf(monkeypatch):
     from oneirodex.runtime_native import admin_pilot
 

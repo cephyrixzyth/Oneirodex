@@ -17,6 +17,8 @@ from oneirodex.utils.providers.base import (
     fetch_outbound_image,
     mask_api_key,
 )
+from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.security import validate_user_outbound_http_url
 
 DEFAULT_TIMEOUT = 20
 
@@ -28,7 +30,8 @@ def get_giantbomb_api_key() -> str | None:
     settings = db.session.execute(
         select(GlobalSettings).order_by(GlobalSettings.id).limit(1),
     ).scalars().first()
-    key = getattr(settings, 'giantbomb_api_key', None) if settings else None
+    from oneirodex.utils.secret_store import read_global_secret
+    key = read_global_secret(settings, 'giantbomb_api_key') if settings else None
     return (key or '').strip() or None
 
 
@@ -54,18 +57,25 @@ class GiantBombProvider(MetadataImageProvider):
         if not q:
             return []
         limit = max(1, min(int(limit or 20), 50))
-        resp = requests.get(
-            'https://www.giantbomb.com/api/search/',
-            params={
-                'api_key': key,
-                'format': 'json',
-                'query': q,
-                'resources': 'game',
-                'limit': limit,
-            },
-            headers={'User-Agent': 'Oneirodex/1.0 (self-hosted library)'},
-            timeout=DEFAULT_TIMEOUT,
-        )
+        try:
+            resp = safe_request(
+                'GET',
+                'https://www.giantbomb.com/api/search/',
+                validator=validate_user_outbound_http_url,
+                params={
+                    'api_key': key,
+                    'format': 'json',
+                    'query': q,
+                    'resources': 'game',
+                    'limit': limit,
+                },
+                headers={'User-Agent': 'Oneirodex/1.0 (self-hosted library)'},
+                timeout=DEFAULT_TIMEOUT,
+            )
+        except requests.RequestException:
+            # Requests transport exceptions may include the prepared URL, which
+            # contains the provider key. Never let that text reach ASGI/Flask logs.
+            raise RuntimeError('GiantBomb search request failed') from None
         if resp.status_code >= 400:
             raise RuntimeError(f'GiantBomb search failed ({resp.status_code})')
         payload = resp.json() if resp.content else {}
@@ -103,8 +113,10 @@ def pcgamingwiki_enrichment(game_name: str) -> dict:
         return {'provider': 'pcgamingwiki', 'results': []}
 
     wiki_search = f'https://www.pcgamingwiki.com/w/api.php'
-    resp = requests.get(
+    resp = safe_request(
+        'GET',
         wiki_search,
+        validator=validate_user_outbound_http_url,
         params={
             'action': 'opensearch',
             'search': name,

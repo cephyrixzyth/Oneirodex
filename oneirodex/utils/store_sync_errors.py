@@ -52,6 +52,10 @@ REASONS: dict[str, Reason] = {
                             '{provider} account not connected'),
     'credential_missing': Reason('bad_request', 400, 'reconnect', False, 'member',
                                  '{provider} live sync needs a sign-in token. Reconnect with one; CSV import still works.'),
+    'credential_storage_unavailable': Reason('bad_request', 400, 'contact_admin', False, 'admin',
+                                              'Oneirodex cannot securely save or open {provider} credentials. Ask your administrator to configure the credential key ring.'),
+    'credential_migration_required': Reason('bad_request', 400, 'contact_admin', False, 'admin',
+                                            '{provider} credentials need an administrator conversion before live sync can run.'),
     'credential_rejected': Reason('bad_request', 400, 'reconnect', False, 'member',
                                   '{provider} rejected the saved sign-in (expired or revoked). Reconnect with a fresh one; CSV import still works.'),
     # The member never saved a sign-in; the operator's household one failed.
@@ -83,6 +87,8 @@ REASONS: dict[str, Reason] = {
                          'Another change to your {provider} link is in progress. Try again in a moment.'),
     'not_cancellable': Reason('conflict', 409, 'none', False, 'member',
                               '{provider} sync is a single request and cannot be stopped once it starts'),
+    'ownership_limit': Reason('conflict', 409, 'contact_admin', False, 'member',
+                              'Your ownership register has reached its safety limit. Remove old entries before importing more.'),
     'nothing_to_cancel': Reason('conflict', 409, 'none', False, 'member',
                                 'No {provider} sync is running'),
     'cancelled': Reason('conflict', 409, 'retry', True, 'member',
@@ -155,6 +161,16 @@ def classify_sync_exception(exc):
     reason = getattr(exc, 'reason', None)
     if isinstance(exc, (StoreSyncError, StoreSyncPermissionError)) and reason in REASONS:
         return reason
+    from oneirodex.utils.store_credentials import (
+        StoreCredentialError,
+        StoreCredentialKeyUnavailable,
+        StoreCredentialMigrationRequired,
+    )
+
+    if isinstance(exc, StoreCredentialMigrationRequired):
+        return 'credential_migration_required'
+    if isinstance(exc, (StoreCredentialError, StoreCredentialKeyUnavailable)):
+        return 'credential_storage_unavailable'
     if isinstance(exc, PermissionError):
         return 'sync_disabled'
     if isinstance(exc, BlockedOutboundUrl):

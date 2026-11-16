@@ -14,6 +14,7 @@ from oneirodex.utils.cover_quality import (
     replace_cover_if_degenerate,
 )
 from oneirodex.utils.functions import download_image
+from oneirodex.utils.image_upload_limits import IMAGE_DECODE_WORKER
 
 
 def _save(path: Path, image: PILImage.Image, fmt='JPEG') -> Path:
@@ -45,6 +46,23 @@ def test_varied_artwork_is_kept(tmp_path):
             pixels[x, y] = (x, y % 256, (x + y) % 256)
     path = _save(tmp_path / 'art.jpg', img)
     assert inspect_cover_file(str(path)) is None
+
+
+def test_cover_qualification_fails_closed_while_image_work_is_busy(tmp_path):
+    path = _save(tmp_path / 'cover.jpg', PILImage.new('RGB', (200, 300), (8, 8, 8)))
+    original = path.read_bytes()
+
+    assert IMAGE_DECODE_WORKER.acquire(blocking=False)
+    try:
+        ok, error = qualify_downloaded_image(
+            str(path), image_type='cover', title='Hades',
+        )
+    finally:
+        IMAGE_DECODE_WORKER.release()
+
+    assert ok is False
+    assert error and 'busy' in error
+    assert path.read_bytes() == original
 
 
 def test_unreadable_bytes_are_degenerate(tmp_path):

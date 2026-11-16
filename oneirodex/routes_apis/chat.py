@@ -275,7 +275,9 @@ def chat_attachment_file(file_name: str):
         folder, row.file_name, mimetype=row.mime, download_name=row.original_name,
         as_attachment=not row.mime.startswith('image/'),
     )
-    resp.headers['Cache-Control'] = 'private, max-age=3600'
+    # Attachment access is channel-ACL scoped. Prevent a shared browser
+    # profile from reusing one account's cached bytes after an account switch.
+    resp.headers['Cache-Control'] = 'private, no-store'
     return resp
 
 

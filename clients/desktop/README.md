@@ -1,5 +1,7 @@
 # Oneirodex Desktop Companion
 
+> **Doc status:** Active
+
 Cross-platform Tauri client (Windows · macOS · Linux) with **two build flavors** against a Oneirodex server:
 
 | Flavor | Command | What it does |
@@ -19,7 +21,7 @@ Thin is not “coming later”: TC-2 shell is buildable today. See [thin-client.
 
 ## Prerequisites
 
-- **Node.js** 20+ and npm
+- **Node.js 22** and npm (matches the locked workspace engine requirement)
 - **Rust** stable (`rustup`) — required for `tauri dev` / `tauri build`
 - **Tauri system deps** — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) (WebView2 on Windows)
 
@@ -62,7 +64,7 @@ For all three platforms in one go, use [`scripts/build-installers.sh`](../../scr
 
 1. Enter your **server base URL** (e.g. `https://oneirodex.example.com`).
 2. Enter a personal **API token** (`gt_<hexprefix>_<urlsafe-secret>`; secret may include `_`/`-`) from **Account → API tokens** (or Admin). Full companion needs the **Desktop companion** preset (`read:library` + **`write:download`**). Thin uses the **Thin client** preset (no download).
-3. Click **Connect** — validates via `GET /api/collections`, then loads a library preview via search.
+3. Click **Connect** — validates via `GET /api/collections`, then loads a 12-title library preview and verifies launchable local install IDs outside that preview through the details API. The Installed shelf caches those permitted installed titles independently. Click **Open full library** for the wider `/library` catalog; the webview uses the site session and receives no companion API token.
 4. Non-secret settings (base URL) are saved to app data as JSON; the API token goes to the OS credential store:
 
    - Windows: `%APPDATA%\com.oneirodex.desktop\config.json` (base URL only) + Windows Credential Manager (`com.oneirodex.desktop` / `api_token`)
@@ -118,11 +120,15 @@ While connected, the desktop companion POSTs `POST /api/client/heartbeat` every 
 
 The server uses recent heartbeats (5-minute TTL) to set `client_connected: true` on browse/discover/game-details responses so the web UI enables Install/Update/Uninstall actions when the companion is online.
 
-After **two consecutive heartbeat failures**, the UI switches to **Offline**: Download / Update / apply_patch are disabled with an explanation; Play / Install / Uninstall remain available. Queued web commands are nack’d back to `pending` until the companion is reachable again.
+After **two consecutive transport/service failures**, the UI switches to **Offline**. HTTP401/403 instead shows **Server access denied** and retains matching historical local installs. Refused redirects and invalid responses have separate failure states. Recovery revalidates identity and library access before enabling server actions.
+
+The Installed shelf contains previously verified titles for the same server/account/device/credential that still have a local install record and launchable lifecycle state. Verification includes installed IDs outside the preview, with at most four reads in flight and an explicit5,000-title cache capacity.403/404 omit a title on a successful refresh; transport/service/protocol failure preserves the previous cache. Newly committed local installs refresh shelf metadata too, with a warning if the install succeeded but that refresh failed. Concurrent metadata completions cannot overwrite a newer shelf.
+
+Play and Reveal use local files; Download, Update, mods and patches require current server access. **Open full library** uses a separate site sign-in. The cache stores UUIDs/names, identity binding and a SHA-256 credential fingerprint, never the bearer token. **Forget account and cached titles** removes this profile's saved server/token/cache and stops tracking; it preserves installed files, saves, local install records and running games. Partial storage failures are reported. Independent site-window sign-ins and server token revocation are separate. Local file access follows OS permissions; UI restrictions cannot revoke possession of those files.
 
 ## Friends window
 
-**Open friends window** creates or focuses a compact bottom-right always-on-top Tauri label `social` (~360×560, work-area anchored) pointed at `{baseUrl}/social-companion`. Capability file `capabilities/social.json` grants only `core:default` (no FS / launch ACL). Main window keeps create/focus/always-on-top/close permissions so a Server URL change can recreate the webview. Friends open uses the **form Server URL** (Connect not required); companion heartbeat Offline does not block Friends.
+**Open friends window** creates or focuses a compact bottom-right always-on-top Tauri label `social` (~360×560, work-area anchored) pointed at `{baseUrl}/social-companion`. **Open full library** creates or focuses label `full-library` at `{baseUrl}/library`; it opens the server's site login as needed and does not put the companion token in the URL. Both site webviews use `capabilities/social.json`, which grants only `core:default` (no install, launch, or filesystem ACL). Main window keeps create/focus/always-on-top/close permissions so a Server URL change can recreate a webview. Friends and full-library opens use the **form Server URL** (Connect not required); companion heartbeat Offline does not disable either handoff.
 
 ## Project layout
 

@@ -9,7 +9,9 @@ from starlette.responses import Response
 from werkzeug.datastructures import MultiDict
 
 from .acquire_status import _login_redirect
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+
+_MAX_JSON_BODY_BYTES = 64 * 1024
 
 
 class DiscoverReadsData:
@@ -168,8 +170,10 @@ def create_discover_reads_router(
             if auth.user is None:
                 response = anonymous(request, auth)
             else:
-                response = _native_json_response(flask_app, data.sections(auth.user))
-            return secure(response, request)
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = _native_json_response(flask_app, data.sections(auth.user))
+            return secure(response, request, auth)
 
     @router.api_route('/api/discover/rows/{identifier}', methods=['GET', 'HEAD'])
     def discover_row(identifier: str, request: Request):
@@ -178,6 +182,9 @@ def create_discover_reads_router(
             if auth.user is None:
                 response = anonymous(request, auth)
                 return secure(response, request)
+            response = require_bearer_scope(auth, 'read:library')
+            if response is not None:
+                return secure(response, request, auth)
 
             args = MultiDict(request.query_params.multi_items())
             try:
@@ -211,6 +218,9 @@ def create_discover_reads_router(
             if auth.user is None:
                 response = anonymous(request, auth)
                 return secure(response, request)
+            response = require_bearer_scope(auth, 'read:library')
+            if response is not None:
+                return secure(response, request, auth)
 
             payload = data.zone(auth.user, slug)
             if payload is None:
@@ -223,11 +233,18 @@ def create_discover_reads_router(
 
     @router.api_route('/api/discover/hubs/genre/{genre:path}', methods=['GET', 'HEAD'])
     def discover_genre_hub(genre: str, request: Request):
+        if not genre:
+            from .response_compat import flask_route_not_found_response
+
+            return flask_route_not_found_response(flask_app, request)
         with request_scope():
             auth = authenticate(request)
             if auth.user is None:
                 response = anonymous(request, auth)
                 return secure(response, request)
+            response = require_bearer_scope(auth, 'read:library')
+            if response is not None:
+                return secure(response, request, auth)
 
             payload = data.genre_hub(auth.user, genre)
             if payload is None:
@@ -245,6 +262,9 @@ def create_discover_reads_router(
             if auth.user is None:
                 response = anonymous(request, auth)
                 return secure(response, request)
+            response = require_bearer_scope(auth, 'read:library')
+            if response is not None:
+                return secure(response, request, auth)
 
             args = MultiDict(request.query_params.multi_items())
             genre = None
@@ -279,6 +299,10 @@ def create_discover_reads_router(
                 return secure(_api_error_response(
                     flask_app, 'Forbidden', 'forbidden',
                 ), request, auth)
+            if request.method in ('GET', 'HEAD'):
+                response = require_bearer_scope(auth, 'read:library')
+                if response is not None:
+                    return secure(response, request, auth)
             if request.method == 'PUT' and auth.token is None:
                 from .csrf_compat import csrf_error_response
 
@@ -287,22 +311,43 @@ def create_discover_reads_router(
                     return secure(response, request, auth)
             if auth.user is None:
                 response = anonymous(request, auth)
+            elif request.method == 'HEAD':
+                from oneirodex.utils.api_contract import api_error_payload
+                from .runtime_context import native_json_response
+
+                payload, status = api_error_payload(
+                    'Send pins, hidden, or both as lists of row identifiers.',
+                    code='bad_request',
+                )
+                response = native_json_response(
+                    payload, config=flask_app.config, status=status,
+                )
             elif request.method == 'PUT':
-                try:
-                    payload = await request.json()
-                except Exception:
-                    payload = {}
-                if not isinstance(payload, dict):
-                    payload = {}
-                result = data.save_pins(auth.user, payload)
-                error = result.get('error')
-                if error:
+                from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+                raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+                if raw_body is BODY_TOO_LARGE:
                     response = _api_error_response(
-                        flask_app, error[0], error[1],
-                        **({'detail': error[2]} if len(error) > 2 else {}),
+                        flask_app, 'Request body is too large.', 'payload_too_large',
                     )
                 else:
-                    response = _api_ok_response(flask_app, result)
+                    try:
+                        import json
+
+                        payload = json.loads(raw_body or b'{}')
+                    except Exception:
+                        payload = {}
+                    if not isinstance(payload, dict):
+                        payload = {}
+                    result = data.save_pins(auth.user, payload)
+                    error = result.get('error')
+                    if error:
+                        response = _api_error_response(
+                            flask_app, error[0], error[1],
+                            **({'detail': error[2]} if len(error) > 2 else {}),
+                        )
+                    else:
+                        response = _api_ok_response(flask_app, result)
             else:
                 response = _api_ok_response(flask_app, data.pins(auth.user))
             return secure(response, request, auth)
@@ -316,11 +361,9 @@ def mount_discover_reads_routes(app: FastAPI, flask_app, **kwargs):
 
 
 def _native_json_response(flask_app, payload, status: int = 200) -> Response:
-    return Response(
-        content=flask_app.json.dumps(payload),
-        status_code=status,
-        media_type='application/json',
-    )
+    from oneirodex.runtime_native.runtime_context import native_json_response
+
+    return native_json_response(payload, config=flask_app.config, status=status)
 
 
 def _api_ok_response(flask_app, payload, status: int = 200) -> Response:

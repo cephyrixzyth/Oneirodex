@@ -97,6 +97,17 @@ def test_filters_anonymous_request_redirects_to_configured_login_with_next():
     assert response.headers['location'] == (
         '/login?next=%2Fapi%2Ftrailers%2Ffilters'
     )
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/login?next=%2Fapi%2Ftrailers%2Ffilters">'
+        '/login?next=%2Fapi%2Ftrailers%2Ffilters</a>. If not, click the link.\n'
+    )
+    assert len(response.headers.get_list('set-cookie')) == 1
     assert response.headers['X-Content-Type-Options'] == 'nosniff'
     assert 'httponly' in response.headers['set-cookie'].lower()
     assert 'cookie' in response.headers['vary'].lower()
@@ -104,6 +115,17 @@ def test_filters_anonymous_request_redirects_to_configured_login_with_next():
         response.cookies.get('session'), 'native-test-secret', max_age=3600,
     )
     assert session['_flashes'] == [('message', 'Please log in.')]
+
+    random_response = make_client(FakeData(), authenticated=False).get(
+        '/api/trailers/random', follow_redirects=False,
+    )
+    assert random_response.status_code == 302
+    assert random_response.headers['location'] == '/login?next=%2Fapi%2Ftrailers%2Frandom'
+    assert random_response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert random_response.text.endswith(
+        '<a href="/login?next=%2Fapi%2Ftrailers%2Frandom">'
+        '/login?next=%2Fapi%2Ftrailers%2Frandom</a>. If not, click the link.\n'
+    )
 
 
 def test_anonymous_redirect_preserves_absolute_next_for_external_login_origin():

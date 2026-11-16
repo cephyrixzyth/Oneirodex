@@ -1,0 +1,194 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2080",
+  "observed_utc": "2026-11-14T18:54:39.045622+00:00",
+  "classification": "App window/WebView2 observed; native IPC and full installed-runtime acceptance remain unknown. Elevated-host override restrictions are consistent with missing CDP.",
+  "first_run": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43627052128",
+    "job_id": 132545215952,
+    "harness_source": "c5e51daae69ad1d09e37b82e089a7ee6a4d3652a",
+    "raw_log_sha256": "cd40bceaeb8378610674c13ef4d9527e7880e2eb7cd26c85b053e10a77f29a08",
+    "receipt": {
+      "observed_utc": "2026-11-14T18:31:47.053030+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_webview_startup",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "owned_application_uninstalled": true,
+      "code": "webview_endpoint_not_ready"
+    }
+  },
+  "observed": "Pinned ZIP/installer verified; silent installation and uninstallation succeeded; installed binary hash recorded. The controller did not reach a CDP endpoint during the original60second window. Window/renderer/native IPC/account/game behavior was not observed.",
+  "followup": "Task2b6: implement a CI-only standard-user launch/observation path with focused ownership, credential isolation and cleanup guards, retaining the exact 6a03c6fb NSIS artifact. Keep loopback ownership, timeout and native IPC assertions. Do not add debug plugins to the shipping binary, change registry/browser security, or launch a local GUI. Dispatch only after review and focused checks; retain original failures. Then continue actual isolated ASGI/PostgreSQL account/offline/game/restart journeys and every original gate.",
+  "local_preflight": {
+    "observed_utc": "2026-11-14T18:54:39.045622+00:00",
+    "guard_methods_passed": 13,
+    "diagnostic_powershell": "parsed without execution",
+    "python_compile": "passed",
+    "source_sha256": {
+      "scripts/ci/probe_windows_packaged.py": "a30876582e31e78a6beb09b7ed3690fa5e5a2406521650404fb31da743aa70d5",
+      "scripts/ci/test_windows_packaged_probe.py": "aea3219632a694300e375af5e3d5a75c58c7ee82e34cef9dcfa948b95d94707d"
+    },
+    "git_normalized_source_sha256": {
+      "scripts/ci/probe_windows_packaged.py": "a30876582e31e78a6beb09b7ed3690fa5e5a2406521650404fb31da743aa70d5",
+      "scripts/ci/test_windows_packaged_probe.py": "aea3219632a694300e375af5e3d5a75c58c7ee82e34cef9dcfa948b95d94707d"
+    }
+  },
+  "runtime_retry": "completed failure: run43629561197/job132552947762; CDP observation prerequisite remains unmet",
+  "installed_runtime_acceptance": false,
+  "dependency_followup": {
+    "inventory_records_retrieved": 113,
+    "severity": {
+      "critical": 13,
+      "high": 56,
+      "moderate": 43,
+      "low": 1
+    },
+    "new_records_reviewed": [
+      {
+        "number": 132,
+        "manifest": "requirements-dev.txt",
+        "ghsa": "GHSA-wqgw-9xfh-qf2g",
+        "affected": "<= 12.3.0",
+        "patched": "13.0.0",
+        "classification": "already_resolved_in_review_manifest",
+        "evidence": "requirements-dev.txt includes requirements.txt; reviewed source pins pillow13.0.0. Default alert remains open; no deployment claim."
+      },
+      {
+        "number": 131,
+        "manifest": "requirements-dev.txt",
+        "ghsa": "GHSA-xcvg-w56q-r89m",
+        "affected": "<= 12.3.0",
+        "patched": "13.0.0",
+        "classification": "already_resolved_in_review_manifest",
+        "evidence": "requirements-dev.txt includes requirements.txt; reviewed source pins pillow13.0.0. Default alert remains open; no deployment claim."
+      }
+    ],
+    "scope": "Other records were retrieved as inventory, not newly reviewed. Alerts stay open on default until authorized merge and recheck."
+  },
+  "rework": "A new diagnostic sanitizer scaffold had expected missing-function RED then13methods passed. Explicit page-number pagination was rejected; GitHub CLI cursor-aware pagination retrieved113 records without broader scopes. No duplicate native/full-suite tests or product-vulnerability claim.",
+  "limits": "Original first failure retained. Second run observed a live window/static product label and WebView2, not native bridge/account/game behavior. Controlled non-elevated rerun and every original gate remain required.",
+  "capture": "No local GUI execution or screenshots; remote diagnostics retain only bounded selected fields, never raw command lines, window text, paths or tokens.",
+  "archive": {
+    "filename": "windows-packaged-startup-observation-r2080.zip",
+    "sha256": "7ac95c84cbb47127f607afe13d486963a9bd7f9e2e2674d0b7298b7cae056fb7",
+    "payload_files": 8,
+    "manifest_in_addition": true,
+    "bytes": 15886,
+    "storage": "Private canonical package artifacts; prior installer capsule retained separately."
+  },
+  "second_run": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43629561197",
+    "job_id": 132552947762,
+    "harness_source": "44bbc4ecfc437653d4a70d1febcd32054c4e3500",
+    "raw_log_sha256": "9e325bfea75f32c6b0adcddfcba04a5a81e7b018bb5ac8cc811de468c9ef568a",
+    "receipt": {
+      "observed_utc": "2026-11-14T18:59:28.253851+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_webview_startup",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "startup_diagnostics": {
+        "product_window_title": true,
+        "visible_text_keywords": [
+          "Oneirodex Desktop"
+        ],
+        "listeners": [],
+        "processes": [
+          {
+            "pid": 8024,
+            "parent": 9092,
+            "name": "oneirodex-desktop.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": false
+          },
+          {
+            "pid": 7920,
+            "parent": 8024,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          },
+          {
+            "pid": 8196,
+            "parent": 7920,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          },
+          {
+            "pid": 4700,
+            "parent": 7920,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          },
+          {
+            "pid": 2044,
+            "parent": 7920,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          },
+          {
+            "pid": 2124,
+            "parent": 7920,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          },
+          {
+            "pid": 5192,
+            "parent": 7920,
+            "name": "msedgewebview2.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": true
+          }
+        ],
+        "devtools_policy_values": [],
+        "session_id": 2,
+        "root_alive": true,
+        "runtime_versions": [
+          "156.0.4314.58"
+        ],
+        "has_main_window": true,
+        "probe_webview_profile_created": true,
+        "parent_has_browser_folder_override": false
+      },
+      "last_owned_root_and_listener_cleanup_verified": true,
+      "owned_application_uninstalled": true,
+      "code": "webview_endpoint_not_ready"
+    }
+  },
+  "observer_assessment": {
+    "classification": "evidence-supported explanation; corrective runtime rerun pending",
+    "explanation": "Microsoft documents that elevated WebView2 hosts ignore environment-supplied browser argument overrides. Both CI hosts were elevated; the second run had a live product window, matching static label and WebView2 processes, but no expected debugging flag or listener. This is consistent with an observer prerequisite failure; a non-elevated controlled rerun is still required to establish causality and UI/native-IPC acceptance.",
+    "primary_source": "https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/security#for-an-elevated-host-app-use-appropriate-override-flags"
+  }
+}

@@ -185,11 +185,21 @@ export function useDiscoverySections() {
       setMessage('Shelf saved.')
     })
   }
-  function move(index: number, offset: number) {
+  function moveTo(index: number, to: number) {
     const next = [...sections]
-    const to = index + offset
-    if (to < 0 || to >= next.length) return
-    ;[next[index], next[to]] = [next[to], next[index]]
+    if (
+      !Number.isInteger(index) ||
+      !Number.isInteger(to) ||
+      index < 0 ||
+      to < 0 ||
+      index >= next.length ||
+      to >= next.length ||
+      index === to
+    ) {
+      return
+    }
+    const [section] = next.splice(index, 1)
+    next.splice(to, 0, section)
     void action(async () => {
       await postJson(`${API}/order`, {
         sections: next.map((row, order) => ({ id: row.id, order })),
@@ -197,6 +207,9 @@ export function useDiscoverySections() {
       setSections(next)
       setMessage('Shelf order saved.')
     })
+  }
+  function move(index: number, offset: number) {
+    moveTo(index, index + offset)
   }
   function remove(row: Shelf) {
     void action(
@@ -266,6 +279,7 @@ export function useDiscoverySections() {
     search,
     saveShelf,
     move,
+    moveTo,
     remove,
     disabled,
     filterOptions,

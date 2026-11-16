@@ -27,14 +27,18 @@ boot hook warns on when it does not.
 
 from __future__ import annotations
 
+import hashlib
 import os
+import re
 from pathlib import Path
 
 #: jsDelivr mirror of BinBashBanana/webretro at the version the core set matches.
-#: Pinned, not floating: a core silently changing under an install is the kind
-#: of thing that turns into "browser play broke and nothing changed".
+#: The SHA-256 manifest also pins the exact bytes independently of the CDN tag.
 WEBRETRO_VERSION = '6.5'
 CDN = f'https://cdn.jsdelivr.net/gh/BinBashBanana/webretro@{WEBRETRO_VERSION}/cores'
+CORE_HASH_MANIFEST = (
+    Path(__file__).resolve().parents[2] / 'scripts' / 'webretro-cores.sha256'
+)
 
 #: Each core is a ``.js`` loader plus its ``.wasm``. One without the other is
 #: not a working core, so they are fetched and validated as a pair.
@@ -43,6 +47,27 @@ CORE_SUFFIXES = ('_libretro.js', '_libretro.wasm')
 #: Bytes below which a response is assumed to be an error page rather than a
 #: core. The smallest real core is comfortably over 100KB.
 MIN_CORE_BYTES = 32 * 1024
+
+
+def load_core_hashes(path: str | Path | None = None) -> dict[str, str]:
+    """Read the reviewed SHA-256 lock for the default WebRetro core files."""
+    manifest = Path(path) if path is not None else CORE_HASH_MANIFEST
+    hashes: dict[str, str] = {}
+    for line_number, line in enumerate(manifest.read_text(encoding='ascii').splitlines(), 1):
+        if not line or line.startswith('#'):
+            continue
+        parts = line.split()
+        if (
+            len(parts) != 2
+            or not re.fullmatch(r'[0-9a-f]{64}', parts[0])
+            or not re.fullmatch(r'[a-z0-9_]+_libretro\.(?:js|wasm)', parts[1])
+            or parts[1] in hashes
+        ):
+            raise ValueError(f'Invalid WebRetro SHA-256 manifest entry on line {line_number}')
+        hashes[parts[1]] = parts[0]
+    if not hashes:
+        raise ValueError('WebRetro SHA-256 manifest is empty')
+    return hashes
 
 
 def default_cores_dir() -> Path:
@@ -95,6 +120,10 @@ def install_core(core_id: str, cores_dir: str | Path | None = None) -> bool:
     Written to a temp name and moved into place, so an interrupted fetch cannot
     leave a half-file that :func:`missing_cores` would then count as present.
     """
+    if not re.fullmatch(r'[a-z0-9_]+', core_id):
+        raise ValueError('Invalid WebRetro core ID')
+
+    expected_hashes = load_core_hashes()
     root = Path(cores_dir) if cores_dir else default_cores_dir()
     root.mkdir(parents=True, exist_ok=True)
 
@@ -102,9 +131,14 @@ def install_core(core_id: str, cores_dir: str | Path | None = None) -> bool:
     try:
         for suffix in CORE_SUFFIXES:
             name = f'{core_id}{suffix}'
+            expected_hash = expected_hashes.get(name)
+            if expected_hash is None:
+                raise ValueError(f'{name} is not present in the reviewed WebRetro core manifest')
             payload = _fetch(f'{CDN}/{name}')
             if len(payload) < MIN_CORE_BYTES:
                 raise ValueError(f'{name} was {len(payload)} bytes — not a core')
+            if hashlib.sha256(payload).hexdigest() != expected_hash:
+                raise ValueError(f'{name} failed its SHA-256 integrity check')
             tmp = root / f'.{name}.part'
             tmp.write_bytes(payload)
             staged.append((tmp, root / name))

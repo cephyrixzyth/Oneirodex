@@ -231,7 +231,13 @@ export function DashboardBoard({
       }
     }
     const observer = new ResizeObserver(schedule)
-    hosts.forEach((host) => observer.observe(host))
+    hosts.forEach((host) => {
+      observer.observe(host)
+      // The grid host can keep the same one-row box while overflowing text
+      // makes a fit-enabled child taller. Observe that intrinsic child too so
+      // async status/metric content schedules a fresh measurement.
+      if (host.firstElementChild) observer.observe(host.firstElementChild)
+    })
     return () => {
       disposed = true
       if (raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf)

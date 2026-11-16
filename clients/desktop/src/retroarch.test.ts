@@ -91,7 +91,7 @@ describe('retroarch companion helpers', () => {
     expect(result).toEqual({ ok: true, text: 'cheat 0\n' })
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://gt.example/api/games/g1/cheats/inf.cht',
-      expect.objectContaining({ credentials: 'include' }),
+      expect.objectContaining({ credentials: 'include', redirect: 'error' }),
     )
   })
 

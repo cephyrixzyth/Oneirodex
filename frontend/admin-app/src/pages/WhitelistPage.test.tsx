@@ -45,3 +45,18 @@ test('cancel leaves the entry, confirmed removal uses the existing endpoint', as
   expect(await screen.findByText('Whitelist entry removed.')).toBeInTheDocument()
   expect(deleteJson).toHaveBeenCalledWith('/admin/whitelist/1')
 })
+
+test('restores legacy form value and field error in the React page', async () => {
+  vi.mocked(getJson).mockResolvedValue({ entries: [] })
+  const legacyState = document.createElement('div')
+  legacyState.id = 'od-whitelist-form-state'
+  legacyState.dataset.email = 'not-an-email'
+  legacyState.dataset.error = 'Invalid email address.'
+  document.body.append(legacyState)
+
+  render(<WhitelistPage />)
+
+  expect(await screen.findByLabelText('Email address')).toHaveValue('not-an-email')
+  expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email address.')
+  expect(document.getElementById('od-whitelist-form-state')).toBeNull()
+})

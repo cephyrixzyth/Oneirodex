@@ -64,3 +64,13 @@ test('lists what it loaded', async () => {
   })
   expect(screen.queryByText(/no announcements yet/i)).toBeNull()
 })
+
+test('keeps an accessible document title without a visible heading above the legacy-aligned form', () => {
+  globalThis.fetch = vi.fn(() => new Promise(() => {})) as unknown as typeof globalThis.fetch
+  render(<AnnouncementsPage />)
+
+  const heading = screen.getByRole('heading', { name: 'Announcements', level: 1 })
+  expect(heading).toHaveClass('visually-hidden')
+  expect(heading).toHaveTextContent('Announcements')
+  expect(document.title).toBe('Announcements · Oneirodex Admin')
+})

@@ -143,3 +143,42 @@ test('load retry and escaped plain-text detail preserve line breaks without mark
   )
   expect(getJson).toHaveBeenLastCalledWith('/api/admin/newsletters/7')
 })
+
+test('failed detail uses the compact summary and does not expose raw delivery errors', async () => {
+  vi.mocked(getJson).mockResolvedValue({
+    newsletter: {
+      id: 7,
+      sender: 'Reviewer',
+      sent_date: '2026-10-31T02:29:01Z',
+      recipient_count: 2,
+      status: 'failed',
+      content: 'Synthetic content',
+      delivery_error: 'synthetic private marker',
+    },
+  })
+
+  const { container } = mount('/admin/newsletter/7')
+
+  expect(await screen.findByText('Some recipients could not be reached.')).toBeVisible()
+  expect(screen.queryByText('synthetic private marker')).not.toBeInTheDocument()
+  expect(screen.getByText('Reviewer')).toBeInTheDocument()
+  expect(screen.getByText('2026-10-31 02:29:01')).toBeInTheDocument()
+  expect(screen.getByText('2')).toBeInTheDocument()
+  expect(screen.getByText('Failed')).toBeInTheDocument()
+  expect(container.querySelector('.od-newsletter-detail__summary')).toHaveClass(
+    'od-newsletter-detail__summary--with-error',
+  )
+})
+
+test('missing detail keeps retry and back actions separated as a pair', async () => {
+  vi.mocked(getJson).mockRejectedValue(new Error('Newsletter not found.'))
+
+  const { container } = mount('/admin/newsletter/2147483647')
+
+  expect(await screen.findByText('Newsletter not found.')).toBeVisible()
+  const actions = container.querySelector('.od-newsletter-detail__actions')
+  expect(actions).toContainElement(
+    screen.getByRole('button', { name: 'Retry loading newsletters' }),
+  )
+  expect(actions).toContainElement(screen.getByRole('link', { name: 'Back to newsletters' }))
+})

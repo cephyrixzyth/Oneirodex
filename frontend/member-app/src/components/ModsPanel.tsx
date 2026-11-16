@@ -56,8 +56,8 @@ export function ModsPanel({ gameUuid, canEdit = false }: { gameUuid: string; can
   }, [load])
 
   // Tracking off server-side, or nothing to show and nobody who could add: stay out of the page.
-  if (!loading && (!pack || pack.enabled === false)) return null
-  if (!loading && pack && pack.mods.length === 0 && !canEdit) return null
+  if (!loading && !error && (!pack || pack.enabled === false)) return null
+  if (!loading && !error && pack && pack.mods.length === 0 && !canEdit) return null
 
   const mods = pack?.mods ?? []
   const loaders = pack?.loaders ?? []
@@ -170,6 +170,7 @@ export function ModsPanel({ gameUuid, canEdit = false }: { gameUuid: string; can
       <PageStatus
         loading={loading}
         error={error}
+        onRetry={() => void load()}
         loadingMessage="Loading mods…"
         className="od-mods__status"
       />

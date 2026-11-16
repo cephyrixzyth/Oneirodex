@@ -1,0 +1,26 @@
+{
+  "review_id": "R1973",
+  "title": "Account token dialog semantics follow-up",
+  "source_evidence": "docs/dev/parity-evidence/review-bundle-r1972/token-ui-lifecycle-r1972-full.json",
+  "classification": "Confirmed accessibility-semantic mismatch; visible panel dimensions already matched.",
+  "finding": {
+    "legacy": "The visible account panel carries role=dialog.",
+    "current_before_fix": "The full-screen scrim carried role=dialog and aria-modal=true; the visible panel held the focus trap.",
+    "impact": "A role-based bounds query selected the scrim rather than the visible dialog panel. This did not establish a visual size difference, but it made the current dialog's accessible boundary broader than the panel users interact with."
+  },
+  "change": {
+    "file": "frontend/shared/src/Modal.tsx",
+    "summary": "Moved role=dialog, aria-modal, and the accessible name to the visible panel that contains focus management. The backdrop remains the click-to-dismiss surface.",
+    "regression_test": "frontend/shared/src/Modal.test.tsx asserts the role-bearing element is the panel and backdrop dismissal still works."
+  },
+  "verification": [
+    {
+      "command": "npm test --workspace frontend/shared -- src/Modal.test.tsx",
+      "result": "passed: 1 file, 9 tests"
+    }
+  ],
+  "limits": [
+    "Screen-reader and keyboard review in a real browser was not performed.",
+    "The R1972 exact-image screenshots and lifecycle data were not regenerated because only dialog semantics changed."
+  ]
+}

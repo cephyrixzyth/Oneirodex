@@ -413,6 +413,31 @@ class TestMainBlueprint:
         assert response.status_code == 200
 
     @patch('flask_login.current_user')
+    @patch('oneirodex.routes_admin_ext.scan_jobs.get_game_names_from_folder')
+    def test_scan_folder_rejects_library_outside_database_choices(
+        self, mock_get_games, mock_current_user, client, app, db_session,
+        admin_user, test_library,
+    ):
+        mock_current_user.is_authenticated = True
+        mock_current_user.role = 'admin'
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+
+        response = client.post('/scan_manual_folder', data={
+            'folder_path': '/test/folder',
+            'library_uuid': 'not-a-library',
+            'csrf_token': 'test_token',
+            'scan_mode': 'folders',
+        })
+
+        assert response.status_code == 200
+        # WTForms rejects the unknown value, but this legacy template does not
+        # render field errors. The current React flow gives the same rejection
+        # a visible flash instead of silently redisplaying the form.
+        assert b'Not a valid choice.' not in response.data
+        mock_get_games.assert_not_called()
+
+    @patch('flask_login.current_user')
     @patch('oneirodex.routes_admin_ext.scan_jobs.os.path.exists')
     def test_scan_folder_invalid_path(self, mock_exists, mock_current_user, client, app, db_session, admin_user, test_library):
         """Test scan_folder with invalid folder path."""
@@ -620,37 +645,20 @@ class TestMainBlueprint:
         response = client.get(f'/edit_game_images/{test_game.uuid}')
         assert response.status_code == 200
 
-    @patch('flask_login.current_user')
     @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
-    @patch('oneirodex.routes_admin_ext.game_images.PILImage.open')
-    @patch('oneirodex.routes_admin_ext.game_images.os.path.join')
-    def test_upload_image_success(self, mock_path_join, mock_pil_open, mock_is_scan_running,
-                                 mock_current_user, client, app, db_session, admin_user, test_game,
+    def test_upload_image_success(self, mock_is_scan_running,
+                                 client, app, db_session, admin_user, test_game,
                                  tmp_path):
         """Test successful image upload."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
+        from PIL import Image as PILImage
+
         mock_is_scan_running.return_value = False
-
-        # Mock PIL image
-        mock_img = Mock()
-        mock_img.width = 800
-        mock_img.height = 600
-        mock_pil_open.return_value = mock_img
-
-        # A real directory the route can actually write into. The hardcoded
-        # '/tmp/test_image.jpg' could never pass on Windows — there is no /tmp —
-        # so the save raised FileNotFoundError before any assertion ran.
-        #
-        # Built by concatenation, not `tmp_path / name`: patching
-        # 'oneirodex.routes_admin_ext.game_images.os.path.join' replaces os.path.join *globally*
-        # (oneirodex.routes_admin_ext.game_images.os is the os module itself), and pathlib joins
-        # through it — so the operator would return the mock's own value here.
-        mock_path_join.return_value = str(tmp_path) + '/test_image.jpg'
-        
-        # Create test file
+        app.config['IMAGE_SAVE_PATH'] = str(tmp_path)
+        image = BytesIO()
+        PILImage.new('RGB', (800, 600), color='green').save(image, format='JPEG')
+        image.seek(0)
         test_file = FileStorage(
-            stream=BytesIO(b'fake image data'),
+            stream=image,
             filename='test.jpg',
             content_type='image/jpeg'
         )
@@ -666,6 +674,13 @@ class TestMainBlueprint:
         data = json.loads(response.data)
         assert 'message' in data
         assert data['message'] == 'File uploaded successfully'
+        row = db_session.get(Image, data['image_id'])
+        assert row.game_uuid == test_game.uuid and row.image_type == 'cover'
+        saved = tmp_path / row.url
+        assert saved.is_file() and saved.parent == tmp_path
+        with PILImage.open(saved) as decoded:
+            assert decoded.format == 'JPEG'
+            decoded.verify()
 
     @patch('flask_login.current_user')
     @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
@@ -1247,27 +1262,24 @@ class TestMainBlueprint:
 class TestErrorHandling:
     """Test error handling scenarios."""
 
-    @patch('flask_login.current_user')
-    def test_upload_image_invalid_image_data(self, mock_current_user, client, app, db_session, admin_user, test_game):
+    def test_upload_image_invalid_image_data(self, client, app, db_session, admin_user, test_game, tmp_path):
         """Test uploading invalid image data."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
+        app.config['IMAGE_SAVE_PATH'] = str(tmp_path)
+        before = db_session.execute(select(func.count()).select_from(Image)).scalar_one()
         
         with patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running', return_value=False):
-            with patch('oneirodex.routes_admin_ext.game_images.PILImage.open', side_effect=IOError("Invalid image")):
-                test_file = FileStorage(
-                    stream=BytesIO(b'invalid image data'),
-                    filename='test.jpg',
-                    content_type='image/jpeg'
-                )
-                
-                with client.session_transaction() as sess:
-                    sess['_user_id'] = str(admin_user.id)
-                
-                response = client.post(f'/upload_image/{test_game.uuid}', 
-                                      data={'file': test_file},
-                                      content_type='multipart/form-data')
-                assert response.status_code == 400
+            test_file = FileStorage(
+                stream=BytesIO(b'invalid image data'),
+                filename='test.jpg', content_type='image/jpeg',
+            )
+            with client.session_transaction() as sess:
+                sess['_user_id'] = str(admin_user.id)
+            response = client.post(f'/upload_image/{test_game.uuid}',
+                                   data={'file': test_file},
+                                   content_type='multipart/form-data')
+            assert response.status_code == 400
+        assert db_session.execute(select(func.count()).select_from(Image)).scalar_one() == before
+        assert list(tmp_path.iterdir()) == []
 
     @patch('flask_login.current_user')
     def test_delete_image_not_found(self, mock_current_user, client, app, db_session, admin_user):

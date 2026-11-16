@@ -42,6 +42,7 @@ def _dlc_summary(game: Game) -> dict | None:
 
 @apis_bp.route('/updates/inbox', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def updates_inbox():
     """List games that look behind store versions (member + librarian/admin).
 
@@ -126,6 +127,7 @@ def updates_inbox():
 
 @apis_bp.route('/updates/store_search', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def updates_store_search():
     """Multi-store search for update/DLC discovery (register/match only).
 

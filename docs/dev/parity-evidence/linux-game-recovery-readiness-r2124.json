@@ -1,0 +1,45 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2124",
+  "observed_utc": "2026-11-15T23:31:19.498153+00:00",
+  "base_commit": "65d290ba95f9c36faae2d9a11ff0c038f9fee590",
+  "classification": "Pure readiness for actual installed Play, detached-child tracking and exact-launch restart; native runtime result pending.",
+  "implementation": [
+    "The self-authored synthetic archive now contains a bounded wrapper that exits after starting its setsid child. Only a fresh owned HOME control directory is used; no external network/files. Cooperative stop or a four-minute deadline limits lifetime.",
+    "Actual bundled Play must produce the expected child UID/argv/cwd/start identity and a matching exact installed-app supervisor. Hold pidfds across assertions/companion closure; never signal numeric PIDs or kill by process name.",
+    "Require genuine native inventory/status, wrong-launch refusal, other-profile refusal and a persisted real-server heartbeat after wrapper exit.",
+    "After actual companion closure/reopen, cached hydration and successful child-account switch must not resume adult reporting. Fresh adult identity/ACL refresh must recover the exact launch, orphan the old interval and create one current report. Family exit must stop reporting.",
+    "Only the synthetic adult gains existing write:library scope needed by production playtime APIs. A second child token remains valid after the original child revocation test. Database observations are marker-fenced, read-only and publish only fixed counts/booleans.",
+    "Unknown or incomplete family cleanup fails extended acceptance. Forced cleanup uses only previously verified held pidfds and cannot turn a failed cooperative exit into success."
+  ],
+  "verification": {
+    "linux_pure_methods": "66 passed in 0.291s",
+    "new_game_methods": 12,
+    "pyflakes": "Four changed Python files pass",
+    "workflow_contexts": 13,
+    "native_status": "not run for this candidate",
+    "red_to_green": "Seven missing-module failures, two missing-integration/unknown-cleanup failures, missing observer and transient native preparation regression all retained with GREEN. No local game/native/server/database/keyring/installer execution."
+  },
+  "qualified_previous": "R2123 actual account/archive/shelf result and R2121 selected core CI remain their recorded scoped results; neither qualifies this new game journey.",
+  "source_sha256_git_normalized": {
+    "scripts/ci/linux_game_journey.py": "92cae99157dad8d9815d7308e1bee9d56c64e7a2480b36c1dbc9131405be218d",
+    "scripts/ci/test_linux_game_journey.py": "7a6ee9f45ed77d8453ccc5b7f1f970641413769787143c65c0a1e528b7992ec9",
+    "scripts/ci/linux_connected_server.py": "ea21b7a157d1d0176469de37c9dcd15fe32b385db5ebd3e3c648484a037fca55",
+    "scripts/ci/linux_installed_journey.py": "82a42e24600fe72bd8140d17dddd7f95826fbbe772c296220a6bfb58c5c6803f"
+  },
+  "package_source": "ce8c35a6980891ef85c26cb64aa0d8a3ecc9e867",
+  "package_run": 43747390211,
+  "package_archive_sha256": "7e253a922f9481715b399b217821822cb317dff13e83192a0ce0c8e33b4d1749",
+  "limits": [
+    "No actual Play, detached child, live heartbeat or native recovery acceptance until this candidate passes CI.",
+    "One synthetic shell fixture cannot qualify arbitrary games, launchers, PID reuse or other platforms.",
+    "Actual file-manager Reveal, reachable denial and network-outage shelf with files, saves/update/rollback/uninstall retention, platform/AT/operator/parity/final/release remain in original scope."
+  ],
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: no UI markup/style changes; all actual native execution is disposable CI only.",
+  "followup_r2125": {
+    "native_terminal": "success",
+    "report": "linux-game-family-recovery-terminal-r2125.json",
+    "scope": "Actual installed Play/detached-child heartbeat/exact-launch account recovery and reporter stop verified; other original gates open."
+  }
+}

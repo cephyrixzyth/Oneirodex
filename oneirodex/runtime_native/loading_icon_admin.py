@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, Response, RedirectResponse
+from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect, _set_session_cookie
 from .csrf_compat import csrf_error_response
@@ -67,7 +67,7 @@ def create_loading_icon_admin_router(
             response.body = b''
         return response
 
-    def admin_denial(auth):
+    def admin_denial(auth, request):
         from oneirodex.utils.role_catalog import normalize_role
 
         role = normalize_role(getattr(auth.user, 'role', None) or '')
@@ -79,12 +79,17 @@ def create_loading_icon_admin_router(
             )
             return JSONResponse(payload, status_code=status)
         if role != 'admin':
-            flashes = list(auth.session_data.get('_flashes') or [])
-            flashes.append(('danger', 'You must be an admin to access this page.'))
-            auth.session_data['_flashes'] = flashes
-            response = RedirectResponse('/login', status_code=302)
-            _set_session_cookie(response, flask_app, auth)
-            return response
+            from .oidc_status import _login_redirect as admin_login_redirect
+
+            return admin_login_redirect(
+                flask_app,
+                request,
+                login_manager,
+                auth,
+                message='You must be an admin to access this page.',
+                category='danger',
+                include_next=False,
+            )
         return None
 
     @router.api_route('/api/admin/loading-icon/config', methods=['GET', 'HEAD', 'PUT'])
@@ -102,8 +107,16 @@ def create_loading_icon_admin_router(
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None:
-                response = admin_denial(auth)
-            if response is None and request.method in ('GET', 'HEAD'):
+                response = admin_denial(auth, request)
+            if response is None and request.method == 'HEAD':
+                from oneirodex.utils.api_contract import api_error_payload
+                from .runtime_context import native_json_response
+
+                payload, status = api_error_payload('No fields to update', code='bad_request')
+                response = native_json_response(
+                    payload, config=flask_app.config, status=status,
+                )
+            if response is None and request.method == 'GET':
                 response = JSONResponse(data.get())
             if response is None:
                 body = await _json_object(request)
@@ -138,7 +151,7 @@ def create_loading_icon_admin_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                response = admin_denial(auth)
+                response = admin_denial(auth, request)
                 if response is None:
                     from oneirodex.utils.api_contract import api_ok_payload
 

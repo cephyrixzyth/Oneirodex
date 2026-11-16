@@ -7,10 +7,16 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import Response
 from werkzeug.datastructures import MultiDict
 
-from .request_auth import RequestAuthContext, request_auth_context
+from .cookie_compat import set_cookie as set_response_cookie
+from .request_auth import (
+    RequestAuthContext,
+    request_auth_context,
+    require_bearer_scope,
+)
+from .response_compat import add_vary_header, flask_redirect_response
 
 
 class BrowseDataAccess:
@@ -61,6 +67,9 @@ def create_browse_router(
                     flask_app,
                     request,
                 )
+            scope_response = require_bearer_scope(context, 'read:library')
+            if scope_response is not None:
+                return _secure_response(scope_response, flask_app, request)
 
             # Werkzeug's MultiDict preserves the legacy Flask ``request.args``
             # API, including typed ``get(..., type=int)`` and first-value rules.
@@ -132,7 +141,9 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context: Re
         login_url = rule.rule if rule is not None else '/login'
         parsed_login = urlsplit(login_url)
 
-    current_url = str(request.url)
+    from .url_compat import request_url_iri
+
+    current_url = request_url_iri(request)
     parsed_current = urlsplit(current_url)
     same_origin = (
         (not parsed_login.scheme or parsed_login.scheme == parsed_current.scheme)
@@ -148,7 +159,7 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context: Re
     if forced_host:
         parsed_login = parsed_login._replace(netloc=forced_host)
     location = urlunsplit(parsed_login._replace(query=urlencode(query, doseq=True)))
-    response = RedirectResponse(location, status_code=302)
+    response = flask_redirect_response(location)
 
     login_message = getattr(login_manager, 'login_message', None)
     if login_message:
@@ -174,10 +185,14 @@ def _set_session_cookie(response, flask_app, auth_context):
     if not secret_key:
         return
     session_data = auth_context.session_data
+    from oneirodex.utils.persistent_sessions import prepare_session_identity_for_cookie
+
+    prepare_session_identity_for_cookie(session_data, config)
     lifetime = config.get('PERMANENT_SESSION_LIFETIME')
     expires = datetime.now(timezone.utc) + lifetime if session_data.get('_permanent') and lifetime else None
     samesite = config.get('SESSION_COOKIE_SAMESITE')
-    response.set_cookie(
+    set_response_cookie(
+        response,
         config.get('SESSION_COOKIE_NAME', 'session'),
         dump_session_cookie(
             session_data,
@@ -189,7 +204,7 @@ def _set_session_cookie(response, flask_app, auth_context):
         domain=config.get('SESSION_COOKIE_DOMAIN'),
         secure=bool(config.get('SESSION_COOKIE_SECURE', False)),
         httponly=bool(config.get('SESSION_COOKIE_HTTPONLY', True)),
-        samesite=str(samesite).lower() if samesite else None,
+        samesite=str(samesite) if samesite else None,
         partitioned=bool(config.get('SESSION_COOKIE_PARTITIONED', False)),
     )
-    response.headers.add_vary_header('Cookie')
+    add_vary_header(response, 'Cookie')

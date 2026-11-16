@@ -20,7 +20,8 @@ def test_entrypoint_warns_on_missing_admin_app():
 def test_dockerfile_builds_admin_app():
     text = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
     assert 'frontend/admin-app' in text
-    assert 'dist/admin-app' in text
+    assert 'npm run build:native-spas' in text
+    assert 'COPY --from=frontend-build /build/oneirodex/static/dist /app/oneirodex/static/dist' in text
 
 
 def test_dockerfile_stages_tsconfig_base():
@@ -32,7 +33,7 @@ def test_dockerfile_stages_tsconfig_base():
 def test_admin_pilot_bundle_is_required_at_container_start():
     dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
     entrypoint = (ROOT / 'entrypoint.sh').read_text(encoding='utf-8')
-    assert 'npm run build:pilot --workspace=admin-app' in dockerfile
-    assert 'dist/admin-pilot /app/oneirodex/static/dist/admin-pilot' in dockerfile
+    assert 'npm run build:native-spas' in dockerfile
+    assert 'admin-pilot' in (ROOT / 'scripts' / 'build-native-spas.mjs').read_text(encoding='utf-8')
     assert '/app/oneirodex/static/dist/admin-pilot/index.html' in entrypoint
     assert 'FastAPI admin page routes require the packaged admin-pilot/index.html bundle' in entrypoint

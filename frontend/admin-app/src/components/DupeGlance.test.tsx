@@ -184,7 +184,10 @@ test('DupeGlance Mark as Emulator calls mark_kind and catalogs without IGDB', as
   await screen.findByRole('heading', { name: 'Dupe glance' })
   await user.selectOptions(screen.getByLabelText(/status/i), 'Unmatched')
   expect(await screen.findByText('/games/3DSenVR')).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: 'Fix search' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Fix search' })).toHaveAttribute(
+    'href',
+    '/add_game_manual?full_disk_path=%2Fgames%2F3DSenVR&library_uuid=&name=3DSenVR&platform_name=PCWIN&platform_id=&from_unmatched=true',
+  )
 
   await user.click(screen.getByRole('button', { name: 'Mark as Emulator' }))
 
@@ -505,6 +508,30 @@ test('DupeGlance shows Stage E propose-only chip and expandable candidates', asy
     'https://www.mobygames.com/game/42',
   )
   expect(screen.getByText('Exact')).toBeInTheDocument()
+})
+
+test('Stage E candidate links reject unsafe schemes from catalog data', async () => {
+  const user = userEvent.setup()
+  vi.mocked(getJson).mockResolvedValue([
+    {
+      id: 7,
+      folder_path: '/games/Celeste',
+      status: 'Unmatched',
+      library_name: 'PC',
+      platform_name: 'PCWIN',
+      stage_e_candidates: [
+        { id: 'candidate-1', name: 'Catalog result', source: 'moby', url: 'javascript:alert(1)' },
+      ],
+      stage_e: { match_reason: 'stage_e_moby_exact' },
+    },
+  ])
+
+  render(<DupeGlance onOpenPath={() => {}} />)
+  await user.selectOptions(screen.getByLabelText(/status/i), 'Unmatched')
+  await screen.findByRole('heading', { name: 'Dupe glance' })
+  await user.click(await screen.findByText(/Stage E candidates \(1\)/i))
+  expect(await screen.findByText('Catalog result')).toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Catalog result' })).toBeNull()
 })
 
 test('DupeGlance soft-degrades Stage E when fields absent (mid-rollout)', async () => {

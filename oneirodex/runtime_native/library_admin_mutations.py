@@ -5,20 +5,29 @@ All durable writes, scans, and deletion scheduling live behind
 """
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 import json
 import logging
 import os
 import base64
 from contextlib import nullcontext
-from io import BytesIO
 from typing import Any, Callable
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
+from .query_compat import first_query_value
+from oneirodex.utils.image_upload_limits import (
+    LIBRARY_IMAGE_MAX_BYTES,
+    LIBRARY_PREVIEW_MAX_BODY_BYTES,
+    ImageWorkBusy,
+    normalize_library_image,
+    validate_library_image_header,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,18 +36,19 @@ class LibraryAdminMutationData:
     """Production adapter; tests replace it to prevent every real side effect."""
 
     def preview_image(self, image_data: str) -> str:
-        from PIL import Image as PILImage
-
         if image_data.startswith('data:image'):
             image_data = image_data.split(',', 1)[1]
-        image_bytes = base64.b64decode(image_data)
-        with PILImage.open(BytesIO(image_bytes)) as opened:
-            image = opened.convert('RGBA')
-            if image.width > 1024 or image.height > 1024:
-                image.thumbnail((1024, 1024), PILImage.LANCZOS)
-            output = BytesIO()
-            image.save(output, 'PNG')
-            return 'data:image/png;base64,' + base64.b64encode(output.getvalue()).decode()
+        max_encoded_bytes = ((LIBRARY_IMAGE_MAX_BYTES + 2) // 3) * 4
+        if len(image_data) > max_encoded_bytes:
+            raise ValueError('Library image must be 10 MB or smaller.')
+        try:
+            image_bytes = base64.b64decode(image_data, validate=True)
+        except (ValueError, base64.binascii.Error) as exc:
+            raise ValueError('The library image data is invalid.') from exc
+        if len(image_bytes) > LIBRARY_IMAGE_MAX_BYTES:
+            raise ValueError('Library image must be 10 MB or smaller.')
+        normalized = normalize_library_image(image_bytes)
+        return 'data:image/png;base64,' + base64.b64encode(normalized).decode()
 
     def library(self, library_uuid: str):
         from sqlalchemy import select
@@ -50,8 +60,6 @@ class LibraryAdminMutationData:
 
     def create(self, *, name: str, platform, scan_depth: int, watch_enabled,
                image_bytes: bytes | None, user, config, root_path: str = ''):
-        from PIL import Image as PILImage
-
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Library
         from oneirodex.utils.event_logging import log_system_event
@@ -59,18 +67,14 @@ class LibraryAdminMutationData:
         image_url = _static_url('newstyle/default_library.jpg', root_path)
         saved_path = None
         if image_bytes:
-            with PILImage.open(BytesIO(image_bytes)) as opened:
-                if opened.width * opened.height > 80_000_000:
-                    raise ValueError('Library image dimensions are too large.')
-                converted = opened.convert('RGBA')
-                if converted.width > 1024 or converted.height > 1024:
-                    converted.thumbnail((1024, 1024), PILImage.LANCZOS)
-                image_name = f'{uuid4()}.png'
-                image_dir = os.path.join(config['UPLOAD_FOLDER'], 'images')
-                os.makedirs(image_dir, exist_ok=True)
-                saved_path = os.path.join(image_dir, image_name)
-                converted.save(saved_path, 'PNG')
-                image_url = _static_url(f'library/images/{image_name}', root_path)
+            normalized = normalize_library_image(image_bytes)
+            image_name = f'{uuid4()}.png'
+            image_dir = os.path.join(config['UPLOAD_FOLDER'], 'images')
+            os.makedirs(image_dir, exist_ok=True)
+            saved_path = os.path.join(image_dir, image_name)
+            with open(saved_path, 'xb') as image_file:
+                image_file.write(normalized)
+            image_url = _static_url(f'library/images/{image_name}', root_path)
 
         library = Library(
             uuid=str(uuid4()), name=name, platform=platform, scan_depth=scan_depth,
@@ -92,27 +96,21 @@ class LibraryAdminMutationData:
 
     def update(self, library, *, name: str, platform, scan_depth: int,
                watch_enabled, image, app, user):
-        from PIL import Image as PILImage
-
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.runtime_native.library_reads import LibraryReadData
         from oneirodex.utils.event_logging import log_system_event
 
         saved_path = None
         if image:
-            filename, content = image
-            with PILImage.open(BytesIO(content)) as opened:
-                if opened.width * opened.height > 80_000_000:
-                    raise ValueError('Library image dimensions are too large.')
-                converted = opened.convert('RGBA')
-                if converted.width > 1024 or converted.height > 1024:
-                    converted.thumbnail((1024, 1024), PILImage.LANCZOS)
-                image_name = f'{uuid4()}.png'
-                image_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'images')
-                os.makedirs(image_dir, exist_ok=True)
-                saved_path = os.path.join(image_dir, image_name)
-                converted.save(saved_path, 'PNG')
-                library.image_url = f'/static/library/images/{image_name}'
+            _, content = image
+            normalized = normalize_library_image(content)
+            image_name = f'{uuid4()}.png'
+            image_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'images')
+            os.makedirs(image_dir, exist_ok=True)
+            saved_path = os.path.join(image_dir, image_name)
+            with open(saved_path, 'xb') as image_file:
+                image_file.write(normalized)
+            library.image_url = f'/static/library/images/{image_name}'
         library.name = name
         library.platform = platform
         library.scan_depth = scan_depth
@@ -130,7 +128,8 @@ class LibraryAdminMutationData:
         )
         return LibraryReadData.public_fields(library)
 
-    def start_scan(self, *, library, folder: str, options: dict, app):
+    def start_scan(self, *, library, folder: str, options: dict, app,
+                   database_scope=None):
         from oneirodex.utils.scan_queue import start_or_queue_scan
 
         return start_or_queue_scan(
@@ -139,11 +138,46 @@ class LibraryAdminMutationData:
             download_missing_images=options['download_missing_images'],
             force_updates_extras_scan=options['force_updates_extras'],
             queue_policy=options['queue_policy'], allow_force=True, app=app,
+            database_scope=database_scope,
             fetch_hltb=options.get('fetch_hltb', False),
             force_hltb_refetch=options.get('force_hltb_refetch', False),
             schedule=options.get('schedule'),
             schedule_fields=options.get('schedule_fields'),
         )
+
+    def fail_scan_for_legacy_mode(self, *, library, folder: str, options: dict):
+        """Preserve v1.1.8's accepted-then-failed result for unknown modes.
+
+        The old worker accepted the request, then failed because it had no
+        branch for the mode. The native queue stores scan mode as a boolean,
+        so persist the same terminal failure directly instead of silently
+        converting the malformed request into a folder scan.
+        """
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.utils.scan_queue import create_scan_job_row
+
+        job = create_scan_job_row(
+            folder_path=folder,
+            library_uuid=library.uuid,
+            scan_mode='folders',
+            remove_missing=options['remove_missing'],
+            download_missing_images=options['download_missing_images'],
+            force_updates_extras_scan=options['force_updates_extras'],
+            schedule=options.get('schedule'),
+            schedule_fields=options.get('schedule_fields'),
+            status='Failed',
+        )
+        job.error_message = (
+            "cannot access local variable 'game_names_with_paths' "
+            'where it is not associated with a value'
+        )
+        db.session.commit()
+        return {
+            'status': 'started',
+            'job_id': job.id,
+            'position': None,
+            'message': f'Scan started (job {job.id[:8]}…).',
+        }
 
     def refresh_queue(self):
         from sqlalchemy import select
@@ -167,15 +201,15 @@ class LibraryAdminMutationData:
 
         return enqueue_library_refresh_jobs(queue)
 
-    def promote_refresh(self, app):
+    def promote_refresh(self, app, *, database_scope=None):
         from oneirodex.utils.scan_queue import promote_next_queued_scan
 
-        return promote_next_queued_scan(app)
+        return promote_next_queued_scan(app, database_scope=database_scope)
 
     def force_refresh(self, queue, app, *, database_scope=None):
         from threading import Thread
 
-        from oneirodex.utilities import scan_and_add_games
+        from oneirodex.utils.services.scan_orchestration import scan_and_add_games
         from contextlib import nullcontext
 
         def run_queue():
@@ -248,6 +282,15 @@ def create_library_admin_mutations_router(
     router = APIRouter()
     data = data_access or LibraryAdminMutationData()
 
+    @router.options('/api/library/preview-cropped-image')
+    async def preview_cropped_image_options():
+        # Match Flask's automatically generated OPTIONS response for this API.
+        return Response(
+            status_code=200,
+            headers={'Allow': 'HEAD, OPTIONS, POST, GET'},
+            media_type='text/html',
+        )
+
     @router.post('/api/library/preview-cropped-image')
     async def preview_cropped_image(request: Request):
         return await _handle(
@@ -304,10 +347,10 @@ def create_library_admin_mutations_router(
             login_manager=login_manager, database_scope=database_scope,
         )
 
-    @router.put('/api/admin/libraries/{library_uuid}')
-    async def update_library(library_uuid: str, request: Request):
+    @router.put('/api/admin/libraries/{library_uuid:uuid}')
+    async def update_library(library_uuid: UUID, request: Request):
         return await _handle(
-            request, flask_app, data, action='update', library_uuid=library_uuid,
+            request, flask_app, data, action='update', library_uuid=str(library_uuid),
             find_user=find_user, find_token=find_token,
             commit_token_touch=commit_token_touch, load_user_id=load_user_id,
             login_manager=login_manager, database_scope=database_scope,
@@ -363,6 +406,7 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
     from .oidc_status import _login_redirect
     from oneirodex.platform import LibraryPlatform
     from oneirodex.utils.role_catalog import normalize_role
+    from starlette.responses import HTMLResponse
 
     target = '/admin/library/add' if action == 'create' else f'/admin/library/edit/{library_uuid}'
     scope = database_scope(app) if database_scope else nullcontext()
@@ -393,12 +437,12 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
             replay = Request(request.scope, receive=_body_receive(b''.join(raw_chunks)))
             form = await replay.form(max_files=1, max_fields=20, max_part_size=64 * 1024)
             form_values = {key: value for key, value in form.items() if not isinstance(value, UploadFile)}
-            upload = form.get('image')
+            upload = first_form_upload(form, 'image')
             raw_image = None
             filename = ''
             if isinstance(upload, UploadFile) and upload.filename:
                 filename = upload.filename
-                raw_image = await upload.read(10 * 1024 * 1024 + 1)
+                raw_image = await upload.read(LIBRARY_IMAGE_MAX_BYTES + 1)
 
         try:
             cookie_name = str(app.config.get('SESSION_COOKIE_NAME') or 'session')
@@ -431,10 +475,11 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
 
             message = None
             category = 'error'
+            response_status = 200
             if response is None:
                 if too_large:
                     message = 'Request body is too large.'
-                elif raw_image is not None and len(raw_image) > 10 * 1024 * 1024:
+                elif raw_image is not None and len(raw_image) > LIBRARY_IMAGE_MAX_BYTES:
                     message = 'File size is too large. Maximum allowed is 10 MB.'
                 else:
                     name = str(form_values.get('name') or '').strip()
@@ -453,37 +498,47 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                     elif len(name) > 255:
                         message = 'Please correct the errors below.'
                     elif platform is None:
-                        message = f'Invalid platform selected: {platform_key}'
+                        # WTForms rejects values outside the SelectField choices
+                        # before the legacy route reaches its explicit KeyError.
+                        message = 'Please correct the errors below.'
                     elif depth not in (1, 2):
                         message = 'Please correct the errors below.'
                     else:
-                        try:
-                            watch = _watch_value(watch_raw)
-                        except ValueError:
+                        # WTForms SelectField accepts only its declared choice
+                        # values on the legacy multipart form. Keep the more
+                        # permissive boolean aliases on the JSON API, but do
+                        # not silently accept them on this compatibility route.
+                        if watch_raw not in ('default', 'on', 'off'):
                             watch = 'invalid'
+                        else:
+                            watch = _watch_value(watch_raw)
                         if watch == 'invalid':
                             message = 'Please correct the errors below.'
                         else:
                             image = None
                             if raw_image is not None:
-                                extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-                                if extension not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
+                                try:
+                                    from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
+                                    await run_image_work_in_threadpool(validate_library_image_header, raw_image)
+                                    image = raw_image
+                                except ImageWorkBusy:
+                                    message = 'Image processing is busy. Try again shortly.'
+                                    response_status = 503
+                                except ValueError:
                                     message = 'Please correct the errors below.'
-                                else:
-                                    from PIL import Image as PILImage, UnidentifiedImageError
-                                    from io import BytesIO
-                                    try:
-                                        with PILImage.open(BytesIO(raw_image)) as opened:
-                                            if opened.width * opened.height > 80_000_000:
-                                                message = 'Library image dimensions are too large.'
-                                            else:
-                                                image = raw_image
-                                    except (UnidentifiedImageError, OSError, ValueError):
-                                        message = 'Please correct the errors below.'
+                                except Exception:
+                                    message = 'Please correct the errors below.'
+                                    # v1.1.8 let corrupt image decoding escape
+                                    # and returned HTTP 500. Keep the generic
+                                    # response body, while matching that status.
+                                    response_status = 500
                             if message is None:
                                 try:
+                                    from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
                                     if action == 'create':
-                                        data.create(
+                                        await run_image_work_in_threadpool(data.create,
                                             name=name, platform=platform, scan_depth=depth,
                                             watch_enabled=watch, image_bytes=image,
                                             user=auth.user, config=app.config,
@@ -492,33 +547,82 @@ async def _legacy_library_form(request, app, data, *, action, library_uuid,
                                     else:
                                         library = data.library(str(library_uuid))
                                         if library is None:
-                                            message = 'Library not found.'
+                                            response = HTMLResponse(
+                                                '<!doctype html>\n<html lang=en>\n'
+                                                '<title>404 Not Found</title>\n'
+                                                '<h1>Not Found</h1>\n'
+                                                '<p>The requested URL was not found on the server. '
+                                                'If you entered the URL manually please check your spelling '
+                                                'and try again.</p>\n',
+                                                status_code=404,
+                                            )
                                         else:
-                                            data.update(
+                                            await run_image_work_in_threadpool(data.update,
                                                 library, name=name, platform=platform,
                                                 scan_depth=depth, watch_enabled=watch,
                                                 image=(filename, image) if image is not None else None,
                                                 app=app, user=auth.user,
                                             )
-                                    if message is None:
+                                    if message is None and response is None:
                                         message, category = 'Library saved successfully!', 'success'
+                                except ImageWorkBusy:
+                                    from oneirodex.runtime_native.db_session import native_db as db
+
+                                    db.session.rollback()
+                                    message = 'Image processing is busy. Try again shortly.'
+                                    response_status = 503
                                 except Exception:
                                     from oneirodex.runtime_native.db_session import native_db as db
 
                                     db.session.rollback()
                                     message = 'Failed to save library. Please try again.'
             if response is None:
-                flashes = list(auth.session_data.get('_flashes') or [])
-                flashes.append((category, message or 'Please correct the errors below.'))
-                auth.session_data['_flashes'] = flashes
-                response = RedirectResponse(
-                    '/libraries' if category == 'success' else target, status_code=302,
-                )
-                _set_session_cookie(response, app, auth)
+                notice = message or 'Please correct the errors below.'
+                if category == 'success':
+                    flashes = list(auth.session_data.get('_flashes') or [])
+                    flashes.append((category, notice))
+                    auth.session_data['_flashes'] = flashes
+                    response = flask_redirect_response('/libraries', status_code=302)
+                    _set_session_cookie(response, app, auth)
+                else:
+                    response = _legacy_library_form_error_response(
+                        app, auth, category, notice, status_code=response_status,
+                    )
             return response
         finally:
             if form is not None:
                 await form.close()
+
+
+def _legacy_library_form_error_response(
+    app, auth, category: str, message: str, *, status_code: int = 200,
+):
+    """Render validation flashes inline, as the legacy library form did."""
+    from pathlib import Path
+    from starlette.responses import HTMLResponse
+
+    from .admin_pilot import _shell_with_admin_flashes
+
+    shell_path = (
+        Path(__file__).resolve().parents[1]
+        / 'static' / 'dist' / 'admin-pilot' / 'index.html'
+    )
+    try:
+        shell = shell_path.read_text(encoding='utf-8')
+    except OSError:
+        shell = (
+            '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+            '<title>Libraries · Oneirodex Admin</title></head><body><main>'
+            '<div id="admin-app-root"></div></main></body></html>'
+        )
+    previous_flashes = list(auth.session_data.pop('_flashes', []) or [])
+    response = HTMLResponse(
+        _shell_with_admin_flashes(shell, [*previous_flashes, (category, message)]),
+        status_code=status_code, headers={'Cache-Control': 'no-store'},
+    )
+    if auth.should_set_session_cookie or previous_flashes:
+        _set_session_cookie(response, app, auth)
+    return response
 
 
 async def _handle(request, flask_app, data, *, action, find_user, find_token,
@@ -532,6 +636,7 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
             login_manager=login_manager,
         )
         from .csrf_compat import csrf_error_response
+        from .csrf_compat import csrf_html_error_response
         from .acquire_status import _login_redirect
 
         csrf_token = None
@@ -541,36 +646,61 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
             delete_payload, delete_too_large = await _json_object_or_form(request, flask_app.config)
             if auth.token is None and request.headers.get('X-CSRFToken') is None:
                 form = delete_payload.get('__form__', {})
-                csrf_token = form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
+                csrf_token = first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
         elif auth.token is None and request.headers.get('X-CSRFToken') is None:
             try:
                 form = await request.form(max_files=0, max_fields=10, max_part_size=16 * 1024)
-                csrf_token = form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
+                csrf_token = first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
             except Exception:
                 pass
         response = csrf_error_response(
             request, auth.session_data, flask_app.config, token=csrf_token,
         ) if auth.token is None else None
+        delete_form_compat = (
+            action == 'delete_single'
+            and not _request_is_json(request)
+        )
+        if response is not None and delete_form_compat:
+            response = csrf_html_error_response(response)
         if response is None and auth.user is None:
-            response = _login_redirect(flask_app, request, login_manager, auth)
+            # API clients follow redirects inside fetch and would consume the
+            # login HTML as a successful response. Return the JSON 401 contract
+            # so the SPA's unauthorized handler can navigate the top-level
+            # page to login while preserving its current route.
+            response = _error('Authentication required', 'unauthorized', 401)
         if response is None:
             from oneirodex.utils.role_catalog import normalize_role
 
             if normalize_role(getattr(auth.user, 'role', None)) != 'admin' or (
                 auth.token is not None and not auth.has_scope('admin')
             ):
-                response = _error('Admin required', 'forbidden', 403)
+                if delete_form_compat and auth.token is None:
+                    from .oidc_status import _login_redirect as _admin_login_redirect
+
+                    response = _admin_login_redirect(
+                        flask_app, request, login_manager, auth,
+                        message='You must be an admin to access this page.',
+                        category='danger', include_next=False,
+                    )
+                else:
+                    response = _error('Admin required', 'forbidden', 403)
         if response is None:
             if action == 'create':
                 response = await _create(request, flask_app, data, auth.user)
             elif action == 'update':
                 response = await _update(request, flask_app, data, auth.user, library_uuid)
             elif action == 'single_scan':
-                response = await _single_scan(request, flask_app, data, auth.user)
+                response = await _single_scan(
+                    request, flask_app, data, auth.user,
+                    database_scope=database_scope,
+                )
             elif action == 'refresh_all':
                 response = await _refresh_all(request, flask_app, data, database_scope=database_scope)
             elif action == 'scan':
-                response = await _scan(request, flask_app, data, auth.user)
+                response = await _scan(
+                    request, flask_app, data, auth.user,
+                    database_scope=database_scope,
+                )
             elif action == 'delete_single':
                 response = await _delete_single(
                     request, flask_app, data, auth.user, library_uuid,
@@ -599,9 +729,30 @@ async def _preview_cropped_image(request, data):
     from oneirodex.utils.validation import format_validation_errors
     from pydantic import ValidationError
 
-    try:
-        body = await request.json()
-    except Exception:
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    is_json = (
+        content_type == 'application/json'
+        or (content_type.startswith('application/') and content_type.endswith('+json'))
+    )
+    if is_json:
+        try:
+            declared_size = int(request.headers.get('content-length', '0') or 0)
+        except (TypeError, ValueError):
+            declared_size = LIBRARY_PREVIEW_MAX_BODY_BYTES + 1
+        if declared_size > LIBRARY_PREVIEW_MAX_BODY_BYTES:
+            return _error('Request body is too large.', 'bad_request', 413)
+        raw_body = bytearray()
+        async for chunk in request.stream():
+            raw_body.extend(chunk)
+            if len(raw_body) > LIBRARY_PREVIEW_MAX_BODY_BYTES:
+                return _error('Request body is too large.', 'bad_request', 413)
+        try:
+            body = json.loads(raw_body)
+        except Exception:
+            body = {}
+    else:
+        # Flask request.get_json(silent=True) used by @validate_body returns
+        # no payload for non-JSON media types; keep its missing-field 422.
         body = {}
     try:
         model = PreviewCroppedImageBody.model_validate(body if isinstance(body, dict) else {})
@@ -611,7 +762,11 @@ async def _preview_cropped_image(request, data):
         )
         return JSONResponse(payload, status_code=status)
     try:
-        preview_url = data.preview_image(model.image_data)
+        from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
+        preview_url = await run_image_work_in_threadpool(data.preview_image, model.image_data)
+    except ImageWorkBusy:
+        return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
     except Exception:
         return _error('Failed to process image', 'internal', 500)
     return JSONResponse(api_ok_payload({
@@ -642,24 +797,29 @@ async def _create(request, app, data, user):
     except KeyError:
         return _error('Choose a supported platform.', 'bad_request', 400)
     if image is not None:
-        filename, content = image
-        extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-        if extension not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
-            return _error('Choose a JPG, PNG, GIF, or WebP library image.', 'bad_request', 400)
-        if len(content) > 10 * 1024 * 1024:
+        _, content = image
+        if len(content) > LIBRARY_IMAGE_MAX_BYTES:
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
         from PIL import Image as PILImage, UnidentifiedImageError
         try:
-            with PILImage.open(BytesIO(content)) as opened:
-                if opened.width * opened.height > 80_000_000:
-                    return _error('Library image dimensions are too large.', 'bad_request', 400)
-        except (UnidentifiedImageError, OSError, ValueError):
+            from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
+            await run_image_work_in_threadpool(validate_library_image_header, content)
+        except ImageWorkBusy:
+            return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
+        except ValueError as exc:
+            return _error(str(exc), 'bad_request', 400)
+        except (UnidentifiedImageError, OSError):
             return _error('The uploaded library image could not be read.', 'bad_request', 400)
     try:
-        result = data.create(name=name, platform=platform, scan_depth=depth,
+        from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
+        result = await run_image_work_in_threadpool(data.create, name=name, platform=platform, scan_depth=depth,
                              watch_enabled=watch, image_bytes=image[1] if image else None,
                              user=user, config=app.config,
                              root_path=request.scope.get('root_path', ''))
+    except ImageWorkBusy:
+        return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
     except Exception:  # noqa: BLE001 — do not expose storage/database details
         return _error('Library could not be created.', 'internal', 500)
     from oneirodex.utils.api_contract import api_ok_payload
@@ -687,31 +847,36 @@ async def _update(request, app, data, user, library_uuid):
     if depth not in (1, 2):
         return _error('Choose a supported platform, scan depth, and watch setting.', 'bad_request', 400)
     if image:
-        filename, content = image
-        extension = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-        if extension not in {'jpg', 'jpeg', 'png', 'gif', 'webp'}:
-            return _error('Choose a JPG, PNG, GIF, or WebP library image.', 'bad_request', 400)
-        if len(content) > 10 * 1024 * 1024:
+        _, content = image
+        if len(content) > LIBRARY_IMAGE_MAX_BYTES:
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
         from PIL import Image as PILImage, UnidentifiedImageError
         try:
-            with PILImage.open(BytesIO(content)) as opened:
-                if opened.width * opened.height > 80_000_000:
-                    return _error('Library image dimensions are too large.', 'bad_request', 400)
-        except (UnidentifiedImageError, OSError, ValueError):
+            from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
+            await run_image_work_in_threadpool(validate_library_image_header, content)
+        except ImageWorkBusy:
+            return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
+        except ValueError as exc:
+            return _error(str(exc), 'bad_request', 400)
+        except (UnidentifiedImageError, OSError):
             return _error('The uploaded library image could not be read.', 'bad_request', 400)
     try:
-        result = data.update(
+        from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
+        result = await run_image_work_in_threadpool(data.update,
             library, name=name, platform=platform, scan_depth=depth,
             watch_enabled=watch, image=image, app=app, user=user,
         )
+    except ImageWorkBusy:
+        return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
     except Exception:  # noqa: BLE001 — do not expose storage/database details
         return _error('Library could not be saved.', 'internal', 500)
     from oneirodex.utils.api_contract import api_ok_payload
     return JSONResponse(api_ok_payload(result))
 
 
-async def _single_scan(request, app, data, user):
+async def _single_scan(request, app, data, user, *, database_scope=None):
     from oneirodex.utils.scan_queue import (
         FORCE_PARALLEL_RISK, normalize_schedule_fields,
         parse_force_parallel, parse_queue_policy,
@@ -724,9 +889,9 @@ async def _single_scan(request, app, data, user):
     def value(key, default=None):
         if key in payload:
             return payload.get(key)
-        return form.get(key) or request.query_params.get(key) or default
+        return first_form_value(form, key) or first_query_value(request.query_params, key) or default
 
-    library_uuid = payload.get('library_uuid') or form.get('library_uuid') or request.query_params.get('library_uuid')
+    library_uuid = payload.get('library_uuid') or first_form_value(form, 'library_uuid') or first_query_value(request.query_params, 'library_uuid')
     if not library_uuid:
         return _error('library_uuid is required', 'bad_request', 400,
                       body_status='rejected', job_id=None, position=None)
@@ -739,12 +904,16 @@ async def _single_scan(request, app, data, user):
         return _error('use_library_root must be a boolean', 'bad_request', 400,
                       body_status='rejected', job_id=None, position=None)
     folder = payload.get('folder', '') if use_library_root else (
-        payload.get('folder') or form.get('folder') or request.query_params.get('folder')
+        payload.get('folder') or first_form_value(form, 'folder') or first_query_value(request.query_params, 'folder')
         or getattr(library, 'last_scan_folder', None)
     )
+    if folder is None:
+        folder = ''
+    # v1.1.8 stringified JSON scalar folder values before storing the path.
+    # Keep path allowlisting below; a malformed scalar can only address a
+    # child of an allowed scan root after resolution.
     if not isinstance(folder, str):
-        return _error('folder must be a string', 'bad_request', 400,
-                      body_status='rejected', job_id=None, position=None)
+        folder = str(folder)
     if not folder and not use_library_root:
         return _error(
             'No folder provided and library has no last_scan_folder. Run one Auto Scan first or pass folder.',
@@ -768,18 +937,22 @@ async def _single_scan(request, app, data, user):
         return _error('Access denied for this scan location', 'forbidden', 403,
                       body_status='rejected', job_id=None, position=None)
     scan_mode = value('scan_mode', 'folders') or 'folders'
-    if scan_mode not in ('auto', 'folders', 'files'):
-        return _error('scan_mode must be auto, folders, or files', 'bad_request', 400,
-                      body_status='rejected', job_id=None, position=None)
-    if scan_mode == 'auto':
+    if not isinstance(scan_mode, str):
+        scan_mode = str(scan_mode)
+    invalid_scan_mode = scan_mode not in ('auto', 'folders', 'files')
+    if invalid_scan_mode:
+        scan_mode = 'folders'
+    elif scan_mode == 'auto':
         scan_mode = data.scan_mode_for_path(resolved, scan_mode)
-    force_raw = payload.get('force_parallel') if 'force_parallel' in payload else (form.get('force_parallel') or request.query_params.get('force_parallel'))
-    policy_raw = payload.get('queue_policy') if 'queue_policy' in payload else (form.get('queue_policy') or request.query_params.get('queue_policy'))
+    force_raw = payload.get('force_parallel') if 'force_parallel' in payload else (first_form_value(form, 'force_parallel') or first_query_value(request.query_params, 'force_parallel'))
+    policy_raw = payload.get('queue_policy') if 'queue_policy' in payload else (first_form_value(form, 'queue_policy') or first_query_value(request.query_params, 'queue_policy'))
     schedule = payload.get('schedule')
     if schedule is not None and not isinstance(schedule, str):
         return _error('schedule must be a string', 'bad_request', 400,
                       body_status='rejected', job_id=None, position=None)
-    schedule = (schedule or '').strip() or None
+    # Preserve non-empty SelectField values exactly so padded choices are
+    # rejected like v1.1.8. Whitespace-only is still the optional "once" value.
+    schedule = schedule if schedule and schedule.strip() else None
     interval_unit = payload.get('schedule_interval_unit')
     cron_expr = payload.get('schedule_cron')
     if interval_unit is not None and not isinstance(interval_unit, str):
@@ -797,7 +970,7 @@ async def _single_scan(request, app, data, user):
                       body_status='rejected', job_id=None, position=None)
 
     def flag(key, default=False):
-        raw = payload.get(key) if key in payload else (form.get(key) or request.query_params.get(key))
+        raw = payload.get(key) if key in payload else (first_form_value(form, key) or first_query_value(request.query_params, key))
         if raw is None:
             return default
         if isinstance(raw, bool):
@@ -818,7 +991,15 @@ async def _single_scan(request, app, data, user):
         'schedule_fields': schedule_fields,
     }
     try:
-        result = data.start_scan(library=library, folder=resolved, options=options, app=app)
+        if invalid_scan_mode:
+            result = data.fail_scan_for_legacy_mode(
+                library=library, folder=resolved, options=options,
+            )
+        else:
+            result = data.start_scan(
+                library=library, folder=resolved, options=options, app=app,
+                database_scope=database_scope,
+            )
     except Exception:
         data.rollback()
         return _error('Scan request could not be queued.', 'internal', 500,
@@ -844,10 +1025,10 @@ async def _refresh_all(request, app, data, *, database_scope=None):
         return _error('Request body is too large.', 'bad_request', 413)
     form = payload.get('__form__', {})
     force_raw = payload.get('force_parallel') if 'force_parallel' in payload else (
-        form.get('force_parallel') or request.query_params.get('force_parallel')
+        first_form_value(form, 'force_parallel') or first_query_value(request.query_params, 'force_parallel')
     )
     policy_raw = payload.get('queue_policy') if 'queue_policy' in payload else (
-        form.get('queue_policy') or request.query_params.get('queue_policy')
+        first_form_value(form, 'queue_policy') or first_query_value(request.query_params, 'queue_policy')
     )
     force = parse_queue_policy(policy_raw, force_parallel=force_raw) == 'force'
     try:
@@ -876,7 +1057,7 @@ async def _refresh_all(request, app, data, *, database_scope=None):
         busy = data.refresh_busy()
         result = data.enqueue_refresh(queue)
         if not busy:
-            promoted = data.promote_refresh(app)
+            promoted = data.promote_refresh(app, database_scope=database_scope)
             if promoted:
                 result['status'] = 'started'
                 result['job_id'] = promoted.id
@@ -898,7 +1079,7 @@ async def _refresh_all(request, app, data, *, database_scope=None):
         return _error('Refresh-all could not be queued.', 'internal', 500)
 
 
-async def _scan(request, app, data, user):
+async def _scan(request, app, data, user, *, database_scope=None):
     from oneirodex.utils.library_batch import (
         LIBRARY_BATCH_UUID_CAP, parse_bool_flag, parse_library_uuids,
     )
@@ -933,8 +1114,52 @@ async def _scan(request, app, data, user):
                             'status': 'skipped', 'message': 'No folder provided and library has no last_scan_folder. Run one Auto Scan first or pass folder/folders.'})
             skipped += 1
             continue
+        # Match single-scan handling of JSON scalars before applying the same
+        # configured-root resolution and allowlist checks. Keep the submitted
+        # path out of row errors and logs.
+        if not isinstance(folder, str):
+            folder = str(folder)
+        folder = folder.strip()
+        if not folder:
+            results.append({
+                'uuid': uuid, 'name': library.name, 'ok': False,
+                'error': 'no_scan_folder', 'status': 'skipped',
+                'message': 'No scan folder was provided.',
+            })
+            skipped += 1
+            continue
         try:
-            outcome = data.start_scan(library=library, folder=folder, options=options, app=app)
+            resolved, root_error = data.resolve_scan_path(app, folder, None)
+            if root_error:
+                results.append({
+                    'uuid': uuid, 'name': library.name, 'ok': False,
+                    'error': 'bad_request', 'status': 'rejected',
+                    'message': 'Unknown scan location.',
+                })
+                failed += 1
+                continue
+            allowed_bases = data.allowed_bases(app)
+            if not allowed_bases:
+                results.append({
+                    'uuid': uuid, 'name': library.name, 'ok': False,
+                    'error': 'unavailable', 'status': 'rejected',
+                    'message': 'Scan locations are not configured.',
+                })
+                failed += 1
+                continue
+            safe, _path_error = data.safe_path(resolved, allowed_bases)
+            if not safe:
+                results.append({
+                    'uuid': uuid, 'name': library.name, 'ok': False,
+                    'error': 'forbidden', 'status': 'rejected',
+                    'message': 'Access denied for this scan location.',
+                })
+                failed += 1
+                continue
+            outcome = data.start_scan(
+                library=library, folder=resolved, options=options, app=app,
+                database_scope=database_scope,
+            )
             status = outcome.get('status')
             row = {'uuid': uuid, 'name': library.name, 'ok': status in ('started', 'queued'),
                    'status': status, 'job_id': outcome.get('job_id'), 'position': outcome.get('position'),
@@ -975,11 +1200,11 @@ async def _delete_single(request, app, data, user, library_uuid, *, database_sco
     form = payload.get('__form__', {})
     force_raw = payload.get('force') if 'force' in payload else (
         payload.get('force_delete') if 'force_delete' in payload else
-        (form.get('force') or form.get('force_delete')
-         or request.query_params.get('force') or request.query_params.get('force_delete'))
+        (first_form_value(form, 'force') or first_form_value(form, 'force_delete')
+         or first_query_value(request.query_params, 'force') or first_query_value(request.query_params, 'force_delete'))
     )
     confirm_raw = payload.get('confirm_name') if 'confirm_name' in payload else (
-        form.get('confirm_name') or request.query_params.get('confirm_name')
+        first_form_value(form, 'confirm_name') or first_query_value(request.query_params, 'confirm_name')
     )
     if force_raw is not None or confirm_raw is not None:
         force = parse_bool_flag(force_raw, default=False)
@@ -1012,8 +1237,8 @@ async def _delete_single(request, app, data, user, library_uuid, *, database_sco
     return JSONResponse(api_ok_payload({'status': 'started', 'job_id': job_id}))
 
 
-async def _json_object_or_form(request, config):
-    is_json = 'json' in request.headers.get('content-type', '').lower()
+async def _json_object_or_form(request, config, *, preserve_non_object_json=False):
+    is_json = _request_is_json(request)
     limit = min(int(config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024), 32 * 1024 * 1024)
     if not is_json:
         limit = min(limit, 64 * 1024)
@@ -1032,7 +1257,9 @@ async def _json_object_or_form(request, config):
             value = json.loads(raw or b'{}')
         except (TypeError, ValueError, UnicodeDecodeError):
             value = {}
-        return (value if isinstance(value, dict) else {}), False
+        if isinstance(value, dict) or preserve_non_object_json:
+            return value, False
+        return {}, False
     content_type = request.headers.get('content-type', '').lower()
     if not content_type.startswith(('multipart/form-data', 'application/x-www-form-urlencoded')):
         return {'__form__': {}}, False
@@ -1045,6 +1272,13 @@ async def _json_object_or_form(request, config):
         return {'__form__': dict(form)}, False
     finally:
         await form.close()
+
+
+def _request_is_json(request):
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    return content_type == 'application/json' or (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    )
 
 
 async def _delete(request, data, user, flask_app, *, database_scope=None):
@@ -1129,7 +1363,7 @@ async def _create_payload(request, config):
         try:
             form = await replay.form(max_files=1, max_fields=20)
             payload = dict(form)
-            upload = form.get('image')
+            upload = first_form_upload(form, 'image')
             image = (upload.filename or '', await upload.read()) if upload is not None and upload.filename else None
             return payload, image, False
         except Exception:
@@ -1137,7 +1371,7 @@ async def _create_payload(request, config):
         finally:
             if form is not None:
                 await form.close()
-    if 'json' in content_type:
+    if _request_is_json(request):
         try:
             value = json.loads(raw or b'{}')
             return (value if isinstance(value, dict) else {}), None, False
@@ -1234,7 +1468,7 @@ async def _input_payload(request, config):
         if len(raw) > limit:
             return {}, True
     content_type = request.headers.get('content-type', '').lower()
-    if 'json' in content_type:
+    if _request_is_json(request):
         try:
             value = json.loads(raw or b'{}')
             return (value if isinstance(value, dict) else {}), False

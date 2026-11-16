@@ -121,8 +121,8 @@ export function AttractModePage() {
       if (!data.settings?.filters || !data.settings?.autoplay)
         throw new Error('Attract mode settings returned an invalid response.')
       setForm(data.settings)
-      setMessage('Attract mode settings saved.')
-      showToast('Attract mode settings saved.', 'success')
+      setMessage('Attract mode settings saved successfully')
+      showToast('Attract mode settings saved successfully', 'success')
     } catch (err) {
       const text = errorText(err) || 'Could not save attract mode settings.'
       setError(text)

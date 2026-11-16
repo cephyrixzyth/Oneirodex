@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, UserOwnedTitle
+from oneirodex.utils.launcher_imports import MAX_TITLES
 
 
 @dataclass
@@ -58,6 +59,10 @@ def import_playnite_json(user_id: int, payload: str | bytes | dict | list) -> Im
         games = data
     else:
         result.errors.append('Unrecognized Playnite JSON shape')
+        return result
+
+    if len(games) > MAX_TITLES:
+        result.errors.append(f'That export has more than {MAX_TITLES} titles')
         return result
 
     for item in games:
@@ -120,6 +125,9 @@ def import_playnite_csv(user_id: int, text: str) -> ImportResult:
 
     rows = []
     for row in reader:
+        if len(rows) >= MAX_TITLES:
+            result.errors.append(f'That export has more than {MAX_TITLES} titles')
+            return result
         rows.append({
             'Name': row.get(name_key),
             'Id': row.get(id_key) if id_key else None,

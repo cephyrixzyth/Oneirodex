@@ -14,7 +14,7 @@ from oneirodex.runtime_native.session_compat import dump_session_cookie, generat
 def _client(*, role='admin', enabled=True, pipeline=True):
     flask_app = Flask(__name__)
     flask_app.config.update(
-        SECRET_KEY='native-arr-indexers-secret', CSP_ENABLED=False,
+        SECRET_KEY='native-arr-indexers-secret', CSP_ENABLED=False, TESTING=True,
         ENABLE_ARR_HARDLINK_PIPELINE=pipeline,
     )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
@@ -228,6 +228,32 @@ def test_arr_download_checks_csrf_validates_outbound_url_and_keeps_accepted_stat
     assert invalid_body.status_code == 422
 
 
+def test_arr_download_allows_valid_magnets_and_rejects_unrelated_schemes():
+    client = _client()
+    headers = {'X-CSRFToken': client.csrf_token}
+    magnet = client.post(
+        '/api/arr/download',
+        json={'download_url': 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567'},
+        headers=headers,
+    )
+    bad_links = [
+        'file:///etc/passwd',
+        'javascript:alert(1)',
+        'ftp://downloads.example/item.torrent',
+        'magnet:?dn=missing-info-hash',
+        'magnet://downloads.example/item',
+    ]
+    rejected = [
+        client.post('/api/arr/download', json={'download_url': value}, headers=headers)
+        for value in bad_links
+    ]
+
+    assert magnet.status_code == 202
+    assert magnet.json()['url'].startswith('magnet:?xt=urn:btih:')
+    assert all(response.status_code == 400 for response in rejected)
+    assert all(response.json()['error_code'] == 'bad_request' for response in rejected)
+
+
 def test_arr_hardlink_preview_and_apply_preserve_gates_and_response_shapes():
     client = _client()
     invalid_csrf = client.post('/api/arr/hardlink/preview', json={'library_dest_dir': 'library'})
@@ -250,6 +276,19 @@ def test_arr_hardlink_preview_and_apply_preserve_gates_and_response_shapes():
         json={'library_dest_dir': 'library'},
         headers={'X-CSRFToken': disabled_client.csrf_token},
     )
+    disabled_invalid = disabled_client.post(
+        '/api/arr/hardlink/preview', json={},
+        headers={'X-CSRFToken': disabled_client.csrf_token},
+    )
+    module_disabled_client = _client(enabled=False)
+    module_disabled_invalid = module_disabled_client.post(
+        '/api/arr/hardlink/preview', json={},
+        headers={'X-CSRFToken': module_disabled_client.csrf_token},
+    )
+    module_disabled_valid = module_disabled_client.post(
+        '/api/arr/hardlink/preview', json={'library_dest_dir': 'library'},
+        headers={'X-CSRFToken': module_disabled_client.csrf_token},
+    )
 
     assert invalid_csrf.status_code == 400
     assert preview.status_code == 200
@@ -259,6 +298,12 @@ def test_arr_hardlink_preview_and_apply_preserve_gates_and_response_shapes():
     assert apply.status_code == 201
     assert apply.json()['applied_count'] == 1
     assert disabled.status_code == 403
+    assert disabled_invalid.status_code == 403
+    assert disabled_invalid.json()['error_code'] == 'forbidden'
+    assert module_disabled_invalid.status_code == 403
+    assert module_disabled_invalid.json()['error_code'] == 'forbidden'
+    assert module_disabled_valid.status_code == 403
+    assert module_disabled_valid.json()['error'] == 'Arr module is disabled'
 
 
 def test_hardlink_preview_uses_explicit_app_config_without_flask_context(tmp_path):

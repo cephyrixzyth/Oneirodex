@@ -4,6 +4,24 @@ oneirodex_guard_postgres_publication() {
     bind_address=${POSTGRES_HOST_BIND:-127.0.0.1}
     password=${POSTGRES_PASSWORD:-}
 
+    case "$password" in
+        CHANGE_ME*)
+            echo "PostgreSQL refuses the template password. Set a unique POSTGRES_PASSWORD before starting." >&2
+            return 1
+            ;;
+        postgres)
+            if [ "${ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD:-false}" != true ]; then
+                echo "PostgreSQL refuses the legacy default password unless ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true is set for an existing volume." >&2
+                return 1
+            fi
+            pgdata=${PGDATA:-/var/lib/postgresql/data}
+            if [ ! -s "$pgdata/PG_VERSION" ]; then
+                echo "PostgreSQL refuses the legacy default password for a new database volume." >&2
+                return 1
+            fi
+            ;;
+    esac
+
     case "$bind_address" in
         127.*|localhost|::1|'[::1]') return 0 ;;
     esac

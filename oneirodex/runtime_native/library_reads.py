@@ -3,12 +3,13 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from typing import Any, Callable
+from uuid import UUID
 
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class LibraryReadData:
@@ -57,6 +58,25 @@ class LibraryReadData:
         }
 
     @classmethod
+    def batch_edit_fields(cls, library) -> dict:
+        """Keep the batch-edit result contract aligned with the legacy route."""
+        fields = cls.public_fields(library)
+        fields.pop('image_url', None)
+        return fields
+
+    @staticmethod
+    def batch_edit_cap_error(cap: int) -> tuple[dict, int]:
+        """Return the legacy batch-edit selection-cap error envelope."""
+        from oneirodex.utils.api_contract import api_error_payload
+
+        return api_error_payload(
+            f'library_uuids cap is {cap}',
+            code='bad_request',
+            body_status='rejected',
+            cap=cap,
+        )
+
+    @classmethod
     def watch_fields(cls, library) -> dict:
         values = cls.public_fields(library)
         return {
@@ -95,13 +115,9 @@ class LibraryReadData:
 
         uuids, error = parse_library_uuids(payload)
         if error:
-            return error[0], error[1]
+            return _batch_rejection(error[0], error[1])
         if len(uuids) > LIBRARY_BATCH_UUID_CAP:
-            body, status = api_error_payload(
-                f'No more than {LIBRARY_BATCH_UUID_CAP} libraries may be selected',
-                code='bad_request', status=400, body_status='rejected',
-            )
-            return body, status
+            return self.batch_edit_cap_error(LIBRARY_BATCH_UUID_CAP)
 
         item_map = {}
         raw_items = payload.get('items')
@@ -168,7 +184,7 @@ class LibraryReadData:
                     results.append({
                         'uuid': library_uuid, 'name': library.name, 'ok': True,
                         'status': 'unchanged', 'changed': [],
-                        **self.public_fields(library),
+                        **self.batch_edit_fields(library),
                     })
                     skipped += 1
                     continue
@@ -176,7 +192,7 @@ class LibraryReadData:
                 updated += 1
                 results.append({
                     'uuid': library_uuid, 'ok': True, 'status': 'updated',
-                    'changed': changed, **self.public_fields(library),
+                    'changed': changed, **self.batch_edit_fields(library),
                 })
             except (TypeError, ValueError) as exc:
                 db.session.rollback()
@@ -297,10 +313,12 @@ def create_library_reads_router(
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
                 login_manager=login_manager,
             )
-            response = (
-                _login_redirect(flask_app, request, login_manager, auth)
-                if auth.user is None else JSONResponse(data.list_for_user(auth.user))
-            )
+            if auth.user is None:
+                response = _login_redirect(flask_app, request, login_manager, auth)
+            else:
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = JSONResponse(data.list_for_user(auth.user))
             if auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 
@@ -322,6 +340,8 @@ def create_library_reads_router(
                 login_manager=login_manager,
             )
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             if response is None and not data.can_access(auth.user, library_uuid):
                 from oneirodex.utils.api_contract import api_error_payload
 
@@ -355,8 +375,8 @@ def create_library_reads_router(
     def get_library(library_uuid: str, request: Request):
         return library_response(request, library_uuid)
 
-    @router.api_route('/api/admin/libraries/{library_uuid}', methods=['GET', 'HEAD'])
-    def admin_library_detail(library_uuid: str, request: Request):
+    @router.api_route('/api/admin/libraries/{library_uuid:uuid}', methods=['GET', 'HEAD'])
+    def admin_library_detail(library_uuid: UUID, request: Request):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
             auth = request_auth_context(
@@ -374,7 +394,7 @@ def create_library_reads_router(
                 ):
                     response = _api_error('Admin required', 'forbidden')
             if response is None:
-                library = data.library(library_uuid)
+                library = data.library(str(library_uuid))
                 if library is None:
                     response = _api_error('Library not found.', 'not_found')
                 else:
@@ -494,23 +514,29 @@ def create_library_reads_router(
                 ):
                     response = _api_error('Admin required', 'forbidden')
             if response is None:
-                payload = await _json_object(request)
-                order = payload.get('order') if isinstance(payload.get('order'), list) else []
                 try:
-                    data.reorder(order)
-                    from oneirodex.utils.api_contract import api_ok_payload
+                    payload = await request.json()
+                except Exception:  # noqa: BLE001 — malformed JSON must not become a no-op success
+                    payload = None
+                if not isinstance(payload, dict):
+                    response = _api_error('Invalid JSON payload', 'bad_request')
+                else:
+                    order = payload.get('order') if isinstance(payload.get('order'), list) else []
+                    try:
+                        data.reorder(order)
+                        from oneirodex.utils.api_contract import api_ok_payload
 
-                    response = JSONResponse(api_ok_payload({'status': 'success'}))
-                except Exception:  # noqa: BLE001 — preserve the legacy safe failure
-                    data.rollback()
-                    flask_app.logger.warning('library reorder failed')
-                    from oneirodex.utils.api_contract import api_error_payload
+                        response = JSONResponse(api_ok_payload({'status': 'success'}))
+                    except Exception:  # noqa: BLE001 — preserve the legacy safe failure
+                        data.rollback()
+                        flask_app.logger.warning('library reorder failed')
+                        from oneirodex.utils.api_contract import api_error_payload
 
-                    body, status = api_error_payload(
-                        'Could not update the library', code='internal',
-                        body_status='error',
-                    )
-                    response = JSONResponse(body, status_code=status)
+                        body, status = api_error_payload(
+                            'Could not update the library', code='internal',
+                            body_status='error',
+                        )
+                        response = JSONResponse(body, status_code=status)
             if auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 
@@ -564,6 +590,34 @@ def create_library_reads_router(
 def mount_library_reads_routes(app: FastAPI, flask_app, **kwargs):
     app.include_router(create_library_reads_router(flask_app, **kwargs))
     return app
+
+
+def _batch_rejection(payload, http_status):
+    """Wrap the shared library-batch refusal in the API error envelope."""
+    from oneirodex.utils.api_contract import api_error_payload
+
+    message = payload.get('message') or payload.get('error') or 'Rejected'
+    token = payload.get('error')
+    extras = {
+        key: value for key, value in payload.items()
+        if key not in ('ok', 'error', 'message', 'status', 'success', 'error_code')
+    }
+    if token and token != message:
+        extras['body_error'] = token
+    code = {
+        400: 'bad_request',
+        403: 'forbidden',
+        404: 'not_found',
+        409: 'conflict',
+        500: 'internal',
+    }.get(http_status, 'bad_request')
+    return api_error_payload(
+        message,
+        code=code,
+        status=http_status,
+        body_status=payload.get('status', 'rejected'),
+        **extras,
+    )
 
 
 async def _json_object(request):

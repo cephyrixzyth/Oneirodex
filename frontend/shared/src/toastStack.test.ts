@@ -1,18 +1,37 @@
 import { describe, expect, it } from 'vitest'
 
-import { MAX_INDIVIDUAL_TOASTS, planToastStack, stackSummaryMessage } from './toastStack.js'
+import {
+  MAX_INDIVIDUAL_TOASTS,
+  MAX_NARROW_INDIVIDUAL_TOASTS,
+  planToastStack,
+  stackSummaryMessage,
+} from './toastStack.js'
 
 describe('planToastStack', () => {
-  it('lets five individual toasts through', () => {
-    expect(planToastStack({ stackedCount: 4, incomingCount: 1 })).toEqual({ action: 'append' })
-    expect(MAX_INDIVIDUAL_TOASTS).toBe(5)
+  it('lets three individual toasts through', () => {
+    expect(planToastStack({ stackedCount: 2, incomingCount: 1 })).toEqual({ action: 'append' })
+    expect(MAX_INDIVIDUAL_TOASTS).toBe(3)
   })
 
-  it('collapses when the sixth would appear', () => {
-    expect(planToastStack({ stackedCount: 5, incomingCount: 1 })).toEqual({
+  it('collapses when the fourth would appear', () => {
+    expect(planToastStack({ stackedCount: 3, incomingCount: 1 })).toEqual({
       action: 'collapse',
-      nextCount: 6,
+      nextCount: 4,
     })
+  })
+
+  it('supports a narrower viewport cap', () => {
+    expect(
+      planToastStack({
+        stackedCount: 2,
+        incomingCount: 1,
+        maxIndividual: MAX_NARROW_INDIVIDUAL_TOASTS,
+      }),
+    ).toEqual({
+      action: 'collapse',
+      nextCount: 3,
+    })
+    expect(MAX_NARROW_INDIVIDUAL_TOASTS).toBe(2)
   })
 
   it('collapses a burst already over the cap', () => {
@@ -23,7 +42,7 @@ describe('planToastStack', () => {
   })
 
   it('increments an existing summary instead of stacking beside it', () => {
-    expect(planToastStack({ stackedCount: 6, hasSummary: true, incomingCount: 3 })).toEqual({
+    expect(planToastStack({ stackedCount: 4, hasSummary: true, incomingCount: 3 })).toEqual({
       action: 'increment-summary',
       add: 3,
     })

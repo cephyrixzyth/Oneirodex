@@ -7,6 +7,7 @@ from sqlalchemy import select
 from oneirodex.utils.api_response import api_error, api_ok
 from oneirodex.utils.functions import format_size
 from oneirodex.utils.event_logging import log_system_event
+from oneirodex.utils.api_tokens import require_api_token_scope
 from . import download_bp
 from oneirodex import db
 
@@ -47,6 +48,7 @@ def delete_download(download_id):
 
 @download_bp.route('/check_download_status/<download_id>')
 @login_required
+@require_api_token_scope('read:library')
 def check_download_status(download_id):
     # Validate download_id parameter
     try:

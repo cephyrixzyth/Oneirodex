@@ -1,0 +1,181 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2098",
+  "observed_utc": "2026-11-15T01:09:06.003096+00:00",
+  "base_commit": "597ac8b6cd8bbdd1a80b68fb7411135dbbb3a1eb",
+  "classification": "Fix unrelated guard coupling in explicit fixture-only mode; actual standard-user provisioning remains pending.",
+  "preceding_native_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43661472425",
+    "job_id": 132651532619,
+    "harness_source": "597ac8b6cd8bbdd1a80b68fb7411135dbbb3a1eb",
+    "raw_log_sha256": "ae43174a40ef239c991481105376b3a670279220625933ec796956c1a9a87fd8",
+    "ci_guard_methods_loaded": 62,
+    "ci_guard_passed": 61,
+    "ci_guard_failed": 1,
+    "ci_guard_elapsed_seconds": 22.256,
+    "fixture_executed": false,
+    "failed_method": "test_native_stop_delivery_for_short_and_long_lived_fixture_names",
+    "provider_control": {
+      "sources": {
+        "start_current": {
+          "exception_events": 0,
+          "short": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [],
+            "name_lengths": [
+              10
+            ]
+          },
+          "truncated": false,
+          "long": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [],
+            "name_lengths": [
+              27
+            ]
+          },
+          "query_hresult_codes": []
+        },
+        "stop_default": {
+          "exception_events": 0,
+          "short": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000025"
+            ],
+            "name_lengths": [
+              10
+            ]
+          },
+          "truncated": false,
+          "long": {
+            "exit_codes": [],
+            "exact": 0,
+            "other": 0,
+            "empty": 0,
+            "count": 0,
+            "prefix": 0
+          },
+          "query_hresult_codes": []
+        },
+        "stop_current": {
+          "exception_events": 0,
+          "short": {
+            "count": 1,
+            "prefix": 0,
+            "other": 0,
+            "exact": 1,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000025"
+            ],
+            "name_lengths": [
+              10
+            ]
+          },
+          "truncated": false,
+          "long": {
+            "count": 1,
+            "prefix": 1,
+            "other": 0,
+            "exact": 0,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000026"
+            ],
+            "name_lengths": [
+              14
+            ]
+          },
+          "query_hresult_codes": []
+        },
+        "stop_unfiltered": {
+          "exception_events": 0,
+          "short": {
+            "exit_codes": [],
+            "exact": 0,
+            "other": 0,
+            "empty": 0,
+            "count": 0,
+            "prefix": 0
+          },
+          "truncated": false,
+          "long": {
+            "count": 1,
+            "prefix": 1,
+            "other": 0,
+            "exact": 0,
+            "empty": 0,
+            "exit_codes": [
+              "0x00000026"
+            ],
+            "name_lengths": [
+              14
+            ]
+          },
+          "query_hresult_codes": []
+        }
+      },
+      "error": "none",
+      "fixture_exits": {
+        "long": 38,
+        "short": 37
+      }
+    }
+  },
+  "change": "Fixture-only preflight runs the23relevant account/desktop/control tests. Package mode retains the full Windows guard selection, including the existing native observer comparison. No test/assertion is removed; build/release/ordinary context behavior is preserved.",
+  "separate_sensor_uncertainty": "The current stop query delivered both expected37/38 fixture exits with prefix14 and no errors. An independent duplicate reference query missed the short fixture stop. Its delivery reliability remains unresolved; it is not an ordinary-account provisioning prerequisite or a product identity decision.",
+  "verification": {
+    "red": "Workflow check fails because fixture-only mode has no distinct relevant guard set.",
+    "fixture_local_passed": 23,
+    "workflow_contexts": 15,
+    "package_guard_unchanged": "test_windows_*.py retained for package mode",
+    "fixture_guard": "test_windows_user_fixture*.py"
+  },
+  "source_sha256_git_normalized": {
+    ".github/workflows/desktop-build.yml": "ab2924db120b2887b19f7a2e2066f1fa019cea969f5c4c1644ead57afff9c238",
+    "scripts/ci/windows_user_fixture.py": "efc292bcbb549fb46753016516f5b2dd431be87ada5aef9edf2e5a6121ce9bea",
+    "scripts/ci/probe_windows_user_fixture.py": "587abf6c073c8a53e2cde1e37d9f895b6f5395e5338e108f3482b53463f3aaf9"
+  },
+  "native_retry": "terminal provisioning password step ObjectNotFound/0x80131501; abort cleanup verified; no app",
+  "native_fixture_qualified": false,
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "R2097 never reached fixture provisioning. R2096 account failure cause/abort cleanup still unknown. Native fixture, package/account/game/UI/IPC and original acceptance gates remain open.",
+  "capture": "Skipped: CI-only mode selection.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43661743221",
+    "job_id": 132652372991,
+    "harness_source": "c3a62f25455320d3d584f04e1d8ae16c37acdf4e",
+    "raw_log_sha256": "f8e1274856aa7e07be08dbeda2890131e1b36b06a88a8db69361fc29dd211276",
+    "ci_fixture_guard_methods_passed": 23,
+    "ci_guard_elapsed_seconds": 0.081,
+    "receipt": {
+      "observed_utc": "2026-11-15T01:10:02.074702+00:00",
+      "status": "failed",
+      "native_fixture_qualified": false,
+      "installed_runtime_acceptance": false,
+      "cleanup_verified": true,
+      "phase": "fixture_provisioning",
+      "code": "fixture_account_creation_failed",
+      "diagnostic": {
+        "stage": "password",
+        "category": "ObjectNotFound",
+        "hresult": "0x80131501"
+      }
+    },
+    "package_client_build_mac_release": "observed skipped"
+  }
+}

@@ -18,7 +18,7 @@ Whitelist pre-approves addresses when registration is open.
 
 5
 00:00:25.965 --> 00:00:31.581
-Support inbox receives what members send from Report, and can mirror to GitHub Issues.
+Support inbox receives what members send from Report; GitHub Issues sync runs only when the member opts in.
 
 6
 00:00:32.665 --> 00:00:41.377

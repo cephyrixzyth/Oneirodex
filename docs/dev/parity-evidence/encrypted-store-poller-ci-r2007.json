@@ -1,0 +1,194 @@
+{
+  "review_id": "R2007",
+  "title": "Restore encrypted store polling and repair confirmed CI qualification gates",
+  "reviewed_on": "2026-11-08",
+  "classification": "Confirmed encrypted-link scheduling regression fixed; CI formatting/type and credential-fixture failures repaired; full baseline pending",
+  "source_head_before_change": "013e6b23b67ea47ad40a2ac1812172bdaff08604",
+  "uncommitted_changes_at_capture": true,
+  "changed_source_sha256": {
+    "frontend/admin-app/src/api/adminApi.test.ts": "e9ef0c8e67b719f8bd93b71ceb797ae5de6426a853fd19bdb4e0f54d5ab15b58",
+    "frontend/admin-app/src/components/AdminTopNav.css": "1a5a45f51f34f9828bb1bfc539c6ed5dd08b63137d57ad703925e4d0d129887c",
+    "frontend/admin-app/src/components/CreateLibraryForm.test.tsx": "91b532f3736354168c4e44f059d3570cabca0448dc827eb5d684bf6d68bb83b5",
+    "frontend/admin-app/src/components/Page.tsx": "7f02e7d755091e7ad7a0cd59f9c829bb4e96c1fc0f77c190c9b5c24eafb246e8",
+    "frontend/admin-app/src/components/navConfig.ts": "597f20c46907d262c78070aaf6253236d72fe267f3f3810fb6af5eb8b6fac2ea",
+    "frontend/admin-app/src/hooks/useLibraryScan.test.ts": "5ac939b916472815dbdccebe4417f200bad3b2fb2633ab9631687678488598cc",
+    "frontend/admin-app/src/hooks/useLibraryScan.ts": "1a4e9b6fdaa0c76e697f188b794f05e4097e653e00c71fea83ee2639442191fb",
+    "frontend/admin-app/src/pages/DiscoverySectionsPage.tsx": "fb9ef0529ed7d4ac2e50011cc98cccff61bb9c83069019de4aef3b86c5559315",
+    "frontend/admin-app/src/pages/DiscoverySectionsStyles.test.ts": "019cc59bac61a9873053ac40c4620f181b84faba85c905a847f3a49aea5a7559",
+    "frontend/admin-app/src/pages/IgdbSettingsPage.test.tsx": "8b52333a8d94e015174b54739e94713ae7db92203b46f99cf84879a046791ca9",
+    "frontend/admin-app/src/pages/ImagesPage.test.tsx": "872fc2314b125d11c60fdfc252ae9ed47f7b06293d77b6f9c9914d4dfbae8889",
+    "frontend/admin-app/src/pages/NativeLibrariesPage.test.tsx": "4366c749cffc8705cfa1c72a5162b240add086f58a2d0ade70cf92598a08c225",
+    "frontend/admin-app/src/pages/ReferenceSetsPage.test.tsx": "b511a4b49a715f941508dc06929973173ab06239631734b4e2f1163de1057a02",
+    "frontend/admin-app/src/pages/ScanControlsPage.test.tsx": "138ab7ebfd8a5b5e73ae89382249dd24499a16efda45f69282b89f49d3054948",
+    "frontend/admin-app/src/pages/ScanUnmatchedPage.test.tsx": "89c458205cae90a39f6ece61d9a255da426dc94cc0cec89cd87af66f0ec0743f",
+    "frontend/admin-app/src/pages/ScanUnmatchedPage.tsx": "5966842092ba5c89c09f21192d24d6aecfbba6a8e02152caba67c060ae9d36f4",
+    "frontend/admin-app/src/pages/ScansPage.test.tsx": "75edef1c347a1e9d574555d78bee93be5537ae830096bcee6126537fa2d06afc",
+    "frontend/admin-app/src/pages/SmtpPage.tsx": "e63ec6f3174111a81022ad4983a210e4b035733a953a97c617a8021c7e4a184f",
+    "frontend/admin-app/src/pages/SupportInboxPage.tsx": "cda31745cc687ad64e76222c5db01dd458880441a02d0d7bed7a5d44e02a8dea",
+    "frontend/admin-app/src/pages/ThemesPage.test.tsx": "5da7e3b2b149657d3d145558463e938b058d8c56fe16671d028e3cc5e514c50f",
+    "frontend/api-client/COVERAGE.md": "0c13633ebce301badee9df2e7a3641fc90901d829a865c43d63e7189af0747a9",
+    "frontend/member-app/src/App.tsx": "5098c91969f74e851ffddc4ac4592ced477be1ea6765645889f835d775265d64",
+    "frontend/member-app/src/PreferencesModal.test.tsx": "034968c4a000a9715198c9751b86733e10529d5676750f26771618695a5a78c6",
+    "frontend/member-app/src/chrome/CommandPalette.test.tsx": "09757c3bde016440582a384143f5151215402a2e3b804b6c17b019cc76de9650",
+    "frontend/member-app/src/chrome/dropdownHover.test.ts": "68740797e4419373ffed0576c24f09b1e1da1a80fc696283ef8e654da8394f7c",
+    "frontend/member-app/src/components/DiscoverShelf.tsx": "98d30e54c2926283792f4b78f35ef4c3772e1f69e655686872a266ad492bdab7",
+    "frontend/member-app/src/components/GameActionBar.tsx": "0b2824bbd1a466d29070677b326981f7296586c32275cf284d16fb9ca22e0418",
+    "frontend/member-app/src/components/GameCard.actions.test.tsx": "8fc5685bf92703f84297346d4620690bfa30b6e2e51804757c811e77fa1e765e",
+    "frontend/member-app/src/components/GamePreviewPopup.tsx": "66eaee681afd173d8f949c6e8d92cc948ab89e110eac44f2d5a1db81ba42d5c2",
+    "frontend/member-app/src/components/RelatedMediaStrip.test.tsx": "0ba970862b24dda7773334f1cb3d3603d59ee8b0caf435cc42698ebc3dbbddf0",
+    "frontend/member-app/src/pages/CalendarPage.tsx": "4e7a98276ee779ec75eaf284192b2a1a9ac876420920be14f3d229438db2a864",
+    "frontend/member-app/src/pages/GameDetailsPage.test.tsx": "fe3c72ccba0db17655874b795674f66f4c6b0768fe0c3dcf06c1e8ec1ad98b49",
+    "frontend/member-app/src/pages/InvitesPage.test.tsx": "f96dc1d3f23476a3a74d6540294c5e8fda19a8b4eff43d2b7bc52967349e43ca",
+    "frontend/member-app/src/pages/MemberProfilePage.test.tsx": "c93adcef95c8f889236ecd1f0ceb6947174ede9efc5a921f9ec3a53c857ff2fd",
+    "frontend/member-app/src/pages/MemberProfilePage.tsx": "965fb0d054813aa5b249a7174d45c1514352f758db86e536d829d80c5c2677e6",
+    "frontend/member-app/src/pages/ReportIssuePage.test.tsx": "ca08e2bcd85df43f1acdab9fc45899a438a37f3889a1f5174ee6d45cb9291854",
+    "frontend/member-app/src/pages/ReportIssuePage.tsx": "178fd188d1c0f40b9005df0683219b0749e74c305bfb13006f9d245f6cf67783",
+    "frontend/member-app/src/pages/TokensPage.tsx": "c1242ac24dd242d66612f031f797cf1587c0b1046423b333d332276ea2b77d03",
+    "frontend/member-app/src/pages/UpdatesPage.test.tsx": "b3f5ebc1a5f3f352166cb7fa57931e7a0a4ec359986b084c2856333bc5290ed2",
+    "frontend/member-app/src/pages/UpdatesPage.tsx": "e0784f73286141a961ab056c12fa9486c46277798d78791b4e288d0d7faab740",
+    "frontend/member-app/src/pages/gameDetails/DetailsExtrasSection.tsx": "11b1f6551ca48bd4e3b9af3899c9652ec357d7651e7f451acd1fc397a9698f07",
+    "frontend/member-app/src/pages/gameDetails/DetailsVersionsSection.tsx": "8fddc2d82b531988fdd9336f1a05102e74b7196dad9b866539cb21aded56a98f",
+    "frontend/shared/icons/manifest.json": "adb4efca7eb792bf4ebe7af02fafaf306b61e374e406ff52b57d1085a751c0b5",
+    "frontend/shared/src/AppErrorBoundary.tsx": "5b49e54766ccd136f9e6ee48fb3b2e5a19d72ae2d850e53d15a459a2d10a7d73",
+    "frontend/shared/src/PreferencesModal.tsx": "10855370246b5c29450b1084fc3401596507ba1235e25486b137062204868a42",
+    "frontend/shared/src/account/InvitesPanel.test.tsx": "4d76756c37e88b0970dafd467eff9486b692727557577b10ec5dc3916ed3aede",
+    "frontend/shared/src/account/InvitesPanel.tsx": "c4f1ff5a5d35b821c210f5915062374cd05a35fa743a8d7cc3d365c98b32dff0",
+    "frontend/shared/src/useTopBarReserve.test.ts": "483f22f7a531588c8e0f577c80e6df6c081d830de662175c9ca0f0952550af6a",
+    "frontend/ui-catalog/src/App.tsx": "9dea0559029e395e34fe6a8c5d53543a46a262ac8c8e65d0581ec82f007f2c32",
+    "oneirodex/utils/ownership_poller.py": "7f30b18ffabc768d2122a0eba733ff3bb9e9e2ec950d19d838fe9da3e6113f58",
+    "tests/test_store_connections.py": "63ebacb4427ae14c5aea685a21fd2db0a19b69c4b7a696ef85b308f30f26537c"
+  },
+  "failed_ci_run": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/42532186849",
+  "root_causes": [
+    "Store fixtures wrote legacy plaintext, so the encrypted credential reader correctly required migration. Normal fixtures now use the production writer; plaintext/corrupt-envelope rejection remains covered.",
+    "After correcting fixtures, three encrypted-member/no-household-token cases reproduced the scheduler skipping GOG, Epic and Amazon links because its snapshot checked only the plaintext column.",
+    "Prettier rejected 47 frontend files; the explicit-any ratchet found new sites in three components. Formatting and declared callback/session/input/library-row types repair the gates without widening baselines."
+  ],
+  "fix": "Scheduler snapshots only credential presence through has_store_credential, preserving encrypted and legacy detection without retaining secret bytes. Credential decryption and fail-closed policy are unchanged.",
+  "checks": [
+    {
+      "id": "store-red",
+      "exit_code": 1,
+      "elapsed_seconds": 13.66,
+      "started_utc": "2026-11-08T22:58:37.946076+00:00",
+      "counts": {
+        "passed": 43,
+        "failed": 14,
+        "skipped": 3
+      },
+      "raw_log_sha256": "8afbd54d956a38283591877ed94d9994f8d10f54b5a29d7a83d788c684e66f28"
+    },
+    {
+      "id": "poller-encrypted-red",
+      "exit_code": 1,
+      "elapsed_seconds": 9.12,
+      "started_utc": "2026-11-08T23:01:37.364002+00:00",
+      "counts": {
+        "failed": 3
+      },
+      "raw_log_sha256": "28b4f5749a68acd2b692c472efc1a847e4fba9b40bf6ca159e0ba2c153c1038f"
+    },
+    {
+      "id": "store-green",
+      "exit_code": 0,
+      "elapsed_seconds": 15.76,
+      "started_utc": "2026-11-08T23:02:10.056295+00:00",
+      "counts": {
+        "passed": 60,
+        "skipped": 3
+      },
+      "raw_log_sha256": "a94eda1ee7e4977177a81728745fff839ae67eb6c8b2b138f441b661a49d16e5"
+    },
+    {
+      "id": "store-postgres",
+      "exit_code": 0,
+      "elapsed_seconds": 21.77,
+      "started_utc": "2026-11-08T23:03:40.754166+00:00",
+      "counts": {
+        "passed": 61,
+        "skipped": 2
+      },
+      "raw_log_sha256": "90f3bab6c67e95a5108f8ca06494c13a2e4032761328450068900bb0b2df8cb4",
+      "disposable_database_removed": true
+    },
+    {
+      "id": "poller-postgres",
+      "exit_code": 0,
+      "elapsed_seconds": 17.91,
+      "started_utc": "2026-11-08T23:05:34.380014+00:00",
+      "counts": {
+        "passed": 11
+      },
+      "raw_log_sha256": "f32a48036294fc64b5491a87268aa8ddadc62842c043ff022d69362e3c467dcd",
+      "disposable_database_removed": true
+    },
+    {
+      "id": "undefined-green",
+      "exit_code": 0,
+      "elapsed_seconds": 7.68,
+      "started_utc": "2026-11-08T23:05:34.379969+00:00",
+      "counts": {},
+      "raw_log_sha256": "68e1d0e787e889f1737d42b1a7ad5d9a15d2bffbc979b953ae9f5a47c5496b92"
+    },
+    {
+      "id": "lint-ci-repair",
+      "exit_code": 0,
+      "elapsed_seconds": 28.0,
+      "started_utc": "2026-11-08T23:06:43.236559+00:00",
+      "counts": {},
+      "raw_log_sha256": "9752f2f6abf6b55276a92b93c1807a78f3b9f791f0ce59ce6ef95a46541d12ae"
+    },
+    {
+      "id": "member-ci-repair",
+      "exit_code": 0,
+      "elapsed_seconds": 10.7,
+      "started_utc": "2026-11-08T23:06:43.239225+00:00",
+      "counts": {
+        "passed": 12
+      },
+      "raw_log_sha256": "42863e1773876ba51cc1518ab8bf6b19cd1158d8a54fb2977691dff1cd4995dc"
+    },
+    {
+      "id": "admin-ci-repair",
+      "exit_code": 0,
+      "elapsed_seconds": 51.09,
+      "started_utc": "2026-11-08T23:06:43.238289+00:00",
+      "counts": {
+        "passed": 7
+      },
+      "raw_log_sha256": "6df694eeee09ee788808ebfa056ffaeb483ba91e812c9a01a95988fb1a5020db"
+    }
+  ],
+  "other_checks": {
+    "prettier_semantic_debug_check": "passed for all 47 mechanical formatting candidates before type edits",
+    "full_frontend_prettier": "passed after formatting and type edits",
+    "explicit_any_ratchet": "passed; baseline unchanged",
+    "member_typecheck": "passed after final type edit",
+    "admin_typecheck": "passed",
+    "css_token_ratchet": "passed; zero violations",
+    "eslint": "passed; zero errors and 36 existing warnings",
+    "bundle_r1972": "passed; 7 reports, 1545 rows, lifecycle/cleanup and secret/path scan"
+  },
+  "environment": {
+    "python": "3.12.16",
+    "node": "22.23.4",
+    "postgresql": "17.6",
+    "credentials": "Synthetic keys and sign-ins only; process-local dotenv loading disabled and external Python network connections blocked."
+  },
+  "database_scope": "Store connection fixtures use disposable minimal tables on SQLite and PostgreSQL. Adjacent poller tests use a separate disposable PostgreSQL database upgraded by the guarded schema command. Both PostgreSQL databases were removed. These runs do not qualify a deployed schema or real provider connectivity.",
+  "interrupted_baseline": {
+    "id": "core-postrepair",
+    "reason": "Intentionally stopped before editing already-collected source after CI confirmed store-fixture failures; known future failures justified interruption.",
+    "elapsed_seconds": 963.76,
+    "owned_process_tree_terminated": true,
+    "disposable_database_removed": true,
+    "qualification": "Incomplete, not a passing core/full baseline."
+  },
+  "limits": [
+    "Provider requests were faked; no live integration was revoked, migrated or contacted.",
+    "SQLite run: 60 passed/3 skipped; PostgreSQL store slice: 61 passed/2 skipped; platform skips do not establish other OS behavior.",
+    "Adjacent PostgreSQL poller module passed 11 cases with one nested-transaction SQLAlchemy warning.",
+    "The CI core pytest step was not reached in the failed run; full core/full-suite and release acceptance remain incomplete."
+  ],
+  "review": "Inline author review with Superpowers systematic-debugging, test-driven-development and verification-before-completion. Whole-branch review remains a later merge gate."
+}

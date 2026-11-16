@@ -58,6 +58,7 @@ def saved_filter_fields():
 
 @apis_bp.route('/filters/saved', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def list_saved_filters():
     rows = (
         db.session.execute(

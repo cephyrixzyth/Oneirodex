@@ -1,0 +1,198 @@
+{
+  "review_id": "R2016",
+  "doc_status": "Reference",
+  "title": "Native member, scan and custom adapter auth-fixture qualification",
+  "classification": "Confirmed obsolete test login identities repaired; brittle unordered Allow-method assertion corrected; production authentication and routes unchanged",
+  "source_head_before_change": "b52fdf6ff3af4f761bc55dad57beb3a1a90322b4",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "tests/test_native_announcements.py": "90a67d9ddb095db948e938c0bc657b3b179fa3c15de06189f6beec14a9436129",
+    "tests/test_native_artwork_apply_mutation.py": "23a0b5d1046bb38fbbdd71c3992d6775dd1f2780224c34fc479cafd5ef180636",
+    "tests/test_native_artwork_provider_search.py": "74922d0a9b0a1f7b40c2457e9cc49e0f822ba720f68f783f366870f6381c96c0",
+    "tests/test_native_attract_mode_routes.py": "2c46c97a35b9be44cd4dade5ccfb360f7c20a2b0e2887aa7ce7f4bda6569cb17",
+    "tests/test_native_browse_locations.py": "6baa2e82eef36390fd15ef88b8c82b657dfb44056269f1a8b4550968eae8a993",
+    "tests/test_native_emulator_health.py": "f0704872b4d1be09a4daa5f51e4cce5a119fb9a585b52fb3d48dd397efdd9479",
+    "tests/test_native_event_publish_auth_parity.py": "9d5d203d16fc7f09c7e4fecc780903d62a6b2992868bc60fa57e6d25945fab03",
+    "tests/test_native_game_mods.py": "e3b379be100f9f523e35be485d60f91f176dddba815b2661fc60d7874c03a32f",
+    "tests/test_native_game_servers.py": "0162f9019ea5a6ccd63650278085dc7d0cc0128ce9ab350623bc2b4e725da38e",
+    "tests/test_native_hltb_refresh.py": "67c57d8d6c77ad85afe9f997d1bf1f33558a0104ad27723d34a17aa14f2c2233",
+    "tests/test_native_hltb_stats.py": "d5af1bec44ac49c8446b93857b69453b73bcfcec1ce3fc727524ef63358ae46a",
+    "tests/test_native_integer_path_parity.py": "dfdb200a1e63d3a33b5be364e482494f6f637b3a37a3016d535e360cab126726",
+    "tests/test_native_library_tools.py": "976a62b974a291e2fa86a7597dd5e229753109c8d7a6a40e7a574493b79e83e2",
+    "tests/test_native_library_tools_mutations.py": "d4d7c32b48234616e0e39ae7860b9bd55f81a7debd1f8d326eb9abff27d518e6",
+    "tests/test_native_licensed_catalog_reads.py": "e512b5ae2a98031d6aa9bb41c19a09af27cf6d875e578e80784cdb880802b193",
+    "tests/test_native_manual_identify_list.py": "e8cf64424aef285d0eec1fd7f710736edf40883b43360ee4a5ed1fe559a42321",
+    "tests/test_native_member_json_body_limits.py": "9291cc87b066007eb6f25ffdbd78d8cfee015445b0d927b3dd5b036ea6a4cd47",
+    "tests/test_native_metadata_providers.py": "b759d7997e69df7b4e18478a24c91f6641a4a09d9c8172ecefab406a89e82b34",
+    "tests/test_native_metadata_search.py": "9f01797996599fca25060a7b046b6466629230b88bf8e26aa87171e0fb16fe95",
+    "tests/test_native_metadata_search_sources.py": "bb4cd2a8da5da46b064e630c8f277fe4ac72228da356514d6c99d87740e9dd26",
+    "tests/test_native_palette_suggest.py": "4178d16a6c5203503ab9b9ae0257cfcff2450544c42cddfd60b0f4cf18ffe927",
+    "tests/test_native_patch_catalog_json_media.py": "b8a33d59a263032455c9f3e32bce4cedeb157c78afd1def88832f700af86df83",
+    "tests/test_native_provider_catalog_reads.py": "cafdb5f991a547bbf84f0046c499e28277b4e19512a6abc5f2bc29dcc20ff4b2",
+    "tests/test_native_reference_sets_read.py": "6a654e7ed604c106151bfa756ca5b8131778474c17c183ec39285a6b20eb1b55",
+    "tests/test_native_scan_job_mutations.py": "11d224d26e8778730b00e9120c153ccd16344cae294c398667d4409201882493",
+    "tests/test_native_scan_unmatched_feedback.py": "4307ebf7465a10728a2f777ae0df5c1df9dea4cf2066bb9411816f3bba447db1",
+    "tests/test_native_scan_unmatched_mutations.py": "35e4789faa389bc940a5c1240035993b80449d7fad841f39328a6ad31666e8ec",
+    "tests/test_native_scan_unmatched_reads.py": "b6c8cf4863877b6e3251f0df86d6cdd16d0624445d39fe102a6d9f2d0a757bce",
+    "tests/test_native_theme_fonts_read.py": "a408ad70a0a83123ab460994a977e61201a13910a410a3643e916026f65df9d7",
+    "tests/test_native_game_delete_mutations.py": "e4b84f775eda816da44d1c43a4b66ab3f997550596d205dcacda5e55faddf9bd",
+    "tests/test_native_integrations_inventory.py": "8bcc1ccdca6646a2a147a09f470f6a962e91218fdd10d758d376c9dbd87756cf",
+    "tests/test_native_legacy_manual_identify_forms.py": "a031bf6738a4e893510624dc2917439c03c59cbbaa3a2c75115a902631d4958c",
+    "tests/test_native_legacy_scan_management.py": "323a6a0b351c4e8f7cf341d947f283a6584c61252057bff904ddcedff876ff2d",
+    "tests/test_native_member_shell.py": "cd3c2671f4833583b771992c7491f36edf76382849c1325f17760ca28be721ab",
+    "tests/test_native_ownership_actions.py": "7f7d897009806ca6a6ba54860d29efcbf214140af7e8c673d468c9417f99f1f8",
+    "tests/test_native_support_reads.py": "261155aca22217ec8612394210cfbdd531210d49e3fd7767dc45eb9269930668",
+    "tests/test_native_site_redirects.py": "eb9457a13c19217657ca6d331806de344b934b6581a97f40a5a9f91be89b2cd0",
+    "tests/test_native_igdb_company_role.py": "6a0f5ce37a370f8ac90aa983ec61ae08d80629a2ba28aab5254084b8683b7f22",
+    "tests/test_native_legacy_scan_forms.py": "2a1d7c6ec8bb15ab9bab15422701b78cde9fc43074649f437b28280a6761bde9",
+    "tests/test_native_library_exports.py": "1bf0672b86cf15c00654f403a0564d133ae363335890e20008ff3f1cf63f311a",
+    "tests/test_native_notification_parity.py": "efd3aff5a11658bd20ab63ffbfeeeae7c00b2bbab05e32feedaecdfdb3495b67"
+  },
+  "environment": {
+    "platform": "Windows",
+    "python": "3.12.16",
+    "postgresql": "17.6, owned loopback test databases upgraded to Alembic head",
+    "fake_adapters": "Temporary SQLite persistent-login stores, including an owned unmatched native engine",
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "checks": {
+    "native-member-fixtures-red": {
+      "exit_code": 1,
+      "seconds": 33.76,
+      "counts": {
+        "tests": 197,
+        "failures": 143,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 54
+      },
+      "owned_database_removed": null,
+      "log_sha256": "4c70260e8b6e94c8d84efcf119d1c8683635d8538fdf22c2ca6185c7835047ff"
+    },
+    "native-member-fixtures-green": {
+      "exit_code": 1,
+      "seconds": 33.0,
+      "counts": {
+        "tests": 197,
+        "failures": 0,
+        "errors": 12,
+        "skipped": 0,
+        "passed": 185
+      },
+      "owned_database_removed": null,
+      "log_sha256": "3d8a1d6834dac098e98303f0dff7185c142300f63ce335352c0db10899947129"
+    },
+    "unmatched-native-owned-sqlite-green": {
+      "exit_code": 1,
+      "seconds": 7.58,
+      "counts": {
+        "tests": 15,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 13
+      },
+      "owned_database_removed": null,
+      "log_sha256": "80deab518fabcb6bc047e341066e19bb07c8cafde6dfc9344a1504b61f29a541"
+    },
+    "native-member-fixtures-qualified": {
+      "exit_code": 0,
+      "seconds": 31.95,
+      "counts": {
+        "tests": 197,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 197
+      },
+      "owned_database_removed": null,
+      "log_sha256": "110b592e69238c1c81467e1617471044fe275f9f23685e9b03a002ed1b75dd84"
+    },
+    "native-special-red": {
+      "exit_code": 1,
+      "seconds": 26.19,
+      "counts": {
+        "tests": 127,
+        "failures": 77,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 50
+      },
+      "owned_database_removed": true,
+      "log_sha256": "3a7e0ca619f09dcba22a8a865aab24ecb5b0e2e770133ba76819f0e103be97c0"
+    },
+    "native-special-green": {
+      "exit_code": 2,
+      "seconds": 16.8,
+      "counts": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 1,
+        "skipped": 0,
+        "passed": 0
+      },
+      "owned_database_removed": true,
+      "log_sha256": "ed2de2f4f10f395c8cbb8863f2140b567ad8ad69e5312f41e0e56e07c69844cd"
+    },
+    "native-special-qualified": {
+      "exit_code": 0,
+      "seconds": 26.2,
+      "counts": {
+        "tests": 127,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 127
+      },
+      "owned_database_removed": true,
+      "log_sha256": "53fe0e7fe6a1d77c0d531e7edbd325868ff53491be1db1c5abc5118a47624f45"
+    },
+    "native-all-fixtures-final": {
+      "exit_code": 0,
+      "seconds": 50.8,
+      "counts": {
+        "tests": 324,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 324
+      },
+      "owned_database_removed": true,
+      "log_sha256": "7870e3c1314dfe8c308f46823125e735e0ea7a2ab7fcc4bcdb403ec36165f533"
+    }
+  },
+  "verification": {
+    "final_cases_passed": 324,
+    "modules": 41,
+    "warnings": "Four existing HTTPX/Starlette deprecation warnings",
+    "source_syntax": "All changed modules compile/import in the final run",
+    "preserved_assertions": "All 41 module ASTs match earlier versions after explicitly enumerated auth-fixture/loader/import normalization, owned unmatched session-table/context, added notification adapter-reach assertions and the single Allow-method ordering assertion.",
+    "notification_failure_path": "Each runtime/SQLAlchemy fault replay asserts the intended native list/read/preferences adapter was reached; identities are persisted before installing commit-failure hooks.",
+    "allow_contract": "Still requires exactly GET, HEAD and OPTIONS once each; ignores order from the framework method set.",
+    "cleanup": "All owned PostgreSQL databases removed; current matching count zero. Local SQLite engines disposed; no external provider delivery or product server launch.",
+    "bundle_validator": {
+      "exit_code": 0,
+      "seconds": 1.47,
+      "log_sha256": "d206149190f73b00074cad13af0ca3024dbc0e18b3865f68f59a6c7dbd469c25"
+    }
+  },
+  "changes": [
+    "Issue real persisted random-secret identities and matching valid fingerprints for native adapter fixtures, including user-loader prefix handling.",
+    "Custom unmatched fixture initializes its own persistent-login table and issues identities within its actual native engine scope; CSRF variants reuse those issued identities.",
+    "Native/Flask redirect and cookie comparisons use the same valid identity; support reads continue checking owner/admin boundaries.",
+    "Notification failure fixtures use real persisted user/session rows and assert domain fault-adapter entry."
+  ],
+  "rework": [
+    "The shared minimal login store replaced the Flask extension required by one owned native-engine fixture; changed that fixture to persist logins in its own engine.",
+    "Two reused-cookie calls initially omitted required max_age; corrected before final qualification.",
+    "A manually inserted top-level import landed inside a function-local import block in the notification file; retained collection error and corrected placement."
+  ],
+  "limitations": [
+    "Fake adapter checks do not establish full application behavior parity, provider delivery, installed/platform behavior, deployed schema or restart acceptance.",
+    "SQLite does not qualify PostgreSQL FK/locking behavior; the mixed real database checks remain separate controls.",
+    "Preliminary 197/127-case batches overlap the final 324 and must not be added as unique outcomes.",
+    "Current-source CI/full unrestricted Python and original review acceptance remain incomplete. R1972 coverage is unchanged."
+  ],
+  "capture": "Not applicable: tests and documentation only."
+}

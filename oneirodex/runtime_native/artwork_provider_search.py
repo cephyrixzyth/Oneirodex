@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class ArtworkProviderSearchData:
@@ -113,9 +114,9 @@ def create_artwork_provider_search_router(
                             )
 
                             art_kind = normalize_image_kind(
-                                request.query_params.get('image_type')
-                                or request.query_params.get('art_kind')
-                                or request.query_params.get('kind'),
+                                first_query_value(request.query_params, 'image_type')
+                                or first_query_value(request.query_params, 'art_kind')
+                                or first_query_value(request.query_params, 'kind'),
                                 default='cover',
                             )
                             if art_kind not in STEAMGRIDDB_SEARCH_KINDS:

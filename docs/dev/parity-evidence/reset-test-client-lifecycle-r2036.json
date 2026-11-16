@@ -1,0 +1,92 @@
+{
+  "doc_status": "Reference",
+  "review_id": "R2036",
+  "base_commit": "5b724b2b633d12161dac8169a632103ac922e4a9",
+  "captured_utc": "2026-11-11T15:17:11.231283+00:00",
+  "classification": "confirmed reset-policy omission and test-fixture idle-client retention",
+  "source_state": "Fingerprint-qualified correction before commit",
+  "source_sha256": {
+    "conftest.py": "e00d21041f0d215b0cf716ea4363575ddf9ab1d7118a8e1f4f2174b5f1bd0f74",
+    "oneirodex/utils/system_reset.py": "d531f4c1c6fca6cf67c24c5980166e6790c21ab7b1330d7062623135c6f03ac1",
+    "tests/test_system_reset.py": "5aba9fda2152b954b879a94365bb01a8462efa88f93689c2c898ecf5edc9e5ea",
+    "tests/test_test_harness_resources.py": "7f2684b5a4ce0c6305d870a415a07667b0cc3231f0ee380f3da1453d89e77abd"
+  },
+  "root_cause": {
+    "reset": "New account-owned support delivery tables were absent from the explicit reset/preservation map. PostgreSQL cascade was insufficient for the completeness contract.",
+    "test_clients": "Per-test app fixture yielded without removing sessions/disposing app engines. Retained app objects kept idle PostgreSQL clients alive until nondeterministic collection. A controlled normal/failed fixture probe reproduced3 retained clients each.",
+    "scope": "Connection lifecycle correction is in the test harness; no production database connection leak is asserted. Direct causation by the reset assertion is not established."
+  },
+  "changes": [
+    "Explicit users-reset policy for support delivery journal and check budget",
+    "Populated reset proves metadata is cleared while acting admin is restored and previously queued file cleanup survives",
+    "Exception-safe per-test session removal and app-engine disposal, independent of garbage collection"
+  ],
+  "verification": {
+    "red": {
+      "failed": 3,
+      "runner_seconds": 21.24,
+      "database_removed": true
+    },
+    "green": {
+      "passed": 18,
+      "pytest_seconds": 13.86,
+      "runner_seconds": 21.85,
+      "database_removed": true
+    },
+    "focused_final": {
+      "passed": 143,
+      "pytest_seconds": 66.41,
+      "runner_seconds": 77.23,
+      "database_removed": true,
+      "scope": "Reset/resource lifecycle, PostgreSQL support delivery transactions, account deletion inventory/retention, native support mutation and real support HTTP privacy boundaries"
+    },
+    "owned_resource_absence_checked": true,
+    "native_reset_locking": {
+      "passed": 9,
+      "pytest_seconds": 6.51,
+      "runner_seconds": 16.17,
+      "database_removed": true,
+      "overlap_note": "Separate selection; do not add to overlapping historical counts."
+    },
+    "checks": [
+      "api-envelope lint passed, no baseline increase",
+      "Python undefined names passed730 production modules",
+      "R1972 validator passed7 reports/1545 route rows/160 current-only; no coverage promotion",
+      "git diff --check passed"
+    ]
+  },
+  "prior_unrestricted": {
+    "source_head": "5b724b2b633d12161dac8169a632103ac922e4a9",
+    "case": "unrestricted-r2034",
+    "exit_code": 1,
+    "passed": 7613,
+    "failed": 1,
+    "errors": 9,
+    "skipped": 101,
+    "warnings": 157,
+    "pytest_seconds": 2142.66,
+    "runner_seconds": 2164.64,
+    "database_removed": true,
+    "source_unchanged": true,
+    "limit": "Stopped after10 failures/errors; not a full-suite pass. Setup errors reported PostgreSQL client exhaustion."
+  },
+  "prior_ci": {
+    "run": 42973215151,
+    "conclusion": "failure",
+    "passed": 7839,
+    "failed": 1,
+    "errors": 33,
+    "skipped": 14,
+    "deselected": 548,
+    "pytest_seconds": 1443.16,
+    "desktop_run": 42973215112,
+    "desktop_conclusion": "success"
+  },
+  "generated_files": "Two test-generated wanted_updates records preserved in private ignored history with verified hashes; nothing deleted.",
+  "limits": [
+    "Fresh post-correction exact-commit CI and unrestricted suite still required",
+    "Focused selections overlap and are not additive",
+    "No route/platform/restore/independent acceptance promotion"
+  ],
+  "no_merge_release_deployment": true
+}

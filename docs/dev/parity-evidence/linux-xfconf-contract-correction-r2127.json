@@ -1,0 +1,366 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2127",
+  "observed_utc": "2026-11-16T00:04:21.697041+00:00",
+  "tested_harness_commit": "cc8f3ce1f9de30e4cea482830aefa246dc8a8b13",
+  "native_run": 43777968644,
+  "native_job": 133008491218,
+  "classification": "Confirmed fixture prerequisite defect: invented Xfconf --no-daemon requirement. Corrected to upstream default-foreground contract; actual Reveal/denial/outage acceptance still unknown.",
+  "raw_log": {
+    "path": "findings/DT-006/linux-reveal-offline-run-43777968644-job-133008491218-r2127.log",
+    "sha256": "7956ef6ea68d318431edf87dd6f9790b1f762f729e10442ef58a256f6aee97cd"
+  },
+  "receipt": {
+    "observed_utc": "2026-11-16T00:04:21.697041+00:00",
+    "status": "failed",
+    "mode": "remote-companion",
+    "installed_runtime_acceptance": false,
+    "acceptance_scope": "linux_connected_accounts_and_credentials",
+    "source_commit": "ce8c35a6980891ef85c26cb64aa0d8a3ecc9e867",
+    "source_run": 43747390211,
+    "artifact_id": 14173989223,
+    "archive_sha256": "7e253a922f9481715b399b217821822cb317dff13e83192a0ce0c8e33b4d1749",
+    "deb_sha256": "94374bcad58a0475c432c5ca1cb6963cac2959a071f5456822bc19d69841e754",
+    "source_and_digest_verified": true,
+    "backend_source_commit": "cc8f3ce1f9de30e4cea482830aefa246dc8a8b13",
+    "phase": "linux_real_manager_prerequisites",
+    "backend_launcher": "startweb.sh",
+    "backend_listener_owned": true,
+    "backend_alembic_head": "a4b5c6d7e8f9",
+    "postgres_version_num": "160016",
+    "backend_bearer_http_controls": {
+      "adult": 200,
+      "child": 200,
+      "wrong": 401,
+      "limited": 403
+    },
+    "native_origin_preflight": {
+      "http_status": 200,
+      "origin_allowed": true
+    },
+    "backend_collection_list_shape": {
+      "http_status": 200,
+      "root_array": false,
+      "collections_array": true
+    },
+    "backend_search_wire_controls": {
+      "adult_empty": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 0,
+        "shared_visible": false,
+        "private_visible": false
+      },
+      "adult_star": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 0,
+        "shared_visible": false,
+        "private_visible": false
+      },
+      "adult_letter": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 2,
+        "shared_visible": true,
+        "private_visible": true
+      },
+      "child_empty": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 0,
+        "shared_visible": false,
+        "private_visible": false
+      },
+      "child_star": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 0,
+        "shared_visible": false,
+        "private_visible": false
+      },
+      "child_letter": {
+        "http_status": 200,
+        "root_array": true,
+        "results_array": false,
+        "games_array": false,
+        "item_count": 1,
+        "shared_visible": true,
+        "private_visible": false
+      }
+    },
+    "backend_ready": true,
+    "backend_synthetic_seeded": true,
+    "cleanup_verified": true,
+    "cold_rounds": [
+      {
+        "round": 1,
+        "bundled_renderer": true,
+        "native_ipc": true,
+        "parent_directory_denied": true,
+        "ordinary_user": true,
+        "listener_ownership_verified": true
+      },
+      {
+        "round": 2,
+        "bundled_renderer": true,
+        "native_ipc": true,
+        "parent_directory_denied": true,
+        "ordinary_user": true,
+        "listener_ownership_verified": true
+      }
+    ],
+    "platform": "Linux",
+    "effective_uid_nonzero": true,
+    "tauri_driver_version": "2.1.0",
+    "process_cleanup_scope": "Owned session/process groups and explicit driver ports; not product game-launch identity.",
+    "installer_executed": true,
+    "installed_binary_sha256": "a30d27b45cfb26c320c576a75e53abce97f237783369813c282684c2692535fd",
+    "native_package_versions": {
+      "webkit2gtk-driver": "2.50.4-0ubuntu0.22.04.1",
+      "libwebkit2gtk-4.1-0": "2.50.4-0ubuntu0.22.04.1"
+    },
+    "tauri_driver_sha256": "a71b247ca519f3ed02a364cd8692d71d381ffe81279c94c6ed65ec300d217868",
+    "owned_display_and_dbus_started": true,
+    "secret_service_owned_bus_ready": true,
+    "secret_service_package_version": "40.0-3ubuntu3",
+    "selected_driver_logs": [
+      {
+        "round": 1,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "c3444a6941cc4a5eda1166b41fec63d769715f5b931f84ed3d14cefdfde12f88",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      },
+      {
+        "round": 2,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "85e31cdf19032a7c0d5d8f558866fb5f40de2e73a88249e72f9b733cd79a624e",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      },
+      {
+        "round": 3,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "e1e48912155548bf52c0505d05c76e7f746d6ab90f84567d26fb6f2930713f2b",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      },
+      {
+        "round": 4,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "5d8708bb60c003ded28a4d9011da339b562ddf628dd9b2454751402aadedac82",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      },
+      {
+        "round": 5,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "d13e79376724357c875d8193388ed551f4845403d41c0985c49607a9dbd899d3",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      },
+      {
+        "round": 6,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "8d0852ae60e6b29c23269d53c8ca5c72bd99378e13355eacf82ce19e503daabb",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      },
+      {
+        "round": 7,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "eef1cbec2e8cd3cf9934b8663538824639d318ba7e2d9d5f12c13401e8669ded",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      },
+      {
+        "round": 8,
+        "prefix_bytes": 353,
+        "truncated": false,
+        "prefix_sha256": "17d1def4a67b4ebe0c0a2c0a96325877d47958dc667ff725f3fecb586df9ff7c",
+        "matched_categories": [
+          "not_found"
+        ],
+        "limits": "Static selected terms, not a causal diagnosis; raw text remains on disposable runner."
+      }
+    ],
+    "owned_marker_retained_after_cold_reopen": true,
+    "connected_account_checks": {
+      "adult_connect": true,
+      "adult_connect_connection_settled": true,
+      "adult_persisted_json_has_no_plaintext_token": true,
+      "adult_os_credential_persisted": true,
+      "adult_live_identity": true,
+      "os_credential_hydrated_after_app_cold_reopen": true,
+      "adult_reconnect": true,
+      "adult_reconnect_connection_settled": true,
+      "wrong_token_denied": true,
+      "wrong_token_denied_connection_settled": true,
+      "wrong_failed_connect_preserves_credential": true,
+      "limited_token_denied": true,
+      "limited_token_denied_connection_settled": true,
+      "limited_failed_connect_preserves_credential": true,
+      "child_account_switch": true,
+      "child_account_switch_connection_settled": true,
+      "child_persisted_json_has_no_plaintext_token": true,
+      "child_os_credential_persisted": true,
+      "child_live_identity": true,
+      "child_revocation_persisted": true,
+      "revoked_token_denied": true,
+      "revoked_token_denied_connection_settled": true,
+      "revoked_denial_preserves_saved_credential": true,
+      "forget_clears_os_credential_and_config": true,
+      "forgotten_json_has_no_plaintext_token": true,
+      "adult_install_reconnect": true,
+      "adult_install_reconnect_connection_settled": true,
+      "adult_game_connect": true,
+      "adult_game_connect_connection_settled": true,
+      "child_game_recovery_connect": true,
+      "child_game_recovery_connect_connection_settled": true,
+      "adult_game_recovery_connect": true,
+      "adult_game_recovery_connect_connection_settled": true
+    },
+    "connected_account_journey_verified": true,
+    "installed_archive_checks": {
+      "download_ui_completed": true,
+      "install_ui_completed": true,
+      "cold_reopen_cached_shelf_and_files": true
+    },
+    "installed_archive_file_checks": {
+      "archive_hash_verified": true,
+      "member_hashes_verified": true,
+      "selected_executable_verified": true,
+      "member_count": 2,
+      "unix_modes_verified": true
+    },
+    "installed_archive_journey_verified": true,
+    "installed_archive_scope": "Synthetic ZIP transfer/extraction and cached shelf before reconnect; no payload execution, network outage, Play/Reveal, game compatibility or save-retention qualification.",
+    "game_play_checks": {
+      "real_play_detached_child_verified": true,
+      "wrapper_exited_family_still_running": true,
+      "wrong_launch_identity_refused": true,
+      "foreign_profile_refused": true,
+      "heartbeat_after_wrapper_exit": true,
+      "child_and_supervisor_survived_companion_close": true,
+      "cached_hydration_does_not_resume_reporting": true,
+      "child_account_does_not_recover_adult_launch": true,
+      "fresh_adult_identity_resumes_exact_launch": true,
+      "child_and_supervisor_exit_verified_by_pidfds": true,
+      "family_exit_stops_playtime_reporting": true
+    },
+    "game_sessions_before_reopen": {
+      "total": 1,
+      "active": 1,
+      "ended": 0,
+      "orphaned": 0,
+      "adult_owned": true,
+      "desktop_only": true,
+      "active_heartbeat_observed": true
+    },
+    "game_sessions_after_verified_recovery": {
+      "total": 2,
+      "active": 1,
+      "ended": 0,
+      "orphaned": 1,
+      "adult_owned": true,
+      "desktop_only": true,
+      "active_heartbeat_observed": false
+    },
+    "game_fixture_cleanup_verified": true,
+    "game_sessions_after_family_exit": {
+      "total": 2,
+      "active": 0,
+      "ended": 1,
+      "orphaned": 1,
+      "adult_owned": true,
+      "desktop_only": true,
+      "active_heartbeat_observed": false
+    },
+    "game_family_recovery_journey_verified": true,
+    "file_manager_cleanup_verified": true,
+    "owned_package_uninstalled": true,
+    "owned_marker_retained_after_uninstall": true,
+    "owned_marker_removed": true,
+    "cleanup_errors": [],
+    "backend_cleanup_verified": true,
+    "selected_backend_log": {
+      "prefix_bytes": 22219,
+      "truncated": false,
+      "prefix_sha256": "6aeaec566e1cf9d39ad3be8f5d6d26fce457accb1b8777f2a57445786550b6ca",
+      "matched_categories": [
+        "migration"
+      ]
+    },
+    "code": "linux_xfconf_foreground_unavailable"
+  },
+  "cause": {
+    "installed_thunar": "4.16.10-1",
+    "installed_xfconf": "4.16.0-2",
+    "package_version_evidence": "Actual native job package installation log.",
+    "failure": "Harness rejected Xfconf help before starting its daemon. No real file-manager window or denial/outage extension ran.",
+    "upstream": {
+      "url": "https://github.com/xfce-mirror/xfconf/blob/xfconf-4.16.0/xfconfd/main.c",
+      "git_blob": "3fbca0e8d1bc2ed6cd3913dd9ededfa753b13c18",
+      "retained_source_sha256": "bd63611f2989ca66b4d674051fbc1ba8cf83a381074f4aeab5ad96048f86ca16",
+      "contract": "do_daemon defaults to FALSE; only --daemon selects the fork branch. No --no-daemon option is defined."
+    }
+  },
+  "correction": [
+    "Invoke the documented default foreground mode with no daemon option after recognizing the actual --daemon/--version CLI contract.",
+    "Retain actual bus-owner/UID/kernel identity/owned-group checks and held cleanup. No fake manager, disabled security or weaker target proof.",
+    "Publish package versions before later prerequisites so a subsequent failure retains observed versions."
+  ],
+  "verification": {
+    "linux_methods": "77 passed in 0.326s after one observed RED regression",
+    "lint": "Changed helper/test pass pyflakes",
+    "previous_native": {
+      "linux_methods": "76 passed in 0.071s",
+      "cors": "7 passed in 0.073s",
+      "bearer_actual_handlers": "9 passed in 0.086s",
+      "account_checks": 33,
+      "game_checks": 11,
+      "archive_and_recovery": "Repeated successfully before the new prerequisite failure.",
+      "cleanup": "Game/package/process/listeners/marker/backend/database verified; no file-manager daemon started."
+    },
+    "corrected_native": "pending; do not infer new acceptance from earlier passed stages"
+  },
+  "overall_goal": "active and incomplete",
+  "next": "Publish focused prerequisite correction and repeat same pinned package explicit native; preserve this failure. Complete genuine Reveal/denial/outage before original remaining gates.",
+  "capture": "Skipped: no UI markup/style changes; native resources only in disposable CI.",
+  "source_sha256_git_normalized": {
+    "scripts/ci/linux_reveal_context.py": "0711d5d01e423ddb7b645ef4c99ac9a570b348dc901cfb3983dedaf0d92394ca",
+    "scripts/ci/test_linux_reveal_context.py": "651c7e1d405e0c0f02f45328d7378811bc108e0c018c75877299a078f39cfb85"
+  }
+}

@@ -281,7 +281,9 @@ def redeem_space_invite(token: str, user) -> tuple[ChatSpace | None, str | None]
         return None, 'Invite token is required'
 
     invite = db.session.execute(
-        select(ChatSpaceInvite).where(ChatSpaceInvite.token == key)
+        select(ChatSpaceInvite)
+        .where(ChatSpaceInvite.token == key)
+        .with_for_update()
     ).scalars().first()
     if not invite_is_usable(invite):
         return None, 'This invite is no longer valid'
@@ -295,8 +297,12 @@ def redeem_space_invite(token: str, user) -> tuple[ChatSpace | None, str | None]
         return None, 'This space is not available for this account'
 
     already = get_space_member(space.id, user.id)
-    if not already:
-        db.session.add(ChatSpaceMember(space_id=space.id, user_id=user.id, role='member'))
+    if already:
+        # Re-entering with the same invite is idempotent and must not consume
+        # capacity that should remain available to a new member.
+        return space, None
+
+    db.session.add(ChatSpaceMember(space_id=space.id, user_id=user.id, role='member'))
     invite.uses = (invite.uses or 0) + 1
     db.session.commit()
     return space, None

@@ -235,3 +235,15 @@ def test_device_config_reads_writes_and_probe_actions_preserve_contract():
     assert probed.json()['probe_requested'] is True
     assert data['ambient'].configs == [{'enabled': True}]
     assert data['ambient'].probes == [True]
+
+
+def test_device_config_head_preserves_legacy_non_get_validation():
+    client, _data = make_client()
+    for path in (
+        '/api/admin/ambient-lighting/config',
+        '/api/admin/challenge-solver/config',
+    ):
+        response = client.head(path)
+        assert response.status_code == 400
+        assert response.content == b''
+        assert response.headers['content-length'] == '118'

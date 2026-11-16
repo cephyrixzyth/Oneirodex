@@ -175,15 +175,17 @@ describe('isPrivateOrLoopbackHost', () => {
     }
     for (const host of [
       'lan',
+      'nas',
       'example.lan.com',
       '.lan',
       '.internal',
       '100.63.0.1',
       '100.128.0.1',
     ]) {
-      // A bare `lan` is a dotless name, so it is local for that reason alone.
-      expect(isPrivateOrLoopbackHost(host), host).toBe(host === 'lan')
+      expect(isPrivateOrLoopbackHost(host), host).toBe(false)
     }
+    expect(isPrivateOrLoopbackHost('localhost')).toBe(true)
+    expect(isPrivateOrLoopbackHost('localhost.')).toBe(true)
   })
 })
 

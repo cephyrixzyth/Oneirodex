@@ -140,7 +140,13 @@ def test_the_fast_steam_fetch_makes_one_attempt_and_never_sleeps(monkeypatch):
         def json(self):
             return {}
 
-    monkeypatch.setattr(steam_lookup.requests, 'get', lambda url, **kw: (calls.append(kw), Throttled())[1])
+    def throttled(method, url, **kwargs):
+        assert method == 'GET'
+        assert kwargs['validator'] is steam_lookup.validate_user_outbound_http_url
+        calls.append(kwargs)
+        return Throttled()
+
+    monkeypatch.setattr(steam_lookup, 'safe_request', throttled)
     monkeypatch.setattr(steam_lookup.time, 'sleep', lambda s: sleeps.append(s))
 
     assert steam_lookup.fetch_steam_app_details(123, fast=True) is None

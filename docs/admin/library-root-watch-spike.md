@@ -19,7 +19,7 @@ Unset / `0` → no watcher (scan-driven discovery only: manual / scheduled / ref
 | `ONEIRODEX_LIBRARY_WATCH_DEBOUNCE_SEC` | `3` | Debounce window; clamped to **2–5** |
 | `ONEIRODEX_LIBRARY_ADD_NOTIFY_DEBOUNCE_SEC` | `5` | Staff digest debounce when titles are identified; clamped **2–30** |
 
-Also documented in `.env.example` and [unraid-deploy.md](../runbooks/unraid-deploy.md#library-root-watch-gt_library_watch--unraid-honesty).
+Also documented in `.env.example` and [unraid-deploy.md](../runbooks/unraid-deploy.md#library-root-watch-oneirodex_library_watch--unraid-honesty).
 
 ## Per-library `watch_enabled`
 

@@ -11,11 +11,13 @@ from pydantic import ValidationError
 from starlette.responses import RedirectResponse, Response
 
 from .acquire_status import _login_redirect
-from .csrf_compat import csrf_error_response
+from .csrf_compat import csrf_error_response, csrf_html_error_response
+from .form_compat import first_form_value, first_form_values
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, touch_resolved_bearer
 
 _logger = logging.getLogger(__name__)
+_PASSWORD_JSON_MAX_BYTES = 64 * 1024
 
 
 class AccountPasswordData:
@@ -64,8 +66,11 @@ def create_account_password_router(
                 commit_token_touch=commit_token_touch,
                 load_user_id=load_user_id,
                 login_manager=login_manager,
+                touch_bearer=False,
             )
             response = csrf_error_response(request, auth.session_data, flask_app.config)
+            if response is None:
+                touch_resolved_bearer(auth, commit_token_touch)
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:
@@ -82,7 +87,7 @@ def create_account_password_router(
                         response = _api_error('Account not found.', code='not_found')
                     elif not user.check_password(body.current_password):
                         response = _api_error(
-                            'Current password is incorrect.', code='unauthorized'
+                            'Current password is incorrect.', code='unprocessable'
                         )
                     else:
                         minimum = 8
@@ -136,37 +141,60 @@ def create_account_password_router(
             auth = request_auth_context(
                 request, flask_app.config, find_user=find_user, find_token=find_token,
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
-                login_manager=login_manager,
+                login_manager=login_manager, touch_bearer=False,
             )
             form, body_error = await _legacy_password_form(request)
             response = body_error
             if response is None:
                 response = csrf_error_response(
                     request, auth.session_data, flask_app.config,
-                    token=form.get('csrf_token'),
+                    token=first_form_value(form, 'csrf_token'),
                 )
+                if response is not None:
+                    response = csrf_html_error_response(response)
+            if response is None:
+                touch_resolved_bearer(auth, commit_token_touch)
             remember_cookie = False
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:
                 from .account_avatar_upload import _flash
+                from oneirodex.schemas.account import password_exceeds_byte_limit
 
                 user = data.get_user(auth.user.id)
+                current_password = first_form_value(form, 'current_password')
+                new_password = first_form_value(form, 'password') or ''
+                confirm_password = first_form_value(form, 'confirm_password') or ''
                 if user is None:
                     _flash(auth.session_data, 'error', 'Account not found.')
-                elif not form.get('current_password'):
+                elif not current_password:
                     _flash(auth.session_data, 'error', 'Current Password: This field is required.')
-                elif not user.check_password(form['current_password']):
+                elif any((
+                    password_exceeds_byte_limit('current_password', current_password),
+                    password_exceeds_byte_limit('new_password', new_password),
+                    password_exceeds_byte_limit('confirm_password', confirm_password),
+                )):
+                    _flash(
+                        auth.session_data, 'error',
+                        'Passwords must be within the supported length.',
+                    )
+                elif not user.check_password(current_password):
                     _flash(auth.session_data, 'error', 'Current password is incorrect.')
-                elif len(form.get('password') or '') < 8:
-                    _flash(auth.session_data, 'error', 'New Password must be at least 8 characters.')
-                elif form.get('password') != form.get('confirm_password'):
-                    _flash(auth.session_data, 'error', 'Passwords must match.')
-                elif form.get('password') == form.get('current_password'):
+                elif len(new_password) < 8:
+                    _flash(
+                        auth.session_data,
+                        'error',
+                        'New Password: Field must be at least 8 characters long.',
+                    )
+                elif (
+                    new_password != confirm_password
+                ):
+                    _flash(auth.session_data, 'error', 'Confirm Password: Passwords must match')
+                elif new_password == current_password:
                     _flash(auth.session_data, 'error', "Pick a password you're not already using.")
                 else:
                     try:
-                        user.set_password(form['password'])
+                        user.set_password(new_password)
                         data.commit()
                         _refresh_password_session(auth.session_data, user, request, flask_app.config)
                         remember_cookie = True
@@ -199,11 +227,34 @@ async def _validated_body(request: Request, model):
     import json
 
     from oneirodex.utils.api_contract import api_error_payload
+    from oneirodex.utils.validation import format_validation_errors
 
+    content_length = request.headers.get('content-length')
     try:
-        value = json.loads(await request.body() or b'{}')
+        if content_length is not None and int(content_length) > _PASSWORD_JSON_MAX_BYTES:
+            payload, status = api_error_payload(
+                'Request body is too large.', code='payload_too_large',
+            )
+            from starlette.responses import JSONResponse
+
+            return None, JSONResponse(payload, status_code=status)
+    except ValueError:
+        pass
+
+    raw_body = bytearray()
+    async for chunk in request.stream():
+        if len(raw_body) + len(chunk) > _PASSWORD_JSON_MAX_BYTES:
+            payload, status = api_error_payload(
+                'Request body is too large.', code='payload_too_large',
+            )
+            from starlette.responses import JSONResponse
+
+            return None, JSONResponse(payload, status_code=status)
+        raw_body.extend(chunk)
+    try:
+        value = json.loads(bytes(raw_body) or b'{}')
     except (TypeError, ValueError):
-        return None, _api_error('Invalid request.', code='unprocessable')
+        value = {}
     try:
         body = model.model_validate(value if isinstance(value, dict) else {})
         return body, None
@@ -227,10 +278,12 @@ async def _legacy_password_form(request: Request):
         if len(body) > 64 * 1024:
             return {}, Response(status_code=413)
     try:
-        fields = parse_qs(bytes(body).decode('utf-8'), keep_blank_values=True)
-    except UnicodeDecodeError:
+        fields = parse_qs(
+            bytes(body).decode('utf-8'), keep_blank_values=True, max_num_fields=16,
+        )
+    except (UnicodeDecodeError, ValueError):
         return {}, Response(status_code=400)
-    return {name: values[-1] for name, values in fields.items() if values}, None
+    return first_form_values(fields), None
 
 
 def _api_error(message: str, *, code: str):
@@ -262,10 +315,19 @@ def _write_remember_cookie(response: Response, flask_app, session_data) -> None:
     remember_id = session_data.get('_user_id')
     if not remember_id:
         return
-    duration = config.get('REMEMBER_COOKIE_DURATION') or timedelta(days=365)
+    from oneirodex.utils.persistent_sessions import MAX_SESSION_AGE, ensure_login_identity
+
+    remember_id = ensure_login_identity(
+        str(remember_id), testing=bool(config.get('TESTING')),
+        enabled=config.get('PERSISTENT_SESSIONS_ENABLED', not config.get('TESTING')),
+    )
+    session_data['_user_id'] = remember_id
     seconds = session_data.pop('_remember_seconds', None)
     if seconds is not None:
         duration = timedelta(seconds=seconds)
+    else:
+        duration = config.get('REMEMBER_COOKIE_DURATION') or MAX_SESSION_AGE
+    duration = min(duration, MAX_SESSION_AGE)
     response.set_cookie(
         config.get('REMEMBER_COOKIE_NAME', 'remember_token'),
         encode_remember_cookie(str(remember_id), config['SECRET_KEY']),

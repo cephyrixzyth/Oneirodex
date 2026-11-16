@@ -14,7 +14,7 @@ call venv\Scripts\activate.bat
 REM Load .env file and export variables to shell environment
 if exist .env (
     echo [*] Loading environment variables from .env...
-    for /f "usebackq tokens=1,2 delims==" %%a in (".env") do (
+    for /f "usebackq tokens=1,* delims==" %%a in (".env") do (
         if not "%%a"=="" if not "%%b"=="" (
             set "%%a=%%b"
         )
@@ -55,6 +55,8 @@ if %INIT_STATUS% neq 0 (
 REM Ensure environment variables are set for worker processes
 set ONEIRODEX_MIGRATIONS_COMPLETE=true
 set ONEIRODEX_INITIALIZATION_COMPLETE=true
+REM In-process login limits and other runtime state require one worker by default.
+if not defined UVICORN_WORKERS set UVICORN_WORKERS=1
 
 REM Start uvicorn with workers (migrations already complete)
-uvicorn asgi:asgi_app --host 0.0.0.0 --port %PORT% --workers 4 --no-proxy-headers
+uvicorn asgi:asgi_app --host 0.0.0.0 --port %PORT% --workers %UVICORN_WORKERS% --no-proxy-headers

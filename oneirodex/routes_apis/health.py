@@ -12,6 +12,7 @@ from oneirodex.utils.api_response import api_error
 
 from . import apis_bp
 from oneirodex.utils.rbac import is_admin
+from oneirodex.utils.api_tokens import require_api_token_scope
 
 
 @apis_bp.route('/health/library', methods=['GET'])
@@ -29,6 +30,7 @@ def library_health_summary():
 
 @apis_bp.route('/health/games/<game_uuid>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def game_health_detail(game_uuid: str):
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     if not game:

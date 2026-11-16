@@ -30,6 +30,8 @@ import { getInstallRecord } from './install.js'
 import { loadInstallsFromDisk, saveInstallsToDisk } from './install-store.js'
 import { watchPlaySession } from './playtime-session.js'
 
+const nativeLaunchId = '5d283155-6b33-45c9-b9cf-a8e872dd0559'
+
 describe('launch helper', () => {
   beforeEach(() => {
     vi.mocked(invoke).mockReset()
@@ -45,6 +47,56 @@ describe('launch helper', () => {
     expect(canLaunchGame('downloaded')).toBe(false)
   })
 
+  it('binds the watcher to the identity returned by native launch', async () => {
+    const launchId = '5d283155-6b33-45c9-b9cf-a8e872dd0559'
+    vi.mocked(getInstallRecord).mockResolvedValue({
+      archivePath: '/downloads/game.zip',
+      extractPath: '/installs/game',
+    })
+    vi.mocked(invoke).mockResolvedValue({ pid: 9001, launch_id: launchId })
+    const api = createOneirodexClient({
+      baseUrl: 'https://example.com',
+      getToken: () => 'test',
+      fetchImpl: vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: 12 }), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    })
+
+    await kickoffLaunch(api, 'bound-identity-game')
+    expect(watchPlaySession).toHaveBeenCalledWith(api, 9001, 12, { launchId })
+  })
+
+  it('keeps local play successful without inventing tracking for an old native receipt', async () => {
+    vi.mocked(getInstallRecord).mockResolvedValue({
+      archivePath: '/downloads/game.zip',
+      extractPath: '/installs/game',
+    })
+    vi.mocked(invoke).mockResolvedValue({ pid: 9001 })
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: 12 }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    const api = createOneirodexClient({
+      baseUrl: 'https://example.com',
+      getToken: () => 'test',
+      fetchImpl,
+    })
+
+    await expect(kickoffLaunch(api, 'old-native-game')).resolves.toEqual({
+      pid: 9001,
+      sessionId: null,
+    })
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(watchPlaySession).not.toHaveBeenCalled()
+  })
+
   it.each(['network', 'invalid-id', 'registry'])(
     'keeps native launch successful after %s failure',
     async (failure) => {
@@ -54,6 +106,7 @@ describe('launch helper', () => {
       })
       vi.mocked(invoke).mockResolvedValue({
         pid: 9001,
+        launch_id: nativeLaunchId,
         resolved_exe_path: failure === 'registry' ? '/installs/game/game.exe' : null,
       })
       vi.mocked(loadInstallsFromDisk).mockResolvedValue({})
@@ -72,7 +125,9 @@ describe('launch helper', () => {
       const sessionId = failure === 'registry' ? 15 : null
       await expect(kickoffLaunch(api, 'game-offline')).resolves.toEqual({ pid: 9001, sessionId })
       expect(invoke).toHaveBeenCalledTimes(1)
-      expect(watchPlaySession).toHaveBeenCalledWith(api, 9001, sessionId)
+      expect(watchPlaySession).toHaveBeenCalledWith(api, 9001, sessionId, {
+        launchId: nativeLaunchId,
+      })
     },
   )
 
@@ -84,6 +139,7 @@ describe('launch helper', () => {
     })
     vi.mocked(invoke).mockResolvedValue({
       pid: 9001,
+      launch_id: nativeLaunchId,
       exe_path: 'C:\\appdata\\installs\\game-42\\game.exe',
       resolved_exe_path: null,
     })
@@ -119,7 +175,7 @@ describe('launch helper', () => {
         body: JSON.stringify({ game_uuid: 'game-42', client: 'desktop' }),
       }),
     )
-    expect(watchPlaySession).toHaveBeenCalledWith(api, 9001, 12)
+    expect(watchPlaySession).toHaveBeenCalledWith(api, 9001, 12, { launchId: nativeLaunchId })
     expect(saveInstallsToDisk).not.toHaveBeenCalled()
     expect(result).toEqual({ pid: 9001, sessionId: 12 })
   })
@@ -132,6 +188,7 @@ describe('launch helper', () => {
     })
     vi.mocked(invoke).mockResolvedValue({
       pid: 9001,
+      launch_id: nativeLaunchId,
       exe_path: 'C:\\appdata\\installs\\game-42\\game.exe',
       resolved_exe_path: 'C:\\appdata\\installs\\game-42\\game.exe',
     })
@@ -189,6 +246,7 @@ describe('launch helper', () => {
     vi.mocked(loadInstallsFromDisk).mockResolvedValue({ 'game-42': record })
     vi.mocked(invoke).mockResolvedValue({
       pid: 9001,
+      launch_id: nativeLaunchId,
       exe_path: 'C:\\appdata\\installs\\game-42.reinstall-1\\game.exe',
       resolved_exe_path: 'C:\\appdata\\installs\\game-42.reinstall-1\\game.exe',
     })

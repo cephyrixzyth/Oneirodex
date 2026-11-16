@@ -6,6 +6,7 @@ Filesystem-only — no app, no database.
 import re
 from pathlib import Path
 
+from oneirodex.utils.icon_themes import BUILTIN_PACKS
 from oneirodex.utils.play_rooms import ROOMS
 from oneirodex.utils.preset_themes import (
     DEFAULT_ERA,
@@ -32,6 +33,14 @@ def test_every_preset_names_a_real_play_room():
         era = era_for_theme(preset['slug'])
         assert era in ROOMS, f"{preset['slug']} era {era} is not a play room"
         assert preset_tokens(preset)['od-era'] == era
+
+
+def test_every_preset_pairs_with_an_installed_icon_pack():
+    installed = {pack['id'] for pack in BUILTIN_PACKS}
+    for preset in PRESET_THEMES:
+        assert preset['icon_pack'] in installed, (
+            f"{preset['slug']} uses unavailable icon pack {preset['icon_pack']}"
+        )
 
 
 def test_replacement_presets_use_distinct_rooms():

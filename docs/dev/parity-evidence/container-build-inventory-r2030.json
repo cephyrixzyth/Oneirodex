@@ -1,0 +1,62 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2030",
+  "source_commit": "3d770780d09ec4f31553eb566cff3bb83533eb94",
+  "source_tree": "e74b1e050c0affbbbc9baec27f1423e7b539f349",
+  "image_id": "sha256:f63116797656d9cb79218410bf22dcabb497e37384b932eb8b16617aa47e7709",
+  "build_exit_code": 0,
+  "build_seconds": 180.32,
+  "source_fixed": true,
+  "manifest_valid": true,
+  "spa_target_file_counts": {
+    "member-app": 65,
+    "member-auth": 3,
+    "admin-app": 3,
+    "admin-pilot": 3,
+    "ops-glance": 3
+  },
+  "manifest_sha256": "78901c653320efcf67ff54b77e45802652dfb60f3e2cf67d65b401fa1119f292",
+  "source_sha256": {
+    "oneirodex/utils/api_tokens.py": "aab7c9a00f960dde9996ff4e568a8c83aa46d6dcbe99dd20d8ed8269cbc0c097",
+    "oneirodex/utils/igdb_api.py": "2ff561afaa21b7618d7b13dc24a99542c2e3294ccebaa139d8ffb2d5368eeb32",
+    "oneirodex/utils/scanning.py": "a70fb3212d908ba39c18dfd53f20bae72ccdafbaa6d3b53a8bae1ed2318e028d",
+    "oneirodex/schemas/auth.py": "ea9bfa9e15dfeee185df345aa65d3400a30729b27b8e68a5ca65afddf1eee442",
+    "oneirodex/routes_login.py": "8dd2ac92f64c9d5a7404387edcfb7485e023b9ceb2a996c8587aaf57c8970cee",
+    "requirements.lock": "076c6852d3452448df953b429b75680522d9d6339a66fa2436cab7e05138d5ca",
+    "package-lock.json": "130a7280cea19944f9a275febf6ed1e8615368aeb2d95883150d8412bd6bfbdf"
+  },
+  "selected_excluded_paths_present": {
+    ".env": false,
+    ".artifacts": false,
+    ".agents": false,
+    ".codex": false,
+    ".superpowers": false,
+    "docs/_private": false,
+    ".bios-install-out-user-source": false
+  },
+  "pip_check": "passed",
+  "offline_sbom": {
+    "image_id": "sha256:f63116797656d9cb79218410bf22dcabb497e37384b932eb8b16617aa47e7709",
+    "offline": true,
+    "exit_code": 0,
+    "seconds": 150.21,
+    "sha256": "5ebf1ed6a57acdc8f7310eed44e5dbd05273555e2f5a73ff7b6d64e2e5dfc55f",
+    "spdx_version": "SPDX-2.3",
+    "packages": 384,
+    "files": 711
+  },
+  "retrospective_r2026": {
+    "source_commit": "fdc2d67999870e5a58ec2489da0c68f79a40cffa",
+    "image_id": "sha256:b44f636f94aae1167ea75858f1eb86fe1f3ccf3d7b222033695d18fe5dd704d7",
+    "engine_build_seconds": 1805.185585943,
+    "engine_status": "completed",
+    "manifest_verified_files": 77,
+    "correction": "Original CLI observation was interrupted; later engine history plus image content establish completion. Original receipt retained."
+  },
+  "limits": [
+    "Selected exclusions are not a whole-image secret audit.",
+    "Offline SBOM inventory is not vulnerability assessment or published release attestation.",
+    "No current-image service launch, health/auth, platform, release or deployment acceptance.",
+    "Build durations include tool/network/cache variation and do not compare model inference."
+  ]
+}

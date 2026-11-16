@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-Oneirodex dispatches HTTP requests through the FastAPI ASGI runtime, with three React SPAs and a typed HTTP client. Flask route modules remain as development-time compatibility and parity references; the runtime image no longer installs Flask or Jinja. This page is the map, not a rewrite of [ADR 0005](../adr/0005-api-client-is-the-requester.md) or [agent-locks.md](agent-locks.md).
+Oneirodex dispatches HTTP requests through the FastAPI ASGI runtime, with three React SPA workspaces producing five server entry surfaces (member, member-auth, admin, admin-pilot and ops-glance) plus a typed HTTP client. Native installers and Docker use the same Node 22 staged build and SHA-256 manifest contract; the runtime validates the manifest without loading Node or Flask. Flask route modules remain as development-time compatibility and parity references; the runtime image no longer installs Flask or Jinja. This page is the map, not a rewrite of [ADR 0005](../adr/0005-api-client-is-the-requester.md) or [agent-locks.md](agent-locks.md).
 
 The migration notes below are dated implementation checkpoints; their interim
 runtime descriptions may be superseded by the current status above and in the
@@ -67,7 +67,9 @@ membership check, feature/configuration gates, child video restrictions, and
 the existing signed-user identity; route tests use a fake mint adapter.
 
 Native write handlers apply CSRF to browser-session requests and retain the
-existing API-token authentication path.
+existing API-token authentication path. The ASGI preflight checks FastAPI route
+tables only for unsafe `/admin` requests, avoiding route matching on normal
+page and member API reads while preserving CSRF-before-auth behavior.
 
 The first-run setup shell pages, ordered `POST /api/setup/step` transition,
 and classic HTML form POSTs (`/setup/submit` plus the five step URLs) now
@@ -82,7 +84,7 @@ The Ops log, system, summary, device, and library-health reads also dispatch
 through FastAPI with administrator and token-scope checks. Flask still registers
 the compatibility URL map during startup, while FastAPI owns request dispatch.
 Six retired admin bookmarks now use native FastAPI redirects with the original
-admin/login checks and query forwarding: `/admin/help`, `/admin/library_tools`,
+admin/login checks and query forwarding: `/admin/library_tools`,
 `/admin/scan_management`, `/admin/server_logs`, `/admin/system_logs`, and
 `/admin/server_status_page`. Their targets remain the shared Help, Libraries &
 scans, and Ops pages.
@@ -122,6 +124,9 @@ and personal API-token management use
 request-local ORM sessions where needed and direct Starlette JSON responses; they no longer push Flask app
 contexts. Their legacy response shapes, ACL, CSRF, and signed-session behavior
 remain covered by route tests.
+Native API JSON uses the shared `NativeJSONProvider` with Flask-compatible key
+ordering, compact separators, and a trailing newline. Exact-byte tests protect
+this wire-format compatibility for migrated routes.
 The admin challenge-solver and ambient-lighting status, config, and test routes
 now handle authentication, authorization, response serialization, and
 request-scoped ORM work in FastAPI. Config saves accept explicit configuration
@@ -191,7 +196,10 @@ secret value. The FastAPI `PUT` path also preserves CSRF-before-auth,
 validation, blank-secret retention, session refresh, and cache invalidation;
 the FastAPI `POST /api/admin/igdb/test` route preserves CSRF, safe result/error
 payloads, and the last-tested timestamp while using the existing provider
-adapter.
+adapter. The React settings form keeps the legacy `POST /admin/igdb_settings`
+and `POST /admin/test_igdb` paths; the outer ASGI dispatcher explicitly routes
+those POSTs to their native handlers, and the form save response never includes
+the client secret.
 The custom chat emoji catalogue `GET`/`HEAD` is native as well; it preserves
 the admin gate, limits metadata, no-store response, and generic storage-error
 contract. Its DELETE action also uses FastAPI and validates CSRF before auth;
@@ -307,8 +315,13 @@ start compatibility workers. It also
 serves `/offline` directly using the member-free HTML builder, and
 `/sw.js` plus `/vr/sw.js` from shipped application files with their existing
 scope and no-cache headers; mutable library overrides cannot replace these
-origin-wide worker scripts. `/favicon.ico` also uses the native response path
-with its existing one-hour cache policy. A native FastAPI redirect handler
+origin-wide worker scripts. These static routes retain their GET/HEAD and
+automatic OPTIONS behavior, and return the legacy 405 response for unsupported
+methods. Worker 416 responses omit `Service-Worker-Allowed`, matching Flask's
+range-error headers. `/favicon.ico` uses the native GET/HEAD response path with
+the one-hour `Cache-Control` policy, conditional and byte-range semantics, and
+the legacy 405 response for unsupported methods. Its session-independent
+response omits `Vary: Cookie`. A native FastAPI redirect handler
 also serves `/` and `/index`. It keeps setup
 redirects ahead of login checks, sends anonymous users to login, and sends
 authenticated users to Discover; the setup utility uses the native DB session
@@ -322,10 +335,13 @@ headers, and HEAD behavior. The shared FastAPI app still initializes after
 Flask during the transition. Requests to `/api/emulator/installed-cores.js`
 build the existing disk-backed WebRetro
 allowlist directly in ASGI with its JavaScript content type and five-minute
-private cache policy.
+private cache policy. Its unsupported methods retain the API JSON 405 envelope
+and final newline used by the Flask response; automatic OPTIONS remains empty
+with the legacy Allow method set.
 The shared native FastAPI API app converts unmatched HTTP errors and unexpected
 handler failures into the standard API error envelope, preserves safe security
-headers and does not expose exception details to clients.
+headers, logs unexpected failures server-side, and does not expose exception
+details to clients.
 `/manifest.webmanifest` reads the configured site label through a request-local
 ORM scope and returns the shared install manifest payload directly from ASGI
 with its one-hour cache policy. `/api/loading-icon` uses the native API router
@@ -352,6 +368,11 @@ The admin library-health summary `/api/health/library` is also native.
 The complete admin quality-profile API family `/api/quality-profiles` now uses
 FastAPI for list, create, save, activate, detail, update, delete, and score
 actions, including CSRF on writes and the legacy bare JSON responses.
+These routes decode request bodies only for `application/json` and
+`application/*+json` media types, matching the legacy silent JSON parser; other
+content types are treated as an empty JSON body.
+The companion heartbeat applies the same media-type gate while retaining its
+bounded-body limit and tolerant handling of malformed or non-object JSON.
 The admin statistics read `/api/admin/statistics` also dispatches through
 FastAPI, keeping the existing aggregate projection, admin session/token-scope
 checks, envelope, no-store response, and HEAD behavior.
@@ -485,7 +506,11 @@ configuration and extension compatibility.
 The ASGI activity/event streams now check event visibility and child-role
 eligibility in request-local ORM scope without pushing Flask app context. Their
 signed-session ID resolver uses the framework-independent Flask-cookie codec
-and active-user/password-fingerprint checks.
+and active-user/password-fingerprint checks. Admin test events carry non-serialized
+publisher ownership metadata. The publisher and other admins retain access, while
+unrelated members and children do not receive account names through live delivery
+or replay. Generic scan, ops, and hello events remain available to signed-in
+stream subscribers.
 
 ASGI ZIP and ROM downloads read ownership, game ACL, and download records in
 request-local ORM scope. Download identity uses the signed-session codec or
@@ -653,11 +678,11 @@ The native library-tools write slice now covers rename preview, proposal approva
 
 Admin library creation, batch scans, and batch deletion now use FastAPI routes with explicit admin/token authorization, CSRF checks, caps and typed deletion confirmation. Durable database, image, scan and deletion-job work remains behind adapters while route parity is established.
 
-Manual-identify preview/queue, support-ticket list/detail reads, and the theme-font catalogue now have native FastAPI dispatch. The scan queue preserves the idle preview and explicit busy-scan choices; support reads remain browser-session-only and owner-scoped for members. The font inventory keeps its existing `fonts_dir` response field pending later exposure review.
+Manual-identify preview/queue, support-ticket list/detail reads, and the theme-font catalogue now have native FastAPI dispatch. The scan queue preserves the idle preview and explicit busy-scan choices; support reads remain browser-session-only and owner-scoped for members. The font catalogue returns font metadata without disclosing the configured server filesystem path; custom-font placement remains an administrator task. The preference-specific font stylesheet uses private caching and varies by session cookie to prevent cross-user cache replay.
 
 A source-level API route comparison is maintained as an estimate only: it cannot establish that each FastAPI router is mounted behind the correct ASGI method gate or that behavior matches. Runtime dispatch checks remain necessary for each migrated family.
 
-Read-only provider and patch-catalog registries plus the admin integrations inventory now use native FastAPI dispatch, preserving their legacy response shapes and authorization. Provider calls were not part of these catalog reads. The server-local path fields remain for parity and need review in the planned security scrub.
+Read-only provider and patch-catalog registries plus the admin integrations inventory now use native FastAPI dispatch, preserving their legacy response shapes and authorization. Provider calls were not part of these catalog reads. The patch-catalog registry keeps its `catalog_path` field for parity; the route requires an admin session and an admin-scoped token, so this field is limited to trusted administrators.
 
 Artwork-provider searches and the admin artwork-apply action now dispatch through native FastAPI routes. Artwork writes retain signed-session CSRF and admin/token-scope checks, bounded input validation, provider and image-kind restrictions, and the existing artwork service behind an adapter. Launcher import writes are also native and remain upload-bounded and feature-gated. Flask startup and ORM ownership remain active while semantic parity and dependency retirement continue.
 
@@ -746,25 +771,27 @@ First-run setup page GET/HEAD routes serve the built React shell through FastAPI
 The runtime config builder is framework-independent and shared by the compatibility factory. FastAPI creates its native SQLAlchemy engine directly from that config and disposes it during ASGI shutdown, rather than reading Flask-SQLAlchemy's private engine registry. Native request and worker scopes expose that config through a context-local accessor and bind the native SQLAlchemy session; service helpers use a small compatibility fallback only when called from the legacy Flask app. Normal ASGI startup no longer constructs Flask; Flask-SQLAlchemy remains installed for compatibility services and legacy callers. This boundary change does not complete strict zero-Jinja runtime removal.
 
 
-FastAPI's force-refresh coordinator and per-game scan workers receive the same explicit native DB scope. Scan, identify, enrichment, image, and scan-only filesystem/filter/quality/catalog helpers resolve persistence through the native session facade when that scope is active; legacy callers continue to fall back to Flask-SQLAlchemy. Importing the scan, identify, enrichment, and image modules together no longer loads Flask/Jinja. Malware policy receives explicit runtime config, and local metadata reads/writes accept explicit allowed directory bases. Native enrichment and scoped image download helpers avoid their own Flask context pushes. Native force-refresh and per-game orchestration also skip their Flask app-context pushes when the native scope is supplied; legacy worker entry points keep their context behavior. Some downstream image helpers and other image entry points still require Flask context, and no real library scan was run to validate the full path. These remain runtime migration gates.
+FastAPI's force-refresh coordinator and per-game scan workers receive the same explicit native DB scope. Scan, identify, enrichment, image, and scan-only filesystem/filter/quality/catalog helpers resolve persistence through the native session facade when that scope is active; legacy callers continue to fall back to Flask-SQLAlchemy. Importing the scan, identify, enrichment, and image modules together no longer loads Flask/Jinja. Malware policy receives explicit runtime config, and local metadata reads/writes accept explicit allowed directory bases. Native enrichment and scoped image download helpers avoid their own Flask context pushes. Native force-refresh and per-game orchestration also skip their Flask app-context pushes when the native scope is supplied; legacy worker entry points keep their context behavior. Some downstream image helpers and other image entry points still require Flask context. The targeted scan probes below validate only empty-root, cached-game, and provider-off unmatched folder cases; they do not validate the full scan path or all image helpers. These remain runtime migration gates.
 
 
-The scan orchestration module itself now imports without Flask/Jinja: legacy form dependencies load only when their Flask handlers run, and the worker accepts an explicit app plus database-scope factory. Native worker session cleanup supports direct SQLAlchemy sessions. Native forced refresh supplies its app and database scope explicitly and no longer pushes an outer or per-game Flask app context. Legacy scan callers retain their original context setup. Full scan execution and background queue-drain behavior still need isolated parity evidence.
+The scan orchestration module itself now imports without Flask/Jinja: legacy form dependencies load only when their Flask handlers run, and the worker accepts an explicit app plus database-scope factory. Native worker session cleanup supports direct SQLAlchemy sessions. Native forced refresh supplies its app and database scope explicitly and no longer pushes an outer or per-game Flask app context. Legacy scan callers retain their original context setup. Authenticated scans on isolated v1.1.8/current builds queue and complete for an empty read-only `/storage`, a cached-existing-game folder, and a new folder that remains unmatched when providers are disabled. The no-match branch uses Flask-optional flash/context helpers. Native scan-status safety-drain promotion carries its database scope into the promoted worker. Two queued empty-folder jobs were promoted in FIFO order and completed cleanly on isolated v1.1.8/current clones. A synthetic file-mode NES no-match also matches with one unmatched row on both versions. Successful live-provider identification, local metadata, DAT/hash identification, successful file-mode import, writable/destructive effects, recurring schedules, and non-empty/contention queue parity remain open.
 
 
 The FastAPI worker scope also reaches game admission, identify, deferred post-identify enrichment, and image persistence/download coordinators. Their DB sessions use the direct native engine. The worker context reduction is limited to native force-refresh and its per-game orchestration; image refresh and other legacy/background entry points still use Flask app contexts.
 
-The root install manifest (`/manifest.webmanifest`) now reads site branding through the native request-local database scope and uses runtime security headers. GET/HEAD requests are handled before Flask initialization; this removes another first-request dependency on the Flask app context while preserving the public cache policy and manifest payload.
+The PWA manifest, offline document and service-worker routes are handled directly by ASGI before Flask initialization. They follow the legacy first-run setup redirect while setup is required; after setup, they serve their public payloads through the native paths. The manifest reads site branding through a request-local database scope and keeps its public cache policy.
 
 The legacy `/restricted` page now uses FastAPI redirect handling. Anonymous requests retain the login message and `next=/restricted` target; authenticated requests continue to `/welcome`, with cookie and security-header behavior kept in the native handler.
 
 The `/downloads` URL now resolves to the authenticated member shell directly, where the existing React Downloads page already owns the view. The legacy `/playromtest` URL also uses the member shell and retains its informational flash message.
 
+Legacy GET download links no longer create queue requests. The native compatibility route can still return the v1.1.8 missing-update warning and game-details redirect after read-only checks; valid download creation remains behind POST and CSRF or scoped bearer authorization.
+
 `/play_game/<uuid>` now uses FastAPI for the existing browser-play decision. The native route retains the library ACL check, browser-play URL, missing/inaccessible-game redirects, and user-facing flash messages.
 
 `/game_details/<game_uuid>` now uses the native authenticated member shell. It validates the UUID, checks game existence and the user’s library/content ACL before serving the React shell, preserving the legacy 404 and 403 outcomes.
 
-The GET/HEAD compatibility redirects for `/settings_profile_view`, `/settings_password`, and `/settings_panel` now run in FastAPI and retain their existing account/preferences destinations. Their mutation methods remain on the compatibility path while those flows are migrated.
+The GET/HEAD compatibility redirects for `/settings_profile_view`, `/settings_password`, and `/settings_panel` now run in FastAPI and retain their existing account/preferences destinations. They apply the legacy first-run setup gate before authentication so a clean install reaches setup rather than login. Their mutation methods remain on the compatibility path while those flows are migrated.
 
 The main `/library` page now builds its React shell in the native member router. It retains default preference creation, URL-over-cookie filter precedence, library-name resolution and flash redirect, user sort/page preferences, and the catalog/scan/unmatched counts used by empty states.
 

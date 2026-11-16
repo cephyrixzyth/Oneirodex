@@ -1,0 +1,185 @@
+{
+  "review_id": "R2028",
+  "doc_status": "Reference",
+  "title": "Backend unrestricted qualification and desktop account access boundaries",
+  "source_head_before_desktop_change": "2f35750771aa6f4b4345bfb67a496514cff2ee77",
+  "uncommitted_desktop_changes_at_capture": true,
+  "source_sha256": {
+    "clients/desktop/src/api-boundary.test.ts": "13fcf7456423a4ac7e69cdef31b25c47f5febe8a205b2a489df189217ded0735",
+    "clients/desktop/src/api.ts": "f50b07165762bd78ee64a1a72a84f8c58b2cbab00a1883fa43e1192ff6b89a8b",
+    "clients/desktop/src/app-access-boundary.test.ts": "5515ddcd0de6c476f53e1e1b0c55098edf248298dc40095ba5c744517d8d1689",
+    "clients/desktop/src/app.ts": "341ffa58960aae0dc71d2dc76649cd8a3ac90722989b0d168baddac45e6446d4",
+    "clients/desktop/src/auth.ts": "c1c31536f4c31cad89409e94651eecd20b3a7e438c718ae56f311bbcb9a6e7c9",
+    "clients/desktop/src/connect.ts": "974158a4e1da87024811a7e28e82a641960a6821dc33e6921960f805b410713e",
+    "clients/desktop/src/connection-ux.ts": "a6e3d47873a9fab9f25e2dc465eb7f0a9d388241fff862fb5ea7ab8d32c3fd6b",
+    "clients/desktop/src/heartbeat-boundary.test.ts": "78cda0926467221fc02295273ef1e5d952d1d496a52ea2bb7d0e0b3124549a15",
+    "clients/desktop/src/heartbeat.ts": "affda0ffcf54023124c6ee0b11b3c7d2fc442e62485485cc790735295f32f6d0",
+    "clients/desktop/src/launch.ts": "e450aa708637ccd7eaf79e1dad68b500da25bd85ab2a501a621af652b470ed7e",
+    "clients/desktop/src/offline-shelf-race.test.ts": "167e5fd5b9a6b8062b25b93955dc36bf949a1c42c36f505127283510c63e8249",
+    "clients/desktop/src/offline-shelf.ts": "f19fb5452cf67b515810b9fd16872d298474b712c93823c6319e2754be3e3ae5",
+    "clients/desktop/src/playtime-session.ts": "b5c7cc58c3cc3ad2b575ebb9b61961d3dc2f2c8a356745a59ad7a7b9f34eb527",
+    "clients/desktop/src/playtime-stop-boundary.test.ts": "feae8cf06ce8520e09da524c761fba09d5628bb6e71276e0a06c227dc4b6a157"
+  },
+  "owner_policy": "Keep matching historically verified local Installed shelf on known server token denial; show denial and block server actions. Preserve game files and saves.",
+  "backend_unrestricted": {
+    "source_head": "2f35750771aa6f4b4345bfb67a496514cff2ee77",
+    "counts": {
+      "tests": 8480,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 101,
+      "passed": 8379
+    },
+    "warnings": 160,
+    "pytest_seconds": 2153.65,
+    "runner_seconds": 2172.82,
+    "source_fixed": true,
+    "owned_database_removed_and_absence_verified": true,
+    "generated_test_files_preserved": true,
+    "log_sha256": "c8870500959117af3049310dadd17ec3532cc7d5e1b78a4113880f5387278388",
+    "selection": "All tests with no integration exclusion or CI deselections"
+  },
+  "preceding_source_ci": {
+    "source_head": "2f35750771aa6f4b4345bfb67a496514cff2ee77",
+    "ci": {
+      "run": 42942019905,
+      "conclusion": "success"
+    },
+    "desktop": {
+      "run": 42942019936,
+      "conclusion": "success"
+    }
+  },
+  "confirmed_and_corrected": [
+    "401/403 heartbeat failures were classified as outages; typed HTTP denial now takes precedence even if its body names a network error.",
+    "Stopped and superseded heartbeat responses could dispatch commands or acknowledge with new credentials. Snapshot, revision and stopped guards prevent these completions, including A-to-B-to-A transitions.",
+    "Connection attempts retained previous-account titles and paths. Current-epoch display guards clear the old profile before validation; cache writes also check the epoch after hashing.",
+    "Heartbeat recovery re-enabled server actions on the old catalog. Identity and ACL-filtered search now refresh first; identity changes clear cached titles and stop recovery until explicit Connect.",
+    "Local profile forgetting was absent. Explicit forgetting clears local credentials/title cache, preserves games/saves/install records and reports partial persistence failures.",
+    "A pending credential write could repopulate a forgotten token. Serialized profile writes apply the later forget after the pending write.",
+    "A pending native process check could send playtime heartbeat after tracking stopped. Late stopped completions are discarded; explicit forgetting stops profile tracking without killing the game."
+  ],
+  "checks": {
+    "r2028-desktop-applied": {
+      "exit_code": 0,
+      "seconds": 18.6,
+      "log_sha256": "afedb05856208fa3b29b3ac1280559dfb9d406ca7f14881a451846bc30f0b21a",
+      "tests": {
+        "passed": 316,
+        "files": 43
+      }
+    },
+    "r2028-api-source": {
+      "exit_code": 0,
+      "seconds": 5.46,
+      "log_sha256": "51cd2a4558ba4e4bd327b4890b6ab9d9caf6e67529fd6d57b6bd573509901b4f",
+      "tests": {
+        "passed": 55,
+        "files": 14,
+        "selection": "Unique source tests only; generated dist duplicates excluded"
+      }
+    },
+    "r2028-types": {
+      "exit_code": 0,
+      "seconds": 4.25,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "r2028-eslint": {
+      "exit_code": 0,
+      "seconds": 25.84,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "r2028-css": {
+      "exit_code": 0,
+      "seconds": 0.72,
+      "log_sha256": "0dcefb129c2ff420e04f891e5d49207e3ad44e69e2417e4ff65cf21dd36dd399"
+    },
+    "r2028-full-build": {
+      "exit_code": 0,
+      "seconds": 2.8,
+      "log_sha256": "725d5aeaf7c767baa02e454da64e37fbc7f8ad55d67bd2f3f946462b8e8b55e2"
+    },
+    "r2028-thin-build": {
+      "exit_code": 0,
+      "seconds": 1.86,
+      "log_sha256": "6cbf9f11e8dbf884cc15fede7f33be5414c7e97eeafb4a6d7ef289fe0d3fe659"
+    },
+    "r2028-bundle-corrected": {
+      "exit_code": 0,
+      "seconds": 1.61,
+      "log_sha256": "d206149190f73b00074cad13af0ca3024dbc0e18b3865f68f59a6c7dbd469c25"
+    }
+  },
+  "red_green": [
+    {
+      "case": "transport and heartbeat boundaries",
+      "red_failed": 11,
+      "red_passed": 1,
+      "green": "Included in final316 desktop tests"
+    },
+    {
+      "case": "heartbeat credential roundtrip",
+      "red_failed": 1,
+      "red_passed": 6,
+      "green": "Included in final316 desktop tests"
+    },
+    {
+      "case": "actual app denial/account/recovery orchestration",
+      "red_failed": 6,
+      "green": "Included in final316 desktop tests"
+    },
+    {
+      "case": "stale async cache write",
+      "red_failed": 1,
+      "green": "Included in final316 desktop tests"
+    },
+    {
+      "case": "keychain write versus forget race",
+      "red_failed": 1,
+      "red_passed": 9,
+      "green": "Included in final316 desktop tests"
+    },
+    {
+      "case": "late native process-check completion",
+      "red_failed": 1,
+      "green": "Included in final316 desktop tests"
+    },
+    {
+      "case": "invalid superseding connection attempt",
+      "red_failed": 1,
+      "red_passed": 10,
+      "green": "Included in final316 desktop tests"
+    },
+    {
+      "case": "HTTP denial body network phrase precedence",
+      "red_failed": 1,
+      "red_passed": 7,
+      "green": "Included in final316 desktop tests"
+    }
+  ],
+  "runtime_scope": "Actual desktop app DOM and real SDK with controlled Tauri adapters/API responses; real Node HTTP origin-to-sink redirect test. Browser opaque redirect responses also simulated. No installed Tauri/WebView acceptance claimed.",
+  "rulings": [
+    "Use a desktop control-plane adapter with manual redirect refusal; leave shared requester and archive destination validation unchanged.",
+    "Connection switching/forgetting waits for busy local operations to finish or be cancelled. Native files remain OS-owned.",
+    "Local lifecycle persistence stays OS-owned; explicit server sync uses the current operation identity and current catalog-visible rows.",
+    "Forgetting does not revoke the remote token or clear independent site-window cookies; the UI discloses those boundaries."
+  ],
+  "rework": [
+    "Private task helper required a space in task headings; corrected plan formatting, no product effect.",
+    "A recovery-stop assertion initially observed status before async hashing settled; request-count assertion reproduced the missing stop, then passed with the guard.",
+    "Initial tracking-forget fixture rejected native process polling and auto-stopped tracking, masking the defect; corrected running-process fixture reproduced it before the fix.",
+    "First API adjacency selection included source and generated dist duplicates:110 executions. Corrected source-only55 is the unique result reported.",
+    "First bundle command used an incorrect filename and ran no validator; corrected standalone validator passed.",
+    "UI builds warn about external output directories and an existing static/dynamic native import; both builds completed. Output stays in private review artifacts."
+  ],
+  "limits": [
+    "316 desktop cases and55 API cases do not establish server-side permission acceptance, route parity, real OS credential behavior or native platform lifecycle.",
+    "Offline cache still derives from the twelve-title library preview; complete Installed-shelf inventory remains open.",
+    "Actual native cold/offline/denial/reconnect/account switch, operation/restart/PID/filesystem journeys and official installed upgrade/rollback remain open.",
+    "Physical macOS/Linux/Steam Deck/headset and assistive-technology acceptance remain separate.",
+    "Current-source clean image build remains incomplete after a previous interrupted external archive wait; no clean-image or deployment claim.",
+    "Default-branch security alerts remain open pending gated merge and a subsequent recheck. No merge, release or deployment performed.",
+    "R1972 route coverage remains0 fully verified/10 partial/1535 unverified shared pairs, and2 partial/158 unverified current-only operations."
+  ],
+  "capture": "Needed for the updated native companion UI; no member/admin UI changed in this slice."
+}

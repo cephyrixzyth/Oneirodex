@@ -1,0 +1,63 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2070",
+  "observed_utc": "2026-11-13T21:23:19.610785+00:00",
+  "source_base": "a3d796c5c165e9457c76d2236b675dfa9cb47174",
+  "scope": "Synthetic macOS probe readiness reader; production tracking unchanged.",
+  "classification": "Confirmed fixture correctness defects, not a newly attributed product vulnerability.",
+  "reproduction": "Before fix: 16 test methods; 7 assertion failures and 4 errors (including subtests). Malformed JSON escaped structured reporting; invalid numeric snapshots could be returned as ready; API-unavailable payload was echoed.",
+  "fix": "Reject malformed/nonobject JSON, noninteger/out-of-range/reserved IDs and inconsistent counters with a bounded fixture failure. Keep nonce and held-lease checks; classify API denial unavailable without echoing its payload.",
+  "verification": [
+    {
+      "name": "controller",
+      "exit_code": 0,
+      "expected": 0,
+      "log_sha256": "e0facb3faa8b04eb043b91df78ab2414c9887d4aa87f8b2ba3cce815e259be5e"
+    },
+    {
+      "name": "syntax",
+      "exit_code": 0,
+      "expected": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "nonmac-refusal",
+      "exit_code": 2,
+      "expected": 2,
+      "log_sha256": "f5b025f6e932439ade05ed3fe43b254f206a583acb389a93e056060c4045a821"
+    },
+    {
+      "name": "workflow",
+      "exit_code": 0,
+      "expected": 0,
+      "log_sha256": "d88c3faaed103084fc8572000ab66d4b635c079d09dc7cad97e8ae798695d38e"
+    }
+  ],
+  "controller_test_methods": 16,
+  "source_sha256": {
+    "scripts/ci/probe-macos-launch-coalition.py": "f61601fa0b06ec9ab37a3b32af7b218f899851aea14746eec4fc5d66d97302f3",
+    "scripts/ci/test_macos_launch_coalition_probe.py": "76e04e129a25f39d0f532a2632f9b019422cfb68c11d39a1a760c58f5b763806",
+    "scripts/ci/README-macos-coalition-probe.md": "834e9b851561807b0de0c0a654eb7523ad073b005a116025bb550cb7ec150e9a"
+  },
+  "native_verification": {
+    "status": "phase_passed",
+    "source_head": "0a7e117c22643fb48ffe3b2f6ca6dbcc919baa3e",
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43510447597",
+    "job_id": 132179005311,
+    "platform": "Darwin 25.6.0 arm64",
+    "controller_tests": 16,
+    "user_control": "Unsupported: bootstrap exit 5; exact attempted job cleaned up.",
+    "gui_selection": "Passed: two distinct keeper-only job coalitions excluded controller/outside membership; cleanup errors 0.",
+    "other_jobs": "Rust, installer build and release all skipped.",
+    "raw_log_sha256": "5aa02707de1c20b419ebdbf366bc38fee9b886f20faefba38c4b84dfbce5ffd1",
+    "private_native_receipt_sha256": "a24379dd3748c68a8029b0502096d121c7cea05212e81ef6d4027a50df537488",
+    "limits": "Readiness controls and API/job isolation on this runtime only. No descendant, crash, guardian-loss, production integration, account/restart/package or other-runtime acceptance."
+  },
+  "family_recovery_acceptance": false,
+  "production_tracking_changed": false,
+  "remaining": [
+    "Task2b3 descendants/crash/guardian-loss survival",
+    "Production integration and all original acceptance gates"
+  ],
+  "capture": "Skipped: synthetic fixture and documentation only."
+}

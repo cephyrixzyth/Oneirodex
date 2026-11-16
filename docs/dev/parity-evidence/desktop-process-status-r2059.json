@@ -1,0 +1,73 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2059",
+  "finding": "DT-006 process identity follow-up",
+  "observed_utc": "2026-11-13T01:56:32.446818+00:00",
+  "source_base": "44da3162a9f91b90eff02259cb1729484530db74",
+  "candidate_source_sha256": {
+    "clients/desktop/src-tauri/src/lib.rs": "4a14b7643e3c10b11cff08884bb44cdd1c5a4b75a8b22ac4b88710b3bff3127b"
+  },
+  "classification": "Confirmed native unmanaged-PID attribution corrected and locally verified. Original descendant, restart, platform and packaged acceptance remains open.",
+  "root_cause": "A missing registry entry fell back to OS-wide PID existence; an unrelated live process could be reported as a running game after registry loss or a consumed terminal record.",
+  "change": "The native command uses its retained-child registry only. Unknown or consumed records return false; registry errors remain errors. OS-wide tasklist/kill probes are removed. The command delegates to a testable native implementation.",
+  "red": {
+    "failed": 2,
+    "passed": 0,
+    "test_seconds": 0.72,
+    "compile_seconds": 15.91,
+    "scope": "Unchanged command implementation extracted before RED; own live test PID used as an unregistered process and deterministic replacement for a consumed exit record."
+  },
+  "green": {
+    "focused_passed": 2,
+    "native_suite_passed": 100,
+    "ignored": 1,
+    "ignored_reason": "Linux-only real ENOSPC opt-in; separately verified at exact44da in R2058.",
+    "native_test_seconds": 0.62,
+    "combined_check_seconds": 17.58,
+    "registered_child_control": "Actual short-lived child passes positive registered-running and post-reap false checks through the same native implementation.",
+    "format": "passed",
+    "clippy_all_targets_warnings_denied": "passed",
+    "R1972": "7 reports,1545 route rows,160 current-only operations and secret/path scan pass"
+  },
+  "dependencies": "Cargo manifests and lockfile match BASE; no new runtime/test dependencies remain.",
+  "rework": [
+    "Initial dev-only Tauri MockRuntime attempt compiled41.66s but Windows loader rejected an entry point before tests started. No RED or native IPC result claimed; exact missing symbol remains unknown.",
+    "Removed the mock feature and extracted the unchanged implementation; normal test binary starts and exposes intended2assertion failures.",
+    "Format check requested one function-signature wrap; formatted before final fixed-source suite."
+  ],
+  "owner_policy": "Follow verified game child processes. Direct-executable-only tracking is not the final accepted solution.",
+  "limits": [
+    "Native shared implementation and real direct child tested on Windows; thin Tauri adapter compiles, but no OS webview/IPC or packaged app journey ran.",
+    "The deterministic live-PID replacement is not an actual kernel PID-reuse test.",
+    "Opaque per-launch identity, verified descendants, wrapper/grandchild lifetimes, companion exit/restart and platform/package acceptance remain required.",
+    "No route-parity promotion, final whole-program review, merge, release or deployment."
+  ],
+  "parent_source_qualification": {
+    "source": "44da3162a9f91b90eff02259cb1729484530db74",
+    "main_run": 43345227358,
+    "main_jobs_passed": 9,
+    "desktop_push_run": 43345217751,
+    "desktop_PR_run": 43345227216,
+    "desktop_active_jobs_passed_per_run": 7,
+    "note": "Parent qualification only. The separately fingerprinted R2059 code still needs its own next-head native/platform CI."
+  },
+  "published_source_qualification": {
+    "source": "25b2833fc343044a40ec2959f9f61119f4ccb458",
+    "main_run": 43350306811,
+    "main_jobs_passed": 9,
+    "core": {
+      "passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 1781.61,
+      "coverage_percent": 74.98,
+      "job": 131639489129,
+      "raw_log_sha256": "789c238e89779a7dfaa79d8c0866e4400c803bc6894bedd1eb2ef0488dd43832"
+    },
+    "desktop_push_run": 43350298925,
+    "desktop_PR_run": 43350307045,
+    "desktop_active_jobs_passed_per_run": 7,
+    "limits": "Existing CI selection; duplicate automatic desktop events are not additional unique coverage. No release assets published. R2061 later candidate needs its own exact-head qualification."
+  }
+}

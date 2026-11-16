@@ -357,6 +357,10 @@ describe('apply_mods helpers', () => {
     })
 
     expect(result).toEqual({ ok: true, path: '/appdata/mods/game-42/hd/hd.zip', bytes: 2 })
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://cdn.example/hd.zip',
+      expect.objectContaining({ redirect: 'error' }),
+    )
     expect(invoke).toHaveBeenCalledWith('write_file_bytes', {
       path: '/appdata/mods/game-42/hd/hd.zip',
       bytes: [],
@@ -448,11 +452,10 @@ describe('apply_mods helpers', () => {
       }
     })
 
-    it('allows http:// on the local network (LAN address, .local, bare name, loopback)', async () => {
+    it('allows http:// on the local network (LAN address, .local, loopback)', async () => {
       for (const source of [
         'http://192.168.1.20:8080/hd.zip',
         'http://nas.local/hd.zip',
-        'http://nas/hd.zip',
         'http://127.0.0.1:9000/hd.zip',
         'https://cdn.example.com/hd.zip',
       ]) {
@@ -463,7 +466,10 @@ describe('apply_mods helpers', () => {
           fetchImpl: fetchImpl as unknown as typeof fetch,
         })
         expect(result.ok, source).toBe(true)
-        expect(fetchImpl).toHaveBeenCalledWith(source)
+        expect(fetchImpl).toHaveBeenCalledWith(
+          source,
+          expect.objectContaining({ redirect: 'error' }),
+        )
       }
     })
 
@@ -481,10 +487,14 @@ describe('apply_mods helpers', () => {
         fetchImpl: fetchImpl as unknown as typeof fetch,
       })
       expect(result.ok).toBe(false)
+      expect(fetchImpl).toHaveBeenCalledWith(
+        'https://cdn.example.com/hd.zip',
+        expect.objectContaining({ redirect: 'error' }),
+      )
       expect(invoke).not.toHaveBeenCalledWith('write_file_bytes', expect.anything())
     })
 
-    it('accepts an https source that redirects to another https URL', async () => {
+    it('refuses a reported redirect even when the final URL is https', async () => {
       const fetchImpl = vi.fn(async () => ({
         ok: true,
         redirected: true,
@@ -497,7 +507,9 @@ describe('apply_mods helpers', () => {
         mod: modAt('https://cdn.example.com/hd.zip'),
         fetchImpl: fetchImpl as unknown as typeof fetch,
       })
-      expect(result.ok).toBe(true)
+      expect(result.ok).toBe(false)
+      expect(result.ok === false && result.error).toContain('redirects are not allowed')
+      expect(invoke).not.toHaveBeenCalledWith('write_file_bytes', expect.anything())
     })
   })
 

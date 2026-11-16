@@ -3,6 +3,8 @@ import { Button, PageStatus } from '@oneirodex/ui'
 import { getJson, putJson } from '../api/adminApi'
 import { errorText } from '../utils/errorText'
 
+import { AdminLink } from './AdminLink'
+
 const ENDPOINT = '/api/admin/integrations/community'
 
 export function CommunityChatSettingsPanel() {
@@ -103,12 +105,12 @@ export function CommunityChatSettingsPanel() {
           <Button className="od-btn--accent" type="submit" disabled={loading || busy}>
             {busy ? 'Saving…' : 'Save community link'}
           </Button>
-          <a className="od-cbtn" href="/admin/chat_emoji">
+          <AdminLink className="od-cbtn" to="/admin/chat_emoji">
             Manage custom chat emoji
-          </a>
-          <a className="od-cbtn" href="/admin/reference_sets">
+          </AdminLink>
+          <AdminLink className="od-cbtn" to="/admin/reference_sets">
             ROM reference sets
-          </a>
+          </AdminLink>
         </div>
       </form>
     </section>

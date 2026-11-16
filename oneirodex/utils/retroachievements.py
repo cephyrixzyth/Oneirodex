@@ -33,6 +33,9 @@ from typing import Any
 import requests
 from sqlalchemy import func, select
 
+from oneirodex.utils.http_safe import safe_request
+from oneirodex.utils.security import validate_user_outbound_http_url
+
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Library, RetroAchievementsIndexEntry
 from oneirodex.utils.global_settings import global_settings_row
@@ -95,6 +98,7 @@ def credentials() -> tuple[str, str]:
     except RuntimeError:
         # Hash helpers can be used without an application context in tooling.
         pass
+    from oneirodex.utils.secret_store import read_global_secret
     return (
         (
             os.getenv('RETROACHIEVEMENTS_USERNAME')
@@ -103,7 +107,7 @@ def credentials() -> tuple[str, str]:
         ).strip(),
         (
             os.getenv('RETROACHIEVEMENTS_API_KEY')
-            or getattr(settings, 'retroachievements_api_key', None)
+            or read_global_secret(settings, 'retroachievements_api_key')
             or ''
         ).strip(),
     )
@@ -114,8 +118,9 @@ def settings_summary() -> dict[str, Any]:
     settings = global_settings_row()
     env_username = (os.getenv('RETROACHIEVEMENTS_USERNAME') or '').strip()
     env_key = (os.getenv('RETROACHIEVEMENTS_API_KEY') or '').strip()
+    from oneirodex.utils.secret_store import has_global_secret
     db_username = (getattr(settings, 'retroachievements_username', None) or '').strip()
-    db_key = (getattr(settings, 'retroachievements_api_key', None) or '').strip()
+    db_key = has_global_secret(settings, 'retroachievements_api_key')
     username, key = credentials()
     return {
         'username': username or None,
@@ -137,12 +142,13 @@ def save_settings(
     from oneirodex.utils.global_settings import global_settings_row_or_create
 
     settings = global_settings_row_or_create()
+    from oneirodex.utils.secret_store import write_global_secret
     if username is not None:
         settings.retroachievements_username = username.strip() or None
     if clear_api_key:
-        settings.retroachievements_api_key = None
+        write_global_secret(settings, 'retroachievements_api_key', None)
     elif api_key:
-        settings.retroachievements_api_key = api_key.strip()
+        write_global_secret(settings, 'retroachievements_api_key', api_key.strip())
     db.session.commit()
     return settings_summary()
 
@@ -272,12 +278,14 @@ def _read_rom_bytes(path: str | Path, platform_key: str | None) -> bytes | None:
     """Bytes of the primary ROM: the file itself, or the one dump inside an archive."""
     from oneirodex.utils.rom_archive import (
         ArchiveRomError,
+        RomExpansionBudget,
         choose_rom_member,
         extract_rom_from_7z,
         extract_rom_from_rar,
         list_roms_in_archive,
         path_is_supported_archive,
     )
+    from oneirodex.utils.rom_archive_zip import open_bounded_zip
     from oneirodex.utils.rom_hash import resolve_hashable_file
 
     target = resolve_hashable_file(path)
@@ -297,15 +305,26 @@ def _read_rom_bytes(path: str | Path, platform_key: str | None) -> bytes | None:
             return None
         ext = target.suffix.lower()
         if ext == '.zip':
-            with zipfile.ZipFile(target, 'r') as archive:
+            with open_bounded_zip(target) as archive:
                 with archive.open(member) as handle:
                     return handle.read(MAX_ROM_BYTES + 1)[:MAX_ROM_BYTES]
         with tempfile.TemporaryDirectory(prefix='od-ra-') as tmp:
+            # Archive listings can omit or under-report member sizes. Keep the
+            # decompressor's disk budget aligned with the limit enforced for
+            # raw and ZIP ROMs, then verify the resulting file before reading
+            # it into memory.
+            budget = RomExpansionBudget(MAX_ROM_BYTES)
             if ext == '.7z':
-                dest = extract_rom_from_7z(str(target), tmp, member=member, platform=platform_key)
+                dest = extract_rom_from_7z(
+                    str(target), tmp, member=member, platform=platform_key, budget=budget,
+                )
             elif ext == '.rar':
-                dest = extract_rom_from_rar(str(target), tmp, member=member, platform=platform_key)
+                dest = extract_rom_from_rar(
+                    str(target), tmp, member=member, platform=platform_key, budget=budget,
+                )
             else:
+                return None
+            if Path(dest).stat().st_size > MAX_ROM_BYTES:
                 return None
             return Path(dest).read_bytes()
     except (OSError, KeyError, zipfile.BadZipFile, ArchiveRomError):
@@ -339,14 +358,25 @@ def _api_get(endpoint: str, params: dict[str, Any]) -> Any:
     if not (user and key):
         raise RuntimeError('RetroAchievements is not configured')
     query = {'z': user, 'y': key, **params}
-    response = requests.get(
-        f'{API_BASE}/{endpoint}',
-        params=query,
-        timeout=HTTP_TIMEOUT,
-        headers={'User-Agent': 'Oneirodex (household game library)'},
-    )
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = safe_request(
+            'GET',
+            f'{API_BASE}/{endpoint}',
+            validator=validate_user_outbound_http_url,
+            params=query,
+            timeout=HTTP_TIMEOUT,
+            headers={'User-Agent': 'Oneirodex (household game library)'},
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as exc:
+        # Requests exceptions may embed the full URL, including the shared API
+        # key. Keep a safe class/status diagnostic; never propagate that text.
+        status = getattr(getattr(exc, 'response', None), 'status_code', None)
+        detail = f' ({status})' if status else ''
+        raise RuntimeError(
+            f'RetroAchievements request failed ({type(exc).__name__}){detail}'
+        ) from None
 
 
 def fetch_console_index(console_id: int) -> list[dict[str, Any]]:

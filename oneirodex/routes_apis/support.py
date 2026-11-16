@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from flask import current_app, jsonify
+from flask import current_app, jsonify, make_response
 
 from oneirodex.utils.api_response import api_error, api_ok
 from flask_login import current_user, login_required
@@ -12,12 +12,19 @@ from sqlalchemy import func, select
 
 from oneirodex import db
 from oneirodex.models import SupportTicket
-from oneirodex.schemas.support import CreateSupportTicketBody
+from oneirodex.schemas.support import CreateSupportTicketBody, ReconcileSupportDeliveryBody
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.validation import validate_body
-from oneirodex.utils.github_issues import build_issue_body, create_github_issue
+from oneirodex.utils.github_issues import create_github_issue, read_support_issue
+from oneirodex.utils.support_reports import (
+    preview_support_report, valid_support_preview, support_external_payload,
+)
+from oneirodex.utils.support_delivery import (
+    SupportRequestConflict, SupportRateLimited, find_support_request, is_support_replay,
+    persist_support_request, deliver_support_request,
+    SupportRequestNotFound, support_reconciliation_candidate, finish_support_reconciliation,
+)
 from oneirodex.utils.notifications import notify_admins
-from oneirodex.utils.rbac import normalize_role
 from oneirodex.utils.api_tokens import require_browser_session
 
 from . import apis_bp
@@ -41,8 +48,22 @@ _LOGS_MAX = 4000
 
 @apis_bp.route('/support/tickets', methods=['POST'])
 @login_required
+@require_browser_session
 @validate_body(CreateSupportTicketBody)
 def support_ticket_create(body: CreateSupportTicketBody):
+    values = body.model_dump()
+    try:
+        existing = find_support_request(db.session, current_user.id, values)
+        replay = is_support_replay(db.session, existing, values)
+    except SupportRequestConflict as exc:
+        return api_error(str(exc), code='conflict')
+    if replay:
+        return api_ok({'ticket': existing.to_dict()}, status=201)
+    if body.sync_to_github:
+        approval = valid_support_preview(current_user, values, current_app.secret_key)
+        if not approval:
+            return api_error('Preview this report and its destination again before sending to GitHub.', code='conflict')
+        values['_approved_repository'] = approval['destination']
     now = datetime.now(timezone.utc)
     recent_count = db.session.scalar(
         select(func.count(SupportTicket.id)).where(
@@ -50,79 +71,78 @@ def support_ticket_create(body: CreateSupportTicketBody):
             SupportTicket.created_at >= now - _SUPPORT_TICKET_WINDOW,
         )
     ) or 0
-    if recent_count >= _SUPPORT_TICKET_LIMIT:
+    if existing is None and recent_count >= _SUPPORT_TICKET_LIMIT:
         return api_error(
             'Support report limit reached. Try again later.',
             code='rate_limited',
         )
 
-    title = body.title[:200]
-    # Symptom/body optional for redesigned Report UI (title alone is enough).
-    ticket_body = (body.body or body.symptom or '').strip()[:_BODY_MAX]
-    area = (body.area or 'other').strip().lower()
-    if area not in VALID_AREAS:
-        area = 'other'
-    # A request for something new is not a defect, and filing it as one both
-    # misleads triage and makes the product look broken. Unknown values fall
-    # back to 'issue' rather than 404ing a report someone took time to write.
-    kind = (body.kind or 'issue').strip().lower()
-    if kind not in VALID_KINDS:
-        kind = 'issue'
-    severity = (body.severity or 'P2').strip().upper()
-    if severity not in VALID_SEV:
-        severity = 'P2'
-    logs_raw = (body.logs or '').strip()[:_LOGS_MAX]
-    ticket = SupportTicket(
-        user_id=current_user.id,
-        title=title,
-        body=ticket_body or '',
-        area=area,
-        kind=kind,
-        severity=severity,
-        role_at_submit=normalize_role(getattr(current_user, 'role', None)),
-        deploy_hint=(body.deploy_hint or body.deploy or '')[:64] or None,
-        client_hint=(body.client_hint or body.client or '')[:120] or None,
-        url_hint=(body.url_hint or body.url or '')[:512] or None,
-        logs=logs_raw or None,
-        status='open',
-        github_sync='pending',
-        created_at=now,
-    )
-    db.session.add(ticket)
-    db.session.commit()
+    try:
+        ticket, created = persist_support_request(db.session, current_user, values, now)
+    except SupportRequestConflict as exc:
+        return api_error(str(exc), code='conflict')
+    except SupportRateLimited as exc:
+        return api_error(str(exc), code='rate_limited')
 
     # The kind leads the title and rides along as a label, so the distinction
     # survives into the issue tracker instead of stopping at our database.
-    gh = create_github_issue(
-        title=f'[{ticket.kind}] {ticket.severity} {ticket.area}: {ticket.title}',
-        body=build_issue_body(ticket.to_dict()),
-        labels=['support', ticket.kind, ticket.severity.lower(), ticket.area],
-    )
-    if gh.get('ok'):
-        ticket.github_sync = 'synced'
-        ticket.github_issue_number = gh.get('number')
-        ticket.github_issue_url = gh.get('url')
-    elif gh.get('skipped'):
-        ticket.github_sync = 'skipped'
-    else:
-        ticket.github_sync = 'error'
-        current_app.logger.warning('GitHub issue sync failed: %s', gh.get('error'))
-    db.session.commit()
+    if body.sync_to_github:
+        try:
+            ticket = deliver_support_request(
+                db.session, ticket, support_external_payload(current_user, values), create_github_issue,
+                retry_id=body.retry_id if body.retry_github else None,
+            )
+        except SupportRequestConflict as exc:
+            return api_error(str(exc), code='conflict')
 
     try:
-        notify_admins(
-            kind='support_ticket',
-            title=f'Support: {ticket.title}',
-            body=f'{ticket.severity} · {ticket.area} · by {current_user.name}',
-            link='/admin/support',
-            actor_user_id=current_user.id,
-            payload={'ticket_id': ticket.id, 'github_url': ticket.github_issue_url},
-            pref_flag='notify_support',
-        )
+        if created:
+            notify_admins(
+                kind='support_ticket',
+                title=f'Support: {ticket.title}',
+                body=f'{ticket.severity} · {ticket.area} · by {current_user.name}',
+                link='/admin/support',
+                actor_user_id=current_user.id,
+                payload={'ticket_id': ticket.id, 'github_url': ticket.github_issue_url},
+                pref_flag='notify_support',
+            )
     except Exception:
         pass
 
     return api_ok({'ticket': ticket.to_dict()}, status=201)
+
+
+@apis_bp.route('/support/preview', methods=['POST'])
+@login_required
+@require_browser_session
+@validate_body(CreateSupportTicketBody)
+def support_report_preview(body: CreateSupportTicketBody):
+    response = make_response(api_ok({'preview': preview_support_report(current_user, body.model_dump(), current_app.secret_key)}))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@apis_bp.route('/support/tickets/<int:ticket_id>/reconcile', methods=['POST'])
+@login_required
+@require_browser_session
+@validate_body(ReconcileSupportDeliveryBody)
+def support_ticket_reconcile(ticket_id: int, body: ReconcileSupportDeliveryBody):
+    try:
+        candidate = support_reconciliation_candidate(
+            db.session, current_user.id, ticket_id, admin=is_admin(current_user),
+        )
+        ticket = candidate['ticket']
+        if ticket is None:
+            issue = read_support_issue(repository=candidate['repository'], issue_number=body.issue_number)
+            ticket = finish_support_reconciliation(db.session, candidate, issue)
+        response = make_response(api_ok({'ticket': ticket}))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except (SupportRequestNotFound, SupportRequestConflict, SupportRateLimited) as exc:
+        db.session.rollback()
+        code = ('not_found' if isinstance(exc, SupportRequestNotFound)
+                else 'rate_limited' if isinstance(exc, SupportRateLimited) else 'conflict')
+        return api_error(str(exc), code=code)
 
 
 @apis_bp.route('/support/tickets', methods=['GET'])

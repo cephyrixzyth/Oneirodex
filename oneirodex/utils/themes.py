@@ -8,6 +8,7 @@ from oneirodex.models import UserPreference
 from oneirodex.runtime_native.db_session import native_db as db
 from sqlalchemy import update
 from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.theme_validation import WINDOWS_RESERVED_NAMES
 
 
 MAX_THEME_ZIP_MEMBERS = 1024
@@ -52,18 +53,31 @@ class ThemeManager:
         return themes
 
     def upload_theme(self, theme_zip):
-        from flask import flash
+        try:
+            from flask import flash, has_request_context
+        except ImportError:
+            # Flask is intentionally absent from the native FastAPI image.
+            flash = None
+            has_request_context = lambda: False
+
+        def notify(message, category):
+            # The upload service is shared by Flask's form route and the
+            # FastAPI admin API. Flask messages only belong to the former;
+            # calling flash() from the native API raises outside a request
+            # context and can turn a successful upload into an HTTP 500.
+            if flash is not None and has_request_context():
+                flash(message, category)
 
         if not os.path.exists(self.app.config['UPLOAD_FOLDER']):
-            flash('Error: Library folder does not exist.', 'error')
+            notify('Error: Library folder does not exist.', 'error')
             return None
 
         if not os.path.exists(self.theme_folder):
             try:
                 os.makedirs(self.theme_folder, exist_ok=True)
-                flash('Themes folder created successfully.', 'info')
+                notify('Themes folder created successfully.', 'info')
             except Exception as e:
-                flash(f'Error creating themes folder: {str(e)}', 'error')
+                notify(f'Error creating themes folder: {str(e)}', 'error')
                 return None
 
         temp_dir = None
@@ -86,6 +100,25 @@ class ThemeManager:
                         raise ValueError(f"Unsafe absolute path in zip: {member_name}")
                     if '..' in member_name.replace('\\', '/').split('/'):
                         raise ValueError(f"Unsafe path in zip (traversal): {member_name}")
+                    # Win32 normalizes trailing dots/spaces in path components.
+                    # Reject those aliases, device names, alternate data stream
+                    # syntax, and control characters before checking containment
+                    # or passing names to ZipFile.extractall().
+                    for component in member_name.replace('\\', '/').split('/'):
+                        if not component or component == '.':
+                            continue
+                        if component.endswith(('.', ' ')) or any(
+                            ord(char) < 32 or char in '<>:"|?*'
+                            for char in component
+                        ):
+                            raise ValueError(
+                                f"Unsafe Windows path component in zip: {component}"
+                            )
+                        device_stem = component.split('.', 1)[0].rstrip(' .').upper()
+                        if device_stem in WINDOWS_RESERVED_NAMES:
+                            raise ValueError(
+                                f"Unsafe Windows device name in zip: {component}"
+                            )
                     target_path = os.path.realpath(os.path.join(temp_dir, member_name))
                     if target_path != temp_dir_real and not target_path.startswith(temp_dir_real + os.sep):
                         raise ValueError(f"Unsafe path in zip (traversal): {member_name}")
@@ -107,6 +140,12 @@ class ThemeManager:
                 if field not in theme_data:
                     raise ValueError(f"Missing required field '{field}' in theme.json")
 
+            from oneirodex.utils.theme_validation import is_valid_theme_name
+
+            valid_name, name_error = is_valid_theme_name(theme_data.get('name'))
+            if not valid_name:
+                raise ValueError(name_error or 'Invalid theme name')
+
             css_folder = os.path.join(temp_dir, 'css')
             if not os.path.exists(css_folder):
                 raise ValueError("CSS folder not found in the uploaded theme")
@@ -125,26 +164,26 @@ class ThemeManager:
             # folder and theme library are on different filesystems.
             shutil.copytree(temp_dir, theme_path, dirs_exist_ok=True)
             reserved_theme_path = None
-            flash(f'Theme "{theme_data["name"]}" uploaded successfully.', 'success')
+            notify(f'Theme "{theme_data["name"]}" uploaded successfully.', 'success')
             return theme_data
         except (zipfile.BadZipFile, zipfile.LargeZipFile) as e:
-            flash(f'Error: Invalid zip file - {str(e)}', 'error')
+            notify(f'Error: Invalid zip file - {str(e)}', 'error')
             print(f"Zip file error during theme upload: {str(e)}")
             return None
         except json.JSONDecodeError as e:
-            flash('Error: Invalid theme.json file - not valid JSON.', 'error')
+            notify('Error: Invalid theme.json file - not valid JSON.', 'error')
             print(f"JSON decode error in theme upload: {str(e)}")
             return None
         except ValueError as e:
-            flash(f'Error: {str(e)}', 'error')
+            notify(f'Error: {str(e)}', 'error')
             print(f"Validation error during theme upload: {str(e)}")
             return None
         except (OSError, IOError) as e:
-            flash(f'Error: File system error - {str(e)}', 'error')
+            notify(f'Error: File system error - {str(e)}', 'error')
             print(f"File system error during theme upload: {str(e)}")
             return None
         except Exception as e:
-            flash(f'Error: Unexpected error during theme upload - {str(e)}', 'error')
+            notify(f'Error: Unexpected error during theme upload - {str(e)}', 'error')
             print(f"Unexpected error during theme upload: {str(e)}")
             return None
         finally:

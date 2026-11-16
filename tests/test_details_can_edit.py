@@ -43,3 +43,4 @@ def test_can_edit_follows_the_librarian_rule(app, db_session, game, role, expect
         payload = build_game_details_payload(game, user)
     assert payload['can_edit'] is expected
     assert payload['is_admin'] is (role == 'admin')
+    assert payload['can_cleanup_versions'] is expected

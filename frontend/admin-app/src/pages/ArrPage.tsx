@@ -3,6 +3,8 @@ import { Page } from '../components/Page'
 import { LABELS, useArrController } from './useArrController'
 import './ArrPage.css'
 
+import { AdminLink } from '../components/AdminLink'
+
 export function ArrPage() {
   const {
     effectiveEnabled,
@@ -487,9 +489,9 @@ export function ArrPage() {
           </p>
         </section>
       )}
-      <a className="od-admin-backlink" href="/admin/settings">
+      <AdminLink className="od-admin-backlink" to="/admin/settings">
         Back to Settings
-      </a>
+      </AdminLink>
     </Page>
   )
 }

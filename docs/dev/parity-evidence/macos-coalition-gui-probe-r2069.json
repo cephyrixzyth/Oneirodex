@@ -1,0 +1,87 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2069",
+  "observed_utc": "2026-11-13T20:53:03.217983+00:00",
+  "source_base": "6a4118bae90dfc96ae81162e7c5ed37f45c85652",
+  "hypothesis": "Own-user GUI namespace may admit the same fixture rejected in the background user namespace.",
+  "production_tracking_changed": false,
+  "default_domain": "user",
+  "allowed_domains": [
+    "user",
+    "gui"
+  ],
+  "root_or_other_user_or_system_domain": "rejected",
+  "local_checks": {
+    "observed_utc": "2026-11-13T20:50:17.175626+00:00",
+    "passed": true,
+    "platform": "Windows",
+    "results": [
+      {
+        "name": "controller-safety",
+        "exit_code": 0,
+        "expected": 0,
+        "log_sha256": "41bd26b2f7ab7a8e4580d74d57aee5f478a2576fde70038a54923aa2c57556c8"
+      },
+      {
+        "name": "syntax",
+        "exit_code": 0,
+        "expected": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "nonmac-refusal",
+        "exit_code": 2,
+        "expected": 2,
+        "log_sha256": "ce7c58c43213ff3cd73f14cf18895e465c98741e47251836057a1f5071502f24"
+      },
+      {
+        "name": "ordinary-job-guards",
+        "exit_code": 0,
+        "expected": 0,
+        "log_sha256": "36cb47305672c7b70f88cbec4e4986bc684df74675e7e1c5859640a3321046af"
+      },
+      {
+        "name": "targeted-manual-guards",
+        "exit_code": 0,
+        "expected": 0,
+        "log_sha256": "d88c3faaed103084fc8572000ab66d4b635c079d09dc7cad97e8ae798695d38e"
+      }
+    ],
+    "source_sha256": {
+      ".github/workflows/desktop-build.yml": "672edb5c914e375965d052588b26a11adf26c61ce1c55211b371f7ed502cac53",
+      "scripts/ci/probe-macos-launch-coalition.py": "0520e812d19da238dd184b3bcd4145e263c47322b880c22f345822c6ed7233a8",
+      "scripts/ci/test_macos_launch_coalition_probe.py": "f696af20035e1b2187147e1a5e5d7c5274845b8d9ceae633dd889cc1fe9acb3d",
+      "scripts/ci/README-macos-coalition-probe.md": "14c51ca7e094f558aa201d9255aeae7b5606c029a25e0a51c60181356f028359"
+    },
+    "scope": "Ten mocked controller checks, compile/refusal and parsed workflow guards only; actual targeted-manual selection and new native diagnosis remain pending."
+  },
+  "native_comparison": {
+    "status": "phase_passed",
+    "observed_utc": "2026-11-13T21:00:45.768Z",
+    "source_head": "e5688aaa65d3ad7f12f8b4a762e0518152a7d444",
+    "source_sha256": "0520e812d19da238dd184b3bcd4145e263c47322b880c22f345822c6ed7233a8",
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43506053694",
+    "job_id": 132163895665,
+    "platform": "Darwin 25.6.0 arm64",
+    "same_runner_user_control": "Unsupported: bootstrap exit 5; exact attempted job cleanup passed. No elevation or automatic fallback.",
+    "selected_GUI_probe": "Passed: two distinct own-user GUI job coalitions, each active count 1, excluding the controller and independent outside process; cleanup errors 0.",
+    "execution_scope": "One probe job executed; Rust, build and release jobs skipped by the explicit probe-only manual selection.",
+    "family_recovery_acceptance": false,
+    "raw_log_sha256": "69bc78244c2433bb5fec9d1ff53c97a380de23e7fa0ebf321bacc385a485e751",
+    "private_native_receipt_sha256": "aa21b582762d7c760952e0518e62fcd5695b222336d257dd0e10d2ae0b150b1a",
+    "fallback": "none"
+  },
+  "archive": {
+    "filename": "macos-own-gui-probe-r2069.zip",
+    "sha256": "7c12b9c8f8de3e05b7411b6a479825142c918a41c3d6889e18b2b5fbc2d516cf",
+    "payload_files": 16,
+    "manifest_in_addition": true,
+    "bytes": 75490,
+    "storage": "Private canonical DT-006 artifacts; raw host paths withheld from Git."
+  },
+  "limits": "Native API/job isolation qualified on one Darwin arm64 runtime only. No descendant, guardian-loss, production Rust/Tauri, account/restart/package, Intel/older Mac or original-program acceptance. Local mocks are separate evidence.",
+  "evidence_selection": "Archive fixes sources/local checks before this public summary; RED and final staged preflight are separate.",
+  "remaining": [
+    "All detached-descendant, guardian-loss, identity/restart/package and original program gates."
+  ]
+}

@@ -14,7 +14,9 @@ from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
-from oneirodex.models import EmulatorSave, Game, Library, User
+import pytest
+
+from oneirodex.models import EmulatorSave, EmulatorSaveGeneration, Game, Library, User
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils.emulator_saves import (
     AUTO_STATE_SLOT,
@@ -23,6 +25,8 @@ from oneirodex.utils.emulator_saves import (
     QUICK_SAVE_PREFIX,
     is_state_slot,
     latest_state_by_game,
+    audit_save_storage,
+    delete_save,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -173,6 +177,366 @@ def test_uploading_a_state_updates_the_resume_summary(client, db_session, config
     assert response.status_code == 201, response.get_json()
     latest = latest_state_by_game(user.id, [game.uuid])
     assert latest[game.uuid]['slot_name'] == AUTO_STATE_SLOT
+
+
+def test_invalid_expected_revision_returns_bad_request_without_writing(
+    client, db_session, configured_install, tmp_path, app,
+):
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    user = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    _login(client, user)
+
+    response = client.post(
+        f'/api/games/{game.uuid}/saves',
+        data={
+            'slot': AUTO_STATE_SLOT,
+            'expected_revision': 'not-a-number',
+            'file': (BytesIO(b'state-bytes'), 'cloud.state'),
+        },
+        content_type='multipart/form-data',
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()['error_code'] == 'bad_request'
+    assert db_session.query(EmulatorSave).filter_by(user_id=user.id, game_uuid=game.uuid).count() == 0
+    assert not (tmp_path / str(user.id) / game.uuid).exists()
+
+
+def test_save_quota_counts_all_games_for_the_member(client, db_session, configured_install, tmp_path, app):
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    app.config['EMULATOR_SAVES_USER_QUOTA_MB'] = 1
+    user = _user(db_session)
+    library = _library(db_session)
+    existing_game = _game(db_session, library)
+    target_game = _game(db_session, library)
+    db_session.add(EmulatorSave(
+        user_id=user.id,
+        game_uuid=existing_game.uuid,
+        slot_name='existing',
+        filename='existing.state',
+        size_bytes=1024 * 1024,
+        storage_path=str(tmp_path / 'existing.state'),
+        encrypted=False,
+    ))
+    db_session.commit()
+    _login(client, user)
+
+    response = client.post(
+        f'/api/games/{target_game.uuid}/saves',
+        data={'slot': 'new-slot', 'file': (BytesIO(b'new-state'), 'new.state')},
+        content_type='multipart/form-data',
+    )
+
+    assert response.status_code == 413
+    assert response.get_json()['error_code'] == 'payload_too_large'
+    assert not (tmp_path / str(user.id) / target_game.uuid).exists()
+
+
+def test_save_quota_charges_only_replacement_growth(client, db_session, configured_install, tmp_path, app):
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    app.config['EMULATOR_SAVES_USER_QUOTA_MB'] = 1
+    user = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    old_path = tmp_path / 'old.state'
+    old_path.write_bytes(b'old')
+    db_session.add(EmulatorSave(
+        user_id=user.id,
+        game_uuid=game.uuid,
+        slot_name='replace-me',
+        filename='old.state',
+        size_bytes=1024 * 1024,
+        storage_path=str(old_path),
+        encrypted=False,
+    ))
+    db_session.commit()
+    _login(client, user)
+
+    response = client.post(
+        f'/api/games/{game.uuid}/saves',
+        data={'slot': 'replace-me', 'file': (BytesIO(b'new-state'), 'new.state')},
+        content_type='multipart/form-data',
+    )
+
+    # The old generation remains charged against quota, so a replacement that
+    # would exceed the aggregate retained-byte budget is rejected.
+    assert response.status_code == 413, response.get_json()
+    saved = db_session.query(EmulatorSave).filter_by(
+        user_id=user.id, game_uuid=game.uuid, slot_name='replace-me',
+    ).one()
+    assert saved.size_bytes == 1024 * 1024
+    assert old_path.read_bytes() == b'old'
+
+
+def test_save_replacement_keeps_prior_generation_and_uses_unique_paths(
+    client, db_session, configured_install, tmp_path, app, monkeypatch,
+):
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    from oneirodex.utils import emulator_saves
+
+    synced_directories = []
+    monkeypatch.setattr(
+        emulator_saves, '_fsync_directory',
+        lambda directory: synced_directories.append(Path(directory).resolve()) or True,
+    )
+    user = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    _login(client, user)
+    first = client.post(
+        f'/api/games/{game.uuid}/saves',
+        data={'slot': 'a/b', 'file': (BytesIO(b'first'), 'same.state')},
+        content_type='multipart/form-data',
+    )
+    assert first.status_code == 201
+    first_row = db_session.query(EmulatorSave).filter_by(user_id=user.id, game_uuid=game.uuid).one()
+    old_path = Path(first_row.storage_path)
+    second = client.post(
+        f'/api/games/{game.uuid}/saves',
+        data={'slot': 'a?b', 'file': (BytesIO(b'second'), 'same.state')},
+        content_type='multipart/form-data',
+    )
+    assert second.status_code == 201
+    rows = db_session.query(EmulatorSave).filter_by(user_id=user.id, game_uuid=game.uuid).all()
+    assert len(rows) == 2
+    assert rows[0].storage_path != rows[1].storage_path
+    assert old_path.read_bytes() == b'first'
+    assert db_session.query(EmulatorSaveGeneration).count() == 0
+
+    replacement = client.post(
+        f'/api/games/{game.uuid}/saves',
+        data={
+            'slot': 'a/b', 'expected_revision': '1',
+            'file': (BytesIO(b'updated'), 'same.state'),
+        },
+        content_type='multipart/form-data',
+    )
+    assert replacement.status_code == 201
+    assert len(synced_directories) == 3
+    assert all(path.is_relative_to(tmp_path.resolve()) for path in synced_directories)
+    active = db_session.query(EmulatorSave).filter_by(
+        user_id=user.id, game_uuid=game.uuid, slot_name='a/b',
+    ).one()
+    history = db_session.query(EmulatorSaveGeneration).filter_by(save_id=active.id).one()
+    assert Path(history.storage_path).read_bytes() == b'first'
+    assert Path(active.storage_path).read_bytes() == b'updated'
+    stale = client.post(
+        f'/api/games/{game.uuid}/saves',
+        data={
+            'slot': 'a/b', 'expected_revision': '1',
+            'file': (BytesIO(b'stale'), 'stale.state'),
+        },
+        content_type='multipart/form-data',
+    )
+    assert stale.status_code == 409
+    assert stale.get_json()['detail']['current_revision'] == 2
+
+
+def test_bounded_repeated_replacements_keep_every_committed_generation(
+    client, db_session, configured_install, tmp_path, app,
+):
+    """A short burst of sequential writes must retain a complete readable chain."""
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    user = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    _login(client, user)
+    committed_paths = []
+
+    for revision in range(20):
+        payload = f'committed-generation-{revision}'.encode()
+        response = client.post(
+            f'/api/games/{game.uuid}/saves',
+            data={
+                'slot': 'stress-slot',
+                'expected_revision': str(revision),
+                'file': (BytesIO(payload), f'gen-{revision}.state'),
+            },
+            content_type='multipart/form-data',
+        )
+        assert response.status_code == 201, response.get_json()
+        db_session.expire_all()
+        active = db_session.query(EmulatorSave).filter_by(
+            user_id=user.id, game_uuid=game.uuid, slot_name='stress-slot',
+        ).one()
+        assert active.revision == revision + 1
+        assert Path(active.storage_path).read_bytes() == payload
+        committed_paths.append(active.storage_path)
+
+    history = db_session.query(EmulatorSaveGeneration).filter_by(save_id=active.id).all()
+    assert {item.storage_path for item in history} == set(committed_paths[:-1])
+    assert {
+        item.filename: Path(item.storage_path).read_bytes()
+        for item in history
+    } == {
+        f'gen-{index}.state': f'committed-generation-{index}'.encode()
+        for index in range(19)
+    }
+    audit = audit_save_storage(db_session, tmp_path)
+    assert audit['complete'] is True
+    assert audit['mutated_files'] is False
+    assert audit['referenced_files'] == 20
+    assert audit['unreferenced_files'] == 0
+
+
+def test_directory_sync_failure_keeps_old_pointer_and_is_reported_as_orphan(
+    client, db_session, configured_install, tmp_path, app, monkeypatch,
+):
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    user = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    _login(client, user)
+    initial = client.post(
+        f'/api/games/{game.uuid}/saves',
+        data={'slot': 'slot', 'file': (BytesIO(b'committed'), 'old.state')},
+        content_type='multipart/form-data',
+    )
+    assert initial.status_code == 201
+    row = db_session.query(EmulatorSave).filter_by(
+        user_id=user.id, game_uuid=game.uuid, slot_name='slot',
+    ).one()
+    old_path = Path(row.storage_path)
+
+    from oneirodex.utils import emulator_saves
+
+    def fail_directory_sync(_directory):
+        raise OSError('synthetic directory sync failure')
+
+    monkeypatch.setattr(emulator_saves, '_fsync_directory', fail_directory_sync)
+    failed = client.post(
+        f'/api/games/{game.uuid}/saves',
+        data={'slot': 'slot', 'file': (BytesIO(b'not committed'), 'new.state')},
+        content_type='multipart/form-data',
+    )
+    assert failed.status_code == 500
+    db_session.expire_all()
+    unchanged = db_session.query(EmulatorSave).filter_by(id=row.id).one()
+    assert unchanged.storage_path == str(old_path)
+    assert old_path.read_bytes() == b'committed'
+    audit = audit_save_storage(db_session, tmp_path)
+    assert audit['complete'] is True
+    assert audit['mutated_files'] is False
+    assert audit['referenced_files'] == 1
+    assert audit['unreferenced_files'] == 1
+
+
+def test_save_storage_audit_reports_missing_and_shared_root_references(db_session, tmp_path):
+    user = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    existing_path = tmp_path / 'existing.save'
+    existing_path.write_bytes(b'save')
+    missing_path = tmp_path / 'missing.save'
+    db_session.add_all([
+        EmulatorSave(
+            user_id=user.id, game_uuid=game.uuid, slot_name='one', filename='one.state',
+            size_bytes=4, storage_path=str(existing_path),
+        ),
+        EmulatorSave(
+            user_id=user.id, game_uuid=game.uuid, slot_name='two', filename='two.state',
+            size_bytes=4, storage_path=str(missing_path),
+        ),
+    ])
+    db_session.commit()
+    (tmp_path / 'orphan.save').write_bytes(b'orphan')
+    outside = tmp_path.parent / 'outside.save'
+    outside.write_bytes(b'outside')
+    try:
+        db_session.add(EmulatorSave(
+            user_id=user.id, game_uuid=game.uuid, slot_name='three', filename='three.state',
+            size_bytes=7, storage_path=str(outside),
+        ))
+        db_session.commit()
+
+        audit = audit_save_storage(db_session, tmp_path)
+
+        assert audit == {
+            'root_available': True,
+            'complete': True,
+            'entry_limit': 100_000,
+            'entries_scanned': 2,
+            'regular_files': 2,
+            'referenced_files': 2,
+            'missing_references': 1,
+            'outside_root_references': 1,
+            'unreferenced_files': 1,
+            'symlinks_skipped': 0,
+            'scan_limit_reached': False,
+            'mutated_files': False,
+        }
+        assert existing_path.exists() and (tmp_path / 'orphan.save').exists()
+    finally:
+        outside.unlink(missing_ok=True)
+
+
+def test_explicit_save_delete_keeps_legacy_path_until_last_reference_is_removed(
+    db_session, tmp_path,
+):
+    owner = _user(db_session)
+    other_owner = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    legacy_path = tmp_path / 'legacy-shared.state'
+    legacy_path.write_bytes(b'legacy committed state')
+    first = EmulatorSave(
+        user_id=owner.id, game_uuid=game.uuid, slot_name='first',
+        filename='first.state', size_bytes=22, storage_path=str(legacy_path),
+        encrypted=False,
+    )
+    second = EmulatorSave(
+        user_id=other_owner.id, game_uuid=game.uuid, slot_name='second',
+        filename='second.state', size_bytes=22, storage_path=str(legacy_path),
+        encrypted=False,
+    )
+    db_session.add_all([first, second])
+    db_session.commit()
+
+    assert delete_save(owner.id, game.uuid, 'first') is True
+    assert legacy_path.read_bytes() == b'legacy committed state'
+    assert db_session.query(EmulatorSave).filter_by(id=second.id).one_or_none() is not None
+
+    assert delete_save(other_owner.id, game.uuid, 'second') is True
+    assert not legacy_path.exists()
+
+
+def test_failed_save_commit_keeps_previous_generation_readable(
+    client, db_session, configured_install, tmp_path, app, monkeypatch,
+):
+    app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
+    user = _user(db_session)
+    library = _library(db_session)
+    game = _game(db_session, library)
+    _login(client, user)
+    initial = client.post(
+        f'/api/games/{game.uuid}/saves',
+        data={'slot': 'slot', 'file': (BytesIO(b'committed'), 'old.state')},
+        content_type='multipart/form-data',
+    )
+    assert initial.status_code == 201
+    row = db_session.query(EmulatorSave).filter_by(user_id=user.id, game_uuid=game.uuid).one()
+    prior_path = Path(row.storage_path)
+    from oneirodex.runtime_native.db_session import native_db
+    session = native_db.session()
+    real_commit = session.commit
+
+    def fail_commit():
+        raise RuntimeError('simulated database failure')
+
+    monkeypatch.setattr(session, 'commit', fail_commit)
+    with pytest.raises(RuntimeError, match='simulated database failure'):
+        from oneirodex.utils.emulator_saves import store_save
+        store_save(
+            user_id=user.id, game_uuid=game.uuid, slot_name='slot',
+            file_storage=BytesIO(b'uncommitted'),
+        )
+    monkeypatch.setattr(session, 'commit', real_commit)
+    db_session.expire_all()
+    unchanged = db_session.query(EmulatorSave).filter_by(id=row.id).one()
+    assert unchanged.storage_path == str(prior_path)
+    assert prior_path.read_bytes() == b'committed'
 
 
 # --- the shell ---------------------------------------------------------------

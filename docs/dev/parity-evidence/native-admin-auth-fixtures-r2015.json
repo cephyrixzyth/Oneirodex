@@ -1,0 +1,200 @@
+{
+  "review_id": "R2015",
+  "doc_status": "Reference",
+  "title": "Native admin adapter persisted-login fixture qualification",
+  "classification": "Confirmed obsolete test identities repaired; production authentication and role policy unchanged",
+  "source_head_before_change": "48324b529f8753c6d3db3e84ce99316fd89a6189",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "tests/test_native_admin_art_studio_actions.py": "842692025e71d14a25c02408d4238cb2100481bff7d9423907633933dcdf9bb5",
+    "tests/test_native_admin_art_studio_preview.py": "0256a3193eb13242251b4c7fe03df63132e9733674ce1c15061ec735c7bda1cf",
+    "tests/test_native_admin_art_studio_reads.py": "7f7253ca5c8ef7001d08bccf689efee6bcdd9012627982ed519d70d9053d1212",
+    "tests/test_native_admin_artwork_batch.py": "87f05924345b222fb7309cb5db36ce4731edb4141fe83d1449d8f3c2c15b2e33",
+    "tests/test_native_admin_artwork_generate.py": "53c61e1e77f1909f02808b9297af7b95823494991f725d3e8a47feeae159ba8e",
+    "tests/test_native_admin_attract_mode.py": "724e479da92c53ae53ce2c5e2d17061e4a73410d3299f8e671d0d25c9874b823",
+    "tests/test_native_admin_cover_apply.py": "b295b383171b4d0dcc1fd2aaaa7e0f084c000fa9c08d106a1fec0fa3f5d47ca9",
+    "tests/test_native_admin_cover_batch.py": "2c62cac8db73cc50edc1bd87b7a0e5ec6ebbb23b6e78b8571cc0cb050fc9aeb6",
+    "tests/test_native_admin_cover_search.py": "5dc8af963260f5a01d654de1ebed5b54e276afe81057c3cb509e3582358980b2",
+    "tests/test_native_admin_discovery_sections.py": "57032508f51a853d383ef80fefa4f6d9c0587d5b636799420800cd5af16fa1be",
+    "tests/test_native_admin_features.py": "f0b036b90cf101e1635c8d124dfc42800fae0192c0ae8eefb8144c73df5c036a",
+    "tests/test_native_admin_image_queue_read.py": "ad6ad054d5f081f381b7e4d4b0df469308463f1cef78ec9758c5a6f24b17f8eb",
+    "tests/test_native_admin_invites.py": "297fb6e3c3ae5658589d05a7ce8354dd0de1dd26f7c887ee8c42420b7fb69c70",
+    "tests/test_native_admin_newsletters.py": "070cdb6cf9826480adc0fe6535aea6ebfded794e23f8dfc332c974fb61f98dcd",
+    "tests/test_native_admin_ops_context.py": "bbb593bc0a77c8acc5eb51215e17a4f5e6979faba85647fe3e0f0e700bf90bc4",
+    "tests/test_native_admin_plugins_read.py": "a9a5a6719eabde714accccab752c5801267e0667f300f585f5a4652edb1389ce",
+    "tests/test_native_admin_scan_filters.py": "2a185a0763ddc3539299a2a72e912c03385d8ac81e525cb76ab7b92c703d99a6",
+    "tests/test_native_admin_search.py": "068d68c81016a718e76584fd5cb4030fce5d01ad880199da6fbad9e310ddd9db",
+    "tests/test_native_admin_statistics.py": "e18c8b09702a26c102382a3d33fcace58e16136f0ee485a720670d598c2311e9",
+    "tests/test_native_admin_system_reset.py": "142636396355bafefd90ca19294a2fccc5ab9803623934a47f8cfae5c5829d1b",
+    "tests/test_native_admin_theme_fonts.py": "b93c742f2719df4b96dfe55d3b64e62f56b4ac029cdaa66593b34fca034580cc",
+    "tests/test_native_admin_themes_read.py": "7beb13fa2bbed3edf26dc3fb67392395837701603f6821989e62f1348e0bed47",
+    "tests/test_native_admin_users_read.py": "6b6239c89fe30a0b065e27d10921f8b5fa080e44326ba4fccd35621a2ae233d6",
+    "tests/test_native_admin_whitelist.py": "514b350ab561d1899becab6b555bb690bf66a7dbe17fa22f39726f717626b2d2",
+    "tests/test_native_admin_user_create.py": "4c82fbeee13af899d46c0d919aa55e8b1e71e0afccade4c27bc27c57fcaa609a",
+    "tests/fixtures/native_auth.py": "def80c7ce20e561d88160b82442b5a2429d859708edfce3adbfa14e7d1ee213d"
+  },
+  "environment": {
+    "python": "3.12.16",
+    "platform": "Windows",
+    "database": "Owned loopback PostgreSQL 17.6 database upgraded to Alembic head for mixed user-create checks; temporary SQLite for fake native adapters",
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "checks": {
+    "art-native-fixtures-red": {
+      "exit_code": 1,
+      "seconds": 13.2,
+      "counts": {
+        "tests": 14,
+        "failures": 13,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 1
+      },
+      "owned_database_removed": null,
+      "log_sha256": "bbb9c901765d4f4602dea83b318922077ca7e0de4c0fb16b0d5db6ba4f610c7c"
+    },
+    "art-native-fixtures-green": {
+      "exit_code": 0,
+      "seconds": 6.66,
+      "counts": {
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 15
+      },
+      "owned_database_removed": null,
+      "log_sha256": "b9cca47dc24b24fee5cf5fdb4cc48808266443e2c5fe9a585009b631583dddee"
+    },
+    "admin-native-fixtures-red": {
+      "exit_code": 1,
+      "seconds": 29.04,
+      "counts": {
+        "tests": 102,
+        "failures": 88,
+        "errors": 1,
+        "skipped": 0,
+        "passed": 13
+      },
+      "owned_database_removed": null,
+      "log_sha256": "87edebf6f3cfb3677065788ddea329d0a19142d05a9ffc5331ab59813f6ce317"
+    },
+    "admin-native-fixtures-green": {
+      "exit_code": 2,
+      "seconds": 11.49,
+      "counts": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 3,
+        "skipped": 0,
+        "passed": 0
+      },
+      "owned_database_removed": null,
+      "log_sha256": "bedd1cca9ee57fb4fedc180e71c83e2e5761e60579252089816cb4597ac61329"
+    },
+    "admin-native-fixtures-qualified": {
+      "exit_code": 0,
+      "seconds": 16.44,
+      "counts": {
+        "tests": 97,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 97
+      },
+      "owned_database_removed": null,
+      "log_sha256": "b6c60702445e5bae803276031ee674c00bc3f86ea94a481471a3c2b4b8812d99"
+    },
+    "admin-native-fixtures-final": {
+      "exit_code": 0,
+      "seconds": 17.28,
+      "counts": {
+        "tests": 112,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 112
+      },
+      "owned_database_removed": null,
+      "log_sha256": "5327c35ab394ef9bfe730e9d2cc4e85fd8ae9efe1ea59773b498ad0329e186a7"
+    },
+    "user-create-red": {
+      "exit_code": 1,
+      "seconds": 14.0,
+      "counts": {
+        "tests": 5,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 2
+      },
+      "owned_database_removed": true,
+      "log_sha256": "cc607c91041274fbf0df46805988ba73dd8131d1b201e1e413d7d8aa1c97fe13"
+    },
+    "user-create-green": {
+      "exit_code": 0,
+      "seconds": 13.42,
+      "counts": {
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 5
+      },
+      "owned_database_removed": true,
+      "log_sha256": "f9f0efaf57e118dc639db29635a0de8d8a420d7c4c856a44e71e8c714746dc11"
+    },
+    "admin-native-postgres-final": {
+      "exit_code": 0,
+      "seconds": 25.69,
+      "counts": {
+        "tests": 117,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 117
+      },
+      "owned_database_removed": true,
+      "log_sha256": "23e0f6a0c23f9a11566d32083e1904f8d2e3db6a805f7f4d268e7ffe6ba97986"
+    },
+    "native-auth-fixture-consumers": {
+      "exit_code": 0,
+      "seconds": 20.89,
+      "counts": {
+        "tests": 103,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 103
+      },
+      "owned_database_removed": null,
+      "log_sha256": "af685ababc4befe2115dd949231fbfb4ada0722e315e60a75b77889df65ebac0"
+    }
+  },
+  "verification": {
+    "final_native_admin_cases": 117,
+    "direct_existing_fixture_consumer_cases": 103,
+    "syntax": "All 26 changed Python sources compile",
+    "existing_assertions": "All 25 test-module ASTs match their previous versions after explicit normalization of fixture imports, session identities/fingerprints, load-user callbacks, login route mount and the added retired-identity denial case. Existing adapter assertions were preserved.",
+    "negative_control": "Retired two-field cookie cannot reach art generation or event adapters. Existing member/admin, CSRF, invalid/oversized body, disabled capability and failure tests remain intact.",
+    "mixed_database_control": "A real PostgreSQL emailless-user persistence check passed before and after repair. Shared login fixture preserves requested db_session rather than replacing that real transaction with SQLite.",
+    "cleanup": "Owned PostgreSQL databases removed (current matching count verified zero); in-memory engines disposed by fixture; no HTTP server or provider delivery"
+  },
+  "changes": [
+    "Issue real persisted random-secret identities for fake users; use valid matching 16-character synthetic fingerprints.",
+    "Reuse an explicit test-only identity helper and per-test login store; preserve actual db_session in mixed database modules.",
+    "Mount the expected fake login route for the new retired-cookie rejection control."
+  ],
+  "rework": [
+    "Initial 21-module no-conftest diagnostic included one PostgreSQL-dependent case and reported a missing db_session fixture. That module was then qualified separately with real PostgreSQL and included in the final combined run.",
+    "A prefix-based import edit accidentally moved Flask redirect/request imports into the fixture import in three files; collection errors were retained, imports restored, then the complete selection passed."
+  ],
+  "limitations": [
+    "These are adapter/authentication fixture checks, not complete product behavior parity, live provider delivery, process/restart/platform acceptance or full CI.",
+    "Earlier 15/97/112-case runs overlap the final 117; do not add them as unique tests.",
+    "The final admin batch emitted one existing HTTPX deprecation warning.",
+    "Historical CI e26eb687 still records 428 failures; current-source CI and unrestricted Python/coverage qualification remain open."
+  ],
+  "capture": "Not applicable: test helpers, test fixtures and documentation only."
+}

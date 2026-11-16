@@ -16,9 +16,12 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse, Response
+from starlette.responses import JSONResponse, Response
 
-from .request_auth import RequestAuthContext, request_auth_context
+from .cookie_compat import set_cookie as set_response_cookie
+from .request_auth import RequestAuthContext, request_auth_context, require_bearer_scope
+from .response_compat import add_vary_header, flask_redirect_response
+from .query_compat import first_query_value
 
 
 @dataclass(frozen=True)
@@ -150,6 +153,9 @@ def create_trailers_router(
                 return decorate_response(
                     _login_redirect(flask_app, request, auth.login_manager, context), request
                 )
+            response = require_bearer_scope(context, 'read:library')
+            if response is not None:
+                return decorate_response(response, request)
             try:
                 return decorate_response(_api_ok(data.filters(context.user)), request)
             except Exception:
@@ -167,11 +173,14 @@ def create_trailers_router(
                 return decorate_response(
                     _login_redirect(flask_app, request, auth.login_manager, context), request
                 )
+            response = require_bearer_scope(context, 'read:library')
+            if response is not None:
+                return decorate_response(response, request)
             try:
                 # Validate comma-separated IDs at the HTTP boundary, matching the
                 # legacy handler's ValueError-to-safe-internal-envelope behavior.
-                parse_integer_list(request.query_params.get('genres'))
-                parse_integer_list(request.query_params.get('themes'))
+                parse_integer_list(first_query_value(request.query_params, 'genres'))
+                parse_integer_list(first_query_value(request.query_params, 'themes'))
                 ids = data.random_game_ids(context.user, request.query_params)
                 if not ids:
                     return decorate_response(_api_ok(_empty_payload(
@@ -295,7 +304,9 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context):
         # safe path fallback for malformed configuration.
         target = '/login'
 
-    current_url = str(request.url)
+    from .url_compat import request_url_iri
+
+    current_url = request_url_iri(request)
     parsed_target = urlsplit(target)
     parsed_current = urlsplit(current_url)
     same_origin = (
@@ -313,7 +324,7 @@ def _login_redirect(flask_app, request: Request, login_manager, auth_context):
     if force_host:
         parsed_target = parsed_target._replace(netloc=force_host)
     location = urlunsplit(parsed_target._replace(query=query))
-    response = RedirectResponse(location, status_code=302)
+    response = flask_redirect_response(location)
 
     # Flask-Login's default unauthorized handler flashes before redirecting.
     login_message = getattr(login_manager, 'login_message', None)
@@ -341,12 +352,16 @@ def _set_session_cookie(response, flask_app, auth_context):
     if not secret_key:
         return
     session_data = auth_context.session_data
+    from oneirodex.utils.persistent_sessions import prepare_session_identity_for_cookie
+
+    prepare_session_identity_for_cookie(session_data, config)
     cookie_name = config.get('SESSION_COOKIE_NAME', 'session')
     cookie_path = config.get('SESSION_COOKIE_PATH') or config.get('APPLICATION_ROOT') or '/'
     lifetime = config.get('PERMANENT_SESSION_LIFETIME')
     expires = datetime.now(timezone.utc) + lifetime if session_data.get('_permanent') and lifetime else None
     samesite = config.get('SESSION_COOKIE_SAMESITE')
-    response.set_cookie(
+    set_response_cookie(
+        response,
         cookie_name,
         dump_session_cookie(
             session_data,
@@ -358,10 +373,10 @@ def _set_session_cookie(response, flask_app, auth_context):
         domain=config.get('SESSION_COOKIE_DOMAIN'),
         secure=bool(config.get('SESSION_COOKIE_SECURE', False)),
         httponly=bool(config.get('SESSION_COOKIE_HTTPONLY', True)),
-        samesite=str(samesite).lower() if samesite else None,
+        samesite=str(samesite) if samesite else None,
         partitioned=bool(config.get('SESSION_COOKIE_PARTITIONED', False)),
     )
-    response.headers.add_vary_header('Cookie')
+    add_vary_header(response, 'Cookie')
 
 
 def _api_ok(payload: dict) -> JSONResponse:

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 from flask_login import login_user
 
 from oneirodex.models import User
+from oneirodex.utils.activity_feed import list_now_playing
 
 
 @pytest.fixture
@@ -32,6 +34,18 @@ def _login(client, app, user):
         sess['_fresh'] = True
     with app.test_request_context():
         login_user(user)
+
+
+def test_child_now_playing_projection_is_empty_without_reading_sessions(monkeypatch):
+    def unexpected_session_query(**_kwargs):
+        raise AssertionError('child activity must be filtered before querying sessions')
+
+    monkeypatch.setattr(
+        'oneirodex.utils.activity_feed.list_recent_activity',
+        unexpected_session_query,
+    )
+
+    assert list_now_playing(viewer=SimpleNamespace(role='child', id=42)) == []
 
 
 @pytest.mark.parametrize(('raw_limit', 'expected'), [('many', 25), ('500', 100)])

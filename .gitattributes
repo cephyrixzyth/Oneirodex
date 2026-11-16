@@ -15,3 +15,10 @@ Dockerfile text eol=lf
 
 # Prevent CRLF issues on Windows
 * text=auto
+# Historical browser-worker fixtures are byte-pinned to their Git source.
+tests/fixtures/*-legacy-*.js text eol=lf
+# Release licence digests pin the canonical shipped bytes on every platform.
+oneirodex/setup/fonts/OFL.txt text eol=lf
+oneirodex/static/vendor/webretro/LICENSE text eol=lf
+oneirodex/static/vendor/nostalgist/LICENSE text eol=lf
+oneirodex/static/vendor/emulatorjs/LICENSE text eol=lf

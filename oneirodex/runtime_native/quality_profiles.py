@@ -129,18 +129,53 @@ def create_quality_profiles_router(
                 path = request.url.path
                 body = None
                 if request.method in ('POST', 'PUT', 'PATCH'):
-                    try:
-                        body = await request.json()
-                    except Exception:
-                        body = None
+                    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+                    is_json = content_type == 'application/json' or (
+                        content_type.startswith('application/') and content_type.endswith('+json')
+                    )
+                    if is_json:
+                        try:
+                            body = await request.json()
+                        except Exception:
+                            body = None
                 payload_body = body if isinstance(body, dict) else {}
-                if path.endswith('/active') and request.method in ('PUT', 'POST'):
+                if (
+                    (
+                        path == '/api/quality-profiles' and request.method == 'PUT'
+                        or profile_id is not None and request.method in ('PUT', 'PATCH')
+                    )
+                    and body
+                    and not isinstance(body, dict)
+                ):
+                    # Legacy profile updates passed truthy JSON scalars through
+                    # to the profile helper, which reports them as bad requests
+                    # (or a missing profile first). Keep that contract while
+                    # create/active/score routes retain their newer 422 validation.
+                    try:
+                        result = (
+                            data.update(profile_id, body)
+                            if profile_id is not None else data.save(body)
+                        )
+                        response = JSONResponse(result)
+                    except KeyError as exc:
+                        payload, status = api_error_payload(str(exc), code='not_found')
+                        response = JSONResponse(payload, status_code=status)
+                    except (TypeError, ValueError) as exc:
+                        payload, status = api_error_payload(str(exc), code='bad_request')
+                        response = JSONResponse(payload, status_code=status)
+                elif (
+                    body and not isinstance(body, dict)
+                    and not path.endswith(('/active', '/score'))
+                ):
+                    payload, status = api_error_payload('Invalid request.', code='unprocessable')
+                    response = JSONResponse(payload, status_code=status)
+                elif path.endswith('/active') and request.method in ('PUT', 'POST'):
                     from pydantic import ValidationError
                     from oneirodex.schemas.quality_stats import SetActiveQualityProfileBody
                     from oneirodex.utils.validation import format_validation_errors
 
                     try:
-                        model = SetActiveQualityProfileBody.model_validate(payload_body)
+                        model = SetActiveQualityProfileBody.model_validate(body or {})
                         result = data.set_active((model.id or model.active_id or model.profile_id or '').strip())
                     except ValidationError as exc:
                         payload, status = api_error_payload(
@@ -159,7 +194,7 @@ def create_quality_profiles_router(
                     from oneirodex.utils.validation import format_validation_errors
 
                     try:
-                        model = ScoreReleaseBody.model_validate(payload_body)
+                        model = ScoreReleaseBody.model_validate(body or {})
                     except ValidationError as exc:
                         payload, status = api_error_payload(
                             'Invalid request.', code='unprocessable',
@@ -169,7 +204,7 @@ def create_quality_profiles_router(
                     else:
                         try:
                             size_bytes = int(model.size_bytes) if model.size_bytes is not None else None
-                        except (TypeError, ValueError):
+                        except (TypeError, ValueError, OverflowError):
                             size_bytes = None
                         profile = (model.profile_id or model.id or '').strip() or None
                         response = JSONResponse(data.score(

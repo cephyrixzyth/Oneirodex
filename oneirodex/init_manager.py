@@ -170,8 +170,8 @@ class InitializationManager:
 
             return True
 
-        except Exception as e:
-            _safe_print(f"[ERR] Database structure setup failed: {e}")
+        except Exception:
+            _safe_print("[ERR] Database structure setup failed; check schema and migration configuration")
             return False
 
     # First squashed Alembic revision (create_all + frozen updateschema).
@@ -186,7 +186,7 @@ class InitializationManager:
         - If stamped at/ past a revision that adds columns create_all already
           created, migrations are idempotent (see schedule-fields revision).
 
-        Failures are logged and swallowed so boot cannot die on migration.
+        Failures block initialization: readiness must not hide a failed upgrade.
         """
         try:
             from sqlalchemy import inspect as sa_inspect
@@ -203,10 +203,7 @@ class InitializationManager:
             repo_root = os.path.dirname(PACKAGE_ROOT)
             ini_path = os.path.join(repo_root, 'alembic.ini')
             if not os.path.isfile(ini_path):
-                _safe_print(
-                    "[WARN] alembic.ini not found; skipping Alembic ensure"
-                )
-                return
+                raise RuntimeError('Alembic migration configuration is unavailable')
 
             alembic_cfg = AlembicConfig(ini_path)
 
@@ -233,8 +230,10 @@ class InitializationManager:
             if has_schema or has_alembic:
                 command.upgrade(alembic_cfg, 'head')
                 _safe_print("[OK] Alembic upgrade head complete")
-        except Exception as e:  # noqa: BLE001 - boot must not fail on this
-            _safe_print(f"[WARN] Alembic ensure skipped: {e}")
+        except Exception as e:
+            # Driver exceptions can contain URLs, SQL values and local paths.
+            # Keep the cause for internal callers, never interpolate it in CLI output.
+            raise RuntimeError('Alembic migration could not complete; schema repair required') from e
 
     def _phase3_default_data(self):
         """Initialize all default data in the database."""

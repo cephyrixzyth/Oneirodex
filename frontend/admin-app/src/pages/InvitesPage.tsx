@@ -8,6 +8,8 @@ import { CreateUserForm } from '../components/CreateUserForm'
 import { AdminPageActions } from '../components/AdminPageActions'
 import { Page } from '../components/Page'
 
+import { AdminLink } from '../components/AdminLink'
+
 interface InviteUser {
   user_id?: string
   id?: string
@@ -148,12 +150,12 @@ export function InvitesPage() {
         </Button>
       </form>
       <AdminPageActions label="Invite page actions">
-        <a className="od-cbtn" href="/admin/users">
+        <AdminLink className="od-cbtn" to="/admin/users">
           Users
-        </a>
-        <a className="od-cbtn" href="/admin/support">
+        </AdminLink>
+        <AdminLink className="od-cbtn" to="/admin/support">
           Support inbox
-        </a>
+        </AdminLink>
       </AdminPageActions>
       {/* UID-014. "Unused tokens" is the number that decides whether anyone
           can actually invite someone, so it carries the tone: zero across the

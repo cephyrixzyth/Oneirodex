@@ -9,6 +9,7 @@ from sqlalchemy import and_, exists, func, or_, select
 from oneirodex import db
 from oneirodex.models import Game, GameVrProfile, Image, PlayerPerspective, game_player_perspective_association
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.api_tokens import require_api_token_scope
 from oneirodex.utils.auth import librarian_required
 from oneirodex.utils.validation import validate_body
 from oneirodex.schemas.vr import VrCompatBody, VrProfileBody
@@ -77,6 +78,7 @@ def _cover_url_for_game(game: Game) -> str | None:
 
 @apis_bp.route('/vr/catalog', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def vr_catalog():
     if not _vr_enabled():
         return api_error('VR browse is disabled', code='forbidden')
@@ -140,6 +142,7 @@ def vr_catalog():
 
 @apis_bp.route('/vr/games/<game_uuid>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def vr_game_detail(game_uuid: str):
     if not _vr_enabled():
         return api_error('VR browse is disabled', code='forbidden')
@@ -187,6 +190,7 @@ def _vr_profiles_payload(game) -> dict:
 
 @apis_bp.route('/games/<game_uuid>/vr_profiles', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def game_vr_profiles(game_uuid: str):
     """The headset records for a title (INSP-40): kind, runtime, the profile
     *page*, notes. Read by any member who can read the game."""

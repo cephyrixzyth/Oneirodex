@@ -14,7 +14,7 @@ from oneirodex.utils.arr_connectors import public_arr_config
 
 def _client(*, role='admin', enabled=True):
     flask_app = Flask(__name__)
-    flask_app.config.update(SECRET_KEY='native-arr-config-secret', CSP_ENABLED=False)
+    flask_app.config.update(SECRET_KEY='native-arr-config-secret', CSP_ENABLED=False, TESTING=True)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=71, user_id='arr-user', role=role,

@@ -1,0 +1,87 @@
+{
+  "doc_status": "Reference",
+  "review_id": "R2035",
+  "finding": "FE-007",
+  "classification": "confirmed original finding; bounded current browser correction qualified",
+  "source_head": "5b724b2b633d12161dac8169a632103ac922e4a9",
+  "captured_utc": "2026-11-11T15:17:11.231283+00:00",
+  "code_changed": false,
+  "source_sha256": {
+    "oneirodex/utils/github_issues.py": "ab79f3256802cbacc252d857b122ec1487d5674c85b109a2e542537a91bc2320",
+    "oneirodex/utils/support_privacy.py": "4a79ab29aebc5cae14ed3b916e20d04f9b9a113d53a015cd028337137cb58560",
+    "oneirodex/utils/support_reports.py": "adf176cd1b8e40a4d67d88c96dfc68c223e130cc6aa2a8590cc464fcdf88ac4b",
+    "oneirodex/schemas/support.py": "530bdf7738a51e9862f7f7ac23013db02443ca20d85d4b2ffcd8648cbe348984",
+    "oneirodex/routes_apis/support.py": "f499745857b0b3ae984b4657891496d8ab3ea99d019bf7e52034a062b055b474",
+    "oneirodex/runtime_native/support_mutations.py": "5884dc841f90f99ab8c9107197a06892fe3e18b8f406a54be712cfc8498f064d",
+    "oneirodex/models/misc.py": "ee725dcc26292bc366e2682052ced2279ebc251a2d94649b0168d6805f3f17b5",
+    "oneirodex/updateschema.py": "e26faafe7d9ce0b9f229d59c627f6741137e11993e72ab8cd5e4fb906a5bdf60",
+    "oneirodex/utils/support_delivery.py": "91af0386fad87ab889c2ace437742edfa303470c0ccf43424c68cbec5cf9fdcc",
+    "alembic/versions/f2a3b4c5d6e7_support_request_receipts.py": "602201dfb701c25b478009a8625953329f6c0172091776c4b24a891dd7ca06c7",
+    "alembic/versions/a4b5c6d7e8f9_support_delivery_attempts.py": "65456491e017300101b88b82b419e1ec2ca31f84253f622ff66922ab3c1760bc",
+    "oneirodex/runtime_native/palette_suggest.py": "3ae71e5e81c0c46dfdc1935e136a19d628e31a464ed18cb0f741c79e36b850af",
+    "oneirodex/utils/palette_suggest.py": "906f9d9ead21f9ee687ec2dc5d589ff4665fc59eb75917c375514aad70890568",
+    "oneirodex/utils/discover_providers.py": "8b7e5785b06fec1893f8341e8f1c564d04889f010df7370c933ede649c68cb85",
+    "oneirodex/static/js/od_pwa_install.js": "8aeb0160e9a9847ad0582a0e99abd1c91b5ea3995f977bafec39e464323be680"
+  },
+  "verification": {
+    "headless_seconds": 38.69,
+    "passed": true,
+    "steps": [
+      "Populated synthetic account, library and game using actual schema",
+      "Actual adult-to-child logout/login and pre-existing second tab: server ACL filters prior private progress and DOM suggestions; legacy origin history removed",
+      "Failed suggestions503 never revive origin history or prior-user names; reopened palette after same-user ACL revocation returns no unauthorized names"
+    ],
+    "real_accounts": "Two synthetic fixture accounts only",
+    "browser": "Headless Chromium, one shared context/two pages",
+    "legacy_origin_history_removed": true,
+    "restricted_progress_excluded_from_child_json_and_dom": true,
+    "existing_second_tab_reopening_filtered": true,
+    "suggestion_503_no_private_fallback": true,
+    "same_user_acl_revoke_reopening_filtered": true,
+    "source_fixed": true,
+    "cleanup_and_absence_checked": true,
+    "screenshots": [
+      {
+        "name": "fe007-browser-boundary-r2035-post-logout-adult.png",
+        "sha256": "f1d450cd94be93462beaa1ca5ad647a8d20c8d85c96a5f5ecdb5b9441d5ad753",
+        "width": 1100,
+        "height": 850,
+        "published": false
+      },
+      {
+        "name": "fe007-browser-boundary-r2035-post-logout-child.png",
+        "sha256": "74e1db0959aa6e32e32b8cd37475a4afb9670e8e1ebd3c7cbd15d2b30f89f72b",
+        "width": 1100,
+        "height": 850,
+        "published": false
+      },
+      {
+        "name": "fe007-browser-boundary-r2035-post-logout-failed-suggest.png",
+        "sha256": "b14fe86b4244a6ab2fc046e7b7336a55d151762ba8d887155c67cdcb7e80e5a1",
+        "width": 1100,
+        "height": 850,
+        "published": false
+      },
+      {
+        "name": "fe007-browser-boundary-r2035-post-logout-revoked.png",
+        "sha256": "b3408302ea815f8ada2289a8361585d4c66e665d4e79afd347f70b89d89be678",
+        "width": 1100,
+        "height": 850,
+        "published": false
+      }
+    ]
+  },
+  "harness_rework": {
+    "first_seconds": 67.57,
+    "first_passed": false,
+    "reason": "GET logout correctly refused405; harness did not assert logout and remained adult. Corrected POST+CSRF logout302 and visible username verification. Not a reproduced child ACL leak.",
+    "first_cleanup_passed": true
+  },
+  "limits": [
+    "Current-only evidence, no v1.1.8 parity promotion",
+    "Already-open stale DOM and immediate cross-tab invalidation without reopening unverified",
+    "Delayed in-flight cross-account search/suggestions and offline state still require qualification",
+    "Whole-original-program fresh independent review and supported-platform acceptance remain open"
+  ],
+  "no_merge_release_deployment": true
+}

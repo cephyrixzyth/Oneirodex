@@ -9,6 +9,8 @@ import pytest
 from fastapi import FastAPI
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.legacy_scan_management import create_legacy_scan_management_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -51,7 +53,7 @@ class FakeScanManagementData:
     def busy(self):
         return False
 
-    def start_scan(self, *, library, folder, options, app):
+    def start_scan(self, *, library, folder, options, app, database_scope=None):
         self.calls.append(('start_scan', library.uuid, folder, options))
         return {'status': 'queued', 'message': 'Scan queued.'}
 
@@ -77,13 +79,13 @@ def native_client():
         SECRET_KEY='scan-management-secret', WTF_CSRF_ENABLED=True,
         WTF_CSRF_SECRET_KEY='scan-management-secret', SESSION_PROTECTION='none',
     )
-    user = SimpleNamespace(id=9, name='Admin', role='admin', state=True, is_active=True)
+    user = SimpleNamespace(id=9, name='Admin', role='admin', state=True, is_active=True, session_fingerprint=lambda: '0123456789abcdef')
     data = FakeScanManagementData()
     runtime = FastAPI()
     runtime.include_router(create_legacy_scan_management_router(
         app, find_user=lambda _id: user, find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda user_id: user if user_id == '9:fp' else None,
+        load_user_id=lambda user_id: user if user_id.split(':', 1)[0] == str(9) else None,
         data_access=data, database_scope=lambda _app: nullcontext(),
     ))
     return runtime, data
@@ -95,7 +97,7 @@ def _request(runtime, action, *, fields=None, csrf=True):
             transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
             follow_redirects=False,
         ) as client:
-            session = {'_user_id': '9:fp', '_fresh': True}
+            session = {'_user_id': login_identity_for(9), '_fresh': True}
             token = generate_csrf_token(session, 'scan-management-secret')
             cookie = dump_session_cookie(session, 'scan-management-secret')
             body = {'submit': action, 'csrf_token': token if csrf else 'invalid', **(fields or {})}
@@ -110,12 +112,15 @@ def test_legacy_scan_management_csrf_and_filter_actions(native_client):
     runtime, data = native_client
     refused = _request(runtime, 'AddReleaseGroup', fields={'filter_pattern': 'Scene'}, csrf=False)
     assert refused.status_code == 400
+    assert refused.headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<p>The CSRF token is invalid.</p>' in refused.text
     assert data.calls == []
 
     added = _request(runtime, 'AddReleaseGroup', fields={
         'filter_pattern': ' Scene ', 'case_sensitive': 'yes',
     })
     assert added.status_code == 302
+    assert added.headers['content-type'] == 'text/html; charset=utf-8'
     assert added.headers['location'] == '/scan_management?active_tab=scan_filters'
     assert ('add_filter', 'Scene', True) in data.calls
 
@@ -137,10 +142,10 @@ def test_legacy_scan_management_auto_and_manual_scan_actions(native_client):
     runtime, data = native_client
     auto = _request(runtime, 'AutoScan', fields={
         'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
-        'scan_mode': 'folders', 'remove_missing': 'on', 'fetch_hltb': 'true',
+        'scan_mode': 'folders', 'remove_missing': 'y', 'fetch_hltb': 'y',
     })
     assert auto.status_code == 302
-    assert auto.headers['location'] == '/scan_management?active_tab=auto&library_uuid=lib-1'
+    assert auto.headers['location'] == '/scan_management?library_uuid=lib-1&active_tab=auto'
     queued = next(call for call in data.calls if call[0] == 'start_scan')
     assert queued[3]['remove_missing'] is True
     assert queued[3]['fetch_hltb'] is True
@@ -150,8 +155,79 @@ def test_legacy_scan_management_auto_and_manual_scan_actions(native_client):
         'scan_mode': 'folders', 'force_updates_extras_scan': 'on',
     })
     assert manual.status_code == 302
-    assert manual.headers['location'] == '/scan_management?active_tab=manual&library_uuid=lib-1'
+    assert manual.headers['location'] == '/scan_management?library_uuid=lib-1&active_tab=manual'
     assert ('list_folders', '/safe/root/library', 'lib-1') in data.calls
+
+
+@pytest.mark.parametrize(('action', 'tab'), [('AutoScan', 'auto'), ('ManualScan', 'manual')])
+@pytest.mark.parametrize('scan_mode', ['', 'unexpected-mode'])
+def test_legacy_scan_management_rejects_invalid_scan_mode(native_client, action, tab, scan_mode):
+    runtime, data = native_client
+    response = _request(runtime, action, fields={
+        'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
+        'scan_mode': scan_mode,
+    })
+
+    assert response.status_code == 302
+    assert response.headers['location'] == f'/scan_management?library_uuid=lib-1&active_tab={tab}'
+    assert not any(call[0] in {'start_scan', 'list_folders', 'list_files'} for call in data.calls)
+
+
+@pytest.mark.parametrize(('action', 'expected_call'), [
+    ('AutoScan', 'start_scan'), ('ManualScan', 'list_folders'),
+])
+def test_legacy_scan_management_defaults_missing_scan_mode(native_client, action, expected_call):
+    runtime, data = native_client
+    response = _request(runtime, action, fields={
+        'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
+    })
+
+    assert response.status_code == 302
+    assert any(call[0] == expected_call for call in data.calls)
+
+
+def test_legacy_scan_management_rejects_padded_schedule_choice(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'AutoScan', fields={
+        'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
+        'scan_mode': 'folders', 'schedule': ' interval ',
+        'schedule_interval_value': '15', 'schedule_interval_unit': 'minutes',
+    })
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/scan_management?library_uuid=lib-1&active_tab=auto'
+    assert not any(call[0] == 'start_scan' for call in data.calls)
+
+
+@pytest.mark.parametrize('fields', [
+    {'schedule': 'never'},
+    {'schedule': 'interval', 'schedule_interval_value': '0', 'schedule_interval_unit': 'minutes'},
+    {'schedule': 'interval', 'schedule_interval_value': '10081', 'schedule_interval_unit': 'minutes'},
+    {'schedule': 'interval', 'schedule_interval_value': '15', 'schedule_interval_unit': 'weeks'},
+    {'schedule': 'cron', 'schedule_cron': '0' * 65},
+])
+def test_schedule_wtforms_validation_errors_preserve_selected_library(native_client, fields):
+    runtime, data = native_client
+    response = _request(runtime, 'AutoScan', fields={
+        'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
+        'scan_mode': 'folders', **fields,
+    })
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/scan_management?library_uuid=lib-1&active_tab=auto'
+    assert not any(call[0] == 'start_scan' for call in data.calls)
+
+
+def test_legacy_scan_management_uses_six_hour_interval_default(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'AutoScan', fields={
+        'library_uuid': 'lib-1', 'folder_path': '/safe/root/library',
+        'scan_mode': 'folders', 'schedule': 'interval',
+    })
+
+    assert response.status_code == 302
+    queued = next(call for call in data.calls if call[0] == 'start_scan')
+    assert queued[3]['schedule_fields']['schedule_interval_minutes'] == 360
 
 
 def test_legacy_scan_management_rejects_unknown_libraries_and_unsafe_paths(native_client):
@@ -161,5 +237,6 @@ def test_legacy_scan_management_rejects_unknown_libraries_and_unsafe_paths(nativ
         'library_uuid': 'lib-1', 'folder_path': '/etc',
     })
     assert unknown.status_code == unsafe.status_code == 302
+    assert unknown.headers['location'] == '/scan_management?library_uuid=missing&active_tab=auto'
     assert not any(call[0] == 'start_scan' for call in data.calls)
     assert not any(call[0] == 'list_folders' for call in data.calls)

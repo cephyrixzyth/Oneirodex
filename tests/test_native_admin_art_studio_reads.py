@@ -11,6 +11,8 @@ from oneirodex.runtime_native.admin_art_studio_reads import (
     create_admin_art_studio_read_router,
 )
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.utils.persistent_sessions import issue_login_identity
+from tests.fixtures.native_auth import persistent_login_store
 
 
 class FakeArtStudioReads:
@@ -31,7 +33,7 @@ def _client(*, role='admin'):
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=18, user_id='admin-id', role=role, state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -51,7 +53,7 @@ def _client(*, role='admin'):
     client = TestClient(app)
     client.cookies.set(
         'session', dump_session_cookie(
-            {'_user_id': '18:fingerprint', '_fresh': True}, flask_app.config['SECRET_KEY'],
+            {'_user_id': issue_login_identity(user), '_fresh': True}, flask_app.config['SECRET_KEY'],
         ),
     )
     return client

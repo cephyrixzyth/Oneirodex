@@ -34,8 +34,6 @@ import os
 from typing import Any
 from urllib.parse import quote, urlparse
 
-from flask import current_app, has_app_context
-
 from oneirodex.utils.http_safe import safe_request
 from oneirodex.utils.security import validate_user_outbound_http_url
 
@@ -55,6 +53,8 @@ def base_url() -> str:
 
 def _testing() -> bool:
     try:
+        from flask import current_app, has_app_context
+
         return bool(has_app_context() and current_app.config.get('TESTING'))
     except Exception:  # noqa: BLE001
         return False

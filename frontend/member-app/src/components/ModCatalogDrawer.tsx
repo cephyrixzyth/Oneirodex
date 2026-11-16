@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Button, Modal } from '@oneirodex/ui'
+import { Button, Modal, safeExternalUrl } from '@oneirodex/ui'
 import { browseModCatalog, MOD_CATALOG_SOURCES, type ModHit } from '../api/mods'
 import { PageStatus } from './PageStatus'
 
@@ -72,11 +72,16 @@ export function ModCatalogDrawer({
     const wanted = new Set((hit.dependencies || []).map((d) => d.toLowerCase()))
     if (wanted.size === 0 || !hits) return []
     return hits.filter(
-      (other) => other.url !== hit.url && !other.tracked_id && wanted.has(other.name.toLowerCase()),
+      (other) =>
+        other.url !== hit.url &&
+        Boolean(safeExternalUrl(other.url)) &&
+        !other.tracked_id &&
+        wanted.has(other.name.toLowerCase()),
     )
   }
 
   async function add(hit: ModHit) {
+    if (!safeExternalUrl(hit.url)) return
     setAdding(hit.url)
     try {
       await onAdd(hit, dependenciesOf(hit))
@@ -160,63 +165,70 @@ export function ModCatalogDrawer({
 
         {hits && hits.length > 0 ? (
           <ul className="od-modcat__list">
-            {hits.map((hit) => (
-              <li key={`${hit.source}:${hit.url}`} className="od-modcat__item">
-                <div className="od-modcat__row">
-                  <strong className="od-modcat__name">{hit.name}</strong>
-                  {hit.version ? <span className="od-modcat__meta">v{hit.version}</span> : null}
-                  {hit.loader ? <span className="od-modcat__loader">{hit.loader}</span> : null}
-                  {hit.author ? <span className="od-modcat__meta">by {hit.author}</span> : null}
-                  {typeof hit.downloads === 'number' ? (
-                    <span className="od-modcat__meta">
-                      {hit.downloads.toLocaleString()} downloads
-                    </span>
+            {hits.map((hit) => {
+              const registryUrl = safeExternalUrl(hit.url)
+              return (
+                <li key={`${hit.source}:${hit.url}`} className="od-modcat__item">
+                  <div className="od-modcat__row">
+                    <strong className="od-modcat__name">{hit.name}</strong>
+                    {hit.version ? <span className="od-modcat__meta">v{hit.version}</span> : null}
+                    {hit.loader ? <span className="od-modcat__loader">{hit.loader}</span> : null}
+                    {hit.author ? <span className="od-modcat__meta">by {hit.author}</span> : null}
+                    {typeof hit.downloads === 'number' ? (
+                      <span className="od-modcat__meta">
+                        {hit.downloads.toLocaleString()} downloads
+                      </span>
+                    ) : null}
+                    {hit.tracked_id ? <span className="od-modcat__tracked">tracked</span> : null}
+                    {hit.update_available ? (
+                      <span className="od-modcat__update">update: v{hit.update_available}</span>
+                    ) : null}
+                  </div>
+                  {hit.dependencies && hit.dependencies.length ? (
+                    <p className="od-modcat__deps">Needs: {hit.dependencies.join(', ')}</p>
                   ) : null}
-                  {hit.tracked_id ? <span className="od-modcat__tracked">tracked</span> : null}
-                  {hit.update_available ? (
-                    <span className="od-modcat__update">update: v{hit.update_available}</span>
-                  ) : null}
-                </div>
-                {hit.dependencies && hit.dependencies.length ? (
-                  <p className="od-modcat__deps">Needs: {hit.dependencies.join(', ')}</p>
-                ) : null}
-                {hit.summary ? <p className="od-modcat__summary">{hit.summary}</p> : null}
-                <div className="od-modcat__actions">
-                  <a
-                    className="od-modcat__link"
-                    href={hit.url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    Registry page
-                  </a>
-                  {hit.tracked_id && hit.update_available && onNoteUpdate ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={adding === hit.url}
-                      onClick={() => void onNoteUpdate(hit)}
-                    >
-                      Mark updated to v{hit.update_available}
-                    </Button>
-                  ) : hit.tracked_id ? null : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={adding === hit.url}
-                      onClick={() => void add(hit)}
-                    >
-                      {adding === hit.url
-                        ? 'Adding…'
-                        : dependenciesOf(hit).length
-                          ? `Add with ${dependenciesOf(hit).length} needed`
-                          : 'Add to list'}
-                    </Button>
-                  )}
-                </div>
-              </li>
-            ))}
+                  {hit.summary ? <p className="od-modcat__summary">{hit.summary}</p> : null}
+                  <div className="od-modcat__actions">
+                    {registryUrl ? (
+                      <a
+                        className="od-modcat__link"
+                        href={registryUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        Registry page
+                      </a>
+                    ) : (
+                      <span className="od-modcat__link">Registry link unavailable</span>
+                    )}
+                    {hit.tracked_id && hit.update_available && onNoteUpdate ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={!registryUrl || adding === hit.url}
+                        onClick={() => void onNoteUpdate(hit)}
+                      >
+                        Mark updated to v{hit.update_available}
+                      </Button>
+                    ) : hit.tracked_id ? null : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={!registryUrl || adding === hit.url}
+                        onClick={() => void add(hit)}
+                      >
+                        {adding === hit.url
+                          ? 'Adding…'
+                          : dependenciesOf(hit).length
+                            ? `Add with ${dependenciesOf(hit).length} needed`
+                            : 'Add to list'}
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         ) : null}
       </div>

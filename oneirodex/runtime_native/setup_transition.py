@@ -1,6 +1,7 @@
 """FastAPI transition API for the ordered first-run setup wizard."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 import os
 import re
 from contextlib import nullcontext
@@ -11,9 +12,23 @@ from uuid import uuid4
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
-from starlette.responses import JSONResponse, PlainTextResponse, RedirectResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 
 from .request_auth import request_auth_context
+from .response_compat import flask_redirect_response
+
+_SETUP_FORM_MAX_FIELDS = 64
+_SETUP_FORM_MAX_FIELD_BYTES = 16 * 1024
+_SETUP_JSON_MAX_BYTES = 64 * 1024
+
+
+async def _parse_setup_form(request):
+    """Parse bounded text-only setup forms; the wizard has no file inputs."""
+    return await request.form(
+        max_files=0,
+        max_fields=_SETUP_FORM_MAX_FIELDS,
+        max_part_size=_SETUP_FORM_MAX_FIELD_BYTES,
+    )
 
 
 class SetupTransitionData:
@@ -22,7 +37,7 @@ class SetupTransitionData:
 
         return get_current_setup_step()
 
-    def transition(self, body, flask_app):
+    def transition(self, body, flask_app, *, database_scope=None):
         from sqlalchemy import select
 
         from oneirodex.runtime_native.db_session import native_db as db
@@ -86,7 +101,8 @@ class SetupTransitionData:
                 settings.smtp_port = body['smtp_port']
                 settings.smtp_username = body['smtp_username'] or None
                 if body['smtp_password']:
-                    settings.smtp_password = body['smtp_password']
+                    from oneirodex.utils.secret_store import write_global_secret
+                    write_global_secret(settings, 'smtp_password', body['smtp_password'])
                 settings.smtp_use_tls = body['smtp_use_tls']
                 settings.smtp_default_sender = body['smtp_default_sender'] or None
                 settings.smtp_enabled = body['smtp_enabled']
@@ -117,7 +133,8 @@ class SetupTransitionData:
                 settings = global_settings_row_or_create()
                 settings.igdb_client_id = body['igdb_client_id']
                 if body['igdb_client_secret']:
-                    settings.igdb_client_secret = body['igdb_client_secret']
+                    from oneirodex.utils.secret_store import write_global_secret
+                    write_global_secret(settings, 'igdb_client_secret', body['igdb_client_secret'])
                 try:
                     db.session.commit()
                 except Exception as exc:  # noqa: BLE001
@@ -135,8 +152,9 @@ class SetupTransitionData:
                     'mobygames_api_key', 'thegamesdb_api_key',
                 ):
                     value = body[key].strip()
-                    if value:
-                        setattr(settings, key, value)
+                    if body['configure_' + key] and value:
+                        from oneirodex.utils.secret_store import write_global_secret
+                        write_global_secret(settings, key, value)
                 if body['configure_oidc']:
                     for field, max_length in (
                         ('oidc_issuer_url', 512), ('oidc_client_id', 255),
@@ -161,7 +179,8 @@ class SetupTransitionData:
                                     ), None
                             setattr(settings, field, value[:max_length])
                     if body['oidc_client_secret']:
-                        settings.oidc_client_secret = body['oidc_client_secret']
+                        from oneirodex.utils.secret_store import write_global_secret
+                        write_global_secret(settings, 'oidc_client_secret', body['oidc_client_secret'])
                 settings.enable_hltb_integration = body['enable_hltb_integration']
                 settings.oidc_enabled = False
                 if not _commit_step(db, set_setup_step, 6, flask_app, 'Setup integration transition'):
@@ -188,9 +207,13 @@ class SetupTransitionData:
                 safe, _reason = is_safe_path(
                     folder, get_allowed_base_directories(flask_app), logger=flask_app.logger,
                 )
-                if not safe or not os.path.isdir(folder):
+                if not safe:
                     errors['folder_path'] = [
-                        'Choose an existing folder inside an allowed library location.'
+                        'That folder is outside the configured library locations.'
+                    ]
+                elif not os.path.isdir(folder):
+                    errors['folder_path'] = [
+                        'That folder is not available as a directory on the server.'
                     ]
             if errors:
                 return None, ('unprocessable', 'Check the first library details.', 422, errors), None
@@ -215,7 +238,8 @@ class SetupTransitionData:
 
                 result = start_or_queue_scan(
                     folder_path=folder, library_uuid=library.uuid, scan_mode=body['scan_mode'],
-                    queue_policy='queue', force_parallel=False, allow_force=False, app=flask_app,
+                    queue_policy='queue', allow_force=False, app=flask_app,
+                    database_scope=database_scope,
                 )
                 scan_status = result.get('status')
             except Exception as exc:  # noqa: BLE001 — library remains usable without a queued scan
@@ -285,7 +309,7 @@ def create_setup_transition_router(
         with scope:
             session_data = _session_data(request, flask_app.config)
             try:
-                form = await request.form()
+                form = await _parse_setup_form(request)
             except Exception:  # noqa: BLE001 — malformed forms are safe client errors
                 response = PlainTextResponse('Invalid setup form.', status_code=400)
                 _setup_form_headers(response, flask_app)
@@ -300,7 +324,7 @@ def create_setup_transition_router(
                 token = (
                     request.headers.get('X-CSRFToken')
                     or request.headers.get('X-CSRF-Token')
-                    or form.get(field_name)
+                    or first_form_value(form, field_name)
                 )
                 try:
                     validate_csrf_token(
@@ -311,8 +335,10 @@ def create_setup_transition_router(
                         field_name=field_name,
                         time_limit=flask_app.config.get('WTF_CSRF_TIME_LIMIT', 3600),
                     )
-                except CsrfTokenError:
-                    response = PlainTextResponse('The CSRF token is invalid.', status_code=400)
+                except CsrfTokenError as exc:
+                    from oneirodex.runtime_native.csrf_compat import csrf_html_error_response
+
+                    response = csrf_html_error_response(str(exc))
                     _setup_form_headers(response, flask_app)
                     return response
 
@@ -325,7 +351,7 @@ def create_setup_transition_router(
             body, return_to, parse_error = _setup_form_payload(path, form)
             if parse_error:
                 _setup_form_flash(auth.session_data, 'error', parse_error)
-                response = RedirectResponse(return_to, status_code=302)
+                response = flask_redirect_response(return_to, status_code=302)
                 _setup_form_session_cookie(response, flask_app, auth)
                 _setup_form_headers(response, flask_app)
                 return response
@@ -333,11 +359,35 @@ def create_setup_transition_router(
             step = body['step']
             current_step = data.current_step()
             if current_step != step:
-                _setup_form_flash(
-                    auth.session_data, 'warning',
-                    'This setup step is no longer current. Reload setup to continue.',
-                )
-                response = RedirectResponse('/setup', status_code=302)
+                if step == 1:
+                    # A competing first-admin submission may have completed
+                    # setup after this request rendered its form. Match the
+                    # legacy winner/loser flow: leave the losing session
+                    # signed out and send it directly to sign-in.
+                    _setup_form_flash(
+                        auth.session_data, 'warning',
+                        'Setup has already been completed.',
+                    )
+                    response = flask_redirect_response('/login', status_code=302)
+                else:
+                    if current_step is None and step in {2, 3}:
+                        _setup_form_flash(
+                            auth.session_data, 'warning',
+                            'Setup already completed.',
+                        )
+                        response = flask_redirect_response('/login', status_code=302)
+                    else:
+                        stale_messages = {
+                            '/setup/smtp': 'Please complete the admin account setup first.',
+                            '/setup/features': 'Please complete the previous setup steps first.',
+                            '/setup/igdb': 'Please complete the previous setup steps first.',
+                        }
+                        stale_message = stale_messages.get(path)
+                        if stale_message:
+                            _setup_form_flash(
+                                auth.session_data, 'warning', stale_message,
+                            )
+                        response = flask_redirect_response('/setup', status_code=302)
             elif step > 1 and (auth.user is None or _role(auth.user) != 'admin'):
                 _setup_form_flash(
                     auth.session_data, 'warning',
@@ -345,12 +395,15 @@ def create_setup_transition_router(
                 )
                 from urllib.parse import urlencode
 
-                response = RedirectResponse(
-                    '/login?' + urlencode({'next': request.url.path}), status_code=302,
+                response = flask_redirect_response(
+                    '/login?' + urlencode({'next': request.url.path}, safe='/'),
+                    status_code=302,
                 )
             else:
                 try:
-                    result, failure, new_admin = data.transition(body, flask_app)
+                    result, failure, new_admin = data.transition(
+                        body, flask_app, database_scope=database_scope,
+                    )
                 except Exception as exc:  # noqa: BLE001 — do not expose transition details
                     flask_app.logger.error('Setup form transition failed: %s', type(exc).__name__)
                     result, failure, new_admin = None, (
@@ -359,9 +412,17 @@ def create_setup_transition_router(
 
                 if new_admin is not None:
                     from oneirodex.runtime_native.auth_resolver import session_identifier
+                    from oneirodex.utils.persistent_sessions import ensure_login_identity
                     from oneirodex.utils.trusted_proxy import trusted_forwarded_for
 
-                    auth.session_data['_user_id'] = str(new_admin.get_id())
+                    auth.session_data['_user_id'] = ensure_login_identity(
+                        str(new_admin.get_id()),
+                        testing=bool(flask_app.config.get('TESTING')),
+                        enabled=flask_app.config.get(
+                            'PERSISTENT_SESSIONS_ENABLED',
+                            not flask_app.config.get('TESTING'),
+                        ),
+                    )
                     auth.session_data['_fresh'] = True
                     auth.session_data['_id'] = session_identifier(
                         request.client.host if request.client else None,
@@ -370,21 +431,34 @@ def create_setup_transition_router(
                     )
 
                 if failure:
-                    _setup_form_flash(auth.session_data, 'error', failure[1])
-                    detail = failure[3]
-                    if isinstance(detail, dict):
-                        for errors in detail.values():
-                            for message in errors:
-                                _setup_form_flash(auth.session_data, 'error', str(message))
-                    response = RedirectResponse(return_to, status_code=302)
+                    if step == 1 and failure[0] == 'conflict':
+                        _setup_form_flash(
+                            auth.session_data, 'warning',
+                            'Setup has already been completed.',
+                        )
+                        response = flask_redirect_response('/login', status_code=302)
+                    else:
+                        message = failure[1]
+                        if step == 1 and failure[0] == 'internal':
+                            message = (
+                                'The admin account could not be saved. '
+                                'Check the server log for details.'
+                            )
+                        _setup_form_flash(auth.session_data, 'error', message)
+                        detail = failure[3]
+                        if isinstance(detail, dict):
+                            for errors in detail.values():
+                                for message in errors:
+                                    _setup_form_flash(auth.session_data, 'error', str(message))
+                        response = flask_redirect_response(return_to, status_code=302)
                 elif result and '_error' in result:
                     _setup_form_flash(auth.session_data, 'error', result['_error'][1])
-                    response = RedirectResponse(return_to, status_code=302)
+                    response = flask_redirect_response(return_to, status_code=302)
                 else:
                     category, message = _setup_form_success(step, body, result or {})
                     _setup_form_flash(auth.session_data, category, message)
                     target = (result or {}).get('next_url') or return_to
-                    response = RedirectResponse(target, status_code=302)
+                    response = flask_redirect_response(target, status_code=302)
 
             _setup_form_session_cookie(response, flask_app, auth)
             _setup_form_headers(response, flask_app)
@@ -439,7 +513,9 @@ def create_setup_transition_router(
                         )
                     else:
                         try:
-                            result, failure, new_admin = data.transition(body, flask_app)
+                            result, failure, new_admin = data.transition(
+                                body, flask_app, database_scope=database_scope,
+                            )
                         except Exception as exc:  # noqa: BLE001
                             flask_app.logger.error('Setup transition failed: %s', type(exc).__name__)
                             result, failure, new_admin = None, (
@@ -451,9 +527,17 @@ def create_setup_transition_router(
                         else:
                             if new_admin is not None:
                                 from oneirodex.runtime_native.auth_resolver import session_identifier
+                                from oneirodex.utils.persistent_sessions import ensure_login_identity
                                 from oneirodex.utils.trusted_proxy import trusted_forwarded_for
 
-                                auth.session_data['_user_id'] = str(new_admin.get_id())
+                                auth.session_data['_user_id'] = ensure_login_identity(
+                                    str(new_admin.get_id()),
+                                    testing=bool(flask_app.config.get('TESTING')),
+                                    enabled=flask_app.config.get(
+                                        'PERSISTENT_SESSIONS_ENABLED',
+                                        not flask_app.config.get('TESTING'),
+                                    ),
+                                )
                                 auth.session_data['_fresh'] = True
                                 auth.session_data['_id'] = session_identifier(
                                     request.client.host if request.client else None,
@@ -464,8 +548,18 @@ def create_setup_transition_router(
                                 code, message, status, detail = result['_error']
                                 response = _error(message, code, status, detail=detail)
                             else:
+                                category, message = _setup_form_success(
+                                    body['step'], body, result or {},
+                                )
+                                _setup_form_flash(auth.session_data, category, message)
+                                result = {
+                                    **(result or {}), 'message': message,
+                                    'message_category': category,
+                                }
                                 response = _ok(result)
-            if auth is not None and auth.should_set_session_cookie:
+            if auth is not None and (
+                auth.should_set_session_cookie or auth.session_data.get('_flashes')
+            ):
                 from oneirodex.runtime_native.oidc_status import _set_session_cookie
 
                 _set_session_cookie(response, flask_app, auth)
@@ -492,20 +586,20 @@ def _setup_form_payload(path, form):
     truthy = lambda value: str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
     if step == 1:
         body.update(
-            username=form.get('username', ''), email=form.get('email', ''),
-            password=form.get('password', ''),
-            confirm_password=form.get('confirm_password', ''),
+            username=first_form_value(form, 'username', ''), email=first_form_value(form, 'email', ''),
+            password=first_form_value(form, 'password', ''),
+            confirm_password=first_form_value(form, 'confirm_password', ''),
         )
     elif step == 2:
         body.update(
             skip='skip_smtp' in form,
-            smtp_server=form.get('smtp_server', ''),
-            smtp_port=form.get('smtp_port', '587'),
-            smtp_username=form.get('smtp_username', ''),
-            smtp_password=form.get('smtp_password', ''),
-            smtp_use_tls=truthy(form.get('smtp_use_tls')),
-            smtp_default_sender=form.get('smtp_default_sender', ''),
-            smtp_enabled=truthy(form.get('smtp_enabled')),
+            smtp_server=first_form_value(form, 'smtp_server', ''),
+            smtp_port=first_form_value(form, 'smtp_port', '587'),
+            smtp_username=first_form_value(form, 'smtp_username', ''),
+            smtp_password=first_form_value(form, 'smtp_password', ''),
+            smtp_use_tls=truthy(first_form_value(form, 'smtp_use_tls')),
+            smtp_default_sender=first_form_value(form, 'smtp_default_sender', ''),
+            smtp_enabled=truthy(first_form_value(form, 'smtp_enabled')),
         )
     elif step == 3:
         for key in (
@@ -516,14 +610,14 @@ def _setup_form_payload(path, form):
     elif step == 4:
         body.update(
             skip='skip_igdb' in form,
-            igdb_client_id=form.get('igdb_client_id', ''),
-            igdb_client_secret=form.get('igdb_client_secret', ''),
+            igdb_client_id=first_form_value(form, 'igdb_client_id', ''),
+            igdb_client_secret=first_form_value(form, 'igdb_client_secret', ''),
         )
     elif step == 5:
         body.update(
-            skip=form.get('skip_integrations') == '1',
-            configure_oidc=form.get('configure_oidc') == 'on',
-            enable_hltb_integration=form.get('enable_hltb_integration') == 'on',
+            skip=first_form_value(form, 'skip_integrations') == '1',
+            configure_oidc=first_form_value(form, 'configure_oidc') == 'on',
+            enable_hltb_integration=first_form_value(form, 'enable_hltb_integration') == 'on',
         )
         for key in (
             'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
@@ -531,28 +625,33 @@ def _setup_form_payload(path, form):
             'oidc_client_id', 'oidc_client_secret', 'oidc_redirect_uri',
             'oidc_scopes', 'oidc_role_claim',
         ):
-            body[key] = form.get(key, '')
+            body[key] = first_form_value(form, key, '')
         for key in (
             'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
             'mobygames_api_key', 'thegamesdb_api_key',
         ):
-            if form.get('configure_' + key) != 'on':
+            configured = first_form_value(form, 'configure_' + key) == 'on'
+            body['configure_' + key] = configured
+            if not configured:
                 body[key] = ''
     else:
         body.update(
-            skip=form.get('skip_library') == 'on',
-            library_name=form.get('name', ''),
-            platform=form.get('platform', ''),
-            folder_path=form.get('folder_path', ''),
-            scan_mode=form.get('scan_mode') or 'folders',
-            scan_depth=form.get('scan_depth') or '1',
+            skip=first_form_value(form, 'skip_library') == 'on',
+            library_name=first_form_value(form, 'name', ''),
+            platform=first_form_value(form, 'platform', ''),
+            folder_path=first_form_value(form, 'folder_path', ''),
+            scan_mode=first_form_value(form, 'scan_mode') or 'folders',
+            scan_depth=first_form_value(form, 'scan_depth') or '1',
         )
+
+    target = path if path != '/setup/submit' else '/setup'
+    if step == 1 and body['password'] != body['confirm_password']:
+        return None, target, 'Passwords must match.'
 
     try:
         validated = SetupTransitionBody.model_validate(body).model_dump()
     except ValidationError:
-        return None, path, 'Please check the setup form and try again.'
-    target = path if path != '/setup/submit' else '/setup'
+        return None, target, 'Please check the setup form and try again.'
     return validated, target, None
 
 
@@ -660,9 +759,13 @@ def _igdb_setup_errors(body):
 
 async def _validated_body(request):
     from oneirodex.schemas.setup import SetupTransitionBody
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
     try:
-        body = SetupTransitionBody.model_validate_json(await request.body())
+        raw_body = await read_bounded_body(request, _SETUP_JSON_MAX_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            return None, _error('Request body is too large.', 'payload_too_large', 413)
+        body = SetupTransitionBody.model_validate_json(raw_body)
         return body.model_dump(), None
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors

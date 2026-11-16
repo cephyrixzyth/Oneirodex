@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import json
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -14,6 +15,8 @@ from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
 BATCH_FAVORITE_MAX = 100
+BATCH_JSON_BODY_MAX_BYTES = 64 * 1024
+JSON_BODY_TOO_LARGE = object()
 _logger = logging.getLogger(__name__)
 
 
@@ -98,7 +101,14 @@ def create_batch_favorite_router(
                     from oneirodex.schemas.game import BatchFavoriteBody
                     from oneirodex.utils.validation import format_validation_errors
 
-                    body = BatchFavoriteBody.model_validate(await _json_object(request))
+                    payload = await _json_object(request)
+                    if payload is JSON_BODY_TOO_LARGE:
+                        response = _error(
+                            'Request body is too large.', 'payload_too_large',
+                            updated=[], skipped=[], errors=[], limit=BATCH_FAVORITE_MAX,
+                        )
+                    else:
+                        body = BatchFavoriteBody.model_validate(payload)
                 except ValidationError as exc:
                     response = _error(
                         'Invalid request.', 'unprocessable',
@@ -111,11 +121,13 @@ def create_batch_favorite_router(
                     payload, status = refusal
                     response = JSONResponse(payload, status_code=status)
                 elif not uuids:
-                    response = JSONResponse({
+                    from oneirodex.utils.api_contract import api_ok_payload
+
+                    response = JSONResponse(api_ok_payload({
                         'ok': True, 'updated': [], 'skipped': [], 'errors': [],
                         'limit': BATCH_FAVORITE_MAX, 'favorite': body.favorite,
                         'requested': 0,
-                    })
+                    }))
                 else:
                     try:
                         games, already = data.state(auth.user, uuids)
@@ -141,8 +153,8 @@ def create_batch_favorite_router(
                                 else:
                                     already.discard(uuid)
                                 updated.append({'uuid': uuid, 'favorite': body.favorite})
-                            except Exception as exc:  # noqa: BLE001 — report item-level failure
-                                errors.append({'uuid': uuid, 'error': str(exc)})
+                            except Exception:  # noqa: BLE001 — keep database details private
+                                errors.append({'uuid': uuid, 'error': 'Could not update favorite'})
                         try:
                             data.commit()
                         except Exception:  # noqa: BLE001 — keep exception details private
@@ -182,13 +194,33 @@ def mount_batch_favorite_routes(app: FastAPI, flask_app, **kwargs):
 
 
 async def _json_object(request):
+    return await bounded_json_object(request)
+
+
+async def bounded_json_object(
+    request, *, max_bytes=BATCH_JSON_BODY_MAX_BYTES, require_json_content_type=True,
+):
+    """Parse a JSON object only after enforcing a small streamed body limit."""
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if require_json_content_type and content_type != 'application/json' and not (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    ):
+        return {}
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            if int(content_length) > max_bytes:
+                return JSON_BODY_TOO_LARGE
+        except ValueError:
+            pass
+    chunks = bytearray()
     try:
-        content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
-        if content_type != 'application/json' and not (
-            content_type.startswith('application/') and content_type.endswith('+json')
-        ):
-            return {}
-        return await request.json()
+        async for chunk in request.stream():
+            if len(chunks) + len(chunk) > max_bytes:
+                return JSON_BODY_TOO_LARGE
+            chunks.extend(chunk)
+        payload = json.loads(chunks)
+        return payload if isinstance(payload, dict) else {}
     except Exception:  # noqa: BLE001 — silent JSON parsing matches Flask
         return {}
 

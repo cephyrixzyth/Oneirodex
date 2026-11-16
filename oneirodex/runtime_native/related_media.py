@@ -1,6 +1,7 @@
 """Native FastAPI routes for related media on member game details."""
 from __future__ import annotations
 
+import json
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -9,8 +10,9 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
+from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 MEDIA_KINDS = {
     'film': 'Film', 'series': 'TV series', 'anime': 'Anime', 'book': 'Book',
@@ -22,6 +24,7 @@ RELATIONS = {
     'documentary': 'Documentary', 'inspired_by': 'Inspired by this game',
 }
 _DOWNLOADISH = ('download', 'torrent', 'magnet:', '.iso', '.mkv', '.mp4', 'warez')
+_MAX_CREATE_BODY_BYTES = 1024 * 1024
 
 
 class RelatedMediaData:
@@ -105,6 +108,8 @@ def create_related_media_router(
                          load_user_id, login_manager)
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
             if response is None:
+                response = require_bearer_scope(auth, 'read:library')
+            if response is None:
                 game = data.game(game_uuid)
                 if game is None:
                     response = _error('Game not found', 'not_found')
@@ -143,7 +148,11 @@ def create_related_media_router(
                     from oneirodex.schemas.related_media import CreateRelatedMediaBody
                     from oneirodex.utils.validation import format_validation_errors
 
-                    body = CreateRelatedMediaBody.model_validate(await _json_object(request))
+                    raw_body = await read_bounded_body(request, _MAX_CREATE_BODY_BYTES)
+                    if raw_body is BODY_TOO_LARGE:
+                        response = _error('Request body is too large.', 'payload_too_large')
+                    else:
+                        body = CreateRelatedMediaBody.model_validate(_json_object(raw_body))
                 except ValidationError as exc:
                     response = _error(
                         'Invalid request.', 'unprocessable',
@@ -236,10 +245,10 @@ def _clean_url(raw):
     return url[:500]
 
 
-async def _json_object(request):
+def _json_object(raw_body):
     try:
-        payload = await request.json()
-    except Exception:  # noqa: BLE001 — malformed JSON becomes an empty object
+        payload = json.loads(raw_body)
+    except (TypeError, ValueError, UnicodeDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
 

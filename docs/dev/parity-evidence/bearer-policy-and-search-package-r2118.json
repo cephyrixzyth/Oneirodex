@@ -1,0 +1,96 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2118",
+  "observed_utc": "2026-11-15T18:52:45.373411+00:00",
+  "base_commit": "ce8c35a6980891ef85c26cb64aa0d8a3ecc9e867",
+  "classification": "New search-corrected Linux source artifact verified/pinned; shared unauthorized-helper scope regression corrected with explicit transport policy. Actual connected retry pending.",
+  "package": {
+    "doc_status": "Reference",
+    "source_commit": "ce8c35a6980891ef85c26cb64aa0d8a3ecc9e867",
+    "source_run": 43747390211,
+    "artifact_id": 14173989223,
+    "artifact_name": "oneirodex-full-linux",
+    "archive_bytes": 85645568,
+    "archive_sha256": "7e253a922f9481715b399b217821822cb317dff13e83192a0ce0c8e33b4d1749",
+    "entries": [
+      {
+        "path": "deb/Oneirodex_1.1.9_amd64.deb",
+        "bytes": 3870386,
+        "sha256": "94374bcad58a0475c432c5ca1cb6963cac2959a071f5456822bc19d69841e754"
+      },
+      {
+        "path": "appimage/Oneirodex_1.1.9_amd64.AppImage",
+        "bytes": 82430456,
+        "sha256": "c4a45e73b2d364e65c4bd27f8a761b0da37c8a28cda6cadc979fa959be6bed0a"
+      }
+    ],
+    "debian_control": {
+      "Package": "oneirodex",
+      "Version": "1.1.9",
+      "Architecture": "amd64",
+      "Depends": "libwebkit2gtk-4.1-0, libgtk-3-0"
+    },
+    "debian_binary": {
+      "member": "usr/bin/oneirodex-desktop",
+      "bytes": 13913056,
+      "sha256": "a30d27b45cfb26c320c576a75e53abce97f237783369813c282684c2692535fd",
+      "elf_class": 64,
+      "elf_machine": 62,
+      "machine_meaning": "x86_64"
+    },
+    "static_member_streams_read": true,
+    "extracted": false,
+    "installed": false,
+    "executed": false,
+    "installed_runtime_acceptance": false,
+    "limits": "Exact successful push source/qualified artifact metadata, ZIP/ar/tar/control/ELF hashes only. No package executed or installed locally; native account/credential/game acceptance remains open."
+  },
+  "source_builds": [
+    {
+      "run": 43747390211,
+      "event": "push",
+      "conclusion": "success",
+      "active_jobs_passed": 8
+    },
+    {
+      "run": 43747395655,
+      "event": "pull_request",
+      "conclusion": "success",
+      "active_jobs_passed": 8
+    }
+  ],
+  "source_ci": {
+    "run": 43747395687,
+    "core_job": 132913605745,
+    "early_five_header_regressions": "passed",
+    "other_ci_jobs_passed": 8,
+    "core": "still running at checkpoint; no complete CI success claimed"
+  },
+  "auth_scope_finding": "R2116 helper challenged any presented Bearer, including session-only endpoints and authenticated role refusals. Existing personal-token expired-Bearer test preserves browser/session sign-in. Two new pure boundary regressions reproduce 401 instead of the required existing302; no token rows were exposed.",
+  "auth_scope_fix": "RequestAuthContext retains allow_bearer route policy; shared helper challenges only user-is-None, Bearer-supported requests. Session-only routes do not advertise unsupported token auth or invoke token lookup; authenticated role refusals keep existing handling. No new authentication grants, role privileges, session bypass or response-data access.",
+  "verification": {
+    "bearer_policy_methods": 7,
+    "policy_red": "Two failures for unsupported-Bearer and authenticated-role challenge; seven methods pass after preserving policy.",
+    "existing_controls": "Wrong/revoked/expired/inactive/unknown-prefix supported Bearer401, valid200, scope403, browser302 and HEAD/security-header/no-touch preserved.",
+    "new_package_pin_red": "New qualified ce artifact refused, retired effe search-bug package accepted;41Linux methods pass after explicit immutable pin update.",
+    "linux_methods_passed": 41,
+    "linux_workflow_contexts": 13,
+    "pyflakes": "Changed backend/context/probe/test files clean.",
+    "api_envelope": "Passed:10known call sites, baseline unchanged",
+    "local_native_resources": "None: only pure handlers/fake persistence and static artifact streams; no local extraction/installer/server/keyring/app."
+  },
+  "source_sha256_git_normalized": {
+    "oneirodex/runtime_native/acquire_status.py": "93d700b8dbf9c6a556a77a9bc418b80ab156f6d17cbf0352d6e65851973b2ea0",
+    "oneirodex/runtime_native/request_auth.py": "9931da913144cd85282969699c061870e3a1028590ceba05a3a741ab6ae42858",
+    "tests/test_native_bearer_denial.py": "c12469d252e028de4a84c9bf7982bca3ea1a9c36cab58e8ee20962cd11755203",
+    "scripts/ci/probe_linux_packaged.py": "964ce3980f52ccbc1612d0732aaf5f63669bcb817ea1e79d1057a67f3fd19579",
+    "scripts/ci/test_linux_packaged_probe.py": "06f227c9c63aeb41098e8f170965da59d2049c9c0b7435a2a8af2ef28b679360"
+  },
+  "retired_artifacts": "Both6a collection mismatch and effe search mismatch remain retained historical failures; current probe refuses either substitution.",
+  "next": "Publish server-policy correction and exact ce pin, dispatch exclusive Linux connected probe with sourcece8c35a6/run43747390211/archive7e253a92. Retain current ce core handle; latest policy source still needs aggregate verification after targeted native checks.",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Builds/static hashes/pure policy methods/early header CI do not qualify actual connected account or OS credentials. Full core CI and newer policy regression coverage remain distinct. Original game/offline/wrapper/exit/exact-launch recovery, Windows namespace, other platform/AT/operator/route/final/release gates remain open.",
+  "capture": "Skipped: no UI markup/style changes or local native resources; actual installed journey only disposable CI.",
+  "correction_r2120": "R2120 correction: the personal-token router does support scoped Bearer authentication (its source uses the shared session/remember/Bearer resolver). Calling it session-only was an incorrect inference. R2118 generic allow_bearer=False tests passed but did not exercise that actual router; they did not fix its expired-Bearer legacy302 contract. The exact existing early CI case still failed at3ff. R2120 restores the general login helper exactly to original6a AST, opts only client/collection/game companion routers into JSON401 and adds actual personal-router expired302/no-data and valid-scoped-Bearer200 controls. Prior test/runtime counts remain historical facts; the incorrect endpoint classification and claimed endpoint fix are superseded."
+}

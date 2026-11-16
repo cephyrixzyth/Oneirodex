@@ -26,24 +26,31 @@ from . import apis_bp
 def integrations_inventory():
     """List all admin-facing integrations with status + deep links."""
     items = build_integrations_inventory()
+    from oneirodex.utils.secret_store import reusable_secret_storage_status
     return jsonify({
         'integrations': items,
         'count': len(items),
         'hub_href': '/admin/integrations',
+        'credential_storage': reusable_secret_storage_status(),
     })
 
 
 OIDC_ADMIN_CONFIG = '/admin/integrations/oidc'
+
+
+def _oidc_secret_configured(row) -> bool:
+    from oneirodex.utils.secret_store import has_global_secret
+
+    return has_global_secret(row, 'oidc_client_secret') or bool(os.getenv('OIDC_CLIENT_SECRET'))
+
+
 def oidc_admin_settings(row):
     return {
         'oidc_enabled': bool(row and row.oidc_enabled),
         'oidc_display_name': (getattr(row, 'oidc_display_name', None) if row else None) or 'Sign in with SSO',
         'oidc_issuer_url': (getattr(row, 'oidc_issuer_url', None) if row else None) or '',
         'oidc_client_id': (getattr(row, 'oidc_client_id', None) if row else None) or '',
-        'oidc_client_secret_configured': bool(
-            (getattr(row, 'oidc_client_secret', None) if row else None)
-            or os.getenv('OIDC_CLIENT_SECRET')
-        ),
+        'oidc_client_secret_configured': _oidc_secret_configured(row),
         'oidc_redirect_uri': (getattr(row, 'oidc_redirect_uri', None) if row else None) or '',
         'oidc_scopes': (getattr(row, 'oidc_scopes', None) if row else None) or 'openid email profile',
         'oidc_role_claim': (getattr(row, 'oidc_role_claim', None) if row else None) or 'groups',
@@ -110,7 +117,8 @@ def oidc_admin_config_put(body: OidcAdminBody):
         # remain authoritative when the database value is empty.
         secret = payload['oidc_client_secret'].strip()
         if secret:
-            row.oidc_client_secret = secret
+            from oneirodex.utils.secret_store import write_global_secret
+            write_global_secret(row, 'oidc_client_secret', secret)
         row.oidc_redirect_uri = payload['oidc_redirect_uri'].strip() or None
         row.oidc_scopes = payload['oidc_scopes'].strip() or 'openid email profile'
         row.oidc_role_claim = payload['oidc_role_claim'].strip() or 'groups'

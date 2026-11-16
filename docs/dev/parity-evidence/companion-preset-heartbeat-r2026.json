@@ -1,0 +1,219 @@
+{
+  "review_id": "R2026",
+  "doc_status": "Reference",
+  "title": "Companion preset heartbeat repair and authenticated native browser qualification",
+  "source_head_before_change": "fdc2d67999870e5a58ec2489da0c68f79a40cffa",
+  "uncommitted_candidate": true,
+  "source_sha256": {
+    "oneirodex/utils/api_tokens.py": "aab7c9a00f960dde9996ff4e568a8c83aa46d6dcbe99dd20d8ed8269cbc0c097",
+    "frontend/member-app/src/pages/TokensPage.tsx": "f7feaf1a00124f5041843552fb0da9d5a1d6ee13968a8fb0117ace688eef4d51",
+    "frontend/member-app/src/pages/TokensPage.test.tsx": "149242bbaf5ff931bc50cede5a073a824b2b1995b55c8e7abaf3716270efdb9a",
+    "tests/test_native_client_reads.py": "b4d59b222ac68f009883cf967eafc2b613467a14f2873f0750c1dba2f6ace63e",
+    "tests/test_vdevice_fake_companion.py": "39a0f17de2c2fd2b921db26427eaa1a12c11336b21d2731b0f3618cb0f408b2a",
+    "tests/test_utils_unmatched.py": "0c045578c5e65d5011640e1c6ddb9e665e32f25d377459ee61c5ef1c991694b3"
+  },
+  "classifications": {
+    "companion_preset": "Confirmed product mismatch: advertised companion preset omitted write:presence while the real desktop heartbeat and both native/Flask endpoints require it. Newly issued preset tokens now include that scope. Existing token rows, role checks, delegated-minting scope narrowing, heartbeat authorization and lifecycle queue gates remain intact.",
+    "unmatched_redirects": "Confirmed stale test expectations: existing redirects include active_tab=unmatched. No production redirect change.",
+    "fixture_storage": "Confirmed fixture isolation defect: fake companion lifecycle writes escaped the temporary command root. Both stores now use the fixture temporary root; generated synthetic files preserved privately."
+  },
+  "checks": {
+    "remaining-after-r2025": {
+      "exit_code": 1,
+      "seconds": 94.91,
+      "database_removed": true,
+      "counts": {
+        "tests": 422,
+        "failures": 4,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 418
+      },
+      "log_sha256": "f13a59c1ced06ab7dc2cf317f47426d83ff64ff63cd710f184944ca8a57fa7f5"
+    },
+    "companion-preset-red": {
+      "exit_code": 1,
+      "seconds": 17.53,
+      "database_removed": true,
+      "counts": {
+        "tests": 2,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 0
+      },
+      "log_sha256": "90b01bca97b1ad066561459b0d092c74c0309d0c5359deb3bd3c931ea3d93865"
+    },
+    "companion-preset-isolated-final": {
+      "exit_code": 0,
+      "seconds": 34.4,
+      "database_removed": true,
+      "counts": {
+        "tests": 75,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 75
+      },
+      "log_sha256": "f734b3f7f9083583af6e595432b379f0916dbf2c6a75f7a1fc833c217fdec427"
+    },
+    "companion-fallback-red": {
+      "exit_code": 1,
+      "seconds": 9.17,
+      "log_sha256": "0e6c52a7e9d1d70bfa4072a537eb5d3ab100859ae59c54314a225c2bf0a65ba1"
+    },
+    "companion-fallback-qualified": {
+      "exit_code": 0,
+      "seconds": 8.27,
+      "log_sha256": "22da1187de8475bbf8991f1fd2edf03def89762b3c8f1c98c09165c2b8f01ba0"
+    },
+    "companion-touched-format": {
+      "exit_code": 0,
+      "seconds": 11.68,
+      "log_sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    "r2026-types": {
+      "exit_code": 0,
+      "seconds": 12.09,
+      "log_sha256": "25d5ecc6b6b5009b339e3e88739e15ef55546604ce6cb8ee6a164c53b1a9fc20"
+    },
+    "r2026-css": {
+      "exit_code": 0,
+      "seconds": 0.5,
+      "log_sha256": "0dcefb129c2ff420e04f891e5d49207e3ad44e69e2417e4ff65cf21dd36dd399"
+    },
+    "r2026-r1972": {
+      "exit_code": 0,
+      "seconds": 1.34,
+      "log_sha256": "d206149190f73b00074cad13af0ca3024dbc0e18b3865f68f59a6c7dbd469c25"
+    },
+    "r2026-undefined": {
+      "exit_code": 0,
+      "seconds": 6.54,
+      "log_sha256": "2b77b24211cb9f496f4b52983d22d82424ea6abf6c1385515336a65ebf433db1"
+    },
+    "r2026-envelope": {
+      "exit_code": 0,
+      "seconds": 13.01,
+      "log_sha256": "5f994b4e8bcf592347f04fb31c5a66c333466492674005d87ad6bb0cd9241549"
+    },
+    "r2026-coordination": {
+      "exit_code": 0,
+      "seconds": 0.81,
+      "log_sha256": "9dd4633df30b8b59f93bcfdca5c8a741c492045dc11d103c3919e53494072463"
+    }
+  },
+  "focused_summary": {
+    "python_passed": 75,
+    "ui_passed": 11,
+    "ui_red": "One new fallback test failed; eight existing tests passed before the UI fix.",
+    "python_red": "New native preset heartbeat and existing real Flask companion dispatch both returned403 before the preset fix."
+  },
+  "browser": {
+    "status": "passed",
+    "chromium": "156.0.8078.4",
+    "seconds": 17.69,
+    "steps": [
+      {
+        "name": "real_login_and_ui_preset_creation",
+        "one_time_secret_displayed_and_cleared": true
+      },
+      {
+        "name": "native_preset_heartbeat_delivery_and_ack",
+        "heartbeat_status": 200,
+        "delivered_once": true,
+        "ack_removed": 1
+      },
+      {
+        "name": "existing_narrow_token_not_widened",
+        "heartbeat_status": 403,
+        "stored_scopes_unchanged": true
+      },
+      {
+        "name": "populated_desktop_mobile_capture",
+        "bounds": {
+          "viewport": 375,
+          "scroll": 375
+        },
+        "one_time_secret_absent": true
+      },
+      {
+        "name": "mobile_account_dialog_keyboard",
+        "role_on_visible_panel": true,
+        "aria_modal": true,
+        "focus_wrap": true,
+        "escape_restores_opener": true,
+        "bounds": {
+          "x": 16,
+          "y": 179.296875,
+          "width": 343,
+          "height": 453.390625
+        }
+      },
+      {
+        "name": "revoked_preset_token_rejected",
+        "heartbeat_status": 302
+      }
+    ],
+    "errors": [],
+    "runtime": "Behavior-only overlay of verified runtime and newly built five SPAs; full fresh runtime build remains separate.",
+    "base_image_id": "sha256:4e79bfc8c7fe73d02477fbe9181baf6bf7aa274a23f0ec235e52e57ae6894082",
+    "candidate_image_id": "sha256:1b2fe3e3b4e26ec861d479cb2337feaf9678a6420734387f2c3fa7b66e6c5e19",
+    "source_delta_verified": [
+      "frontend/member-app/src/pages/TokensPage.test.tsx",
+      "frontend/member-app/src/pages/TokensPage.tsx",
+      "oneirodex/utils/api_tokens.py"
+    ],
+    "full_fresh_runtime_build": "Still pending at capture, waiting on EmulatorJS archive fetch; not claimed successful.",
+    "cleanup": {
+      "removed_and_verified_absent": {
+        "container": true,
+        "network": true,
+        "config_volume": true,
+        "library_volume": true,
+        "database": true
+      }
+    },
+    "captures": {
+      "r2026-tokens-desktop.png": {
+        "sha256": "9aaf79f2641a320436f649569010e77da1b1e0217ce2ab6b61f549809a16354e",
+        "publication": "Withheld; private local synthetic app capture",
+        "use": "Visually inspected"
+      },
+      "r2026-account-mobile.png": {
+        "sha256": "f9ba34e3051f8c31bfcd27cd6443a397c4584a45eb2a718c55a3e279ff1a1ecf",
+        "publication": "Withheld; private local synthetic app capture",
+        "use": "Visually inspected"
+      },
+      "r2026-tokens-mobile.png": {
+        "sha256": "cfb0472aebb3769204484d437ad167aa6590ce1627e0ffc064ae87185d34c1be",
+        "publication": "Withheld; private local synthetic app capture",
+        "use": "Not accepted as layout evidence: transitional navigation frame after resizing"
+      }
+    }
+  },
+  "rework": [
+    "First utility follow-up command named nonexistent adjacent test files; R2025 records the corrected177-pass result.",
+    "Browser harness insertion syntax error was caught by compile before execution.",
+    "First browser relay omitted DELETE; corrected before testing native revocation.",
+    "Playwright followed the native revoked-token302 to login200. Disabled redirects and verified the raw302 login destination; no heartbeat command payload was accepted.",
+    "Desktop-to-mobile transition obscured the token-page image. Mobile token image is not layout evidence; desktop token page and populated mobile Profile dialog were visually inspected.",
+    "Repeated75-case runs overlap; final isolated fixture run is authoritative, not additive."
+  ],
+  "environment": {
+    "platform": "Windows browser host; Linux native app in Docker",
+    "python": "3.12.16 tests;3.12 image runtime",
+    "node": "22 five-SPA build",
+    "database": "Dedicated synthetic loopback PostgreSQL17.6; owned test/browser databases removed",
+    "root_dotenv_excluded": true,
+    "external_python_test_connections_blocked": true,
+    "app_network": "Internal network without external egress; public assets copied from exact overlay image, APIs forwarded to actual native app"
+  },
+  "limits": [
+    "Diagnostic422 was a remainder selection, not a full fresh suite. Original collection cases have been exercised across multiple source-specific runs; no whole-suite-pass claim.",
+    "Profile dialog keyboard/role checks do not qualify screen readers, physical headset behavior, other panels or legacy/current dimension parity.",
+    "Desktop browser captures and synthetic protocol tests do not establish installed companion/platform/launcher acceptance.",
+    "Clean fresh image build, fresh unrestricted suite/current CI and all original acceptance/release gates remain open.",
+    "R1972 historical route coverage is unchanged."
+  ]
+}

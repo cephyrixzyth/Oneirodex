@@ -5,10 +5,13 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
+from starlette.responses import Response
 
 from .acquire_status import _login_redirect
 from .batch_favorite import _finish
 from .request_auth import request_auth_context
+
+_MAX_JSON_BODY_BYTES = 64 * 1024
 
 
 class MemberMetaData:
@@ -92,38 +95,85 @@ def create_member_meta_router(
                 response.body = b''
             return response
 
+    @router.options('/api/check_username')
+    async def check_username_options():
+        # Flask's automatic OPTIONS response preserves POST before OPTIONS.
+        return Response(
+            status_code=200,
+            headers={'Allow': 'POST, OPTIONS'},
+            media_type='text/html; charset=utf-8',
+        )
+
     @router.post('/api/check_username')
     async def check_username(request: Request):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
-            auth, response = authenticate(request)
-            if response is None and auth.token is None:
+            # Match Flask-WTF's before-request ordering: reject a browser write
+            # with invalid CSRF before login_required can flash a login message.
+            # Otherwise the CSRF 400 response accidentally persists that flash
+            # in a new session cookie, even though the legacy route does not.
+            auth = request_auth_context(
+                request, flask_app.config, find_user=find_user,
+                find_token=find_token, commit_token_touch=commit_token_touch,
+                load_user_id=load_user_id, login_manager=login_manager,
+            )
+            response = None
+            if auth.token is None:
                 from .csrf_compat import csrf_error_response
 
-                response = csrf_error_response(request, auth.session_data, flask_app.config)
+                csrf_response = csrf_error_response(request, auth.session_data, flask_app.config)
+                if csrf_response is not None:
+                    response = csrf_response
+            if (
+                response is None
+                and auth.token is not None
+                and not auth.has_scope('read:social')
+            ):
+                from oneirodex.utils.api_contract import api_error_payload
+                from starlette.responses import JSONResponse
+
+                payload, status = api_error_payload(
+                    'Missing scope: read:social', code='forbidden',
+                    detail={'required_scope': 'read:social'},
+                )
+                response = JSONResponse(payload, status_code=status)
+            if response is None and auth.user is None:
+                response = _login_redirect(flask_app, request, login_manager, auth)
             if response is None:
+                from .bounded_request_body import BODY_TOO_LARGE
+
                 from pydantic import ValidationError
 
                 from oneirodex.schemas.user import CheckUsernameBody
                 from oneirodex.utils.validation import format_validation_errors
 
-                try:
-                    body = CheckUsernameBody.model_validate(await _json_object(request))
-                except ValidationError as exc:
+                payload = await _json_object(request)
+                if payload is BODY_TOO_LARGE:
                     from oneirodex.utils.api_contract import api_error_payload
                     from starlette.responses import JSONResponse
 
                     payload, status = api_error_payload(
-                        'Invalid request.', code='unprocessable',
-                        detail=format_validation_errors(exc),
+                        'Request body is too large.', code='payload_too_large',
                     )
                     response = JSONResponse(payload, status_code=status)
                 else:
-                    from starlette.responses import JSONResponse
+                    try:
+                        body = CheckUsernameBody.model_validate(payload)
+                    except ValidationError as exc:
+                        from oneirodex.utils.api_contract import api_error_payload
+                        from starlette.responses import JSONResponse
 
-                    response = JSONResponse({
-                        'exists': data.username_exists(body.username),
-                    })
+                        payload, status = api_error_payload(
+                            'Invalid request.', code='unprocessable',
+                            detail=format_validation_errors(exc),
+                        )
+                        response = JSONResponse(payload, status_code=status)
+                    else:
+                        from starlette.responses import JSONResponse
+
+                        response = JSONResponse({
+                            'exists': data.username_exists(body.username),
+                        })
             _finish(response, flask_app, auth)
             return response
 
@@ -136,13 +186,20 @@ def mount_member_meta_routes(app: FastAPI, flask_app, **kwargs):
 
 
 async def _json_object(request):
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
     try:
         content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
         if content_type != 'application/json' and not (
             content_type.startswith('application/') and content_type.endswith('+json')
         ):
             return {}
-        payload = await request.json()
+        raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            return BODY_TOO_LARGE
+        import json
+
+        payload = json.loads(raw_body or b'{}')
         return payload if isinstance(payload, dict) else {}
     except Exception:  # noqa: BLE001 — match Flask silent JSON handling
         return {}

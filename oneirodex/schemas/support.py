@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from typing import Annotated
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 _RequiredTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -33,3 +34,19 @@ class CreateSupportTicketBody(BaseModel):
     client: str | None = None
     url_hint: str | None = None
     url: str | None = None
+    sync_to_github: bool = False
+    request_id: UUID | None = None
+    preview_token: Annotated[str, StringConstraints(max_length=2048)] | None = None
+    retry_github: bool = False
+    retry_id: UUID | None = None
+
+    @model_validator(mode='after')
+    def retry_requires_existing_external_report(self):
+        if self.retry_github and (not self.request_id or not self.sync_to_github):
+            raise ValueError('Retry requires an existing report reference and explicit GitHub opt-in.')
+        return self
+
+
+class ReconcileSupportDeliveryBody(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    issue_number: Annotated[int, Field(strict=True, gt=0, le=2_147_483_647)]

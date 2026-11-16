@@ -863,7 +863,7 @@ class DatabaseManager:
         CREATE TABLE IF NOT EXISTS chat_messages (
             id SERIAL PRIMARY KEY,
             channel_id INTEGER NOT NULL REFERENCES chat_channels(id) ON DELETE CASCADE,
-            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
             body TEXT NOT NULL,
             parent_message_id INTEGER REFERENCES chat_messages(id) ON DELETE SET NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -932,6 +932,37 @@ class DatabaseManager:
         -- headed "Report issue", so 'issue' is what they actually were.
         ALTER TABLE support_tickets
         ADD COLUMN IF NOT EXISTS kind VARCHAR(16) NOT NULL DEFAULT 'issue';
+
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS request_id VARCHAR(36);
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS request_hash VARCHAR(64);
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS github_attempt_id VARCHAR(36);
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_support_ticket_user_request
+            ON support_tickets(user_id, request_id);
+
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS github_repository VARCHAR(140);
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS github_last_status INTEGER;
+        ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS github_retry_after_at TIMESTAMPTZ;
+        CREATE TABLE IF NOT EXISTS support_delivery_attempts (
+            id VARCHAR(36) NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL,
+            repository VARCHAR(140) NOT NULL,
+            payload_sha256 VARCHAR(64) NOT NULL,
+            outcome VARCHAR(16) NOT NULL,
+            http_status INTEGER,
+            retry_after_at TIMESTAMPTZ,
+            issue_number INTEGER,
+            issue_url VARCHAR(512),
+            PRIMARY KEY (id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS ix_support_delivery_attempts_user_created ON support_delivery_attempts(user_id, created_at);
+        CREATE INDEX IF NOT EXISTS ix_support_delivery_attempts_ticket_id ON support_delivery_attempts(ticket_id);
+        CREATE TABLE IF NOT EXISTS support_delivery_check_budgets (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            window_started_at TIMESTAMPTZ NOT NULL,
+            count INTEGER NOT NULL
+        );
 
         ALTER TABLE user_preferences
         ADD COLUMN IF NOT EXISTS notify_free_games BOOLEAN DEFAULT TRUE;

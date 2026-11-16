@@ -22,6 +22,12 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=oneirodex
+      # The throwaway review database keeps the documented postgres/postgres
+      # pair on loopback only; the entrypoint refuses that password without
+      # this explicit opt-in. Never copy this to a real deployment.
+      - ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true
+      - PUID=${PUID:-99}
+      - PGID=${PGID:-100}
       - SECRET_KEY=review-only-not-a-production-secret
       - DATA_FOLDER_GAMES=/storage
       - UPLOAD_FOLDER=/app/oneirodex/static/library

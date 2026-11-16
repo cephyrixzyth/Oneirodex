@@ -161,8 +161,10 @@ export function toastForScanStartResponse(
   if (status === SCAN_START_STATUS.STARTED) {
     const risk = (body?.risk || '').trim()
     const base = message || 'Scan started.'
+    const messageAlreadyIncludesRisk =
+      risk.length > 0 && base.toLocaleLowerCase().includes(risk.toLocaleLowerCase())
     return {
-      text: risk ? `${base} ${risk}` : base,
+      text: risk && !messageAlreadyIncludesRisk ? `${base} ${risk}` : base,
       variant: risk ? 'warning' : 'success',
     }
   }

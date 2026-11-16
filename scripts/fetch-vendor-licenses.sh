@@ -10,7 +10,8 @@
 #
 # Safe to re-run: existing files are overwritten with the same upstream text.
 # Needs network. WebRetro's MIT text is included (upstream LICENSE, 2021
-# BinBashBanana) — the vendored JS still has no banner of its own.
+# BinBashBanana) — the vendored JS still has no banner of its own. The
+# WebRetro and EmulatorJS sources are tied to the shipped versions.
 
 set -euo pipefail
 
@@ -26,8 +27,9 @@ datatables/1.13.7	https://raw.githubusercontent.com/DataTables/DataTables/1.13.7
 jquery/3.7.1	https://raw.githubusercontent.com/jquery/jquery/3.7.1/LICENSE.txt
 notify/0.4.2	https://raw.githubusercontent.com/mouse0270/bootstrap-notify/master/LICENSE
 sortablejs/1.15.2	https://raw.githubusercontent.com/SortableJS/Sortable/1.15.2/LICENSE
-webretro	https://raw.githubusercontent.com/BinBashBanana/webretro/master/LICENSE
+webretro	https://raw.githubusercontent.com/BinBashBanana/webretro/v6.5/LICENSE
 nostalgist	https://raw.githubusercontent.com/arianrhodsandlot/nostalgist/v0.21.1/LICENSE
+emulatorjs	https://raw.githubusercontent.com/EmulatorJS/EmulatorJS/v4.2.3/LICENSE
 "
 
 failed=0

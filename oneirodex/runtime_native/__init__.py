@@ -23,6 +23,7 @@ ADMIN_STATIC_ROUTES = (
     '/admin/detail_layout',
     '/admin/emulator_profiles',
     '/admin/support',
+    '/admin/help',
     '/admin/ownership',
     '/admin',
     '/admin/dashboard',
@@ -52,7 +53,7 @@ ADMIN_STATIC_ROUTES = (
 )
 ADMIN_BOOTSTRAP_ROUTE = '/admin/api/runtime-bootstrap'
 ADMIN_REDIRECT_ROUTES = (
-    '/admin/help', '/admin/library_tools', '/admin/scan_management',
+    '/admin/library_tools', '/admin/scan_management',
     '/admin/server_logs', '/admin/system_logs', '/admin/server_status_page',
 )
 

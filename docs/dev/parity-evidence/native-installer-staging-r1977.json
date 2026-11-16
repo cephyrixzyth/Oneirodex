@@ -1,0 +1,35 @@
+{
+  "review_id": "R1977",
+  "title": "Windows native installer staged execution",
+  "classification": "The installer correctly accepts Node 22 and the explicit database-skip path, but this run could not complete because pip could not reach PyPI.",
+  "environment": {
+    "platform": "Windows",
+    "python": "3.12.16, provisioned inside the isolated staging directory",
+    "node": "22.23.4, provisioned inside the isolated staging directory",
+    "source": "git archive of codex/release-v1.1.9 at 486aed0126bcbada5bcad23969baf60d5d9a02db"
+  },
+  "method": {
+    "installer": "install-windows.ps1",
+    "arguments": [
+      "-GamesDir <staging>/user-data/Games",
+      "-LibraryRoots Staged=<staging>/user-data/Library",
+      "-Port 15006",
+      "-SkipDb"
+    ],
+    "database": "PostgreSQL check and database creation skipped; no database connection attempted.",
+    "launch": "The installer did not reach its final start prompt; the application was not started."
+  },
+  "observed": [
+    "Python 3.12 and Node.js 22.23.4 prerequisite checks passed.",
+    "The synthetic game and library directories were accepted.",
+    "The installer stopped during pip's pip-upgrade step after PyPI connections failed with Windows socket error 10013.",
+    "The SPA dependency install/build, native runtime validator and staged .env generation were not reached.",
+    "The checkout root .env was not read or modified; the staged source had no .env before execution."
+  ],
+  "result": "incomplete: environment network restriction prevented end-to-end installer acceptance",
+  "independent_prior_evidence": "All five native SPA entry points and the native runtime validator had previously passed under Node 22.23.4 on Windows; this run does not repeat or invalidate that result.",
+  "limits": [
+    "This does not qualify a normal online Windows installer run or other target operating systems.",
+    "No installer assets were built during this run."
+  ]
+}

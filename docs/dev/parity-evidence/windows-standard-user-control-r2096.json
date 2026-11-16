@@ -1,0 +1,59 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2096",
+  "observed_utc": "2026-11-15T00:58:18.259771+00:00",
+  "base_commit": "a9ef2598959cb573cb5ffb907884b0778649a900",
+  "classification": "Fixture-only native control and explicit isolated workflow mode prepared; real fixture qualification pending.",
+  "change": [
+    "Add a standalone fixture-only CLI control using two ordinary-account cmd exits37/38, OS-profile continuity checks, a controller-written content-verified marker, and mandatory cleanup.",
+    "Add an explicit windows_user_fixture_only workflow input, defaultfalse; it excludes package pins/install/client download/build/Mac probe/release and rejects mixed selections. Existing ordinary workflow behavior is preserved.",
+    "Give only newly created desktop/window-station objects an explicit medium mandatory label in addition to the scoped account/System/Administrators DACL; existing object labels/ACLs are unchanged."
+  ],
+  "verification": {
+    "red": [
+      "Four control tests fail before the fixture-only control exists.",
+      "Workflow verifier rejects missing explicit fixture input.",
+      "New-object mandatory-label check fails before the explicit medium label is supplied.",
+      "A wrong CLI exit was masked by a concurrent child-close error; regression now preserves the primary failure."
+    ],
+    "local_methods_loaded": 60,
+    "local_methods_passed": 58,
+    "native_only_skipped": 2,
+    "workflow_truth_table_contexts": 15,
+    "actual_nonmutating_selection_guard_cases": 9,
+    "workflow_powershell_scripts_parse_only": 3,
+    "pyflakes": "passed",
+    "local_execute": "unsupported exit2 before workspace/native factory"
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/windows_user_fixture.py": "cd253971de0e91bb3ed0dc460aaf0112bd54f4b20762a207077c39e909d1e02c",
+    "scripts/ci/test_windows_user_fixture.py": "eb27d011b5f17e41d7da947d309a2ad60b9eaec9eb216e082b3948b6434618f4",
+    "scripts/ci/probe_windows_user_fixture.py": "ee0056db6834ef77a96c2952ec41275c2a881b42c5ea30607df3c15045cf5b85",
+    "scripts/ci/test_windows_user_fixture_control.py": "f4ba247bcec4e92cc283eb295da09f7547021177dc579150c898e52061c05f38",
+    ".github/workflows/desktop-build.yml": "556eb0332dcb33874e4925debb9be84a84f61f9527bff07c7144e3c7d4712fe2"
+  },
+  "native_retry": "terminal account provisioning failure; cause/abort-cleanup result not present in original receipt",
+  "native_fixture_qualified": false,
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Controller-written marker confirms fixture data retention only; it does not establish ordinary-user game/save writes, application startup/IPC, visible UI, AT/focus or account/game behavior. All native account/profile/desktop and cleanup claims remain pending the actual CI control.",
+  "capture": "Skipped: fixture-only source and guards; no local account/desktop/app execution.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43660913079",
+    "job_id": 132649819026,
+    "harness_source": "8eb027297040d54cf3c225118a3b89e64f3e7cd2",
+    "raw_log_sha256": "3735364120c4d5ac6fdcc657a43ed0283d55e79ce8efe329488c38dd70ae604b",
+    "ci_guard_methods_passed": 60,
+    "ci_guard_elapsed_seconds": 23.552,
+    "receipt": {
+      "observed_utc": "2026-11-15T01:00:30.018809+00:00",
+      "status": "failed",
+      "native_fixture_qualified": false,
+      "installed_runtime_acceptance": false,
+      "cleanup_verified": false,
+      "phase": "fixture_provisioning",
+      "code": "fixture_account_creation_failed"
+    },
+    "package_client_build_mac_release": "observed skipped"
+  }
+}

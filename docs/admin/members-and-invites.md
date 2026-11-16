@@ -9,6 +9,8 @@ person nor the server has an email address.
 
 Any member with quota left can create an invite from **Account → Profile →
 Invites**. Admins see the household's quota allocation at **Admin → Invites**.
+The member invite view is also available as a full page at `/user/invites`; revoking
+a link asks for confirmation.
 
 An invite is a **link**. Email is one way of delivering it, not what it is:
 
@@ -20,6 +22,10 @@ An invite is a **link**. Email is one way of delivering it, not what it is:
 
 Links last **48 hours** and hold a quota slot until they are used or revoked.
 Revoking one frees the slot immediately.
+
+When an email is supplied, it must be a syntactically valid address. Invalid
+addresses are rejected before an invite link or quota slot is created. Leave
+the field blank to create a link without a recipient.
 
 > **Set the site URL first.** Invite links are built from **Admin → Settings →
 > site URL**. Left at the default, every link points at `127.0.0.1` and works
@@ -33,6 +39,10 @@ was never shown to anybody.
 ## Adjusting household quota
 
 In **Admin → Invites**, choose a member under **Adjust invite quota** and enter an integer from −1000 to 1000. Positive values add quota; negative values subtract it. The saved total appears after submission and the table refreshes. Existing invite tokens are retained. This preserves the classic editor's additive behavior, including a total below zero after subtraction.
+
+Main admins are not invite-metered. Their invite list and create responses report
+`unlimited: true` with no numeric remaining count; revoking an invite also keeps
+the remaining count unset.
 
 If the invite roster fails to load, use **Retry loading invites** to request it again without leaving the page.
 
@@ -83,9 +93,11 @@ Consequences worth knowing:
 | `admin` | Everything, including the admin shell |
 | `librarian` | Library and scan management |
 | `user` | Browse, download, play, chat |
-| `child` | Browse, play, and chat within the parental / library ACL. No admin, no library writes, no Acquire search, no companion download/install |
+| `child` | Browse, play, and chat within the parental / library ACL. May save/delete own emulator progress for accessible games. No admin, general library writes, server-file downloads, Acquire search, or companion download/install |
 
 Library allowlists and content filters are per-user, under **Admin → Users**.
+Each genre or theme filter accepts up to 100 names, with each name limited to
+50 characters.
 
 ## Troubleshooting
 

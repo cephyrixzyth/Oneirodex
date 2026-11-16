@@ -41,9 +41,12 @@ import { DetailsQuickRows } from './gameDetails/DetailsQuickRows'
 import { DetailsSummarySection } from './gameDetails/DetailsSummarySection'
 import { DetailsTranslationsSection } from './gameDetails/DetailsTranslationsSection'
 import { DetailsVersionsSection } from './gameDetails/DetailsVersionsSection'
+import { useShellConfig } from '@oneirodex/ui'
 import './GameDetailsPage.css'
 
 export function GameDetailsPage() {
+  const shellConfig = useShellConfig()
+  const canDownload = String(shellConfig.role || '').toLowerCase() !== 'child'
   const { gameUuid } = useParams()
   const { game, setGame, versions, setVersions, versionsLoading, error, retry, setRetryCount } =
     useGameDetails(gameUuid)
@@ -292,6 +295,7 @@ export function GameDetailsPage() {
             clientConnected={Boolean(game.client_connected)}
             variant="full"
             showPresence={false}
+            canDownload={canDownload}
           />
           {/* Three rows, one per question, instead of one flex-wrap blob.
               As a single wrapping row the break points moved with the content:
@@ -378,6 +382,7 @@ export function GameDetailsPage() {
             setBusyVersionKey={setBusyVersionKey}
             setVersionActionStatus={setVersionActionStatus}
             setRetryCount={setRetryCount}
+            canDownload={canDownload}
           />
         ) : null}
 
@@ -393,6 +398,7 @@ export function GameDetailsPage() {
             cleanupBusy={cleanupBusy}
             handleCleanupOrphans={handleCleanupOrphans}
             handleVersionDownload={handleVersionDownload}
+            canDownload={canDownload}
           />
         ) : null}
 
@@ -426,6 +432,7 @@ export function GameDetailsPage() {
           setBusyVersionKey={setBusyVersionKey}
           setVersionActionStatus={setVersionActionStatus}
           handleVersionDownload={handleVersionDownload}
+          canDownload={canDownload}
         />
 
         {/* Related media sits above screenshots and trailer by request — it is

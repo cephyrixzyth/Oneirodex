@@ -42,8 +42,12 @@ def smtp_settings_api(body: JsonObjectBody | None = None):
         return api_error(str(exc), code='bad_request')
     try:
         settings = settings or global_settings_row_or_create()
+        from oneirodex.utils.secret_store import write_global_secret
         for key, value in data.items():
-            if key != 'smtp_password' or value:
+            if key == 'smtp_password':
+                if value:
+                    write_global_secret(settings, key, value)
+            else:
                 setattr(settings, key, value)
         db.session.commit()
     except Exception:
@@ -65,9 +69,10 @@ def smtp_test_api():
     if not settings or not settings.smtp_enabled:
         return api_error('Save and enable SMTP before testing the connection', code='bad_request')
     try:
+        from oneirodex.utils.secret_store import read_global_secret
         success, _ = SMTPTester(debug=False).test_connection(
             host=settings.smtp_server, port=settings.smtp_port,
-            username=settings.smtp_username, password=settings.smtp_password,
+            username=settings.smtp_username, password=read_global_secret(settings, 'smtp_password'),
             use_tls=settings.smtp_use_tls, timeout=10,
         )
     except Exception:
@@ -103,7 +108,8 @@ def smtp_settings():
                     code='bad_request',
                 )
             # The page never shows the saved password; blank keeps it.
-            if not data.get('smtp_password') and not settings.smtp_password:
+            from oneirodex.utils.secret_store import has_global_secret
+            if not data.get('smtp_password') and not has_global_secret(settings, 'smtp_password'):
                 return api_error(
                     'SMTP password is required when SMTP is enabled',
                     code='bad_request',
@@ -130,7 +136,8 @@ def smtp_settings():
         settings.smtp_server = data.get('smtp_server')
         settings.smtp_username = data.get('smtp_username')
         if data.get('smtp_password'):
-            settings.smtp_password = data.get('smtp_password')
+            from oneirodex.utils.secret_store import write_global_secret
+            write_global_secret(settings, 'smtp_password', data.get('smtp_password'))
         settings.smtp_use_tls = data.get('smtp_use_tls', True)
         settings.smtp_default_sender = data.get('smtp_default_sender')
         settings.smtp_enabled = data.get('smtp_enabled', False)
@@ -160,6 +167,7 @@ def smtp_test():
         return api_error('SMTP settings not configured', code='bad_request')
 
     # Create SMTPTester instance
+    from oneirodex.utils.secret_store import read_global_secret
     tester = SMTPTester(debug=False)
     print(f"Testing SMTP connection using settings: {settings.smtp_server}:{settings.smtp_port}")
     # Test the connection using settings from database
@@ -167,7 +175,7 @@ def smtp_test():
         host=settings.smtp_server,
         port=settings.smtp_port,
         username=settings.smtp_username,
-        password=settings.smtp_password,
+        password=read_global_secret(settings, 'smtp_password'),
         use_tls=settings.smtp_use_tls,
         timeout=10
     )

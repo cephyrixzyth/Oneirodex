@@ -249,6 +249,18 @@ class TestUploadTheme:
         assert result is None
         mock_flash.assert_called_once_with('Error: Library folder does not exist.', 'error')
 
+    @patch('os.path.exists', return_value=False)
+    @patch('flask.has_request_context', return_value=False)
+    @patch('flask.flash', side_effect=RuntimeError('Working outside of request context'))
+    def test_upload_theme_without_flask_request_context(self, mock_flash, mock_has_request_context, mock_exists, theme_manager):
+        """Native FastAPI uploads must not require Flask's request context."""
+        with theme_manager.app.app_context():
+            result = theme_manager.upload_theme('fake_zip.zip')
+
+        assert result is None
+        mock_has_request_context.assert_called_once_with()
+        mock_flash.assert_not_called()
+
     @patch('os.path.exists')
     @patch('flask.flash')
     def test_upload_theme_missing_theme_json(self, mock_flash, mock_exists, theme_manager):

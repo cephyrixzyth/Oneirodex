@@ -7,6 +7,7 @@ their own checks. BIOS is served to signed-in members only.
 from __future__ import annotations
 
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -53,6 +54,153 @@ def _serve(tmp_path, path, user_id):
     asyncio.run(app._handle_static({'type': 'http', 'method': 'GET', 'path': path, 'headers': []},
                                    receive, send, path))
     return next(m['status'] for m in sent if m['type'] == 'http.response.start')
+
+
+def _serve_response(
+    tmp_path, path, *, method='GET', accept='*/*', extra_headers=(), files=None,
+    static_root=None,
+):
+    static = static_root or tmp_path / 'static-response'
+    static.mkdir(exist_ok=True)
+    for name, payload in (files or {}).items():
+        target = static / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+        import os
+
+        os.utime(target, (1700000000, 1700000000))
+    app = LazyASGIApp()
+    app._ensure_flask = AsyncMock()
+    app._static_root = static.resolve()
+    app._runtime_config = {'CSP_ENABLED': False}
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    async def receive():
+        return {'type': 'http.request'}
+
+    scope = {
+        'type': 'http', 'method': method, 'path': path,
+        'headers': [(b'accept', accept.encode('ascii'))]
+        + [(key.lower().encode('ascii'), value.encode('latin-1')) for key, value in extra_headers],
+    }
+    asyncio.run(app._handle_static(scope, receive, send, path))
+    start = next(message for message in sent if message['type'] == 'http.response.start')
+    body = b''.join(
+        message.get('body', b'') for message in sent
+        if message['type'] == 'http.response.body'
+    )
+    return start['status'], dict(start['headers']), body
+
+
+@pytest.mark.parametrize(('path', 'method', 'accept'), [
+    ('/static/', 'GET', '*/*'),
+    ('/static/', 'HEAD', '*/*'),
+    ('/static/missing-parity-asset.css', 'GET', '*/*'),
+    ('/static/missing-parity-asset.css', 'POST', '*/*'),
+    ('/static/missing-parity-asset.css', 'GET', 'application/json'),
+])
+def test_static_route_errors_match_legacy_flask(tmp_path, path, method, accept):
+    status, headers, body = _serve_response(
+        tmp_path, path, method=method, accept=accept,
+    )
+    expected_status = 405 if method == 'POST' else 404
+    expected_message = 'Method Not Allowed' if method == 'POST' else 'Not Found'
+    expected_body = json.dumps({'error': expected_message}).encode()
+    assert status == expected_status
+    assert headers[b'content-type'].startswith(b'application/json')
+    assert body == expected_body
+
+
+@pytest.mark.parametrize(('method', 'expected_body'), [
+    ('GET', b'0123456789abcdef'),
+    ('HEAD', b''),
+])
+def test_static_file_get_and_head_keep_legacy_body_and_cache_behavior(
+    tmp_path, method, expected_body,
+):
+    files = {'parity.txt': b'0123456789abcdef'}
+    static_root = tmp_path / 'shared-static'
+    actual_status, actual_headers, actual_body = _serve_response(
+        tmp_path, '/static/parity.txt', method=method, files=files,
+        static_root=static_root,
+    )
+    assert actual_status == 200
+    assert actual_body == expected_body
+    assert actual_headers[b'content-type'] == b'text/plain; charset=utf-8'
+    assert actual_headers[b'content-length'] == b'16'
+    assert actual_headers[b'cache-control'] == b'public, max-age=3600'
+
+
+@pytest.mark.parametrize(
+    'suffix', ['html', 'svg', 'svgz', 'xhtml', 'xml', 'xsl', 'mht', 'mhtml'],
+)
+def test_uploaded_theme_documents_are_sandboxed_when_served_directly(tmp_path, suffix):
+    path = f'/static/library/themes/rogue/preview.{suffix}'
+    status, headers, _ = _serve_response(
+        tmp_path,
+        path,
+        files={f'library/themes/rogue/preview.{suffix}': b'<svg/>'},
+    )
+    assert status == 200
+    assert b'sandbox' in headers[b'content-security-policy']
+    assert b"default-src 'none'" in headers[b'content-security-policy']
+    assert headers[b'x-content-type-options'] == b'nosniff'
+
+
+def test_theme_document_mime_type_aliases_are_sandboxed(tmp_path):
+    from oneirodex.utils.static_files import theme_document_security_headers
+
+    assert theme_document_security_headers(
+        '/static/library/themes/rogue/asset.bin', 'image/svg+xml; charset=utf-8',
+    )['Content-Security-Policy'].startswith('sandbox;')
+    assert theme_document_security_headers(
+        '/static/library/themes/rogue/asset.bin', 'message/rfc822',
+    )['Content-Security-Policy'].startswith('sandbox;')
+
+
+def test_theme_css_and_regular_svg_artwork_keep_normal_static_headers(tmp_path):
+    _, css_headers, _ = _serve_response(
+        tmp_path,
+        '/static/library/themes/rogue/css/theme.css',
+        files={'library/themes/rogue/css/theme.css': b'body{color:green}'},
+    )
+    _, svg_headers, _ = _serve_response(
+        tmp_path,
+        '/static/newstyle/mark.svg',
+        files={'newstyle/mark.svg': b'<svg/>'},
+    )
+    assert b'content-security-policy' not in css_headers
+    assert b'content-security-policy' not in svg_headers
+
+
+def test_static_file_conditional_and_range_support_is_retained(tmp_path):
+    files = {'parity.txt': b'0123456789abcdef'}
+    static_root = tmp_path / 'enhanced-static'
+    _, headers, _ = _serve_response(
+        tmp_path, '/static/parity.txt', files=files, static_root=static_root,
+    )
+    etag = headers[b'etag'].decode()
+    status, not_modified, body = _serve_response(
+        tmp_path, '/static/parity.txt', method='GET',
+        extra_headers=(('If-None-Match', etag),), static_root=static_root,
+    )
+    assert status == 304
+    assert body == b''
+    status, ranged, body = _serve_response(
+        tmp_path, '/static/parity.txt', method='GET',
+        extra_headers=(('Range', 'bytes=3-6'),), static_root=static_root,
+    )
+    assert status == 206
+    assert body == b'3456'
+    assert ranged[b'content-range'] == b'bytes 3-6/16'
+    status, unsatisfiable, _ = _serve_response(
+        tmp_path, '/static/parity.txt', method='GET',
+        extra_headers=(('Range', 'bytes=99-104'),), static_root=static_root,
+    )
+    assert status == 416
 
 
 def test_private_files_are_never_served(tmp_path, monkeypatch):

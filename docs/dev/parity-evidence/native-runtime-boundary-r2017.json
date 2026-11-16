@@ -1,0 +1,144 @@
+{
+  "review_id": "R2017",
+  "doc_status": "Reference",
+  "title": "Native metadata import boundary and persisted OIDC/transport qualification",
+  "classification": "Confirmed legacy-framework import regression fixed; obsolete session/keyring/transport test preconditions repaired",
+  "source_head_before_change": "b9d61bcea8fbf76f21394563759a9bf77a1081bf",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "oneirodex/utils/steam_metadata.py": "c6891d4de1cb7e217fc67fd32095491adfc5e015e6969ee5474e1ed85fc37243",
+    "tests/fixtures/native_runtime_probe.py": "3629259d35687675263222f5706bcefd5dfa4482da425785e4a53d5d03989661",
+    "tests/test_runtime_import_boundary.py": "5b36453fe2592ac0e01f65d7641cc1f20e201bd088dab27bd1b74e5e33d7a282",
+    "tests/test_native_oidc_auth.py": "b43afe755389ce7a866539d660c961c089e702ec39894ac0c40a8a713ad29154",
+    "tests/test_native_setup_finalizer.py": "23e70525d11b85dc34b423ecc78abbaac8265f3b25e1ee456b50a50066f3826a",
+    "tests/test_outbound_policy_p04.py": "7577580bfa44c26e5b6e86770b4b3fc8aad10007b12301947e352f345a2fb4e5",
+    "tests/test_review_findings_fixes.py": "4689e3e34ba6aa1b2949cd78e945dcc6acb6a899e4064fc4082f8f3ef3596738",
+    "tests/test_steam_match_brings_metadata.py": "cacc4ccebe920cfe6f972a029974b24c9340fda44ebba32e3b024f6cc682641b"
+  },
+  "environment": {
+    "platform": "Windows",
+    "python": "3.12.16",
+    "database": "Owned loopback PostgreSQL 17.6 plus disposable SQLite for framework-blocked probes and OIDC login storage",
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "checks": {
+    "remaining-ci-modules-red": {
+      "exit_code": 1,
+      "seconds": 184.61,
+      "counts": {
+        "tests": 456,
+        "failures": 34,
+        "errors": 0,
+        "skipped": 2,
+        "passed": 420
+      },
+      "owned_database_removed": true,
+      "log_sha256": "33a67dbd1e1a1cd08cc156bb210878205b824d5ec6bdd10ba19b8156da1fdc6b"
+    },
+    "runtime-boundary-native-green": {
+      "exit_code": 1,
+      "seconds": 29.63,
+      "counts": {
+        "tests": 10,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 8
+      },
+      "owned_database_removed": null,
+      "log_sha256": "e7c4e81e152d5f9f6a957d4b3967782907426009b088076c7b769c053977ac70"
+    },
+    "runtime-boundary-native-qualified": {
+      "exit_code": 0,
+      "seconds": 27.28,
+      "counts": {
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 10
+      },
+      "owned_database_removed": null,
+      "log_sha256": "fe9cac0349227337104910396319858efa38bb677e9e84fd7bf6aaed5243660a"
+    },
+    "runtime-metadata-green": {
+      "exit_code": 1,
+      "seconds": 47.12,
+      "counts": {
+        "tests": 25,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 24
+      },
+      "owned_database_removed": true,
+      "log_sha256": "3ca79fa69eedbbbdd89c29f83b25744652e259346349c2291f0c9b95229f5e0d"
+    },
+    "oidc-setup-fixtures-green": {
+      "exit_code": 0,
+      "seconds": 12.35,
+      "counts": {
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 23
+      },
+      "owned_database_removed": true,
+      "log_sha256": "c6d3e9e18ab778bd05774ff2e5bc9606100ac4fc09b9f1a9d99a8fb3e8477fd5"
+    },
+    "native-runtime-qualification-final": {
+      "exit_code": 0,
+      "seconds": 55.38,
+      "counts": {
+        "tests": 120,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 120
+      },
+      "owned_database_removed": true,
+      "log_sha256": "9c7085599e131a20e4bc4cabf37c0187adcac49ac0bb746d850212f0255c27ce"
+    }
+  },
+  "verification": {
+    "final_cases_passed": 120,
+    "coverage": "Framework-free imports/startup, blocked-framework authenticated bootstrap, Steam metadata mapping in Flask-compatible database scopes, Steam bounded retries, native OIDC PKCE/state/nonce/subject behavior, setup encrypted selected credentials, outbound redirect policies and redacted failures.",
+    "oidc_identity": "Real mapped user and persistent-login records; independent logins have distinct valid random-secret identities for the same user/fingerprint, and remember cookies match their session identity. No TESTING bypass was enabled to pass the native login.",
+    "transport": "Redirect checks still execute safe_request; interception covers actual caller-owned requests.Session transport. Retry unit checks mock the safe_request dependency and assert its validator wiring. No provider delivery occurred.",
+    "cleanup": "All owned PostgreSQL databases removed (matching count verified zero); SQLite probe engines disposed.",
+    "warnings": "One existing Flask-Login UTC deprecation warning"
+  },
+  "root_causes": [
+    "Steam metadata imported the legacy database extension at module import. Use the existing native_db facade, whose session delegates to Flask only when needed at runtime.",
+    "Cold probes used old short identities without persistent rows or setup tables; provide a real owned native engine, synthetic model row, completed setup and issued identity.",
+    "OIDC fakes supplied no persisted mapped user/session; preserve the normal callback issuer path with a real test row rather than disabling persistent sessions.",
+    "Selected-credential setup writes need their explicit temporary keyring and encrypted representation assertions.",
+    "Legacy transport mocks patched module get/request functions while bounded connectors now own Session instances; intercept the actual boundary without bypassing redirect validation."
+  ],
+  "rework": [
+    "First cold-probe store lacked the user/setup tables required by normal setup gating; added owned rows and matching fingerprint before the final pass.",
+    "An overlapping standalone/combined cold-probe subset was run during adjacent qualification; its cases are not counted again.",
+    "The first broader adjacent metadata run exposed another stale requests.get retry mock; corrected that mock before final qualification."
+  ],
+  "limitations": [
+    "This is focused native/compatibility qualification, not full-route parity, a real identity-provider connection or installed-image/platform acceptance.",
+    "The historical 24-module diagnostic ended at 34 failed/420 passed/2 skipped with cleanup; this slice repairs a subset and does not claim the rest resolved.",
+    "Preliminary 10/23/24-case selections overlap the final 120 and must not be added to it.",
+    "Current CI/full unrestricted Python/coverage and original review/release/deployment gates remain open."
+  ],
+  "capture": "Not applicable: backend import ownership, test fixtures and documentation; no UI layout changes.",
+  "ratchets": {
+    "undefined": {
+      "exit_code": 0,
+      "seconds": 6.81,
+      "log_sha256": "2b77b24211cb9f496f4b52983d22d82424ea6abf6c1385515336a65ebf433db1"
+    },
+    "envelope": {
+      "exit_code": 0,
+      "seconds": 13.1,
+      "log_sha256": "5f994b4e8bcf592347f04fb31c5a66c333466492674005d87ad6bb0cd9241549"
+    }
+  }
+}

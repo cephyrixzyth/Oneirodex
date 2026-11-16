@@ -211,8 +211,9 @@ function buildStageEHtml(folder) {
             const source = escapeHtml(stageESourceLabel(hit.source));
             const mode = stageEMatchModeLabel(hit.match_mode);
             const label = escapeHtml(hit.name || hit.id || 'Candidate');
-            const nameHtml = hit.url
-                ? `<a class="unmatched-stage-e__name" href="${escapeHtml(hit.url)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+            const safeUrl = safeStageECandidateUrl(hit);
+            const nameHtml = safeUrl
+                ? `<a class="unmatched-stage-e__name" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${label}</a>`
                 : `<span class="unmatched-stage-e__name">${label}</span>`;
             const modeHtml = mode
                 ? `<span class="unmatched-stage-e__mode">${escapeHtml(mode)}</span>`
@@ -225,6 +226,30 @@ function buildStageEHtml(folder) {
         body = `<p class="unmatched-stage-e__meta" title="${title}">${reason} — Identify to apply.</p>`;
     }
     return `<div class="unmatched-stage-e">${chip}${body}</div>`;
+}
+
+/** Return only known-provider HTTPS links for Stage E candidates. */
+function safeStageECandidateUrl(hit) {
+    const source = String(hit?.source || '').trim().toLowerCase();
+    const allowedHosts = source === 'mobygames'
+        ? new Set(['mobygames.com', 'www.mobygames.com'])
+        : source === 'thegamesdb'
+            ? new Set(['thegamesdb.net', 'www.thegamesdb.net'])
+            : null;
+    if (!allowedHosts || !hit?.url) return null;
+    try {
+        const url = new URL(String(hit.url));
+        if (
+            url.protocol !== 'https:'
+            || !allowedHosts.has(url.hostname.toLowerCase())
+            || (url.port && url.port !== '443')
+            || url.username
+            || url.password
+        ) return null;
+        return url.href;
+    } catch (_) {
+        return null;
+    }
 }
 
 /** Basename of a folder path (null-safe). */

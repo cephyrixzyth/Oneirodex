@@ -75,6 +75,86 @@ def test_encrypted_saves_are_recorded_by_content_and_rekeyed_for_the_server(tmp_
     assert move.rekey_saves(lib, {'files': files, 'save_key': server}, server) == 0, 'same key: nothing to do'
 
 
+def test_versioned_save_move_records_key_id_without_key_material(tmp_path, monkeypatch):
+    from oneirodex.utils.save_crypto import _encrypt_with_keyring
+    from oneirodex.utils.save_keyring import load_save_keyring
+    from scripts.migrate_emulator_save_keys import initialize_keyring
+
+    lib = _library(tmp_path)
+    keyring_path = tmp_path / 'protected-save-keyring.json'
+    initialize_keyring(keyring_path, 'legacy-server-secret')
+    monkeypatch.setenv('ONEIRODEX_SAVE_KEYRING_FILE', str(keyring_path))
+    keyring = load_save_keyring()
+    save = lib / 'saves/1/g/slot1.sav'
+    save.write_bytes(_encrypt_with_keyring(b'new-format-save', keyring))
+
+    files = move.snapshot_files(lib, move.save_key_for('legacy-server-secret'))
+    entry = next(e for e in files if e['path'] == 'saves/1/g/slot1.sav')
+
+    assert entry['plain_sha256'] == move._sha256(b'new-format-save')
+    assert entry['save_key_id'] == keyring.active_key_id
+    manifest = move._save_manifest_fields({keyring.active_key_id})
+    assert manifest == {
+        'required_save_key_ids': [keyring.active_key_id],
+        'save_key': None,
+    }
+    raw_key = json.loads(keyring_path.read_text(encoding='utf-8'))['keys'][keyring.active_key_id]
+    assert raw_key not in json.dumps(manifest)
+
+
+def test_context_bound_save_move_carries_owner_generation_context(tmp_path, monkeypatch):
+    from oneirodex.utils.save_crypto import _encrypt_with_keyring, save_context
+    from oneirodex.utils.save_keyring import load_save_keyring
+    from scripts.migrate_emulator_save_keys import initialize_keyring
+
+    lib = _library(tmp_path)
+    keyring_path = tmp_path / 'protected-save-keyring.json'
+    initialize_keyring(keyring_path, 'legacy-server-secret')
+    monkeypatch.setenv('ONEIRODEX_SAVE_KEYRING_FILE', str(keyring_path))
+    keyring = load_save_keyring()
+    generation_id = 'd' * 32
+    context = save_context(1, 'game-canary', 'slot1', generation_id)
+    save = lib / f'saves/1/game-canary/{generation_id}.save'
+    save.parent.mkdir(parents=True, exist_ok=True)
+    save.write_bytes(_encrypt_with_keyring(b'bound-save', keyring, context=context))
+
+    files = move.snapshot_files(lib, move.save_key_for('legacy-server-secret'), {str(save): context})
+    entry = next(e for e in files if e['path'].endswith(f'{generation_id}.save'))
+
+    assert entry['plain_sha256'] == move._sha256(b'bound-save')
+    assert entry['save_key_id'] == keyring.active_key_id
+    assert entry['save_context'] == context
+    assert move._sha256(save.read_bytes()) == entry['sha256']
+
+
+def test_rekey_does_not_follow_a_precreated_predictable_temp_symlink(tmp_path):
+    lib = _library(tmp_path)
+    source, server = move.save_key_for('standalone'), move.save_key_for('server')
+    save = lib / 'saves/1/g/slot1.sav'
+    _encrypt(save, source)
+    files = move.snapshot_files(lib, source)
+    victim = tmp_path / 'victim.txt'
+    victim.write_text('keep me', encoding='utf-8')
+    planted = save.with_name(save.name + '.rekey')
+    try:
+        planted.symlink_to(victim)
+    except (OSError, NotImplementedError):
+        # Windows may deny symlink creation to non-elevated test processes.
+        # A planted regular file still proves the predictable name is ignored.
+        planted.write_text('pre-existing temp path', encoding='utf-8')
+        was_symlink = False
+    else:
+        was_symlink = True
+
+    assert move.rekey_saves(lib, {'files': files, 'save_key': source}, server) == 1
+    assert victim.read_text(encoding='utf-8') == 'keep me'
+    assert planted.is_symlink() is was_symlink
+    if not was_symlink:
+        assert planted.read_text(encoding='utf-8') == 'pre-existing temp path'
+    data = save.read_bytes()
+    assert Fernet(server.encode()).decrypt(data[len(SAVE_MAGIC):]) == b'plain-save'
+
+
 
 
 def _bundle(tmp_path):
@@ -104,6 +184,44 @@ def test_a_complete_bundle_passes_the_check(tmp_path):
     bundle, manifest, fingerprint = _bundle(tmp_path)
     assert move.check_bundle(bundle, fingerprint) == json.loads(json.dumps(manifest))
     assert move.check_bundle(bundle, fingerprint[:16].upper()), 'a 16-character prefix is enough'
+
+
+def test_legacy_v1_bundle_remains_importable(tmp_path):
+    bundle, manifest, _ = _bundle(tmp_path)
+    manifest['format'] = move.LEGACY_FORMAT
+    fingerprint = _seal(bundle, manifest)
+
+    assert move.check_bundle(bundle, fingerprint)['format'] == move.LEGACY_FORMAT
+
+
+def test_unknown_future_move_bundle_version_is_rejected(tmp_path):
+    bundle, manifest, _ = _bundle(tmp_path)
+    manifest['format'] = 'oneirodex-household-move/3'
+    fingerprint = _seal(bundle, manifest)
+
+    with pytest.raises(Refused, match='unsupported move folder format'):
+        move.check_bundle(bundle, fingerprint)
+
+
+def test_context_bound_save_cannot_be_mislabeled_as_v1(tmp_path):
+    from oneirodex.utils.save_crypto import _encrypt_with_keyring, save_context
+    from oneirodex.utils.save_keyring import SaveKeyring
+
+    bundle, manifest, _ = _bundle(tmp_path)
+    context = save_context(7, 'game-canary', 'slot1', 'd' * 32)
+    keyring = SaveKeyring(active_key_id='key-1', keys={'key-1': Fernet(Fernet.generate_key())})
+    save_entry = next(entry for entry in manifest['files'] if entry['path'].startswith('saves/'))
+    payload = _encrypt_with_keyring(b'bound-save', keyring, context=context)
+    target = bundle / 'files' / save_entry['path']
+    target.write_bytes(payload)
+    save_entry.update({
+        'size': len(payload), 'sha256': move._sha256(payload), 'save_context': context,
+    })
+    manifest['format'] = move.LEGACY_FORMAT
+    fingerprint = _seal(bundle, manifest)
+
+    with pytest.raises(Refused, match='context-bound saves require move folder format 2'):
+        move.check_bundle(bundle, fingerprint)
 
 
 def test_a_resealed_bundle_does_not_match_the_exported_fingerprint(tmp_path):
@@ -200,6 +318,31 @@ def test_a_file_swapped_after_the_check_is_not_copied(tmp_path):
     src.write_bytes(b'checked')
     move._copy_checked(src, dest, expected)
     assert dest.read_bytes() == b'checked'
+
+
+def test_copy_does_not_follow_a_precreated_predictable_temp_symlink(tmp_path):
+    src, dest = tmp_path / 'src.bin', tmp_path / 'dest.bin'
+    src.write_bytes(b'checked')
+    victim = tmp_path / 'victim.txt'
+    victim.write_text('keep me', encoding='utf-8')
+    planted = dest.with_name(dest.name + '.moving')
+    try:
+        planted.symlink_to(victim)
+    except (OSError, NotImplementedError):
+        # Windows may deny symlink creation to non-elevated test processes.
+        # A planted regular file still proves the predictable name is ignored.
+        planted.write_text('pre-existing temp path', encoding='utf-8')
+        was_symlink = False
+    else:
+        was_symlink = True
+
+    move._copy_checked(src, dest, move._sha256(b'checked'))
+
+    assert dest.read_bytes() == b'checked'
+    assert victim.read_text(encoding='utf-8') == 'keep me'
+    assert planted.is_symlink() is was_symlink
+    if not was_symlink:
+        assert planted.read_text(encoding='utf-8') == 'pre-existing temp path'
 
 
 @pytest.mark.skipif(not hasattr(os, 'mkfifo'), reason='no named pipes here')
@@ -383,6 +526,74 @@ def test_export_refuses_without_an_install_or_into_a_used_folder(tmp_path):
     with pytest.raises(Refused, match='new or empty'):
         move.export(args)
     assert (tmp_path / 'out' / 'keep.txt').read_text() == 'mine'
+
+
+def test_export_refuses_while_the_standalone_database_is_running(tmp_path, monkeypatch):
+    from oneirodex_standalone import launcher, postgres
+
+    root = tmp_path / 'data'
+    root.mkdir()
+    (root / launcher.STATE_FILE).write_text('{}', encoding='utf-8')
+
+    class RunningPostgres:
+        def __init__(self, **_kwargs):
+            pass
+
+        def initialized(self):
+            return True
+
+        def in_use(self):
+            return True
+
+    monkeypatch.setattr(launcher, 'load_state', lambda _root: {
+        'db_port': 5432, 'db_password': 'synthetic', 'secret_key': 'synthetic',
+    })
+    monkeypatch.setattr(postgres, 'BundledPostgres', RunningPostgres)
+    args = type('A', (), {
+        'data_dir': root, 'to': str(tmp_path / 'backup'), 'pg_home': tmp_path, 'root': None,
+    })
+
+    with pytest.raises(Refused, match='Oneirodex is running'):
+        move.export(args)
+
+
+def test_database_snapshot_lists_secret_key_ids_without_secret_values(app, db_session, monkeypatch):
+    from oneirodex.models.misc import GlobalSettings
+    from sqlalchemy import text
+
+    # This test's create_all schema need not have migration bookkeeping. Use
+    # session-local metadata without changing a real alembic_version table.
+    db_session.execute(text('CREATE TEMP TABLE alembic_version (version_num varchar(32)) ON COMMIT DROP'))
+    db_session.execute(text("INSERT INTO alembic_version VALUES ('snapshot-fixture')"))
+
+    db_session.add(GlobalSettings(
+        smtp_password='odrc:v1:secret-key-1:context:synthetic-ciphertext',
+        arr_settings={'prowlarr_api_key': 'odrc:v1:arr-key-2:context:synthetic-ciphertext'},
+    ))
+    db_session.flush()
+    connection = db_session.connection()
+
+    class ConnectionContext:
+        def __enter__(self):
+            return connection
+
+        def __exit__(self, *_args):
+            return False
+
+    class EngineProxy:
+        def connect(self):
+            return ConnectionContext()
+
+        def dispose(self):
+            pass
+
+    monkeypatch.setattr(move, '_engine', lambda _url: EngineProxy())
+    with app.app_context():
+        snapshot = move.snapshot_db('postgresql://synthetic/test', {})
+
+    assert snapshot['reusable_secret_key_ids'] == ['arr-key-2', 'secret-key-1']
+    assert snapshot['legacy_reusable_secret_count'] == 0
+    assert 'synthetic-ciphertext' not in repr(snapshot)
 
 
 def test_cli_refusals_exit_1_and_usage_errors_exit_2(tmp_path, capsys):

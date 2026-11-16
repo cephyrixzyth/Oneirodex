@@ -81,6 +81,64 @@ def test_native_scan_queue_drain_passes_scope_to_promoted_worker(monkeypatch):
     assert calls == [('promote', True, True)]
 
 
+def test_native_scan_status_drain_passes_scope_to_queue_worker(monkeypatch):
+    calls = []
+    app = object()
+    database_scope = object()
+
+    monkeypatch.setattr(scan_queue, 'is_scan_busy', lambda: False)
+    monkeypatch.setattr(scan_queue, 'reclaim_stale_busy_jobs', lambda: None)
+    monkeypatch.setattr(
+        scan_queue, 'promote_next_queued_scan',
+        lambda selected_app, *, database_scope: calls.append(
+            (selected_app is app, database_scope is not None),
+        ) or 'promoted',
+    )
+
+    assert scan_queue.maybe_drain_scan_queue(
+        app, database_scope=database_scope,
+    ) == 'promoted'
+    assert calls == [(True, True)]
+
+
+def test_native_scan_start_uses_framework_free_worker_and_preserves_hltb_flags(monkeypatch):
+    calls = []
+    app = object()
+    database_scope = object()
+    job = SimpleNamespace(id='scan-started', last_run=None)
+
+    monkeypatch.setattr(scan_queue, '_application_or_current', lambda selected: app)
+    monkeypatch.setattr(scan_queue, 'reclaim_stale_busy_jobs', lambda: None)
+    monkeypatch.setattr(scan_queue, 'is_scan_busy', lambda: False)
+    monkeypatch.setattr(scan_queue, 'create_scan_job_row', lambda **kwargs: job)
+    monkeypatch.setattr(scan_queue, '_has_older_busy_scan', lambda _job: False)
+    monkeypatch.setattr(
+        scan_queue, '_start_job_thread',
+        lambda selected, selected_app, **kwargs: calls.append(
+            (selected is job, selected_app is app, kwargs),
+        ),
+    )
+    monkeypatch.setattr(
+        'oneirodex.utils.event_bus.publish_scan_event',
+        lambda *args: calls.append(('event', *args)),
+    )
+
+    result = scan_queue.start_or_queue_scan(
+        folder_path='/storage', library_uuid='lib-1', app=app,
+        database_scope=database_scope, fetch_hltb=True,
+        force_hltb_refetch=True,
+    )
+
+    assert result['status'] == 'started'
+    assert calls[0] == ('event', 'scan-started', 'Running')
+    assert calls[1] == (
+        True, True, {
+            'force_parallel': False, 'database_scope': database_scope,
+            'fetch_hltb': True, 'force_hltb_refetch': True,
+        },
+    )
+
+
 def test_scan_orchestration_drain_keeps_native_scope(monkeypatch):
     from oneirodex.utils.services import scan_orchestration
 

@@ -12,6 +12,7 @@ from sqlalchemy import select
 from oneirodex import db
 from oneirodex.models import Game
 from oneirodex.utils.api_response import api_error, api_ok
+from oneirodex.utils.api_tokens import require_api_token_scope
 from oneirodex.utils.auth import admin_required
 from oneirodex.utils.library_acl import user_can_access_game
 from oneirodex.schemas.assists import AssistPackBody
@@ -61,6 +62,7 @@ def load_assist_pack(game_uuid: str, *, config=None, package_root=None) -> dict[
 
 @apis_bp.route('/games/<game_uuid>/assists', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def get_game_assists(game_uuid):
     if not assists_enabled():
         return jsonify({'enabled': False, 'pack': None})

@@ -1,0 +1,21 @@
+{
+  "review_id": "R1984",
+  "title": "Remove native custom emoji committed by a cancelled upload request",
+  "classification": "Confirmed lifecycle gap: the native upload routes waited for image-worker completion on cancellation, but did not undo a successful row/file commit whose response was cancelled.",
+  "change": {
+    "routes": "Both JSON and legacy native upload handlers use a shared cancellable adapter. If cancellation arrives during worker execution, the adapter waits for completion, then removes the exact row by primary key and expected opaque filename before propagating cancellation.",
+    "cleanup": "The upload file is removed only after the matching database row is committed as deleted; mismatched IDs or filenames are preserved. Cleanup errors are logged without exposing paths or masking request cancellation."
+  },
+  "verification": {
+    "unit_command": "python -m pytest tests/test_native_chat_emoji_read.py tests/test_upload_work_budgets.py tests/test_chat_emoji_admin_api.py -q",
+    "unit_result": "passed: 28 tests on Python 3.14.10",
+    "database_command": "python -m pytest tests/test_custom_emoji.py -q",
+    "database_result": "passed: 11 tests on Python 3.14.10 and PostgreSQL 17.6",
+    "database": "Fresh oneirodexemoji_cancel_test database upgraded from Alembic baseline through head; dropped after verification. TEST_DATABASE_URL was process-scoped; root .env unchanged.",
+    "coverage": "The native JSON upload route delegates to the cancellable adapter. Direct task cancellation waits for worker completion and invokes exact-row cleanup; the database helper preserves a row/file on mismatched filename and removes the matching row/file. A synthetic file-unlink failure creates a retry job that the generic post-commit worker successfully processes. Existing generic AnyIO/direct task cancellation and upload-work-slot tests pass."
+  },
+  "limits": [
+    "The cancellation regression exercises the shared native upload adapter, not a real browser disconnect against the HTTP route.",
+    "Emoji-specific health responsiveness and real client-disconnect testing remain open; health was directly exercised through the game-art adapter and generic cleanup restart behavior was separately verified in R1978."
+  ]
+}

@@ -76,3 +76,27 @@ test('useLibraryScanToasts collapses more than five libraries to a count', async
   })
   expect(showToast).toHaveBeenCalledTimes(1)
 })
+
+test('useLibraryScanToasts limits scan notices on narrow screens', async () => {
+  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: true }))
+  const notifications = ['A', 'B', 'C'].map((library, i) => ({
+    id: i + 1,
+    kind: 'library_games_added',
+    library,
+    title: `1 game added to library ${library}`,
+  }))
+  stubFetch(async () => ({
+    ok: true,
+    json: async () => ({ notifications }),
+  }))
+
+  renderHook(() => useLibraryScanToasts({ intervalMs: 60_000 }))
+
+  await waitFor(() => {
+    expect(showToast).toHaveBeenCalledWith('3 notifications', 'success', {
+      count: 3,
+      maxIndividual: 2,
+    })
+  })
+  expect(showToast).toHaveBeenCalledTimes(1)
+})

@@ -74,6 +74,14 @@ test('ownership rail drawing comes from the neutral icon manifest adapter', () =
   ])
 })
 
+test('grip control comes from the neutral icon manifest adapter', () => {
+  const { container } = render(<RailIcon name="grip" size={18} />)
+  const svg = container.querySelector('svg')!
+  expect(svg.getAttribute('data-icon')).toBe('grip')
+  expect(svg.querySelectorAll('circle')).toHaveLength(6)
+  expect(svg.getAttribute('width')).toBe('18')
+})
+
 test('discover compass drawing comes from the neutral icon manifest adapter', () => {
   const { container } = render(<RailIcon name="discover" />)
   const svg = container.querySelector('svg')!

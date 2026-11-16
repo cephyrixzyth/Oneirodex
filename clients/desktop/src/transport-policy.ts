@@ -22,7 +22,7 @@ export type TransportCheck = { ok: true; url: URL } | { ok: false; message: stri
 const PRIVATE_HOST_SUFFIXES = ['.local', '.lan', '.home.arpa', '.internal', '.localdomain']
 
 const HTTP_LOCAL_HINT =
-  'plain http:// is only allowed for localhost, private LAN or Tailscale addresses, and .local, .lan, .home.arpa, .internal or .localdomain names'
+  'plain http:// is only allowed for localhost, private LAN or Tailscale addresses, and .local, .lan, .home.arpa, .internal or .localdomain names; bare host names other than localhost are refused because resolver search domains can send them elsewhere'
 
 /** Parse a dotted-quad from `URL.hostname` (WHATWG already folded 0x7f.1 and friends). */
 function parseIpv4(host: string): [number, number, number, number] | null {
@@ -115,10 +115,10 @@ function isPrivateOrLoopbackIpv6(groups: number[]): boolean {
  * Does this `URL.hostname` name a machine on the user's own network?
  *
  * Literal local address ranges, the house-network suffixes (`*.local` mDNS,
- * `*.lan`, `*.home.arpa`, `*.internal`, `*.localdomain`), and a bare single-label
- * name (`nas`, `localhost`) that only the local resolver can answer. A dotted
- * public name never qualifies, however much it reads like an address
- * (`192.168.1.1.evil.com`).
+ * `*.lan`, `*.home.arpa`, `*.internal`, `*.localdomain`), and `localhost`. Other
+ * bare names are not proof of a local destination: resolver search domains can
+ * send them elsewhere. A dotted public name never qualifies, however much it
+ * reads like an address (`192.168.1.1.evil.com`).
  */
 export function isPrivateOrLoopbackHost(hostname: string): boolean {
   const host = hostname.trim().toLowerCase()
@@ -139,7 +139,7 @@ export function isPrivateOrLoopbackHost(hostname: string): boolean {
   if (suffix) {
     return name.length > suffix.length
   }
-  return name !== '' && !name.includes('.')
+  return name === 'localhost'
 }
 
 const PUNY_BASE = 36

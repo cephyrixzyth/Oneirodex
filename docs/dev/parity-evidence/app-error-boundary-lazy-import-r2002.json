@@ -1,0 +1,37 @@
+{
+  "review_id": "R2002",
+  "title": "React application boundary handles rejected lazy modules",
+  "reviewed_on": "2026-11-08",
+  "claim": "A rejected lazy route module can leave the SPA without a usable recovery path.",
+  "classification": "recovery boundary already implemented; missing focused lazy-import regression is now covered",
+  "implementation_review": {
+    "component": "frontend/shared/src/AppErrorBoundary.tsx",
+    "mounted_at": [
+      "frontend/member-app/src/main.tsx",
+      "frontend/admin-app/src/main.tsx",
+      "frontend/admin-app/src/staticPilot.tsx"
+    ],
+    "behavior": "React render/import errors show an accessible alert and a user-triggered reload action; no automatic reload loop or remote error telemetry is used."
+  },
+  "verification": {
+    "node_version": "22.23.4",
+    "tests": [
+      {
+        "command": "npm exec --yes --package=node@22 -- npm run test --workspace=@oneirodex/ui -- src/AppErrorBoundary.test.tsx",
+        "result": "2 passed",
+        "coverage": "render exception and rejected lazy module import show safe alert and invoke manual reload"
+      },
+      {
+        "command": "npm exec --yes --package=node@22 -- npm run test --workspace=member-app -- src/components/RelatedMediaStrip.test.tsx",
+        "result": "1 passed",
+        "coverage": "dialog focus entry, Tab/Shift+Tab trap, Escape close, and launcher focus restoration"
+      }
+    ],
+    "format_check": "Prettier passed after formatting the focused regression"
+  },
+  "limits": [
+    "The rejected lazy module is simulated in Vitest; this is not a browser deployment test against a removed hashed chunk.",
+    "VoiceOver and NVDA smoke remain open for the related-media modal."
+  ],
+  "evidence_path": "frontend/shared/src/AppErrorBoundary.test.tsx"
+}

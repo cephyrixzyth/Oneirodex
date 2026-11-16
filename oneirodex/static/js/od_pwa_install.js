@@ -48,11 +48,142 @@
     }
   }
 
-  function registerWorker() {
-    if (!('serviceWorker' in navigator) || !secureEnough()) return;
-    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () {
-      // Optional: the app works perfectly well uninstalled.
+  var RETIRED_CACHE = 'oneirodex-vr-v1';
+  var PRIVACY_TIMEOUT = 10000;
+  var legacyRetired = false;
+  var retiredControllers = [];
+
+  function safeFallback() {
+    var controller = navigator.serviceWorker && navigator.serviceWorker.controller;
+    return legacyRetired && (!ownedWorker(controller, '/vr/sw.js') || retiredControllers.indexOf(controller) !== -1);
+  }
+
+  function ownedWorker(worker, path) {
+    if (!worker) return false;
+    var url = new URL(worker.scriptURL, window.location.href);
+    return url.origin === window.location.origin && url.pathname === path;
+  }
+
+  function workers(registration) {
+    return [registration.active, registration.waiting, registration.installing].filter(Boolean);
+  }
+
+  function vrRegistration(registration) {
+    var scope = new URL(registration.scope);
+    var entries = workers(registration);
+    return scope.origin === window.location.origin &&
+      (scope.pathname === '/vr' || scope.pathname === '/vr/') && entries.length &&
+      entries.every(function (worker) { return ownedWorker(worker, '/vr/sw.js'); });
+  }
+
+  function pause() {
+    return new Promise(function (resolve) { window.setTimeout(resolve, 50); });
+  }
+
+  function acknowledge(worker, type) {
+    return new Promise(function (resolve) {
+      var channel = new MessageChannel();
+      var timer = window.setTimeout(function () { finish(false); }, 300);
+      function finish(value) {
+        window.clearTimeout(timer);
+        channel.port1.close();
+        channel.port2.close();
+        resolve(value);
+      }
+      channel.port1.onmessage = function (event) { finish(event.data === type); };
+      try { worker.postMessage({ type: type }, [channel.port2]); }
+      catch (err) { finish(false); }
     });
+  }
+
+  async function retireRegistration(registration, deadline) {
+    var previous = workers(registration);
+    if (registration.active && await acknowledge(registration.active, 'od-vr-retired')) {
+      retiredControllers.push(registration.active);
+      await registration.unregister();
+      return true;
+    }
+    // Updating replaces the caching worker only after its pending events finish.
+    // Unregister alone leaves both its current clients and pending writes alive.
+    await registration.update().catch(function () {});
+    while (Date.now() < deadline) {
+      var entries = workers(registration);
+      if (entries.some(function (worker) { return !ownedWorker(worker, '/vr/sw.js'); })) return false;
+      var active = registration.active;
+      var retired = active && previous.indexOf(active) === -1 && active.state === 'activated' &&
+        await acknowledge(active, 'od-vr-retired');
+      if (retired) retiredControllers.push(active);
+      if (retired || previous.every(function (worker) { return worker.state === 'redundant'; })) {
+        await registration.unregister();
+        return true;
+      }
+      await pause();
+    }
+    return false;
+  }
+
+  async function migrateWorker() {
+    if (!('serviceWorker' in navigator) || !secureEnough()) {
+      legacyRetired = true;
+      return true;
+    }
+    var service = navigator.serviceWorker;
+    var deadline = Date.now() + PRIVACY_TIMEOUT;
+    var registrations = await service.getRegistrations();
+    var mixedLegacy = registrations.some(function (registration) {
+      var scope = new URL(registration.scope);
+      return scope.origin === window.location.origin &&
+        (scope.pathname === '/vr' || scope.pathname === '/vr/') &&
+        workers(registration).some(function (worker) { return ownedWorker(worker, '/vr/sw.js'); }) &&
+        !vrRegistration(registration);
+    });
+    if (mixedLegacy) return false;
+    var legacy = registrations.filter(vrRegistration);
+    legacyRetired = false;
+    for (var registration of legacy) {
+      if (!await retireRegistration(registration, deadline)) return false;
+    }
+    // All owned registrations are gone. A replacement retirement controller is
+    // safe only after its policy acknowledgement; an old URL alone proves nothing.
+    if (ownedWorker(service.controller, '/vr/sw.js') && retiredControllers.indexOf(service.controller) === -1) {
+      if (!await acknowledge(service.controller, 'od-vr-retired')) return false;
+      retiredControllers.push(service.controller);
+    }
+    await caches.delete(RETIRED_CACHE);
+    legacyRetired = true;
+    try {
+      var root = await service.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+      await root.update();
+      while (Date.now() < deadline) {
+        var worker = root.active;
+        if (ownedWorker(worker, '/sw.js') && worker.state === 'activated' &&
+            await acknowledge(worker, 'od-privacy-claim') && (service.controller === worker ||
+              (ownedWorker(service.controller, '/vr/sw.js') && await acknowledge(service.controller, 'od-vr-retired')))) {
+          await caches.delete(RETIRED_CACHE);
+          return true;
+        }
+        await pause();
+      }
+    } catch (err) {
+      // Installing remains optional for a browser with no legacy private worker.
+    }
+    return safeFallback();
+  }
+
+  function registerWorker() {
+    // A hung browser update must not start private requests under old control.
+    window.odPwaPrivacyReady = Promise.race([
+      migrateWorker(),
+      new Promise(function (resolve) { window.setTimeout(function () { resolve(safeFallback()); }, PRIVACY_TIMEOUT); }),
+    ]).catch(function () { return false; });
+  }
+
+  function clearOwnedCaches() {
+    if (!window.caches) return;
+    caches.keys().then(function (names) {
+      return Promise.all(names.filter(function (name) { return name.startsWith('oneirodex-'); })
+        .map(function (name) { return caches.delete(name); }));
+    }).catch(function () {});
   }
 
   /** Sign-out drops whatever the worker cached for this browser profile. */
@@ -60,10 +191,26 @@
     document.addEventListener(
       'click',
       function (event) {
-        var link = event.target.closest && event.target.closest('a[href$="/logout"], a[href*="/logout?"]');
-        if (!link) return;
-        if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
-        navigator.serviceWorker.controller.postMessage({ type: 'od-clear-caches' });
+        var action = event.target.closest && event.target.closest(
+          'a[href$="/logout"], a[href*="/logout?"], button[data-action="logout"]',
+        );
+        if (!action) return;
+        try {
+          window.localStorage.removeItem('od.palette.recent');
+        } catch (err) {
+          // Restricted storage is optional; current code never writes this key.
+        }
+        clearOwnedCaches();
+        if (!navigator.serviceWorker) return;
+        navigator.serviceWorker.getRegistrations().then(function (registrations) {
+          registrations.forEach(function (registration) {
+            workers(registration).forEach(function (worker) {
+              if (ownedWorker(worker, '/sw.js') || ownedWorker(worker, '/vr/sw.js')) {
+                worker.postMessage({ type: 'od-clear-caches' });
+              }
+            });
+          });
+        }).catch(function () {});
       },
       true,
     );

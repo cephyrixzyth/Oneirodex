@@ -1,5 +1,5 @@
 import type { Requester } from './client.js'
-import type { CollectionSummary, SearchResponse } from './types.js'
+import type { CollectionListResponse, CollectionSummary, SearchResponse } from './types.js'
 
 export interface SearchOptions {
   query: string
@@ -13,8 +13,8 @@ export function createBrowseApi(request: Requester) {
       return request<SearchResponse>(`/api/search?${params}`, { signal })
     },
 
-    listCollections(signal?: AbortSignal): Promise<CollectionSummary[]> {
-      return request<CollectionSummary[]>('/api/collections', { signal })
+    listCollections(signal?: AbortSignal): Promise<CollectionListResponse | CollectionSummary[]> {
+      return request<CollectionListResponse | CollectionSummary[]>('/api/collections', { signal })
     },
   }
 }

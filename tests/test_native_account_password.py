@@ -46,6 +46,7 @@ class FakePasswordData:
         self.commit_error = commit_error
         self.commits = 0
         self.rollbacks = 0
+        self.token_touches = []
 
     def get_user(self, user_id):
         return self.user if user_id == self.user.id else None
@@ -59,14 +60,28 @@ class FakePasswordData:
         self.rollbacks += 1
 
 
-def make_client(*, data=None):
+class FakeToken:
+    def __init__(self):
+        self.user_id = 167
+        self.token_prefix = 'deadbeef'
+        self.token_hash = hashlib.sha256(b'token-secret').hexdigest()
+        self.scopes = ['read:library']
+        self.revoked_at = None
+        self.expires_at = None
+        self.last_used_at = None
+
+    def is_expired(self, now=None):
+        return False
+
+
+def make_client(*, data=None, token=None, csrf_enabled=True):
     user = data.user if data else FakeUser()
     data = data or FakePasswordData(user)
     flask_app = Flask(__name__)
     flask_app.config.update(
         SECRET_KEY=SECRET,
         TESTING=True,
-        WTF_CSRF_ENABLED=True,
+        WTF_CSRF_ENABLED=csrf_enabled,
         SESSION_COOKIE_NAME='session',
         REMEMBER_COOKIE_NAME='remember_token',
         REMEMBER_COOKIE_DURATION=timedelta(days=365),
@@ -82,8 +97,8 @@ def make_client(*, data=None):
     router = create_account_password_router(
         flask_app,
         find_user=lambda user_id: user if user_id == 167 else None,
-        find_token=lambda _prefix: None,
-        commit_token_touch=lambda _token: None,
+        find_token=lambda prefix: token if token and prefix == token.token_prefix else None,
+        commit_token_touch=data.token_touches.append,
         load_user_id=lambda value: user if value.split(':', 1)[0] == '167' else None,
         login_manager=login_manager,
         data_access=data,
@@ -100,6 +115,125 @@ def credentials():
     session = {'_user_id': '167:old-fingerprint', '_fresh': True}
     csrf = generate_csrf_token(session, SECRET)
     return dump_session_cookie(session, SECRET), csrf
+
+
+def test_password_change_missing_fields_returns_unprocessable():
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/password', json={}, headers={'X-CSRFToken': csrf}
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error_code'] == 'unprocessable'
+    assert set(response.json()['detail']) == {
+        'current_password', 'new_password', 'confirm_password'
+    }
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
+def test_password_change_malformed_json_returns_unprocessable():
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/password',
+        content=b'{',
+        headers={
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrf,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error_code'] == 'unprocessable'
+    assert response.json()['error'] == 'Invalid request.'
+    assert set(response.json()['detail']) == {
+        'current_password', 'new_password', 'confirm_password'
+    }
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
+def test_password_change_rejects_oversized_json_before_parsing():
+    from oneirodex.runtime_native.account_password import _PASSWORD_JSON_MAX_BYTES
+
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/password',
+        content=b'{"padding":"' + b'x' * _PASSWORD_JSON_MAX_BYTES + b'"}',
+        headers={'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
+def test_password_change_caps_secret_utf8_bytes_before_argon2():
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/api/account/password',
+        json={
+            'current_password': 'OldPassword1!',
+            'new_password': '😀' * 1025,
+            'confirm_password': '😀' * 1025,
+        },
+        headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error_code'] == 'unprocessable'
+    assert 'new_password' in response.json()['detail']
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
+def test_legacy_password_form_caps_repeated_field_count():
+    client, user, data = make_client()
+
+    response = client.post(
+        '/settings_password',
+        content='&'.join(f'field{i}=x' for i in range(17)),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+
+    assert response.status_code == 400
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
+def test_legacy_password_form_caps_password_bytes_before_verify_and_hash():
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/settings_password',
+        data={
+            'csrf_token': csrf,
+            'current_password': 'OldPassword1!',
+            'password': '😀' * 1025,
+            'confirm_password': '😀' * 1025,
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+    assert '😀' not in response.text
 
 
 def test_password_change_updates_session_and_remember_cookie_fingerprint():
@@ -147,8 +281,12 @@ def test_wrong_current_password_does_not_mutate_or_commit():
         headers={'X-CSRFToken': csrf},
     )
 
-    assert response.status_code == 401
+    # This is a field-validation failure inside an authenticated session. A
+    # 401 makes the member SPA treat the response as an expired login and
+    # redirect away before the password panel can show this error.
+    assert response.status_code == 422
     assert response.json()['error'] == 'Current password is incorrect.'
+    assert response.json()['error_code'] == 'unprocessable'
     assert user.password == 'OldPassword1!'
     assert data.commits == 0
 
@@ -188,6 +326,47 @@ def test_invalid_csrf_rejects_password_change_before_adapter():
     assert response.status_code == 400
     assert response.json()['error'] == 'The CSRF token is missing.'
     assert data.commits == 0
+
+
+def test_invalid_csrf_does_not_touch_bearer_token_usage():
+    token = FakeToken()
+    client, user, data = make_client(token=token)
+
+    response = client.post(
+        '/api/account/password',
+        json={
+            'current_password': 'OldPassword1!',
+            'new_password': 'NewPassword2!',
+            'confirm_password': 'NewPassword2!',
+        },
+        headers={'Authorization': 'Bearer gt_deadbeef_token-secret'},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error'] == 'The CSRF token is missing.'
+    assert token.last_used_at is None
+    assert data.token_touches == []
+    assert user.password == 'OldPassword1!'
+
+
+def test_csrf_disabled_password_request_still_touches_authenticated_bearer():
+    token = FakeToken()
+    client, _user, data = make_client(token=token, csrf_enabled=False)
+
+    response = client.post(
+        '/api/account/password',
+        json={
+            'current_password': 'wrong',
+            'new_password': 'NewPassword2!',
+            'confirm_password': 'NewPassword2!',
+        },
+        headers={'Authorization': 'Bearer gt_deadbeef_token-secret'},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error'] == 'Current password is incorrect.'
+    assert token.last_used_at is not None
+    assert data.token_touches == [token]
 
 
 def test_commit_failure_rolls_back_and_does_not_leak_exception():
@@ -236,6 +415,26 @@ def test_legacy_password_form_uses_hidden_csrf_and_refreshes_session():
     assert response.cookies.get('remember_token') == encode_cookie(user.get_id(), key=SECRET)
 
 
+def test_legacy_password_form_keeps_html_csrf_failure_contract():
+    client, user, data = make_client()
+
+    response = client.post(
+        '/settings_password',
+        data={
+            'current_password': 'OldPassword1!',
+            'password': 'NewPassword2!',
+            'confirm_password': 'NewPassword2!',
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert response.headers['content-type'].startswith('text/html')
+    assert b'The CSRF token is missing.' in response.content
+    assert user.password == 'OldPassword1!'
+    assert data.commits == 0
+
+
 def test_legacy_password_form_requires_csrf():
     client, _user, data = make_client()
     client.cookies.set('session', dump_session_cookie(
@@ -253,4 +452,84 @@ def test_legacy_password_form_requires_csrf():
     )
 
     assert response.status_code == 400
+    assert data.commits == 0
+
+
+def test_legacy_password_form_validation_messages_match_v118_copy():
+    cases = (
+        (
+            {
+                'current_password': 'wrong',
+                'password': 'NewPassword2!',
+                'confirm_password': 'NewPassword2!',
+            },
+            'Current password is incorrect.',
+        ),
+        (
+            {
+                'current_password': 'OldPassword1!',
+                'password': 'short',
+                'confirm_password': 'short',
+            },
+            'New Password: Field must be at least 8 characters long.',
+        ),
+        (
+            {
+                'current_password': 'OldPassword1!',
+                'password': 'NewPassword2!',
+                'confirm_password': 'OtherPassword2!',
+            },
+            'Confirm Password: Passwords must match',
+        ),
+    )
+
+    for fields, expected_message in cases:
+        client, user, data = make_client()
+        cookie, csrf = credentials()
+        client.cookies.set('session', cookie)
+
+        response = client.post(
+            '/settings_password',
+            data={'csrf_token': csrf, **fields},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 302
+        assert response.headers['location'] == '/library?account=password'
+        session = load_session_cookie(
+            response.cookies.get('session'), SECRET, max_age=31_536_000
+        )
+        assert session['_flashes'] == [('error', expected_message)]
+        assert user.password == 'OldPassword1!'
+        assert data.commits == 0
+
+
+def test_legacy_password_form_uses_first_repeated_field_value():
+    from urllib.parse import urlencode
+
+    client, user, data = make_client()
+    cookie, csrf = credentials()
+    client.cookies.set('session', cookie)
+    fields = [
+        ('csrf_token', csrf),
+        ('current_password', 'wrong-first'),
+        ('current_password', 'OldPassword1!'),
+        ('password', 'NewPassword2!'),
+        ('confirm_password', 'NewPassword2!'),
+    ]
+
+    response = client.post(
+        '/settings_password',
+        content=urlencode(fields),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/library?account=password'
+    session = load_session_cookie(
+        response.cookies.get('session'), SECRET, max_age=31_536_000
+    )
+    assert session['_flashes'] == [('error', 'Current password is incorrect.')]
+    assert user.password == 'OldPassword1!'
     assert data.commits == 0

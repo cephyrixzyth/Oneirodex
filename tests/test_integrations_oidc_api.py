@@ -2,6 +2,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _keyring(reusable_secret_keyring):
+    return reusable_secret_keyring
 from flask import Flask
 from flask_login import LoginManager, UserMixin
 from flask_wtf.csrf import CSRFProtect, generate_csrf

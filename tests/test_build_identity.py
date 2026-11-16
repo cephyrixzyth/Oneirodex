@@ -123,6 +123,35 @@ def test_the_schema_revision_helper_returns_none_when_the_db_is_unreachable(app,
         assert module._schema_revision() is None
 
 
+def test_schema_revision_uses_native_engine_without_flask(monkeypatch):
+    import builtins
+
+    from sqlalchemy import create_engine, text
+    from oneirodex.runtime_native import db_session
+
+    engine = create_engine('sqlite:///:memory:')
+    with engine.begin() as connection:
+        connection.execute(text(
+            'CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)'
+        ))
+        connection.execute(text(
+            "INSERT INTO alembic_version (version_num) VALUES ('native-head')"
+        ))
+    monkeypatch.setattr(db_session, 'current_native_engine', lambda: engine)
+    real_import = builtins.__import__
+
+    def without_flask(name, *args, **kwargs):
+        if name == 'flask':
+            raise ImportError('Flask is not installed in the native runtime')
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, '__import__', without_flask)
+    try:
+        assert module._schema_revision() == 'native-head'
+    finally:
+        engine.dispose()
+
+
 def test_ops_summary_carries_the_build_block(app):
     from oneirodex import app_start_time
     from oneirodex.utils.ops_summary import build_ops_summary

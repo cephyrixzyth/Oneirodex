@@ -1,0 +1,60 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2068",
+  "observed_utc": "2026-11-13T20:34:09.042544+00:00",
+  "source_base": "bba3a4d5fa2d5ca25d9f1316a80b1f5d03f2dd39",
+  "classification": "Confirmed test-fixture lifetime defect; no production Promise-contract failure claimed.",
+  "ci_trigger": {
+    "source_head": "039ba881a85309f3c0c0eff14b55a897e870903c",
+    "run_id": 43492999662,
+    "admin_job_id": 132118757096,
+    "passed": 713,
+    "failed": 1,
+    "error": "Mocked getJson returned undefined before .then in Clear All case.",
+    "raw_log_sha256": "fc935e7a111c3370fd0243f1f056aefe60f80a6663263505986276510b73a911",
+    "other_jobs": "8 successful, including core132118757660; no complete039 main-pass claim."
+  },
+  "fix": "Unmount/abort the mounted page before resetting API mocks and globals.",
+  "production_code_changed": false,
+  "test_source_sha256": "ef35a89a393977d415368a144d012ba88ecf7c6cb2e2699a1ed86e7286cbd219",
+  "local_verification": {
+    "platform": "Windows / Node22.23.4 / Vitest4.1.12",
+    "new_regression": "Failed before explicit cleanup; passed after correction.",
+    "wrong_order_control": "Unmount after reset failed because API mock was already undefined at request abort.",
+    "scan_test_file": {
+      "passed": 8,
+      "files": 1,
+      "vitest_seconds": 39.01
+    },
+    "admin_full_tsconfig": "passed",
+    "scoped_eslint": "passed",
+    "scoped_prettier": "passed",
+    "full_admin_suite": "Not replayed locally; ordinary new-head CI remains required.",
+    "limits": "One new regression observed across multiple checks; counts overlap, not additive."
+  },
+  "archive": {
+    "filename": "admin-scan-test-teardown-r2068.zip",
+    "sha256": "89ecd5b49d98d5424c8b85a5667c14947cf0125566145daf26b3fba769acc6af",
+    "files": 11,
+    "bytes": 86107,
+    "storage": "Private canonical review artifacts; raw host paths withheld from public Git."
+  },
+  "coverage": "No production UI/route behavior change or parity-coverage promotion.",
+  "remaining": [
+    "Admin selection qualified on6a4118ba; main/core and final-head full required CI remain separate.",
+    "Bootstrap isolation, complete desktop/process/platform acceptance and all original parity/security/operator/final-review gates."
+  ],
+  "full_admin_ci": {
+    "observed_source_head": "6a4118bae90dfc96ae81162e7c5ed37f45c85652",
+    "run_id": 43503317308,
+    "job_id": 132154427964,
+    "status": "success",
+    "passed": 715,
+    "files_passed": 99,
+    "vitest_seconds": 44.41,
+    "full_admin_typecheck": "passed",
+    "job_including_classic_JS_harnesses": "success",
+    "raw_log_sha256": "cacf1322a8a5e4d4fa1ac70318f383b42e23385ce2b09ed961ea2dd2e941a6a4",
+    "scope": "Admin selection only; main/core and all original gates are separate."
+  }
+}

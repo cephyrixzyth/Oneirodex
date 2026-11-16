@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
 
 
 class WantedUpdateData:
@@ -77,7 +77,9 @@ def create_wanted_updates_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                response = JSONResponse({'items': data.list(auth.user.id)})
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = JSONResponse({'items': data.list(auth.user.id)})
             _finish(response, flask_app, request, auth)
             return response
 
@@ -169,7 +171,22 @@ async def _validated(request, operation):
 
     model = AddWantedBody if operation == 'add' else FulfillWantedBody
     try:
-        raw = json.loads(await request.body() or b'{}')
+        content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+        is_json = content_type == 'application/json' or (
+            content_type.startswith('application/') and content_type.endswith('+json')
+        )
+        if is_json:
+            from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+            raw_body = await read_bounded_body(request, 64 * 1024)
+            if raw_body is BODY_TOO_LARGE:
+                payload, status = api_error_payload(
+                    'Request body is too large.', code='payload_too_large',
+                )
+                return None, JSONResponse(payload, status_code=status)
+            raw = json.loads(raw_body or b'{}')
+        else:
+            raw = {}
     except (TypeError, ValueError):
         raw = {}
     try:

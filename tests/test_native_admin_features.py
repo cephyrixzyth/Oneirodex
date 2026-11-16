@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_features import create_admin_features_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -44,7 +46,7 @@ def make_client(*, data=None, csrf_enabled=False):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-admin-features-secret', WTF_CSRF_ENABLED=csrf_enabled)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
-    user = SimpleNamespace(id=12, role='admin', is_active=True, state=True, is_authenticated=True, session_fingerprint=lambda: 'fp')
+    user = SimpleNamespace(id=12, role='admin', is_active=True, state=True, is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef')
     manager = SimpleNamespace(login_view='login.login', blueprint_login_views={}, login_message='Please log in.', login_message_category='message', localize_callback=None, session_protection='basic')
     app = FastAPI()
     app.include_router(create_admin_features_router(
@@ -54,7 +56,7 @@ def make_client(*, data=None, csrf_enabled=False):
         login_manager=manager, data_access=data or FakeFeatures(),
     ))
     client = TestClient(app)
-    client.cookies.set('session', dump_session_cookie({'_user_id': '12:fp', '_fresh': True}, 'native-admin-features-secret'))
+    client.cookies.set('session', dump_session_cookie({'_user_id': login_identity_for(12), '_fresh': True}, 'native-admin-features-secret'))
     return client
 
 
@@ -89,7 +91,7 @@ def test_challenge_configuration_validation_and_probe_projection():
 def test_legacy_feature_form_uses_hidden_csrf_and_saves_all_toggles():
     data = FakeFeatures()
     client = make_client(data=data, csrf_enabled=True)
-    session = {'_user_id': '12:fp', '_fresh': True}
+    session = {'_user_id': login_identity_for(12), '_fresh': True}
     csrf = generate_csrf_token(session, 'native-admin-features-secret')
     client.cookies.set('session', dump_session_cookie(session, 'native-admin-features-secret'))
     form = {'csrf_token': csrf}
@@ -99,6 +101,15 @@ def test_legacy_feature_form_uses_hidden_csrf_and_saves_all_toggles():
 
     assert response.status_code == 302
     assert response.headers['location'] == '/admin/features'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/admin/features">/admin/features</a>. If not, click the link.\n'
+    )
     assert data.saved == [{
         'enable_arr_module': True, 'enable_ai_assist': True,
         'enable_malware_scan': True, 'enable_game_updates': True,

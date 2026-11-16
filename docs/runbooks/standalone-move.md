@@ -15,7 +15,7 @@ Design and evidence: [ADR 0011](../adr/0011-standalone-bundled-postgres.md).
 | Moves | Stays behind |
 |---|---|
 | Everything in the database: members, libraries, games, matches, store entitlements, play history, settings | Game files themselves. They stay where they are; tell the move where they live on the server (`--root`, below) |
-| Artwork, generated cover packs, saves (encrypted ones are re-encrypted for the server), chat uploads, custom emoji, mods, cheats, assists, uploaded themes | The default theme, colour presets, icon packs, fonts and caches: the server rebuilds them on start |
+| Artwork, generated cover packs, saves (encrypted saves keep their protected key IDs), chat uploads, custom emoji, mods, cheats, assists, uploaded themes | The default theme, colour presets, icon packs, fonts and caches: the server rebuilds them on start |
 | | BIOS files: copy them to the server's BIOS folder yourself ([emulator-bios.md](emulator-bios.md)) |
 
 ## Before you start
@@ -42,9 +42,17 @@ python -m oneirodex_standalone export --pg-home <bundled-postgres> --to <move-fo
   Those keep their old value on the server; name their folder too, or rescan
   afterwards. It also notes BIOS files, which are not carried.
 - While Oneirodex is running, the export refuses to start.
+- If any saves are encrypted, configure the protected save keyring on the
+  standalone before export. The exporter upgrades legacy `GTENC1` save files
+  in the move copy to the active key ID; the standalone files are unchanged.
 
 The export prints a **fingerprint**, 64 characters long. Write it down or copy
 it somewhere other than the move folder, because the import asks for it.
+
+New exports use move format version 2 for owner-bound `GTENC3` saves. The current
+importer also accepts version 1 bundles that contain only legacy save formats;
+it rejects context-bound saves mislabeled as version 1. Older importers that
+recognize only version 1 reject new exports as unsupported.
 
 ## 2. Copy the move folder to the server
 
@@ -52,8 +60,9 @@ Put it next to `docker-compose.yml`, for example as `./move`, over a share or
 a USB drive. The import checks every file against the manifest, so a partial
 copy is refused rather than half-restored.
 
-The fingerprint is what makes the folder trustworthy on the server. Restoring
-a database runs its contents on the server. So a folder someone changed along
+The fingerprint detects changes when compared with the value kept separately.
+It does not authenticate who created the bundle. Restoring a database runs its
+contents on the server. So a folder someone changed along
 the way, even with every checksum inside rewritten to match, is refused unless
 its fingerprint is the one your export printed.
 
@@ -67,10 +76,14 @@ a regular file) after the check is refused as `not a regular file` instead of th
 import waiting on it. The copy needs free space equal to the dump in the server's
 temporary folder, and is removed when the import ends.
 
+Library files and re-encrypted saves are written through unique, exclusively
+created temporary files in their destination folders before atomic replacement.
+Pre-created `.moving` or `.rekey` paths are not used.
+
 The folder holds your members' data (password hashes, settings and API keys
-included), their saves and, if any saves are encrypted, the key that opens
-them. It is created readable only by you. Keep it private and delete it once
-the move is done.
+included) and their saves. New encrypted saves stay encrypted in the bundle;
+the manifest lists key IDs but contains no key material. Keep the matching
+operator-managed keyring separately protected and outside the move bundle.
 
 ## 3. Create an empty database for the move
 
@@ -93,8 +106,26 @@ docker compose run --rm --no-deps -v ./move:/move:ro \
 - Give `--root` once for every folder named at export, with its path on the server.
 - The target database comes only from `DATABASE_URL`. There is no command-line
   option for it, so the password stays out of your shell history.
-- The server's own `SECRET_KEY` comes from the app container's environment. It
-  is used to re-encrypt encrypted saves.
+- New move bundles contain encrypted saves plus required key IDs, never save
+  key material. Configure the matching operator-managed save keyring on the
+  target before import; back it up independently from the move bundle and
+  database/library backups. Legacy move bundles with a `save_key` field remain
+  importable and still need the target server's `SECRET_KEY` to re-encrypt.
+- Store-provider and saved admin integration credentials use a separate operator-managed key ring, not the
+  database dump. Copy that protected file independently to the target, set
+  `ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE` to its new local path, and preserve
+  every key ID needed by the restored ciphertext. Keep the key-ring backup
+  outside the move archive and database/library backup payloads.
+- After the schema has been upgraded on the target, run
+  `python scripts/migrate_reusable_secrets.py` and
+  `python scripts/migrate_store_credentials.py` with the target key-ring
+  available. For an external database,
+  set the target `DATABASE_URL` explicitly in the process environment. For the
+  single-container embedded-PostgreSQL target, run the script inside the new
+  running app container; it resolves the database from `/config`, so leave that
+  container running. The converter does not load `.env` or fall back to
+  `TEST_DATABASE_URL`. Keep old-version writers stopped, and verify/migrate every
+  row before depending on restored store links.
 - Files go into the server's library folder (`LIBRARY_HOST_PATH`). If a file
   with the same name and different content is already there, the import stops
   before anything is written.
@@ -106,7 +137,7 @@ The import:
 2. restores the database in one transaction;
 3. copies the files, checking each as it is copied;
 4. rewrites machine paths in one transaction, including Windows `\` to `/`;
-5. re-encrypts encrypted saves;
+5. checks encrypted save IDs and plaintext digests (legacy bundles are re-encrypted);
 6. verifies every table, the game, entitlement, decision and save identities,
    and every file.
 
@@ -138,7 +169,7 @@ docker compose exec db dropdb -U postgres oneirodex_moved
 
 To try again, for example with a corrected `--root`, create the empty database
 again (step 3) and rerun the import. It accepts the files an earlier run of
-the same move left in the library, re-encrypted saves included. They are listed
+the same move left in the library, encrypted saves included. They are listed
 in `<move-folder>/manifest.json` (`files`) if you would rather remove them.
 
 ## Exit status and messages
@@ -156,7 +187,8 @@ in `<move-folder>/manifest.json` (`files`) if you would rather remove them.
 | `Oneirodex is running: stop it, then export` | Quit the standalone app (check the tray) and retry |
 | `the target database is not empty` | Import into a new database (step 3), not the one the server uses |
 | `--root must name exactly the folders named at export` | Give one `--root` per folder you named at export, no more |
-| `encrypted saves need the server's SECRET_KEY` | Run the import through `docker compose run … app` so it gets the server's environment |
+| `restore the protected save keyring` | Mount the matching operator-managed save keyring before importing a current move bundle |
+| `encrypted saves need the server's SECRET_KEY` | This is a legacy move bundle. Run import through `docker compose run … app` so it gets the target server's environment |
 | `pg_restore not found` / `pg_restore did not run` | Older server image without the PostgreSQL 17 client. Copy the standalone's Linux PostgreSQL bundle to the server and pass `--pg-bin <bundle>/usr/lib/postgresql/17/bin`; the import finds the bundle's libraries itself |
 | `move folder incomplete or altered` | Copy the folder again; something was lost or changed on the way |
 | `does not match the fingerprint from export` | The folder is not the one you exported, or it was changed. Export again and copy the new folder |

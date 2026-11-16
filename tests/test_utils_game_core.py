@@ -540,12 +540,17 @@ class TestImageProcessingFunctions:
         db_session.commit()
 
         with app.app_context():
+            database_scope = object()
+            allowed_bases = ('/test',)
             result = retrieve_and_save_game(
                 'Test Game',
                 '/test/path',
                 scan_job_id=job.id,
                 library_uuid=sample_library.uuid,
                 fetch_hltb=True,
+                app=app,
+                database_scope=database_scope,
+                allowed_bases=allowed_bases,
             )
 
         assert result == mock_game
@@ -554,6 +559,9 @@ class TestImageProcessingFunctions:
         mock_folder_size.assert_not_called()
         mock_queue.assert_called_once()
         assert mock_queue.call_args.kwargs.get('fetch_hltb') is True
+        assert mock_queue.call_args.kwargs.get('app') is app
+        assert mock_queue.call_args.kwargs.get('database_scope') is database_scope
+        assert mock_queue.call_args.kwargs.get('allowed_bases') == allowed_bases
 
 
 class TestDownloadFunctions:
@@ -575,13 +583,25 @@ class TestDownloadFunctions:
     
     @patch('oneirodex.utils.clients.igdb.make_igdb_api_request')
     @patch('oneirodex.utils.services.image_pipeline.download_image')
-    def test_process_and_save_image_success(self, mock_download, mock_api, app, sample_game, sample_global_settings):
-        """Test successful image processing and saving."""
+    def test_process_and_save_image_success(self, mock_download, mock_api, app, sample_game,
+                                           sample_global_settings, monkeypatch):
+        """Native image processing uses the supplied app without importing Flask."""
+        import builtins
+
         mock_api.return_value = [{'url': '//images.igdb.com/igdb/image/upload/t_thumb/test.jpg'}]
         mock_download.return_value = (True, None)
+
+        original_import = builtins.__import__
+
+        def no_flask_import(name, *args, **kwargs):
+            if name == 'flask' or name.startswith('flask.'):
+                raise ImportError('Flask is unavailable in the native runtime')
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', no_flask_import)
         
         with app.app_context():
-            process_and_save_image(sample_game.uuid, 12345, 'cover')
+            process_and_save_image(sample_game.uuid, 12345, 'cover', app=app)
         
         # Should call API and download exactly once (previously this double-downloaded for covers)
         mock_api.assert_called_once()
@@ -698,17 +718,33 @@ class TestGameDataFunctions:
     @patch('oneirodex.utils.clients.igdb.make_igdb_api_request')
     def test_retrieve_and_save_game_api_failure(self, mock_api, app, db_session, sample_library, sample_global_settings, monkeypatch):
         """Test retrieve_and_save_game handles API failure."""
+        import builtins
+
         from oneirodex.utils.services import scan_identify
         from oneirodex.utils import software_identify
+        from oneirodex.utils.clients import igdb as igdb_client
 
         monkeypatch.setattr(scan_identify, 'try_stage_d_store_identify', lambda **_kwargs: None)
         monkeypatch.setattr(scan_identify, 'fetch_steam_title_by_app_id', lambda *_args, **_kwargs: None)
         monkeypatch.setattr(software_identify, 'search_gog_games', lambda *_args, **_kwargs: [])
+        monkeypatch.setattr(
+            igdb_client, 'get_runtime_config',
+            lambda: {'IGDB_API_ENDPOINT': 'https://example.invalid/igdb'},
+        )
         mock_api.return_value = {'error': 'API Error'}
         
         # Ensure the library exists and is committed to the database
         db_session.add(sample_library)
         db_session.commit()
+
+        original_import = builtins.__import__
+
+        def import_without_flask(name, *args, **kwargs):
+            if name == 'flask' or name.startswith('flask.'):
+                raise ImportError('Flask is unavailable in the native runtime')
+            return original_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', import_without_flask)
         
         with app.app_context():
             with patch('builtins.print'):
@@ -800,6 +836,27 @@ class TestGameDataFunctions:
 
 class TestGameManagementFunctions:
     """Test game management functions like remove and delete."""
+
+    def test_remove_from_lib_accepts_native_config_without_flask(
+        self, db_session, sample_game, sample_global_settings,
+    ):
+        """Scan cleanup can delete a missing game in the Flask-free runtime."""
+        import builtins
+
+        game_uuid = sample_game.uuid
+        config = {'IMAGE_SAVE_PATH': '/tmp/oneirodex-test-images'}
+        real_import = builtins.__import__
+
+        def import_without_flask(name, *args, **kwargs):
+            if name == 'flask':
+                raise ModuleNotFoundError("No module named 'flask'")
+            return real_import(name, *args, **kwargs)
+
+        with patch('builtins.__import__', side_effect=import_without_flask):
+            result = remove_from_lib(game_uuid, config=config)
+
+        assert result is True
+        assert db_session.query(Game).filter_by(uuid=game_uuid).first() is None
     
     def test_remove_from_lib_success(self, db_session, sample_game, sample_global_settings):
         """Test successful game removal from library."""
@@ -888,6 +945,37 @@ class TestBackgroundImageProcessing:
 
 class TestMissingImageProcessing:
     """Test missing image detection and processing functions."""
+
+    def test_missing_downloaded_artwork_is_discovered_and_requeued(
+        self, app, db_session, sample_game, sample_global_settings, tmp_path,
+    ):
+        app.config['IMAGE_SAVE_PATH'] = str(tmp_path)
+        (tmp_path / 'present.png').write_bytes(b'artwork')
+        rows = [
+            Image(
+                game_uuid=sample_game.uuid, image_type='cover', url='present.png',
+                download_url='https://images.example/present.png', is_downloaded=True,
+            ),
+            Image(
+                game_uuid=sample_game.uuid, image_type='screenshot', url='missing.png',
+                download_url='https://images.example/missing.png', is_downloaded=True,
+            ),
+        ]
+        db_session.add_all(rows)
+        db_session.commit()
+
+        with app.app_context():
+            found = find_missing_images_for_library(sample_game.library_uuid, app=app)
+            result = process_missing_images_for_scan(sample_game.library_uuid, app=app)
+
+        assert found['total_checked'] == 2
+        assert found['missing_count'] == 1
+        assert found['missing_images'][0]['url'] == 'missing.png'
+        assert 'error' not in found
+        assert result['success'] is True
+        assert result['queued'] == 1
+        db_session.refresh(rows[1])
+        assert rows[1].is_downloaded is False
     
     def test_find_missing_images_for_library(self, app, db_session, sample_library, sample_global_settings):
         """Test find_missing_images_for_library function."""
@@ -896,6 +984,7 @@ class TestMissingImageProcessing:
             # Should return a dictionary with statistics and list of missing images
             assert isinstance(result, dict)
             assert 'missing_images' in result or isinstance(result, list)
+            assert 'error' not in result
     
     def test_find_missing_images_all_libraries(self, app, sample_global_settings):
         """Test find_missing_images_for_library for all libraries."""
@@ -904,6 +993,7 @@ class TestMissingImageProcessing:
             # Should return a dictionary with statistics and list of missing images across all libraries
             assert isinstance(result, dict)
             assert 'missing_images' in result or isinstance(result, list)
+            assert 'error' not in result
     
     @patch('oneirodex.utils.services.image_pipeline.store_image_url_for_download')
     def test_queue_missing_images_for_download(self, mock_store_image, app, sample_game, sample_global_settings):

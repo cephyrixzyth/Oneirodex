@@ -1,10 +1,8 @@
-import {
-  createOneirodexClient,
-  type DeviceKind,
-  type RawCompanionCommand,
-} from '@oneirodex/api-client'
+import { type DeviceKind, type RawCompanionCommand } from '@oneirodex/api-client'
 
-import type { AuthStore } from './auth.js'
+import { createAuthStore, type AuthStore } from './auth.js'
+import { createDesktopApi } from './api.js'
+import { isConnectionUnavailable } from './connect.js'
 import type { LifecycleAction } from './lifecycle.js'
 import { CLIENT_VERSION } from './version.js'
 
@@ -12,21 +10,11 @@ const DEVICE_ID_STORAGE_KEY = 'oneirodex-device-id'
 
 export type { DeviceKind }
 
-/**
- * Presence + command transport, typed through `@oneirodex/api-client`.
- *
- * Built per call rather than once, because the base URL can change mid-session
- * (the Server URL field is live) and the token can be rotated from the keyring.
- */
 function deviceApi(auth: AuthStore, fetchImpl?: typeof fetch) {
-  return createOneirodexClient({
-    baseUrl: auth.getBaseUrl(),
-    getToken: () => auth.getToken(),
-    fetchImpl,
-  }).device
+  return createDesktopApi(auth, fetchImpl).device
 }
 
-function getOrCreateDeviceId(): string {
+export function getOrCreateDeviceId(): string {
   if (typeof localStorage === 'undefined') {
     return crypto.randomUUID()
   }
@@ -55,9 +43,11 @@ export interface HeartbeatOptions {
   /** Consecutive failed heartbeats before onUnreachable (default 2). */
   unreachableAfterFailures?: number
   /** Fires once when a heartbeat succeeds after connect / after being unreachable. */
-  onReachable?: () => void
+  onReachable?: () => void | Promise<void>
   /** Fires once after unreachableAfterFailures consecutive failures. */
   onUnreachable?: (error: unknown) => void
+  /** Denial, refused redirect, invalid response or other non-outage failure. */
+  onFailure?: (error: unknown) => void
 }
 
 export type CompanionCommandAction =
@@ -196,25 +186,38 @@ export function startClientHeartbeat(
   let failureStreak = 0
   let reportedUnreachable = false
   let reachableAnnounced = false
+  let stopped = false
+  const baseUrl = auth.getBaseUrl()
+  const token = auth.getToken()
+  const revision = auth.getRevision()
+  const requestAuth = createAuthStore({ baseUrl, token })
+  const isCurrent = () =>
+    !stopped &&
+    auth.getRevision() === revision &&
+    auth.getBaseUrl() === baseUrl &&
+    auth.getToken() === token
 
   const tick = (): void => {
-    if (inFlight) {
+    if (inFlight || !isCurrent()) {
       return
     }
     inFlight = true
     const fetchImpl = options.fetchImpl
-    void postClientHeartbeat(auth, options)
+    void postClientHeartbeat(requestAuth, options)
       .then(async (commands) => {
+        if (!isCurrent()) return
         failureStreak = 0
         if (!reachableAnnounced || reportedUnreachable) {
+          await options.onReachable?.()
+          if (!isCurrent()) return
           reportedUnreachable = false
           reachableAnnounced = true
-          options.onReachable?.()
         }
         if (!options.onCommands || commands.length === 0) {
           return
         }
         for (const command of commands) {
+          if (!isCurrent()) return
           let result: CompanionCommandResult = 'ok'
           try {
             const handlerResult = await options.onCommands(command)
@@ -224,11 +227,12 @@ export function startClientHeartbeat(
           } catch {
             result = 'error'
           }
+          if (!isCurrent()) return
           try {
             if (result === 'ok') {
-              await postCommandResult(auth, 'ack', [command.id], fetchImpl)
+              await postCommandResult(requestAuth, 'ack', [command.id], fetchImpl)
             } else {
-              await postCommandResult(auth, 'nack', [command.id], fetchImpl)
+              await postCommandResult(requestAuth, 'nack', [command.id], fetchImpl)
             }
           } catch {
             // Ack/nack is best-effort; stale reclaim recovers in_flight rows.
@@ -236,6 +240,13 @@ export function startClientHeartbeat(
         }
       })
       .catch((error) => {
+        if (!isCurrent()) return
+        if (!isConnectionUnavailable(error)) {
+          failureStreak = 0
+          reachableAnnounced = false
+          options.onFailure?.(error)
+          return
+        }
         failureStreak += 1
         if (!reportedUnreachable && failureStreak >= unreachableAfter) {
           reportedUnreachable = true
@@ -253,6 +264,7 @@ export function startClientHeartbeat(
 
   return {
     stop() {
+      stopped = true
       if (timer !== undefined) {
         clearInterval(timer)
         timer = undefined

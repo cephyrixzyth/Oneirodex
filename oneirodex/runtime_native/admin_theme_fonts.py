@@ -1,6 +1,7 @@
 """FastAPI admin upload/delete actions for operator supplied theme fonts."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -34,6 +35,10 @@ def create_admin_theme_font_router(
 
     @router.delete('/admin/api/theme/fonts/{filename:path}')
     async def delete_font(filename: str, request: Request):
+        if not filename:
+            from .response_compat import flask_route_not_found_response
+
+            return flask_route_not_found_response(flask_app, request)
         return await _handle(request, flask_app, 'delete', filename, find_user, find_token,
                              commit_token_touch, load_user_id, login_manager,
                              database_scope, font_store)
@@ -77,30 +82,53 @@ async def _handle(
                         response = JSONResponse(payload, status_code=status)
                     else:
                         limit = _max_bytes(flask_app.config)
-                        form = await request.form(max_files=1, max_fields=4, max_part_size=limit)
-                        from .csrf_compat import csrf_error_response
-                        csrf = csrf_error_response(
-                            request, auth.session_data, flask_app.config,
-                            token=form.get('csrf_token'),
-                        ) if auth.token is None else None
-                        if csrf is not None:
-                            response = csrf
-                        else:
-                            upload = form.get('file')
-                            if upload is None or not hasattr(upload, 'file'):
-                                payload, status = api_error_payload(
-                                    'Choose a font file to upload.', code='bad_request',
-                                )
-                                response = JSONResponse(payload, status_code=status)
+                        from .bounded_multipart import (
+                            InvalidContentLength, RequestBodyTooLarge,
+                            bounded_multipart_form,
+                        )
+                        try:
+                            form = await bounded_multipart_form(
+                                request,
+                                max_body_bytes=limit + 64 * 1024,
+                                max_files=1,
+                                max_fields=4,
+                                max_part_size=limit,
+                            )
+                        except RequestBodyTooLarge:
+                            payload, status = api_error_payload(
+                                'Font upload exceeds the configured size limit.',
+                                code='payload_too_large',
+                            )
+                            response = JSONResponse(payload, status_code=status)
+                        except InvalidContentLength:
+                            payload, status = api_error_payload(
+                                'Invalid request size.', code='bad_request',
+                            )
+                            response = JSONResponse(payload, status_code=status)
+                        if form is not None:
+                            from .csrf_compat import csrf_error_response
+                            csrf = csrf_error_response(
+                                request, auth.session_data, flask_app.config,
+                                token=first_form_value(form, 'csrf_token'),
+                            ) if auth.token is None else None
+                            if csrf is not None:
+                                response = csrf
                             else:
-                                store = font_store or _font_store()
-                                wrapped = FileStorage(stream=upload.file, filename=upload.filename)
-                                result = store.store(
-                                    wrapped,
-                                    configured_root=flask_app.config.get('FONT_PATH') or None,
-                                    max_bytes=flask_app.config.get('FONT_MAX_BYTES'),
-                                )
-                                response = JSONResponse(api_ok_payload(result), status_code=201)
+                                upload = first_form_upload(form, 'file')
+                                if upload is None or not hasattr(upload, 'file'):
+                                    payload, status = api_error_payload(
+                                        'Choose a font file to upload.', code='bad_request',
+                                    )
+                                    response = JSONResponse(payload, status_code=status)
+                                else:
+                                    store = font_store or _font_store()
+                                    wrapped = FileStorage(stream=upload.file, filename=upload.filename)
+                                    result = store.store(
+                                        wrapped,
+                                        configured_root=flask_app.config.get('FONT_PATH') or None,
+                                        max_bytes=flask_app.config.get('FONT_MAX_BYTES'),
+                                    )
+                                    response = JSONResponse(api_ok_payload(result), status_code=201)
                 else:
                     from .csrf_compat import csrf_error_response
                     csrf = csrf_error_response(request, auth.session_data, flask_app.config) \

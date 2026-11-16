@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+from oneirodex.runtime_native import account_tokens
 from oneirodex.runtime_native.account_tokens import mount_account_tokens_routes
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie,
@@ -93,7 +94,7 @@ class FakeData:
 class FakePolicy:
     valid = frozenset({
         'read:library', 'read:social', 'write:social', 'write:presence',
-        'write:download', 'write:library', 'admin',
+        'write:download', 'write:library', 'write:saves', 'admin',
     })
     preset_map = {
         'companion': {'label': 'Desktop companion', 'scopes': ['read:library', 'write:download']},
@@ -122,6 +123,7 @@ class FakeFlaskApp:
         'REMEMBER_COOKIE_NAME': 'remember_token',
         'PERMANENT_SESSION_LIFETIME': timedelta(days=31),
         'SESSION_PROTECTION': None,
+        'TESTING': True,
         'SESSION_REFRESH_EACH_REQUEST': True,
         'WTF_CSRF_ENABLED': csrf_enabled,
         'WTF_CSRF_FIELD_NAME': 'csrf_token',
@@ -130,7 +132,10 @@ class FakeFlaskApp:
         'SESSION_COOKIE_SECURE': False,
         'SESSION_COOKIE_SAMESITE': 'Lax',
         }
-        self.logger = SimpleNamespace(error=lambda *args, **kwargs: None)
+        self.logger = SimpleNamespace(
+            error=lambda *args, **kwargs: None,
+            exception=lambda *args, **kwargs: None,
+        )
 
     def app_context(self):
         return nullcontext()
@@ -145,6 +150,7 @@ class FakeLoginManager:
 
 def make_client(*, user=None, rows=(), bearer=None, raw=None, csrf_enabled=True):
     app = FastAPI()
+    flask_app = FakeFlaskApp(csrf_enabled=csrf_enabled)
     data = FakeData(rows, raw=raw or 'gt_a1b2c3d4_RawSecret_0123456789')
     policy = FakePolicy()
     users = {user.id: user} if user is not None else {}
@@ -153,7 +159,7 @@ def make_client(*, user=None, rows=(), bearer=None, raw=None, csrf_enabled=True)
 
     mount_account_tokens_routes(
         app,
-        FakeFlaskApp(csrf_enabled=csrf_enabled),
+        flask_app,
         find_user=lambda user_id: users.get(user_id),
         find_token=lambda prefix: tokens.get(prefix),
         commit_token_touch=touched.append,
@@ -162,6 +168,8 @@ def make_client(*, user=None, rows=(), bearer=None, raw=None, csrf_enabled=True)
         data_access=data,
         policy=policy,
     )
+    data._test_app = app
+    data._test_flask_app = flask_app
     return TestClient(app), data, touched
 
 
@@ -201,6 +209,7 @@ def test_child_role_hides_forbidden_scopes_and_presets():
     assert 'admin' not in body['valid_scopes']
     assert 'write:library' not in body['valid_scopes']
     assert 'write:download' not in body['valid_scopes']
+    assert 'write:saves' in body['valid_scopes']
     assert 'companion' not in body['scope_presets']
 
 
@@ -232,6 +241,38 @@ def test_create_requires_csrf_before_body_validation():
     assert response.status_code == 400
     assert response.json()['error_code'] == 'bad_request'
     assert response.json()['error'] == 'The CSRF token is missing.'
+    assert data.created == []
+
+
+def test_create_caps_json_before_schema_validation(monkeypatch):
+    monkeypatch.setattr(account_tokens, '_MAX_JSON_BODY_BYTES', 8)
+    user = FakeUser()
+    client, data, _ = make_client(user=user)
+
+    response = client.post(
+        '/api/tokens',
+        headers={**browser_credentials(user), 'Content-Type': 'application/json'},
+        content=b'{"name":"large"}',
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.created == []
+
+
+def test_create_non_object_json_preserves_model_type_validation():
+    user = FakeUser()
+    client, data, _ = make_client(user=user)
+
+    for payload in ([], ['x'], 'x'):
+        response = client.post(
+            '/api/tokens', headers=browser_credentials(user), json=payload,
+        )
+
+        assert response.status_code == 422
+        assert response.json()['detail'] == {
+            '__root__': 'Input should be a valid dictionary or instance of CreateApiTokenBody'
+        }
     assert data.created == []
 
 
@@ -323,3 +364,114 @@ def test_unauthenticated_get_keeps_flask_login_redirect_contract():
 
     assert response.status_code == 302
     assert response.headers['location'].startswith('/login?next=%2Fapi%2Ftokens')
+
+
+def test_expired_bearer_cannot_list_personal_tokens():
+    user = FakeUser()
+    bearer = FakeToken(7, user.id, ['read:library'], prefix='1234abcd')
+    bearer.is_expired = lambda now=None: True
+    client, data, _ = make_client(user=user, bearer=bearer)
+
+    response = client.get(
+        '/api/tokens',
+        headers={'Authorization': 'Bearer gt_1234abcd_test-secret'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'].startswith('/login?next=%2Fapi%2Ftokens')
+    assert data.rows == []
+
+
+def test_database_failures_return_redacted_api_errors():
+    import asyncio
+
+    import httpx
+
+    from asgi import _install_native_api_error_handlers
+
+    user = FakeUser()
+    _client, data, _ = make_client(user=user)
+    app = data._test_app
+    _install_native_api_error_handlers(
+        app, data._test_flask_app.config, data._test_flask_app.logger,
+    )
+
+    def fail(*_args, **_kwargs):
+        raise RuntimeError('private-database-connection-string')
+
+    async def check_failure(method, path, *, json_body=None):
+        data_method = {
+            'GET': 'list_for_user', 'POST': 'create', 'DELETE': 'revoke',
+        }[method]
+        setattr(data, data_method, fail)
+        credentials = browser_credentials(user)
+        cookie = credentials['Cookie'].split('=', 1)[1]
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+            base_url='http://testserver',
+        ) as async_client:
+            async_client.cookies.set('session', cookie)
+            response = await async_client.request(
+                method,
+                path,
+                headers={'X-CSRFToken': credentials['X-CSRFToken']},
+                json=json_body,
+            )
+        assert response.status_code == 500
+        assert response.json()['error_code'] == 'internal'
+        assert response.json()['error'] == 'Something went wrong on our end. The error has been logged.'
+        assert 'private-database-connection-string' not in response.text
+
+    async def run():
+        await check_failure('GET', '/api/tokens')
+        await check_failure('POST', '/api/tokens', json_body={'name': 'CLI', 'preset': 'thin'})
+        await check_failure('DELETE', '/api/tokens/1')
+
+    asyncio.run(run())
+
+
+def test_sqlalchemy_connection_failure_has_redacted_api_envelope():
+    import asyncio
+
+    import httpx
+    from sqlalchemy import create_engine, text
+
+    from asgi import _install_native_api_error_handlers
+
+    user = FakeUser()
+    _client, data, _ = make_client(user=user)
+    app = data._test_app
+    _install_native_api_error_handlers(
+        app, data._test_flask_app.config, data._test_flask_app.logger,
+    )
+    engine = create_engine(
+        'postgresql+psycopg2://synthetic_user:synthetic_password@127.0.0.1:1/synthetic_db',
+        connect_args={'connect_timeout': 1},
+    )
+
+    def list_using_unavailable_postgres(_user_id):
+        with engine.connect() as connection:
+            return connection.execute(text('SELECT 1')).all()
+
+    data.list_for_user = list_using_unavailable_postgres
+    credentials = browser_credentials(user)
+    cookie = credentials['Cookie'].split('=', 1)[1]
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+            base_url='http://testserver',
+        ) as async_client:
+            async_client.cookies.set('session', cookie)
+            response = await async_client.get('/api/tokens')
+        assert response.status_code == 500
+        assert response.json()['error_code'] == 'internal'
+        assert response.json()['error'] == 'Something went wrong on our end. The error has been logged.'
+        for diagnostic in ('synthetic_user', 'synthetic_password', 'synthetic_db', '127.0.0.1'):
+            assert diagnostic not in response.text
+
+    try:
+        asyncio.run(run())
+    finally:
+        engine.dispose()

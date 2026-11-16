@@ -45,8 +45,17 @@ export interface HeartbeatResponse extends Partial<ClientCapabilities> {
   commands?: RawCompanionCommand[]
 }
 
+export interface ClientAccountIdentity {
+  account_id: string
+}
+
 export function createDeviceApi(request: Requester) {
   return {
+    /** Stable account ID for binding a local companion cache to this server identity. */
+    identity(): Promise<ClientAccountIdentity> {
+      return request<ClientAccountIdentity>('/api/client/identity')
+    },
+
     /** Presence ping. Companion seats also collect queued install commands here. */
     heartbeat(body: HeartbeatRequest): Promise<HeartbeatResponse> {
       return request<HeartbeatResponse>('/api/client/heartbeat', {

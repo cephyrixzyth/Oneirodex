@@ -6,6 +6,7 @@ import sys
 from getpass import getpass
 from typing import Dict, Tuple, Union, Optional
 from oneirodex.utils.event_logging import log_system_event
+from oneirodex.utils.smtp_transport import open_smtp_connection, upgrade_smtp_connection
 
 class SMTPTester:
     def __init__(self, debug: bool = False):
@@ -98,7 +99,7 @@ class SMTPTester:
             port: SMTP server port
             username: Optional username for authentication
             password: Optional password for authentication
-            use_tls: Whether to use STARTTLS
+            use_tls: Whether to require TLS (implicit TLS on 465, STARTTLS otherwise)
             timeout: Connection timeout in seconds
         
         Returns:
@@ -110,6 +111,9 @@ class SMTPTester:
         is_valid, validation_error = self._validate_inputs(host, port)
         if not is_valid:
             return False, validation_error
+
+        if port == 465 and not use_tls:
+            return False, "TLS is required for SMTP port 465"
             
         try:
             # First test basic socket connection
@@ -117,8 +121,11 @@ class SMTPTester:
             sock.close()
             
             # Initialize SMTP connection
-            smtp = smtplib.SMTP(host, port, timeout=timeout)
-            if self.debug:
+            smtp = open_smtp_connection(host, port, use_tls=use_tls, timeout=timeout)
+            # smtplib debug output includes the AUTH command and its base64
+            # credentials. Keep protocol tracing off whenever authentication
+            # is about to be attempted.
+            if self.debug and not (username and password):
                 smtp.set_debuglevel(1)
             
             try:
@@ -127,13 +134,10 @@ class SMTPTester:
                 supported_features = smtp.esmtp_features
 
                 # Handle TLS if enabled
-                if use_tls:
+                if use_tls and port != 465:
                     if smtp.has_extn('STARTTLS'):
                         # Create strict SSL context for security
-                        context = ssl.create_default_context()
-                        context.check_hostname = True
-                        context.verify_mode = ssl.CERT_REQUIRED
-                        smtp.starttls(context=context)
+                        upgrade_smtp_connection(smtp, port, use_tls=True)
                         smtp.ehlo()  # Say hello again after STARTTLS
                     else:
                         return False, "STARTTLS not supported by server (not found in extensions)"

@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.admin_invites import create_admin_invites_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
@@ -23,6 +25,10 @@ class FakeInvites:
         self.calls.append((str(body.user_id), body.invites_number))
         return self.quota_result
 
+    def adjust_quota_legacy(self, body):
+        result = self.adjust_quota(body)
+        return None if result is None else {**result, 'user_name': 'Target member'}
+
     def rollback(self):
         self.calls.append(('rollback',))
 
@@ -34,7 +40,7 @@ def _client(*, role='admin'):
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=18, user_id='admin-id', role=role, is_active=True, state=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint', name='Admin fixture',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef', name='Admin fixture',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -53,7 +59,7 @@ def _client(*, role='admin'):
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
-    session = {'_user_id': '18:fingerprint', '_fresh': True}
+    session = {'_user_id': login_identity_for(18), '_fresh': True}
     csrf = generate_csrf_token(session, flask_app.config['SECRET_KEY'])
     client.cookies.set('session', dump_session_cookie(session, flask_app.config['SECRET_KEY']))
     return client, data, csrf
@@ -93,6 +99,17 @@ def test_quota_adjustment_keeps_csrf_validation_and_unknown_user_results():
     assert missing.status_code == 404 and missing.json()['error_code'] == 'not_found'
 
 
+def test_quota_adjustment_rejects_oversized_json_before_mutation():
+    client, data, csrf = _client()
+    response = client.post(
+        '/admin/api/invites/quota', content=b' ' * (64 * 1024 + 1),
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
+
+
 def test_admin_invites_reject_members():
     client, data, _csrf = _client(role='user')
     response = client.get('/admin/api/invites', follow_redirects=False)
@@ -112,8 +129,12 @@ def test_legacy_invite_quota_form_uses_hidden_csrf_and_bounds():
         },
         follow_redirects=False,
     )
-    assert response.status_code == 302
-    assert response.headers['location'] == '/admin/manage_invites'
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/html')
+    assert 'id="admin-app-root"' in response.text
+    assert 'role="status"' in response.text
+    assert 'Invites updated successfully.' in response.text
+    assert 'User Target member now has 4 invite quota.' in response.text
     assert data.calls == [('4c2c4a64-6096-4e0c-b5a3-fd8583c43a64', -1)]
 
     invalid, invalid_data, invalid_csrf = _client()
@@ -123,4 +144,27 @@ def test_legacy_invite_quota_form_uses_hidden_csrf_and_bounds():
         follow_redirects=False,
     )
     assert denied.status_code == 302
+    from werkzeug.utils import redirect
+    legacy_redirect = redirect('/admin/manage_invites')
+    assert denied.headers['content-type'] == legacy_redirect.headers['Content-Type']
+    assert denied.headers['content-length'] == legacy_redirect.headers['Content-Length']
+    assert denied.content == legacy_redirect.get_data()
     assert invalid_data.calls == []
+
+
+def test_legacy_invite_form_renders_updated_shell_when_user_is_missing():
+    client, data, csrf = _client()
+    data.quota_result = None
+    response = client.post(
+        '/admin/manage_invites',
+        data={
+            'csrf_token': csrf,
+            'user_id': '4c2c4a64-6096-4e0c-b5a3-fd8583c43a64',
+            'invites_number': '1',
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 200
+    assert 'role="alert"' in response.text
+    assert 'User not found.' in response.text
+    assert data.calls == [('4c2c4a64-6096-4e0c-b5a3-fd8583c43a64', 1)]

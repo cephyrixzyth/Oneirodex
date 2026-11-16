@@ -55,6 +55,7 @@ def _refuse_inaccessible_game(game):
 
 @apis_bp.route('/search')
 @login_required
+@require_api_token_scope('read:library')
 def search():
     query = request.args.get('query', '').strip()
     results = []
@@ -102,6 +103,7 @@ def search():
 
 @apis_bp.route('/games/<game_uuid>/details', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def game_details_api(game_uuid):
     """Full game details JSON for the member SPA details page."""
     game = get_game_by_uuid(game_uuid)
@@ -113,6 +115,7 @@ def game_details_api(game_uuid):
 
 @apis_bp.route('/games/<game_uuid>/more_from', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def game_more_from_api(game_uuid):
     """Other vault titles from the same developer or publisher."""
     game = get_game_by_uuid(game_uuid)
@@ -124,6 +127,7 @@ def game_more_from_api(game_uuid):
 
 @apis_bp.route('/games/<game_uuid>/editions', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def game_editions_api(game_uuid):
     """Every system this title exists on in the library, with per-core launchers.
 
@@ -149,6 +153,7 @@ def game_editions_api(game_uuid):
 
 @apis_bp.route('/game_screenshots/<game_uuid>')
 @login_required
+@require_api_token_scope('read:library')
 def game_screenshots(game_uuid):
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
     refusal = _refuse_inaccessible_game(game)
@@ -174,6 +179,7 @@ def game_screenshots(game_uuid):
 
 @apis_bp.route('/game_images/<game_uuid>')
 @login_required
+@require_api_token_scope('read:library')
 def game_images(game_uuid):
     """List persisted images for a game; optional kind/type filter (BE-DET-10)."""
     game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
@@ -276,6 +282,7 @@ def get_next_custom_igdb_id():
 
 @apis_bp.route('/games/<game_uuid>/freshness', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def game_freshness_get(game_uuid):
     """Return cached freshness snapshot for a game."""
     from oneirodex.utils.freshness import freshness_public_view

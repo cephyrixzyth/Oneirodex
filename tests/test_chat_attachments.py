@@ -282,6 +282,7 @@ def test_attachments_are_served_only_to_people_who_can_read_the_channel(app, db_
     owner, outsider = _signed_in(app, member), _signed_in(app, other)
     with owner.get(url) as resp:
         assert resp.status_code == 200 and resp.mimetype == 'image/png'
+        assert resp.headers['Cache-Control'] == 'private, no-store'
     with outsider.get(url) as resp:
         assert resp.status_code == 404, 'not in the invite-only space'
     with _As(app).get(url) as resp:

@@ -6,7 +6,7 @@ import { avatarSrc } from './accountModalShared'
 /* Note + ProfilePanel moved out of AccountModal (v11 cycle, H-D.2) — unchanged. */
 
 export interface NoteProps {
-  tone: 'error' | 'good'
+  tone: 'error' | 'good' | 'warning'
   children?: ReactNode
 }
 

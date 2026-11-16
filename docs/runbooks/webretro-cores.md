@@ -40,7 +40,7 @@ where the first-boot fetch writes them, provided the volume is writable:
 ## One-command fetch
 
 ```bash
-# Defaults from BinBashBanana/webretro@6.5 (jsDelivr) — 24 cores
+# Defaults from BinBashBanana/webretro@6.5 (jsDelivr) — 24 cores; SHA-256 locked
 ./scripts/fetch-webretro-cores.sh --defaults
 
 # Deferred cores from your Emscripten / WebRetro pack (not on the CDN)
@@ -50,6 +50,11 @@ where the first-boot fetch writes them, provided the volume is writable:
 .\scripts\fetch-webretro-cores.ps1 -Defaults
 .\scripts\fetch-webretro-cores.ps1 -FromDir C:\path\to\built\cores
 ```
+
+Default downloads are checked against `scripts/webretro-cores.sha256` before replacing either
+installed file. A mismatch stops that core and leaves its existing JS/WASM pair in place. The
+explicit `--from-dir` path accepts operator-selected local builds, so verify those files and their
+licences before copying them into the served cores directory.
 
 You are responsible for each core’s license compliance. For `snes9x` and `genesis_plus_gx`,
 start with [webretro-core-clauses.md](../admin/webretro-core-clauses.md) — that file is research

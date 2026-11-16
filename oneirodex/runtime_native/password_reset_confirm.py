@@ -19,20 +19,29 @@ class PasswordResetConfirmData:
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import User
         from oneirodex.utils.event_logging import log_system_event
-        from oneirodex.utils.login_rate_limit import auth_endpoint_key, is_rate_limited, record_failure
+        from oneirodex.utils.login_rate_limit import (
+            auth_endpoint_key, is_rate_limited, password_reset_email_key,
+            record_failure,
+        )
         from oneirodex.utils.smtp import send_email_quiet
-        from oneirodex.utils.tokens import get_serializer
+        from oneirodex.utils.tokens import get_serializer, password_reset_token_digest
 
         reset_key = auth_endpoint_key('pwd_reset', ip)
         if is_rate_limited(reset_key):
             return 'rate_limited'
+        record_failure(reset_key)
+        recipient_key = password_reset_email_key(
+            email, config.get('SECRET_KEY', ''),
+        )
+        if is_rate_limited(recipient_key):
+            return 'requested'
+        record_failure(recipient_key)
         user = db.session.execute(
             select(User).filter_by(email=email.lower())
         ).scalar_one_or_none()
-        record_failure(reset_key)
         if user:
             token = get_serializer().dumps(user.email, salt='password-reset-salt')
-            user.password_reset_token = token
+            user.password_reset_token = password_reset_token_digest(token)
             user.token_creation_time = datetime.now(timezone.utc)
             log_system_event(
                 f"Password reset requested for user: {user.email}",
@@ -62,9 +71,12 @@ class PasswordResetConfirmData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import User
+        from oneirodex.utils.tokens import password_reset_token_digest
 
         user = db.session.execute(
-            select(User).filter_by(password_reset_token=token)
+            select(User).where(User.password_reset_token.in_(
+                (password_reset_token_digest(token), token),
+            ))
         ).scalar_one_or_none()
         issued_at = user.token_creation_time if user else None
         if issued_at is not None and issued_at.tzinfo is None:
@@ -83,9 +95,12 @@ class PasswordResetConfirmData:
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import User
+        from oneirodex.utils.tokens import password_reset_token_digest
 
         user = db.session.execute(
-            select(User).filter_by(password_reset_token=token)
+            select(User).where(User.password_reset_token.in_(
+                (password_reset_token_digest(token), token),
+            ))
         ).scalar_one_or_none()
         issued_at = user.token_creation_time if user else None
         if issued_at is not None and issued_at.tzinfo is None:
@@ -240,8 +255,13 @@ def _password_form_errors(body):
 async def _validated_reset_request(request):
     from oneirodex.schemas.password_reset import PasswordResetRequestBody
 
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
     try:
-        body = PasswordResetRequestBody.model_validate_json(await request.body())
+        raw_body = await read_bounded_body(request, 64 * 1024)
+        if raw_body is BODY_TOO_LARGE:
+            return None, _error('Request body is too large.', 'payload_too_large', 413)
+        body = PasswordResetRequestBody.model_validate_json(raw_body)
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors
 
@@ -345,9 +365,13 @@ def _security_headers(response, config):
 
 async def _validated_body(request):
     from oneirodex.schemas.password_reset import PasswordResetConfirmBody
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 
     try:
-        body = PasswordResetConfirmBody.model_validate_json(await request.body())
+        raw_body = await read_bounded_body(request, 64 * 1024)
+        if raw_body is BODY_TOO_LARGE:
+            return None, _error('Request body is too large.', 'payload_too_large', 413)
+        body = PasswordResetConfirmBody.model_validate_json(raw_body)
         return body.model_dump(), None
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors

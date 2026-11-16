@@ -40,6 +40,29 @@ def get_runtime_config():
     return _runtime_config.get()
 
 
+def install_flask_json_response_compat():
+    """Match Flask's JSON encoding for native Starlette JSON responses.
+
+    Flask's JSON provider sorts object keys, applies its configured ASCII
+    behavior, uses compact separators, and terminates response bodies with a
+    newline. Native routes use Starlette's JSONResponse directly in many
+    adapters, so install this once at the ASGI boundary to preserve the old
+    GET bytes and HEAD Content-Length contract.
+    """
+    from starlette.responses import JSONResponse
+
+    if getattr(JSONResponse, '_oneirodex_flask_json_compat', False):
+        return
+
+    def render_with_flask_json(self, content):
+        config = get_runtime_config() or {}
+        provider = NativeJSONProvider(config)
+        return (provider.dumps(content, separators=(',', ':')) + '\n').encode('utf-8')
+
+    JSONResponse.render = render_with_flask_json
+    JSONResponse._oneirodex_flask_json_compat = True
+
+
 class NativeJSONProvider:
     """Implement the JSON behavior used by native routes without Flask."""
 
@@ -71,6 +94,15 @@ class NativeJSONProvider:
     def response(self, value):
         body = (self.dumps(value, separators=(',', ':')) + '\n').encode('utf-8')
         return _JSONResponseData(body)
+
+
+def native_json_response(payload, *, config, status=200):
+    """Return a Starlette response with Flask-compatible JSON bytes."""
+    from starlette.responses import Response
+
+    provider = NativeJSONProvider(config)
+    body = (provider.dumps(payload, separators=(',', ':')) + '\n').encode('utf-8')
+    return Response(body, status_code=status, media_type=provider.mimetype)
 
 
 class _JSONResponseData:
@@ -154,6 +186,9 @@ class NativeRuntimeContext:
         self.login_manager = SimpleNamespace(
             login_view='login.login',
             blueprint_login_views={},
+            login_message='Please log in to access this page.',
+            login_message_category='message',
+            localize_callback=None,
             session_protection=config.get('SESSION_PROTECTION', 'basic'),
         )
         self.native_engine = None

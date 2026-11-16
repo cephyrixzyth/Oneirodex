@@ -1,0 +1,145 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2132",
+  "observed_utc": "2026-11-16T21:48:14.899958+00:00",
+  "findings": [
+    "OP-004",
+    "OP-006",
+    "OP-007",
+    "BE-007",
+    "BE-008",
+    "UC-003"
+  ],
+  "classification": "Pre-merge release-readiness audit of the tag path and the upgrade path from the public 1.1.9 release. Three confirmed defects were corrected before the tag; the two-architecture image build and the upgrade were rehearsed locally. Nothing was published, merged or tagged by this record.",
+  "tested_source": {
+    "release_commit": "babba8d0977971ec27c8d46998d3b765cff4878a",
+    "fix_commits": [
+      "a6e35658",
+      "e5654ea0",
+      "530119bb",
+      "ea40c499"
+    ],
+    "candidate_image_source": "ea40c499"
+  },
+  "confirmed_defects": [
+    {
+      "area": "desktop release job",
+      "defect": "The release job downloaded every artifact named oneirodex-*. Push runs now also upload a macOS probe diagnostics artifact under that prefix (seven artifacts on run 43830964702; six on the 1.1.9 tag run 38867272158), so a tag run would have attached that JSON to the public release as a ninth asset.",
+      "correction": "e5654ea0: installer artifacts are selected by flavor and the job refuses to attach unless exactly eight installer files are present.",
+      "verification": "Workflow contract test failed on the change, was extended to hold the new shape and passes; the file-count guard accepted eight installers and refused nine and seven in a dry run.",
+      "limit": "The changed release job has not run on a tag."
+    },
+    {
+      "area": "container startup",
+      "defect": "The legacy database-password guard tested POSTGRES_PASSWORD after the entrypoint had filled in its own fallback. An install that reaches its own PostgreSQL through DATABASE_URL alone was refused at startup with a strong password; the 1.1.9 entrypoint warned and continued.",
+      "correction": "530119bb: the guard judges the credential actually in use.",
+      "verification": "Ten parametrized cases pass. In the candidate image: URL-only strong password proceeds to the database wait; URL-only legacy password, URL without a password, Compose legacy password and an explicit legacy password beside a strong URL exit 1; Compose strong password proceeds; the compatibility flag warns and proceeds.",
+      "limit": "No real external PostgreSQL was connected; the scenarios stop at the database wait."
+    },
+    {
+      "area": "repository hygiene",
+      "defect": "Two per-member runtime files from a development instance were tracked under the library folder since 1.1.9.",
+      "correction": "a6e35658: untracked, ignored and guarded by the hygiene test. The image build already excluded the folder, so they were not in published images.",
+      "verification": "Hygiene test failed first and passes."
+    }
+  ],
+  "image_build_rehearsal": {
+    "method": "Clean export of tracked files only, then a local build for linux/amd64 and linux/arm64 with SBOM and max-mode provenance, not pushed.",
+    "source_commit": "babba8d0",
+    "observed": [
+      "Both platforms completed all build stages, including the hash-locked Python install and the pinned EmulatorJS fetch under arm64 emulation.",
+      "An image index with one attestation manifest per platform was exported.",
+      "Each platform image started Python 3.12.16, reported version 1.2.0, imported its native modules and encoded a WebP image; five SPA bundle folders were present.",
+      "No private folder, root .env or agent instruction file was present in the image."
+    ],
+    "raw_logs": [
+      {
+        "path": "findings/OP-004/two-arch-build-babba8d0-r2132.log",
+        "bytes": 147931,
+        "sha256": "9024eb5f5c2dfa8e6d0a73de0453e4863b92e7cc34fd3fc3492872d892420286",
+        "private": true
+      },
+      {
+        "path": "findings/OP-004/amd64-build-ea40c499-r2132.log",
+        "bytes": 78457,
+        "sha256": "4c30cb9a6cf7a4d3b15ed8a5468e22595c7701ec45d64c327a712d2bb4010c30",
+        "private": true
+      }
+    ],
+    "limits": [
+      "Local Docker Desktop with emulated arm64, not the release runner; arm64 was built from babba8d0 and only amd64 was rebuilt from ea40c499.",
+      "The registry push, the published digest and the attestations as stored by the registry are verified at release (B2)."
+    ]
+  },
+  "upgrade_rehearsal": {
+    "method": "The public cephyrixzyth/oneirodex:1.1.9 image was started on a disposable volume with the 1.1.9 Community Apps template values, then the locally built 1.2.0 image was started on the same volume with nothing else changed.",
+    "first_run": {
+      "candidate_source": "babba8d0",
+      "prepared_state": "Setup completed in a browser on 1.1.9: one administrator, a placeholder SMTP secret, no library.",
+      "observed": [
+        "Before: schema revision e6f7a8b9c0d1, library folder owned by root, app process running as root.",
+        "1.2.0 reported ready in about 10 seconds with version 1.2.0 after applying ten migrations to revision a4b5c6d7e8f9; no error or warning lines.",
+        "The app process ran as the configured non-root user and the library folder had been transferred to it.",
+        "The administrator account and settings were preserved. The stored SMTP secret was unchanged and still readable by the app; the key-ring status reported encrypted credential storage as unavailable.",
+        "The 1.1.9 browser sign-in was not accepted: the page redirected to sign-in. Signing in again with the same account succeeded and created one server-side session.",
+        "Started again on the migrated volume, 1.1.9 logged that it could not locate the new schema revision, skipped its schema step and reported ready. Its behavior on that schema was not exercised."
+      ],
+      "limits": [
+        "Container logs of this run were not retained; observations were recorded during the run."
+      ]
+    },
+    "second_run": {
+      "candidate_source": "ea40c499",
+      "scripted": true,
+      "observed": [
+        "1.1.9 ready in about 12 seconds; candidate ready in about 12 seconds with version 1.2.0, ten migrations, zero error lines, non-root app process and transferred library ownership.",
+        "A separate two-start check on a fresh volume showed the second start repeated neither the ownership transfer nor any migration."
+      ],
+      "raw_logs": [
+        {
+          "path": "findings/OP-004/embedded-upgrade-ea40c499-r2132.log",
+          "bytes": 41875,
+          "sha256": "f2f3a57067db6e52a7ae91803e6a97aa9781d4102121e40eb26492054d42ec2c",
+          "private": true
+        },
+        {
+          "path": "findings/OP-004/guard-scenarios-ea40c499-r2132.log",
+          "bytes": 2580,
+          "sha256": "5eec3e9da5af3fcf102a9dafc76a8c13f753605d8b05fbe93338c0de02f72e60",
+          "private": true
+        }
+      ]
+    },
+    "limits": [
+      "Single-container install with the embedded database only. The Compose stack with a separate database container and an operator database with real data were not rehearsed.",
+      "No linked store account, encrypted save, game library or member account existed in the rehearsal data.",
+      "amd64 only; one synthetic instance on a workstation."
+    ]
+  },
+  "tag_path_review": {
+    "method": "Read of docker-publish.yml, desktop-build.yml and the reusable test workflow against a tag push at a merge commit on the default branch.",
+    "checked": [
+      "The reusable test workflow requests no permission beyond the caller's and has no branch- or pull-request-only condition.",
+      "Tag validation compares the tag commit with the build commit and requires it to be reachable from the default branch; VERSION is 1.2.0.",
+      "The licence inventory check passes on the tree.",
+      "The publish environment has no protection rule or branch policy; its token secret and the username variable exist.",
+      "The installer job requires the GitHub Release to exist when it runs; the release checklist now says to create it when the tag is pushed.",
+      "No workflow refers to 1.1.9 or to the review branch; packaged-probe jobs with pinned 1.1.9 artifacts run only on manual dispatch."
+    ],
+    "known_open": [
+      "No template write token is configured, as at 1.1.9, so the Community Apps sync job is expected to stop at its write step and be completed by the documented manual path (B3).",
+      "One macOS build leg of push run 43909027125 was cancelled by the runner service for lack of capacity; the same commit's pull-request run 43909035379 passed all legs. A tag run may need its failed jobs re-run."
+    ]
+  },
+  "documentation": "CHANGELOG 1.2.0 gained upgrade notes (ea40c499); release checklist and Compose deployment runbook updated with the release-job and guard behavior.",
+  "verification": {
+    "startup_hygiene_guard_tests": "39 passed",
+    "spa_asset_and_checkout_tests": "10 passed",
+    "workflow_contract": "passed",
+    "linux_harness_methods": "84 passed",
+    "aggregate_ci": "Runs on the pushed head; see the release record."
+  },
+  "workstation": "Windows workstation, Docker Desktop 29.9.3 with the containerd image store; Python 3.14 for local tests (the baseline is 3.12).",
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: no markup or style changes."
+}

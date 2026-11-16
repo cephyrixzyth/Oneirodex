@@ -8,6 +8,11 @@ from flask_wtf.csrf import CSRFProtect, generate_csrf
 import oneirodex.routes_admin_ext.igdb as routes
 
 
+@pytest.fixture(autouse=True)
+def _keyring(reusable_secret_keyring):
+    return reusable_secret_keyring
+
+
 class ReviewUser(UserMixin):
     def __init__(self, role):
         self.id = role; self.role = role
@@ -47,6 +52,7 @@ def test_read_is_no_store_and_secret_never_echoed(harness):
 
 
 def test_blank_keeps_secret_and_replacement_not_echoed(harness):
+    from oneirodex.utils.secret_store import read_global_secret
     client, row, session, transport, headers = harness
     response = client.put('/api/admin/igdb/settings', json={'igdb_client_id': 'changed-client', 'igdb_client_secret': ''}, headers=headers)
     assert response.status_code == 200
@@ -54,7 +60,8 @@ def test_blank_keeps_secret_and_replacement_not_echoed(harness):
     assert row.igdb_client_id == 'changed-client'
     response = client.put('/api/admin/igdb/settings', json={'igdb_client_id': '', 'igdb_client_secret': 'replacement-test-secret'}, headers=headers)
     assert response.status_code == 200
-    assert row.igdb_client_secret == 'replacement-test-secret'
+    assert row.igdb_client_secret.startswith('odrc:v1:')
+    assert read_global_secret(row, 'igdb_client_secret') == 'replacement-test-secret'
     assert row.igdb_client_secret not in response.text
     assert row.igdb_client_id == ''
     assert session.commit.call_count == 2

@@ -7,9 +7,12 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import Response
 
+from .cookie_compat import set_cookie as set_response_cookie
 from .request_auth import RequestAuthContext, request_auth_context
+from .response_compat import add_vary_header, flask_redirect_response
+from .query_compat import first_query_value
 
 
 def create_release_calendar_router(
@@ -51,9 +54,9 @@ def create_release_calendar_router(
                 )
 
             try:
-                days_ahead = int(request.query_params.get('days_ahead') or 60)
-                days_behind = int(request.query_params.get('days_behind') or 14)
-                limit = int(request.query_params.get('limit') or 40)
+                days_ahead = int(first_query_value(request.query_params, 'days_ahead') or 60)
+                days_behind = int(first_query_value(request.query_params, 'days_behind') or 14)
+                limit = int(first_query_value(request.query_params, 'limit') or 40)
             except (TypeError, ValueError):
                 from oneirodex.utils.api_contract import api_error_payload
 
@@ -117,7 +120,7 @@ def _secure_response(response: Response, flask_app, request: Request):
         response.headers.setdefault(key, value)
     # Flask-Login reads the signed session for every protected route, and the
     # Flask session interface adds this even when it does not rewrite a cookie.
-    response.headers.add_vary_header('Cookie')
+    add_vary_header(response, 'Cookie')
     if request.method == 'HEAD':
         response.body = b''
     return response
@@ -139,7 +142,9 @@ def _login_redirect(flask_app, request: Request, login_manager, auth: RequestAut
         login_url = rule.rule if rule is not None else '/login'
         parsed_login = urlsplit(login_url)
 
-    current_url = str(request.url)
+    from .url_compat import request_url_iri
+
+    current_url = request_url_iri(request)
     parsed_current = urlsplit(current_url)
     same_origin = (
         (not parsed_login.scheme or parsed_login.scheme == parsed_current.scheme)
@@ -155,7 +160,7 @@ def _login_redirect(flask_app, request: Request, login_manager, auth: RequestAut
     if forced_host:
         parsed_login = parsed_login._replace(netloc=forced_host)
     location = urlunsplit(parsed_login._replace(query=urlencode(query, doseq=True)))
-    response = RedirectResponse(location, status_code=302)
+    response = flask_redirect_response(location)
 
     message = getattr(login_manager, 'login_message', None)
     if message:
@@ -181,10 +186,14 @@ def _set_session_cookie(response, flask_app, auth: RequestAuthContext):
     if not secret_key:
         return
     session_data = auth.session_data
+    from oneirodex.utils.persistent_sessions import prepare_session_identity_for_cookie
+
+    prepare_session_identity_for_cookie(session_data, config)
     lifetime = config.get('PERMANENT_SESSION_LIFETIME')
     expires = datetime.now(timezone.utc) + lifetime if session_data.get('_permanent') and lifetime else None
     samesite = config.get('SESSION_COOKIE_SAMESITE')
-    response.set_cookie(
+    set_response_cookie(
+        response,
         config.get('SESSION_COOKIE_NAME', 'session'),
         dump_session_cookie(
             session_data,
@@ -196,7 +205,7 @@ def _set_session_cookie(response, flask_app, auth: RequestAuthContext):
         domain=config.get('SESSION_COOKIE_DOMAIN'),
         secure=bool(config.get('SESSION_COOKIE_SECURE', False)),
         httponly=bool(config.get('SESSION_COOKIE_HTTPONLY', True)),
-        samesite=str(samesite).lower() if samesite else None,
+        samesite=str(samesite) if samesite else None,
         partitioned=bool(config.get('SESSION_COOKIE_PARTITIONED', False)),
     )
-    response.headers.add_vary_header('Cookie')
+    add_vary_header(response, 'Cookie')

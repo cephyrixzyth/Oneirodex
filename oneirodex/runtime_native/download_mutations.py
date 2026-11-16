@@ -11,6 +11,8 @@ from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
+from .response_compat import flask_redirect_response
 
 _UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
 
@@ -116,9 +118,15 @@ class DownloadMutationData:
                          event_type='game', event_level='information')
         return row
 
-    def log_legacy_event(self, message, *, event_type, event_level):
+    def log_legacy_event(self, message, *, event_type, event_level, audit_user=None):
         from oneirodex.utils.event_logging import log_system_event
-        log_system_event(message, event_type=event_type, event_level=event_level)
+        log_system_event(message, event_type=event_type, event_level=event_level,
+                         audit_user=audit_user)
+
+    def log_download_started(self, game, user):
+        from oneirodex.utils.event_logging import log_system_event
+        log_system_event(f'User initiated download for game: {game.name}',
+                         event_type='game', event_level='information', audit_user=user.id)
 
     def can_access(self, user, game):
         from oneirodex.utils.library_acl import user_can_access_game
@@ -153,7 +161,13 @@ class DownloadMutationData:
     def zip_path(self, game, file_location, *, kind, zip_hint):
         if not os.path.isdir(file_location):
             return file_location
-        if os.path.normpath(file_location) != os.path.normpath(game.full_disk_path):
+        # Version selections are already scoped to the requested update or
+        # extra. Preserve the whole directory even when the base is absent.
+        if kind != 'base':
+            return file_location
+        # A base game can have no library path yet. Only inspect the base
+        # directory when one is present.
+        if game.full_disk_path and os.path.normpath(file_location) != os.path.normpath(game.full_disk_path):
             return file_location
         from oneirodex.utils.global_settings import global_settings_row
         settings = global_settings_row()
@@ -183,9 +197,10 @@ class DownloadMutationData:
         )).scalars().first()
         if existing:
             return existing
+        download_size = game.size if kind == 'base' else self.path_size(file_location)
         row = DownloadRequest(
             user_id=user.id, game_uuid=game.uuid, status='available',
-            download_size=game.size if file_location == game.full_disk_path else 0,
+            download_size=download_size,
             file_location=file_location, zip_file_path=zip_file_path,
         )
         db.session.add(row)
@@ -206,7 +221,7 @@ class DownloadMutationData:
         except Exception:
             pass
         log_system_event(f'API download request created for game: {game.name}',
-                         event_type='game', event_level='information')
+                         event_type='game', event_level='information', audit_user=user.id)
         return row
 
 
@@ -231,11 +246,11 @@ def create_download_mutation_router(
     async def create_download(game_uuid: str, request: Request):
         return await _run_download(request, **opts, game_uuid=game_uuid)
 
-    @router.api_route('/download_game/{game_uuid}', methods=['GET', 'HEAD', 'POST'])
+    @router.api_route('/download_game/{game_uuid}', methods=['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
     def legacy_download_game(game_uuid: str, request: Request):
         return _run_legacy_download_game(request, **opts, game_uuid=game_uuid)
 
-    @router.api_route('/download_other/{file_type}/{game_uuid}/{file_id}', methods=['GET', 'HEAD', 'POST'])
+    @router.api_route('/download_other/{file_type}/{game_uuid}/{file_id}', methods=['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
     def legacy_download_other(file_type: str, game_uuid: str, file_id: str, request: Request):
         return _run_legacy_download_other(
             request, **opts, file_type=file_type, game_uuid=game_uuid, file_id=file_id,
@@ -250,7 +265,7 @@ def mount_download_mutation_routes(app: FastAPI, flask_app, **kwargs):
 
 
 def _auth_and_csrf(request, flask_app, find_user, find_token, commit_token_touch,
-                   load_user_id, login_manager):
+                   load_user_id, login_manager, *, check_csrf=True):
     from .csrf_compat import csrf_error_response
     auth = request_auth_context(
         request, flask_app.config, find_user=find_user, find_token=find_token,
@@ -259,7 +274,7 @@ def _auth_and_csrf(request, flask_app, find_user, find_token, commit_token_touch
     )
     # A verified bearer credential is explicit and is not ambient browser
     # authority. Cookie and remember-cookie writes still require CSRF.
-    csrf = None if auth.source == 'bearer' else csrf_error_response(
+    csrf = None if not check_csrf or auth.source == 'bearer' else csrf_error_response(
         request, auth.session_data, flask_app.config,
     )
     if csrf is not None:
@@ -342,10 +357,11 @@ async def _run_download(request, *, flask_app, data, find_user, find_token,
                     payload, status = api_error_payload('Access denied', code='forbidden')
                     response = JSONResponse(payload, status_code=status)
                 else:
+                    data.log_download_started(game, auth.user)
                     body = await _read_json(request)
-                    kind = (body.get('kind') or request.query_params.get('kind') or 'base') if body else (request.query_params.get('kind') or 'base')
+                    kind = (body.get('kind') or first_query_value(request.query_params, 'kind') or 'base') if body else (first_query_value(request.query_params, 'kind') or 'base')
                     kind = kind.strip().lower() if isinstance(kind, str) else 'base'
-                    version_uuid = ((body.get('version_uuid') or body.get('version_id')) if body else None) or request.query_params.get('version_uuid') or request.query_params.get('version_id')
+                    version_uuid = ((body.get('version_uuid') or body.get('version_id')) if body else None) or first_query_value(request.query_params, 'version_uuid') or first_query_value(request.query_params, 'version_id')
                     try:
                         file_location, zip_hint, resolved = data.resolve_version(game, kind=kind, version_uuid=version_uuid)
                     except ValueError as exc:
@@ -418,10 +434,119 @@ def _finish(response, request, flask_app):
     return response
 
 
+def _legacy_post_only_method_response(request):
+    from starlette.responses import Response
+
+    if request.method == 'OPTIONS':
+        return Response(
+            status_code=200,
+            headers={'Allow': 'POST, OPTIONS', 'Content-Type': 'text/html; charset=utf-8'},
+        )
+    from werkzeug.exceptions import MethodNotAllowed
+    legacy_response = MethodNotAllowed(valid_methods=['POST', 'OPTIONS']).get_response()
+    response = Response(
+        content=legacy_response.get_data(),
+        status_code=legacy_response.status_code,
+        headers={key: value for key, value in legacy_response.headers.items()},
+        media_type=None,
+    )
+    if request.method == 'HEAD':
+        response.body = b''
+    return response
+
+
+def _legacy_werkzeug_error(error_type):
+    """Render the same HTML error response Flask's ``abort`` produced."""
+    from starlette.responses import Response
+
+    legacy_response = error_type().get_response()
+    return Response(
+        content=legacy_response.get_data(),
+        status_code=legacy_response.status_code,
+        headers={key: value for key, value in legacy_response.headers.items()},
+        media_type=None,
+    )
+
+
+def _legacy_other_get_preflight(request, *, flask_app, data, find_user, find_token,
+                                commit_token_touch, load_user_id, login_manager,
+                                file_type, game_uuid, file_id):
+    """Keep safe legacy GET failures useful without restoring GET writes."""
+    from starlette.responses import Response
+    from .oidc_status import _login_redirect, _set_session_cookie
+    from .response_compat import flask_redirect_response
+    from werkzeug.exceptions import BadRequest, Forbidden, NotFound
+
+    auth, csrf = _auth_and_csrf(
+        request, flask_app, find_user, find_token, commit_token_touch,
+        load_user_id, login_manager, check_csrf=False,
+    )
+    response = csrf
+    detail_url = f'/game_details/{game_uuid}'
+    if response is None and auth.user is None:
+        response = _login_redirect(flask_app, request, login_manager, auth)
+    elif response is None and not auth.has_scope('write:download'):
+        response = Response(status_code=403)
+    elif response is None and file_type not in ('update', 'extra'):
+        data.log_legacy_event('Invalid download file type', event_type='security', event_level='warning')
+        _flash(auth.session_data, 'error', 'Invalid file type')
+        response = flask_redirect_response(detail_url)
+    elif response is None and not _UUID_RE.fullmatch(game_uuid):
+        response = _legacy_werkzeug_error(BadRequest)
+    elif response is None:
+        game = data.game(game_uuid)
+        if game is None:
+            response = _legacy_werkzeug_error(NotFound)
+        elif not data.can_access(auth.user, game):
+            response = _legacy_werkzeug_error(Forbidden)
+        else:
+            token = str(file_id or '').strip()
+            if not _UUID_RE.fullmatch(token) and not _is_integer_token(token):
+                response = _legacy_werkzeug_error(BadRequest)
+            else:
+                record = data.other_file(file_type, game_uuid, token)
+                if record is None:
+                    data.log_legacy_event(
+                        f'Failed to download {file_type} file for game {game_uuid[:8]}',
+                        event_type='game', event_level='error',
+                    )
+                    _flash(auth.session_data, 'error', f'{file_type.capitalize()} file not found')
+                    response = flask_redirect_response(detail_url)
+                else:
+                    path = record.file_path
+                    bases = data.allowed_bases(flask_app)
+                    if not bases:
+                        _flash(auth.session_data, 'error', 'System configuration error. Please contact administrator.')
+                        response = flask_redirect_response(detail_url)
+                    elif not data.safe_path(path, bases)[0]:
+                        _flash(auth.session_data, 'error', 'Access denied.')
+                        response = flask_redirect_response(detail_url)
+                    elif not data.exists(path):
+                        data.log_legacy_event(
+                            f'{file_type.capitalize()} file not found on disk: {path}',
+                            event_type='system', event_level='error',
+                        )
+                        _flash(auth.session_data, 'error', 'File not found on disk')
+                        response = flask_redirect_response(detail_url)
+                    elif data.other_download_request(auth.user, path):
+                        _flash(auth.session_data, 'info', 'You already have a download request for this file')
+                        response = flask_redirect_response('/downloads')
+                    else:
+                        # A valid GET would create a DownloadRequest in v1.1.8.
+                        # Keep the current POST-only security boundary intact.
+                        return None
+
+    if auth is not None and (
+        auth.should_set_session_cookie or auth.session_data.get('_flashes')
+    ):
+        _set_session_cookie(response, flask_app, auth)
+    return response
+
+
 def _run_legacy_download_game(request, *, flask_app, data, find_user, find_token,
                               commit_token_touch, load_user_id, login_manager,
                               database_scope, game_uuid):
-    from starlette.responses import RedirectResponse, Response
+    from starlette.responses import Response
     from .oidc_status import _login_redirect, _set_session_cookie
     from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.utils.security_headers import security_header_values
@@ -429,7 +554,7 @@ def _run_legacy_download_game(request, *, flask_app, data, find_user, find_token
     scope = database_scope(flask_app) if database_scope else nullcontext()
     with scope:
         if request.method != 'POST':
-            response = Response(status_code=405, headers={'Allow': 'POST'})
+            response = _legacy_post_only_method_response(request)
             for key, value in security_header_values(flask_app.config).items():
                 response.headers.setdefault(key, value)
             response.headers.setdefault('Cache-Control', 'no-store')
@@ -444,36 +569,39 @@ def _run_legacy_download_game(request, *, flask_app, data, find_user, find_token
         elif auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
         elif not auth.has_scope('write:download'):
-            response = Response(status_code=403)
+            response = _missing_download_scope_response()
         elif not _UUID_RE.fullmatch(game_uuid):
-            response = Response(status_code=400)
+            from werkzeug.exceptions import BadRequest
+            response = _legacy_werkzeug_error(BadRequest)
         else:
             game = data.game(game_uuid)
             if game is None:
-                response = Response(status_code=404)
+                from werkzeug.exceptions import NotFound
+                response = _legacy_werkzeug_error(NotFound)
             elif not data.can_access(auth.user, game):
-                response = Response(status_code=403)
+                from werkzeug.exceptions import Forbidden
+                response = _legacy_werkzeug_error(Forbidden)
             else:
                 data.log_legacy_event(
                     f'User initiated download for game: {game.name}',
-                    event_type='game', event_level='information',
+                    event_type='game', event_level='information', audit_user=auth.user.id,
                 )
                 bases = data.allowed_bases(flask_app)
                 if not bases:
                     _flash(auth.session_data, 'error', 'System configuration error. Please contact administrator.')
-                    response = RedirectResponse('/downloads', status_code=302)
+                    response = flask_redirect_response('/downloads', status_code=302)
                 elif not data.safe_path(game.full_disk_path, bases)[0]:
                     _flash(auth.session_data, 'error', 'Access denied.')
-                    response = RedirectResponse('/downloads', status_code=302)
+                    response = flask_redirect_response('/downloads', status_code=302)
                 elif data.legacy_download_request(auth.user, game):
                     _flash(auth.session_data, 'info', 'You already have a download request for this game in your basket. Please check your downloads page.')
-                    response = RedirectResponse('/downloads', status_code=302)
+                    response = flask_redirect_response('/downloads', status_code=302)
                 else:
                     try:
                         data.create_legacy_download_request(
                             game, auth.user, data.legacy_zip_path(game),
                         )
-                        response = RedirectResponse('/downloads', status_code=302)
+                        response = flask_redirect_response('/downloads', status_code=302)
                     except Exception:
                         db.session.rollback()
                         data.log_legacy_event(
@@ -481,7 +609,7 @@ def _run_legacy_download_game(request, *, flask_app, data, find_user, find_token
                             event_type='game', event_level='error',
                         )
                         _flash(auth.session_data, 'error', 'An error occurred processing your request.')
-                        response = RedirectResponse('/downloads', status_code=302)
+                        response = flask_redirect_response('/downloads', status_code=302)
         if auth is not None and (
             auth.should_set_session_cookie or auth.session_data.get('_flashes')
         ):
@@ -508,10 +636,21 @@ def _is_integer_token(value):
         return False
 
 
+def _missing_download_scope_response():
+    from oneirodex.utils.api_contract import api_error_payload
+    from starlette.responses import JSONResponse
+
+    payload, status = api_error_payload(
+        'Missing scope: write:download', code='forbidden',
+        detail={'required_scope': 'write:download'},
+    )
+    return JSONResponse(payload, status_code=status)
+
+
 def _run_legacy_download_other(request, *, flask_app, data, find_user, find_token,
                                commit_token_touch, load_user_id, login_manager,
                                database_scope, file_type, game_uuid, file_id):
-    from starlette.responses import RedirectResponse, Response
+    from starlette.responses import Response
     from .oidc_status import _login_redirect, _set_session_cookie
     from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.utils.security_headers import security_header_values
@@ -519,8 +658,43 @@ def _run_legacy_download_other(request, *, flask_app, data, find_user, find_toke
     detail_url = f'/game_details/{game_uuid}'
     scope = database_scope(flask_app) if database_scope else nullcontext()
     with scope:
+        if request.method == 'OPTIONS':
+            response = Response(
+                status_code=200,
+                headers={
+                    'Allow': 'OPTIONS, HEAD, GET, POST',
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Content-Length': '0',
+                },
+            )
+            for key, value in security_header_values(flask_app.config).items():
+                response.headers.setdefault(key, value)
+            response.headers.setdefault('Cache-Control', 'no-store')
+            return response
+        if request.method in ('GET', 'HEAD'):
+            response = _legacy_other_get_preflight(
+                request, flask_app=flask_app, data=data,
+                find_user=find_user, find_token=find_token,
+                commit_token_touch=commit_token_touch, load_user_id=load_user_id,
+                login_manager=login_manager, file_type=file_type,
+                game_uuid=game_uuid, file_id=file_id,
+            )
+            if response is not None:
+                if request.method == 'HEAD':
+                    headers = dict(response.headers)
+                    if getattr(response, 'body', b'') and 'content-length' not in {
+                        key.lower() for key in headers
+                    }:
+                        headers['Content-Length'] = str(len(response.body))
+                    response = Response(
+                        content=b'', status_code=response.status_code, headers=headers,
+                    )
+                for key, value in security_header_values(flask_app.config).items():
+                    response.headers.setdefault(key, value)
+                response.headers.setdefault('Cache-Control', 'no-store')
+                return response
         if request.method != 'POST':
-            response = Response(status_code=405, headers={'Allow': 'POST'})
+            response = _legacy_post_only_method_response(request)
             for key, value in security_header_values(flask_app.config).items():
                 response.headers.setdefault(key, value)
             response.headers.setdefault('Cache-Control', 'no-store')
@@ -534,24 +708,28 @@ def _run_legacy_download_other(request, *, flask_app, data, find_user, find_toke
         elif auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
         elif not auth.has_scope('write:download'):
-            response = Response(status_code=403)
+            response = _missing_download_scope_response()
         elif file_type not in ('update', 'extra'):
             data.log_legacy_event('Invalid download file type', event_type='security', event_level='warning')
             _flash(auth.session_data, 'error', 'Invalid file type')
-            response = RedirectResponse(detail_url, status_code=302)
+            response = flask_redirect_response(detail_url, status_code=302)
         elif not _UUID_RE.fullmatch(game_uuid):
-            response = Response(status_code=400)
+            from werkzeug.exceptions import BadRequest
+            response = _legacy_werkzeug_error(BadRequest)
         else:
             game = data.game(game_uuid)
             if game is None:
-                response = Response(status_code=404)
+                from werkzeug.exceptions import NotFound
+                response = _legacy_werkzeug_error(NotFound)
             elif not data.can_access(auth.user, game):
-                response = Response(status_code=403)
+                from werkzeug.exceptions import Forbidden
+                response = _legacy_werkzeug_error(Forbidden)
             else:
                 token = str(file_id or '').strip()
                 if not _UUID_RE.fullmatch(token) and not _is_integer_token(token):
                     data.log_legacy_event('Invalid download file ID', event_type='security', event_level='warning')
-                    response = Response(status_code=400)
+                    from werkzeug.exceptions import BadRequest
+                    response = _legacy_werkzeug_error(BadRequest)
                 else:
                     record = data.other_file(file_type, game_uuid, token)
                     if record is None:
@@ -560,30 +738,43 @@ def _run_legacy_download_other(request, *, flask_app, data, find_user, find_toke
                             event_type='game', event_level='error',
                         )
                         _flash(auth.session_data, 'error', f'{file_type.capitalize()} file not found')
-                        response = RedirectResponse(detail_url, status_code=302)
+                        response = flask_redirect_response(detail_url, status_code=302)
                     else:
                         path = record.file_path
                         bases = data.allowed_bases(flask_app)
                         if not bases:
                             _flash(auth.session_data, 'error', 'System configuration error. Please contact administrator.')
-                            response = RedirectResponse(detail_url, status_code=302)
+                            response = flask_redirect_response(detail_url, status_code=302)
                         elif not data.safe_path(path, bases)[0]:
                             _flash(auth.session_data, 'error', 'Access denied.')
-                            response = RedirectResponse(detail_url, status_code=302)
+                            response = flask_redirect_response(detail_url, status_code=302)
                         elif not data.exists(path):
                             _flash(auth.session_data, 'error', 'File not found on disk')
-                            response = RedirectResponse(detail_url, status_code=302)
+                            response = flask_redirect_response(detail_url, status_code=302)
                         elif data.other_download_request(auth.user, path):
                             _flash(auth.session_data, 'info', 'You already have a download request for this file')
-                            response = RedirectResponse('/downloads', status_code=302)
+                            response = flask_redirect_response('/downloads', status_code=302)
                         else:
                             try:
                                 data.create_other_download_request(game_uuid, auth.user, record, path)
-                                response = RedirectResponse('/downloads', status_code=302)
-                            except Exception:
+                                response = flask_redirect_response('/downloads', status_code=302)
+                            except Exception as exc:
                                 db.session.rollback()
-                                _flash(auth.session_data, 'error', 'An error occurred processing your request.')
-                                response = RedirectResponse(detail_url, status_code=302)
+                                from sqlalchemy.exc import SQLAlchemyError
+                                if isinstance(exc, SQLAlchemyError):
+                                    data.log_legacy_event(
+                                        f'Database error creating {file_type} download request: {exc}',
+                                        event_type='system', event_level='error',
+                                    )
+                                    message = 'Database error occurred'
+                                else:
+                                    data.log_legacy_event(
+                                        f'Error creating {file_type} download request: {exc}',
+                                        event_type='system', event_level='error',
+                                    )
+                                    message = 'An error occurred processing your request.'
+                                _flash(auth.session_data, 'error', message)
+                                response = flask_redirect_response(detail_url, status_code=302)
         if auth is not None and (
             auth.should_set_session_cookie or auth.session_data.get('_flashes')
         ):

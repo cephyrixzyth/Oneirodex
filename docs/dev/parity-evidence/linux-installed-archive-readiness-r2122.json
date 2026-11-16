@@ -1,0 +1,48 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2122",
+  "observed_utc": "2026-11-15T20:04:31.461398+00:00",
+  "base_commit": "3cb31ed2e6a3d8740cc7e2b784f8f7988b93fea7",
+  "classification": "CI fixture/controller readiness verified; actual packaged archive journey pending, not installed-game acceptance.",
+  "implementation": [
+    "Seed a deterministic self-authored ZIP for the shared synthetic game inside the already-guarded owned CI games directory; existing OTHER platform, real DB and authorization. Refuse a preexisting archive.",
+    "After unchanged connected-account checks, drive genuine bundled Download and Install buttons; require completed state/actions, then read real native install records and bounded contained files.",
+    "Compare exact archive/member bytes, selected executable, regular-file ownership and Unix permissions; reject symlink metadata, foreign paths, extra files and changed payloads.",
+    "Close/reopen the same installed package and require the cached identity-bound shelf, enabled Play/Reveal controls and persisted verified files before reconnect. No Play/Reveal click or network-outage simulation in this step.",
+    "Install failure revokes extended acceptance and preserves backend/package/process cleanup. No shipping client/backend behavior, workflow permission or immutable package pin changed."
+  ],
+  "verification": {
+    "local_linux_methods": "54 passed in 0.257s; pure/fake/filesystem/AST only",
+    "pyflakes": "Four changed Python files pass",
+    "workflow_contexts": 13,
+    "bearer_actual_handlers": "9 passed",
+    "cors_methods": "7 passed",
+    "api_envelope": "10 known call sites, one file below baseline; baseline unchanged",
+    "bundle_validator": "7 reports, 1545 shared pairs, 160 current-only operations, lifecycle and secret/path checks passed",
+    "red_evidence": "Initial six missing-module failures; later write-collision and install-failure propagation RED cases retained. A local positive fixture initially used a redirected Windows temp path; canonicalized the test root rather than weakening containment.",
+    "native_status": "not run for this candidate",
+    "source_review": "Confirmed real app reports errors through status.dataset.tone; projection reads that field. Exact UUID shape required. No shipping app/runtime code change."
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/linux_installed_journey.py": "520fd7e83efee26a8c2f298ee34a2659d87db08db3b6ef30c461fced560ad291",
+    "scripts/ci/test_linux_installed_journey.py": "09ee836a1cd8812a66cc3a9c760dc03b54a8aa32c477819132ea355d91ab4443",
+    "scripts/ci/linux_connected_journey.py": "5d3e65e98cd0608cdc9e15e6e22a3b20210a62cf21d0ca49075e516d1c41c086",
+    "scripts/ci/linux_connected_server.py": "9a97e3a495ac3ba087cf8cdb01c7c4b5bc18e9cf4e2edcb2e15564ad186a7d5d"
+  },
+  "package": {
+    "source": "ce8c35a6980891ef85c26cb64aa0d8a3ecc9e867",
+    "run": 43747390211,
+    "artifact": 14173989223,
+    "archive_sha256": "7e253a922f9481715b399b217821822cb317dff13e83192a0ce0c8e33b4d1749",
+    "deb_sha256": "94374bcad58a0475c432c5ca1cb6963cac2959a071f5456822bc19d69841e754",
+    "installed_elf_sha256": "a30d27b45cfb26c320c576a75e53abce97f237783369813c282684c2692535fd"
+  },
+  "limits": [
+    "Synthetic archive mechanism only; no game compatibility or execution proof.",
+    "A shelf restored before reconnect while the server remains available is not network-outage/offline Play/Reveal acceptance.",
+    "No game/wrapper exit, exact-launch resumption, saves, update/rollback, uninstall-retained games or other original platform/operator/AT/parity/final/release acceptance.",
+    "Local host Python differs from pinned native CI. No local native/server/keyring/database/installer/payload execution."
+  ],
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: no UI markup/style change; actual native work remains disposable CI only."
+}

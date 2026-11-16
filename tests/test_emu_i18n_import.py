@@ -14,7 +14,8 @@ from flask_login import login_user
 from oneirodex.models import Game, Library, User, UserOwnedTitle
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils.locale_core import normalize_locale
-from oneirodex.utils.playnite_import import import_playnite_json
+from oneirodex.utils.playnite_import import import_playnite_csv, import_playnite_json
+from oneirodex.utils.launcher_imports import MAX_TITLES
 from oneirodex.utils.rom_archive import ArchiveRomError, resolve_playable_rom_path
 
 
@@ -157,3 +158,33 @@ def test_playnite_import_matches(app, db_session, member):
         ).first()
         assert row is not None
         assert row.matched_game_uuid is None
+
+
+def test_playnite_json_title_limit_rejects_before_database_writes(app, monkeypatch):
+    from oneirodex.utils import playnite_import
+
+    monkeypatch.setattr(
+        playnite_import.db.session,
+        'execute',
+        lambda *_args, **_kwargs: pytest.fail('over-limit JSON must be rejected before database reads'),
+    )
+    monkeypatch.setattr(
+        playnite_import.db.session,
+        'add',
+        lambda *_args, **_kwargs: pytest.fail('over-limit JSON must be rejected before writes'),
+    )
+    payload = [None] * (MAX_TITLES + 1)
+
+    with app.app_context():
+        result = import_playnite_json(1, payload)
+    assert result.errors == [f'That export has more than {MAX_TITLES} titles']
+
+
+def test_playnite_csv_title_limit_rejects_at_cap(app):
+    csv_text = 'Name,Id\n' + ''.join(
+        f'Title {index},id-{index}\n' for index in range(MAX_TITLES + 1)
+    )
+
+    with app.app_context():
+        result = import_playnite_csv(1, csv_text)
+    assert result.errors == [f'That export has more than {MAX_TITLES} titles']

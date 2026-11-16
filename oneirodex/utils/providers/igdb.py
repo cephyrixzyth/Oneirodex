@@ -21,7 +21,8 @@ def igdb_credentials_configured() -> bool:
     settings = db.session.execute(
         select(GlobalSettings).order_by(GlobalSettings.id).limit(1),
     ).scalars().first()
-    return bool(settings and settings.igdb_client_id and settings.igdb_client_secret)
+    from oneirodex.utils.secret_store import has_global_secret
+    return bool(settings and settings.igdb_client_id and has_global_secret(settings, 'igdb_client_secret'))
 
 
 class IgdbCoverProvider(MetadataImageProvider):

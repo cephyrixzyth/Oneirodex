@@ -32,7 +32,8 @@ def get_thegamesdb_api_key() -> str | None:
         ).scalars().first()
     except Exception:
         return None
-    key = getattr(settings, 'thegamesdb_api_key', None) if settings else None
+    from oneirodex.utils.secret_store import read_global_secret
+    key = read_global_secret(settings, 'thegamesdb_api_key') if settings else None
     return (key or '').strip() or None
 
 

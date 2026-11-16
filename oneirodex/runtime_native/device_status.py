@@ -170,7 +170,15 @@ def create_device_status_router(
                         'This token does not have the admin scope', code='forbidden',
                     )
                     response = JSONResponse(payload, status_code=status)
-                elif action == 'config' and request.method in ('GET', 'HEAD'):
+                elif action == 'config' and request.method == 'HEAD':
+                    from oneirodex.utils.api_contract import api_error_payload
+                    from .runtime_context import native_json_response
+
+                    payload, status = api_error_payload('No fields to update', code='bad_request')
+                    response = native_json_response(
+                        payload, config=flask_app.config, status=status,
+                    )
+                elif action == 'config' and request.method == 'GET':
                     response = JSONResponse(data.read_config(config=flask_app.config))
                 elif action == 'config':
                     try:

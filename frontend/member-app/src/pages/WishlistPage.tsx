@@ -69,6 +69,7 @@ export function WishlistPage() {
     event.preventDefault()
     const trimmed = title.trim()
     if (!trimmed) {
+      setCreateError(new Error('Enter a title before sending your request.'))
       return
     }
 

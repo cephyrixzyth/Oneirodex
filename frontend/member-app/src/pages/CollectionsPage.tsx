@@ -44,7 +44,11 @@ export function CollectionsPage() {
   async function handleCreate(event: any) {
     event.preventDefault()
     const trimmedName = name.trim()
-    if (!trimmedName || creating) {
+    if (creating) {
+      return
+    }
+    if (!trimmedName) {
+      setCreateError(new Error('Enter a shelf name before creating it.'))
       return
     }
 

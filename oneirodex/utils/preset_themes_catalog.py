@@ -121,7 +121,10 @@ PRESET_THEMES = [
         'btn_primary_hover': '#37a9ed',
         'bg_dark_40': 'rgba(10, 19, 31, 0.97)',
         'bg_dark_30': 'rgba(5, 10, 18, 0.99)',
-        'icon_pack': 'angular',
+        # The era CSS supplies the square, mitered silhouette. Keep the
+        # persisted icon pack on an installed pack so the preference form can
+        # validate the preset selection.
+        'icon_pack': 'outline',
         'tokens': {
             'od-text': '#eef7ff', 'od-text-muted': '#a4c9e5',
             'od-border': 'rgba(106, 199, 255, 0.2)', 'od-accent-2': '#b7e4ff',

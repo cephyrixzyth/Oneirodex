@@ -10,7 +10,13 @@ from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+
+_SAVED_FILTER_BODY_MAX_BYTES = 64 * 1024
+
+
+class _SavedFilterBodyTooLarge(Exception):
+    pass
 
 
 class SavedFilterData:
@@ -54,12 +60,20 @@ class SavedFilterData:
         )
         db.session.add(row)
         db.session.commit()
+        # PostgreSQL stores these DateTime columns without a timezone. Flask's
+        # legacy session expires ORM instances on commit, so its response
+        # serializes the reloaded naive timestamps. The native session keeps
+        # committed instances alive; refresh them to preserve that response
+        # contract and match a subsequent GET.
+        db.session.refresh(row)
         return row
 
-    def save(self):
+    def save(self, row=None):
         from oneirodex.runtime_native.db_session import native_db as db
 
         db.session.commit()
+        if row is not None:
+            db.session.refresh(row)
 
     def delete(self, row):
         from oneirodex.runtime_native.db_session import native_db as db
@@ -127,7 +141,9 @@ def create_saved_filter_router(
                          load_user_id, login_manager)
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
             if response is None:
-                response = _success({'filters': [row.to_dict() for row in data.list(auth.user)]})
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = _success({'filters': [row.to_dict() for row in data.list(auth.user)]})
             return _finish(response, flask_app, request, auth)
 
     @router.post('/api/filters/saved')
@@ -146,6 +162,10 @@ def create_saved_filter_router(
                     from oneirodex.schemas.saved_filters import SavedFilterCreateBody
 
                     body = SavedFilterCreateBody.model_validate(await _json_body(request))
+                except _SavedFilterBodyTooLarge:
+                    response = _error(
+                        'Request body is too large.', 'payload_too_large', status=413,
+                    )
                 except ValidationError as exc:
                     response = _validation_error(exc)
                 if response is None:
@@ -188,6 +208,10 @@ def create_saved_filter_router(
                     from oneirodex.schemas.saved_filters import SavedFilterUpdateBody
 
                     body = SavedFilterUpdateBody.model_validate(await _json_body(request))
+                except _SavedFilterBodyTooLarge:
+                    response = _error(
+                        'Request body is too large.', 'payload_too_large', status=413,
+                    )
                 except ValidationError as exc:
                     response = _validation_error(exc)
                 if response is None:
@@ -213,7 +237,7 @@ def create_saved_filter_router(
                             if body.is_collection is not None:
                                 row.is_collection = body.is_collection
                             try:
-                                data.save()
+                                data.save(row)
                                 response = _success({'filter': row.to_dict()})
                             except Exception:  # noqa: BLE001 — retain generic persistence error
                                 data.rollback()
@@ -264,6 +288,10 @@ def create_saved_filter_router(
                     from oneirodex.schemas.saved_filters import FilterPreviewBody
 
                     body = FilterPreviewBody.model_validate(await _json_body(request))
+                except _SavedFilterBodyTooLarge:
+                    response = _error(
+                        'Request body is too large.', 'payload_too_large', status=413,
+                    )
                 except ValidationError as exc:
                     response = _validation_error(exc)
                 if response is None:
@@ -314,7 +342,16 @@ async def _json_body(request):
             content_type.startswith('application/') and content_type.endswith('+json')
         ):
             return {}
-        return await request.json()
+        from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+        raw_body = await read_bounded_body(request, _SAVED_FILTER_BODY_MAX_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            raise _SavedFilterBodyTooLarge
+        import json
+
+        return json.loads(raw_body or b'{}')
+    except _SavedFilterBodyTooLarge:
+        raise
     except Exception:  # noqa: BLE001 — Flask's silent JSON parsing returns empty body
         return {}
 
@@ -329,15 +366,17 @@ def _bad_tree(exc):
     return _error(str(exc), 'bad_request', detail={'path': exc.path})
 
 
-def _error(message, code, *, detail=None):
+def _error(message, code, *, detail=None, status=None):
     from oneirodex.utils.api_contract import api_error_payload
 
-    payload, status = api_error_payload(message, code=code, detail=detail)
-    return JSONResponse(payload, status_code=status)
+    payload, response_status = api_error_payload(
+        message, code=code, detail=detail, status=status,
+    )
+    return JSONResponse(payload, status_code=response_status)
 
 
 def _success(payload, *, status=200):
-    from oneirodex.utils.api_contract import api_ok_payload 
+    from oneirodex.utils.api_contract import api_ok_payload
 
     return JSONResponse(api_ok_payload(payload), status_code=status)
 

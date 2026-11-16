@@ -1,0 +1,91 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2032",
+  "base_commit": "6339767f10a5b6b6e7376f2df5ea73ca9089ca8c",
+  "source_sha256": {
+    "oneirodex/utils/github_issues.py": "2d54e76693e0891be881c6fddf19b86c90348c15635a990b425425ef65ede1aa",
+    "oneirodex/utils/support_reports.py": "63cd9ea343f771cabd0682858b2d9ace34fcf3c8c2cc0017ee2d2e4232d95b4e",
+    "oneirodex/schemas/support.py": "a2645e1d7c5046f1e61104931d7b1a70df0e27658ff9a76bee0771bebdf7b3f1",
+    "oneirodex/routes_apis/support.py": "118cfa28f4a3f9a1da690e037eb89103cc1a597c34e4fbd430e22c04cc6c382c",
+    "oneirodex/runtime_native/support_mutations.py": "2317caad6201e46d69e4819d76a7f47eb5f27d69b2219d2f26ad76d2084f92c3",
+    "frontend/member-app/src/api/support.ts": "4c9f721370b982246ed23924ec81725179a8f1dbbe3d1d3d4e7a29e791d9f599",
+    "frontend/member-app/src/pages/ReportIssuePage.tsx": "8a6552c01d3c4979440d303e7b3cced5cf78813a57ef187c9abe13759a6cc2ad",
+    "frontend/member-app/src/pages/ReportIssuePage.css": "0863782ad1570cd9731a63130a08772729791281cc878a9e8c8862f118cc51af",
+    "frontend/member-app/src/pages/ReportIssuePage.test.tsx": "75953fe19932fa536f66b1b11a2a5616288fe34a46f02ebd0e773df5edc371f5",
+    "tests/test_support_forwarding_privacy.py": "a428502829352e1a087d3f24435039eea7390b7710fdf8187539a573e0cba02c",
+    "tests/test_support_report_kind.py": "6930d8bfdc572f65c226001395b2fc2360d4e66103472c9fb186547e84d626d3",
+    "tests/test_native_support_mutations.py": "7e4e0589f20aab2c4be414268719193a3c6b19b7f028c91160b54ffc68eb13d1"
+  },
+  "scope": "Mandatory server-redacted support preview and validated repository disclosure in Flask/native and actual member SPA. Original UC-004/P3-07 delivery acceptance remains open.",
+  "verification": {
+    "backend_and_openapi_passed": 72,
+    "backend_seconds": 36.18,
+    "focused_member_contract_navigation_passed": 388,
+    "broader_member_run": {
+      "passed": 1236,
+      "suite_collection_failures": 1,
+      "cause": "Runner used repository CWD; SideRail CSS fixture required member workspace. Corrected focused selection includes all12 SideRail tests. This is not a single green full-suite run."
+    },
+    "types": "passed",
+    "eslint": "passed",
+    "css_tokens": "passed,zero new violations",
+    "member_production_build": "passed; existing chunk-size warning retained",
+    "api_envelope": "passed without baseline increase",
+    "r1972_bundle": "passed unchanged"
+  },
+  "preview_contract": {
+    "redaction": "mandatory, no override",
+    "visibility": "unknown; potentially public",
+    "expiry_seconds": 900,
+    "bound_to": [
+      "authenticated account and role",
+      "normalized raw contents",
+      "report UUID reference",
+      "configured repository and operator credential digest"
+    ],
+    "changed_or_missing_approval": "409, no ticket/forward",
+    "local_only": "works when missing/invalid configuration",
+    "cache_control": "no-store"
+  },
+  "headless_browser": {
+    "base_image": "sha256:f63116797656d9cb79218410bf22dcabb497e37384b932eb8b16617aa47e7709",
+    "runtime": "Actual native app from R2030 with fingerprinted read-only candidate Python/member overlays; not a fresh release image",
+    "passed": true,
+    "seconds": 39.98,
+    "configured": "Preview required; redacted text/destination shown; exact displayed title/body equals one intercepted outgoing payload, local201",
+    "unconfigured": "Actual unset token; unavailable preview, local-only201, no outgoing call",
+    "mobile": "375x812; off-canvas rail settled by DOM geometry before capture; no horizontal overflow",
+    "external_issue_sent": false,
+    "owned_resources_removed_and_absence_verified": true,
+    "screenshots": [
+      {
+        "view": "desktop",
+        "width": 1100,
+        "height": 850,
+        "sha256": "00581e546e8da4a6f22de7de6c95caae3d5061d994ceafc4a417a2e0640b3640",
+        "published": false
+      },
+      {
+        "view": "mobile",
+        "width": 375,
+        "height": 812,
+        "sha256": "6874a296628e1c4038a0a298df8149e49936024e2a3e0e488a79adbcceb9fa9d",
+        "published": false
+      },
+      {
+        "view": "unconfigured-mobile",
+        "width": 375,
+        "height": 812,
+        "sha256": "1b0283ca0d2ef937a49be100c7108881412fe2e77924cc3cb3bc626fcdc09366",
+        "published": false
+      }
+    ]
+  },
+  "review": "Separate author prepatch and bypass/regression passes; weaker than independent review.",
+  "limits": [
+    "Actual repository visibility/provider permission/reachability unknown.",
+    "GitHub transport intercepted; no real issue creation authorized.",
+    "Durable UUID linkage, duplicate/concurrent retry and ambiguous provider outcome handling remain Task3.",
+    "No native desktop, installed-platform, full route parity, full Python suite or release/deployment clearance."
+  ]
+}

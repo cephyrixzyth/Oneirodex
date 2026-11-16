@@ -7,6 +7,8 @@ import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 import './ScanFiltersPage.css'
 
+import { AdminLink } from '../components/AdminLink'
+
 type FilterKind = 'name' | 'dir' | 'regex'
 type ScanFilter = { id: number; filter_pattern: string; kind: FilterKind; case_sensitive: string }
 const API = '/api/admin/scan-filters'
@@ -256,9 +258,9 @@ export function ScanFiltersPage() {
           />
         ) : null}
       </section>
-      <a className="od-cbtn" href="/scan_management?active_tab=scan_filters">
+      <AdminLink className="od-cbtn" to="/scan_management?active_tab=scan_filters">
         Back to Scan management
-      </a>
+      </AdminLink>
     </Page>
   )
 }

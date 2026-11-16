@@ -1,0 +1,41 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2051",
+  "captured_utc": "2026-11-12T16:39:23.149691+00:00",
+  "source": "Read-only GitHub REST open-alert pagination after changed push banner",
+  "pages": [100, 9],
+  "open_alerts": 109,
+  "severities": {"critical": 13, "high": 54, "medium": 41, "low": 1},
+  "prior_r2042": 107,
+  "added_alert_ids": [127, 128],
+  "removed_ids": [],
+  "changed_prior_compact_records": [],
+  "new_record_review": [
+    {
+      "id": 128,
+      "advisory": "GHSA-xvh5-g6gv-559v",
+      "package": "Pillow",
+      "manifest": "requirements-dev.txt",
+      "severity": "high",
+      "affected": ">=5.4.0,<=12.3.0",
+      "first_patched": "13.0.0",
+      "review_branch": "Runtime requirements and hashed lock pin13.0.0; development requirements include runtime requirements. Actual R2046 image reports13.0.0.",
+      "classification": "Same advisory already reviewed for runtime alert126; review branch already uses patched version.",
+      "primary_reference": "https://github.com/python-pillow/Pillow/security/advisories/GHSA-xvh5-g6gv-559v"
+    },
+    {
+      "id": 127,
+      "advisory": "GHSA-g3hv-75wg-m249",
+      "package": "minimatch",
+      "manifest": "package-lock.json",
+      "severity": "medium",
+      "affected": ">=7.0.0,<11.0.1",
+      "first_patched": "11.0.1",
+      "review_branch": "Override11.0.1; sole resolved lock entry11.0.1; installed package metadata11.0.1.",
+      "classification": "Review branch already uses first-patched version; no additional dependency edit required.",
+      "primary_reference": "https://github.com/isaacs/minimatch/security/advisories/GHSA-g3hv-75wg-m249"
+    }
+  ],
+  "outcome": "Both added records assessed against current pins; prior individual triage retained without repeating unchanged records.",
+  "limits": ["No alert modified, closed or dismissed", "Default branch remains109open until its source/dependency state changes", "Not an image vulnerability scan or a global security clearance", "Initial implicit Windows cp1252 capture failed; corrected capture explicitly decodes UTF-8"]
+}

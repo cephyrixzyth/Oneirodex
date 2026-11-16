@@ -1,4 +1,58 @@
+.od-newsletter-detail__summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--od-space-2) var(--od-space-4);
+  margin: 0;
+  padding: var(--od-space-3);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-sm);
+  background: var(--od-surface);
+}
+
+.od-newsletter-detail__summary--with-error {
+  grid-template-columns:
+    minmax(7rem, 1fr)
+    minmax(9rem, 1.4fr)
+    minmax(6rem, 0.8fr)
+    minmax(6rem, 0.8fr)
+    minmax(12rem, 2fr);
+}
+
+.od-newsletter-detail__field {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--od-space-2);
+}
+
+.od-newsletter-detail__field dt {
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm);
+}
+
+.od-newsletter-detail__field dd {
+  margin: 0;
+  color: var(--od-text);
+  font-weight: 600;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+
+.od-newsletter-detail__field--error dd {
+  color: var(--od-danger);
+  font-weight: 400;
+}
+
+.od-newsletter-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--od-space-2);
+}
+
 .od-newsletter-message {
+  margin-block-start: var(--od-space-3);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -11,4 +65,36 @@
 }
 .od-newsletter-compose legend {
   font-size: var(--od-font-lg);
+}
+
+@media (max-width: 900px) {
+  .od-newsletter-detail__summary,
+  .od-newsletter-detail__summary--with-error {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .od-newsletter-detail__field--error {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .od-newsletter-detail__summary,
+  .od-newsletter-detail__summary--with-error {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .od-newsletter-detail__field {
+    display: grid;
+    grid-template-columns: minmax(6rem, 0.8fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .od-newsletter-detail__field dd {
+    text-align: start;
+  }
+
+  .od-newsletter-detail__field--error {
+    grid-column: auto;
+  }
 }

@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { searchGames } from '../api/collections'
 import { fetchPaletteSuggest } from '../api/palette'
 import { openPreferencesModal } from '../api/preferences'
+import { RECENT_TITLES_KEY } from '../utils/recentTitles'
 import {
   buildPaletteCommands,
   CommandPalette,
@@ -54,6 +55,7 @@ function renderPalette(shellConfig = {}, props = {}, initialEntries = ['/library
 }
 
 beforeEach(() => {
+  window.localStorage.removeItem(RECENT_TITLES_KEY)
   navigateMock.mockReset()
   vi.mocked(openPreferencesModal).mockClear()
   vi.mocked(searchGames).mockReset()
@@ -168,6 +170,58 @@ test('empty palette shows recent titles and household favourites', async () => {
   expect(within(dialog).getByText('Favorited here')).toBeInTheDocument()
   expect(within(dialog).getByText('Recent titles')).toBeInTheDocument()
   expect(within(dialog).getByText('Popular here')).toBeInTheDocument()
+})
+
+test('does not show legacy titles when suggestions fail and keeps title search usable', async () => {
+  const user = userEvent.setup()
+  window.localStorage.setItem(
+    RECENT_TITLES_KEY,
+    JSON.stringify([{ uuid: 'private-1', name: 'Private prior account title' }]),
+  )
+  vi.mocked(fetchPaletteSuggest).mockRejectedValue(new Error('suggestions unavailable'))
+  vi.mocked(searchGames).mockResolvedValue([{ uuid: 'allowed-1', name: 'Celeste' }])
+
+  renderPalette({}, { open: true }, ['/discover'])
+
+  const dialog = await screen.findByRole('dialog')
+  expect(await within(dialog).findByRole('status')).toHaveTextContent(
+    /suggestions are unavailable/i,
+  )
+  expect(within(dialog).queryByText('Private prior account title')).toBeNull()
+  expect(window.localStorage.getItem(RECENT_TITLES_KEY)).toBeNull()
+
+  await user.type(within(dialog).getByPlaceholderText(/search titles or pages/i), 'cel')
+  expect(await within(dialog).findByText('Celeste')).toBeInTheDocument()
+})
+
+test('discards suggestions from a prior viewer after an identity change', async () => {
+  let resolvePrior: (value: any) => void = () => undefined
+  const priorResponse = new Promise((resolve) => {
+    resolvePrior = resolve
+  })
+  vi.mocked(fetchPaletteSuggest)
+    .mockReturnValueOnce(priorResponse as any)
+    .mockResolvedValueOnce({
+      recent: [{ uuid: 'current-1', name: 'Current viewer title' }],
+      popular: [],
+    })
+
+  const renderForViewer = (userId: number) => (
+    <MemoryRouter initialEntries={['/discover']}>
+      <ShellHarness shell={{ userId }}>
+        <CommandPalette open />
+      </ShellHarness>
+    </MemoryRouter>
+  )
+  const view = render(renderForViewer(1))
+
+  await waitFor(() => expect(fetchPaletteSuggest).toHaveBeenCalledTimes(1))
+  view.rerender(renderForViewer(2))
+  expect(await screen.findByText('Current viewer title')).toBeInTheDocument()
+
+  resolvePrior({ recent: [{ uuid: 'prior-1', name: 'Prior viewer title' }], popular: [] })
+  await waitFor(() => expect(screen.queryByText('Prior viewer title')).toBeNull())
+  expect(screen.getByText('Current viewer title')).toBeInTheDocument()
 })
 
 test('title search runs from Discover, not only Game Catalog', async () => {

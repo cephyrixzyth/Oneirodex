@@ -11,16 +11,18 @@
 
 - Download is server-side streaming; large titles depend on disk and network to the Oneirodex host.
 - Download actions create or reuse a request in your Downloads queue. Opening or previewing a download link does not create a request.
+- The Downloads queue reports the measured file or folder size for selected updates and extras, and the catalog's stored size for the base install.
 - Legacy direct download URLs no longer create requests with `GET`; browser sessions must use the app's CSRF-protected action, and integrations should create a request with `POST /api/downloads/games/{game_uuid}` (`kind` and optional `version_uuid`). API tokens need the `write:download` scope.
 - Version list honesty: `path_missing` / `downloadable` / measured `size` · **Default** chip on the base install · librarians/admins can **Remove missing versions** (orphan cleanup).
 - Web UI does not install/extract on your PC — that needs the optional desktop companion (**Install / Update / Uninstall**). See [desktop-companion.md](desktop-companion.md).
+- Child accounts keep the familiar Download and companion action slots visible when the game or version supports them. Restricted controls stay disabled with an accessible description and a title tooltip; their positions remain stable. The server independently denies restricted download and companion operations.
 - History lists past downloads for your account; queue shows in-progress work when the client/server reports it.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
-| Button missing / disabled | No path on disk (`path_missing` / not downloadable), ACL, or unfinished scan |
+| Button missing / disabled | No path on disk (`path_missing` / not downloadable), ACL or child-account restriction, or unfinished scan. Child restrictions are available in the disabled control's accessible description and title tooltip. |
 | “Missing on disk” on a version | Path gone after move/delete — librarian **Remove missing versions** cleans orphans |
 | Download fails mid-stream | Disk full, path moved, reverse-proxy timeouts |
 | Page unstyled | Missing `member-app.css` — admin rebuild |
@@ -33,3 +35,4 @@ Related: [getting-started.md](getting-started.md) · admin scan docs [libraries-
 - Searches admin-configured native Torznab/Newznab indexers and optional Prowlarr/Jackett hubs. Hits show the **indexer** name; warnings from search (if returned) appear above results.
 - If no native/hub indexers are ready, the page shows an empty state pointing admins to **Admin → Arr**.
 - Sending to qBit / Transmission / SABnzbd / NZBGet / debrid is **librarian or admin** only.
+- Before forwarding a magnet, Oneirodex removes tracker, web-seed, source, explicit-peer, and unrecognized query fields. Some private-tracker magnets may not resolve through Acquire; add those directly in the configured client when needed. This input filter does not replace network egress controls for the client container.

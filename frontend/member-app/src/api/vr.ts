@@ -1,11 +1,28 @@
 import { deleteJson, getJson, putJson } from './client'
 
+declare global {
+  interface Window {
+    odPwaPrivacyReady?: Promise<boolean>
+  }
+}
+
+export async function requirePrivateVrControl(signal?: AbortSignal) {
+  const ready = await window.odPwaPrivacyReady
+  const worker = navigator.serviceWorker?.controller
+  const legacy = worker && new URL(worker.scriptURL, location.href).pathname === '/vr/sw.js'
+  if (signal?.aborted) throw new DOMException('Request cancelled', 'AbortError')
+  if (ready === false || (ready !== true && legacy)) {
+    throw new Error('Reconnect and reload this page before opening the VR library.')
+  }
+}
+
 export async function fetchVrCatalog({
   signal,
   page = 1,
   perPage = 48,
   vrCompat = '',
 }: LooseProps = {}) {
+  await requirePrivateVrControl(signal)
   const params = new URLSearchParams({
     page: String(page),
     per_page: String(perPage),
@@ -15,6 +32,7 @@ export async function fetchVrCatalog({
 }
 
 export async function fetchVrGame(gameUuid: any, { signal }: LooseProps = {}) {
+  await requirePrivateVrControl(signal)
   return getJson(`/api/vr/games/${encodeURIComponent(gameUuid)}`, {
     signal,
     label: 'vr/games',

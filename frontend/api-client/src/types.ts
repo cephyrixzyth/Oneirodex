@@ -1,7 +1,13 @@
 /** Shapes aligned with docs/openapi/openapi.json components.schemas */
 
 export type ApiTokenScope =
-  'read:library' | 'read:social' | 'write:presence' | 'write:download' | 'write:library' | 'admin'
+  | 'read:library'
+  | 'read:social'
+  | 'write:presence'
+  | 'write:download'
+  | 'write:library'
+  | 'write:saves'
+  | 'admin'
 
 export type ApiTokenPreset = 'companion' | 'thin'
 
@@ -80,16 +86,22 @@ export interface SearchResultItem {
   [key: string]: unknown
 }
 
-export interface SearchResponse {
+export interface SearchResultEnvelope {
   results?: SearchResultItem[]
   games?: SearchResultItem[]
   [key: string]: unknown
 }
 
+export type SearchResponse = SearchResultItem[] | SearchResultEnvelope
+
 export interface CollectionSummary {
   id: number
   name: string
   [key: string]: unknown
+}
+
+export interface CollectionListResponse {
+  collections: CollectionSummary[]
 }
 
 export interface UpdatesInboxItem {

@@ -3,6 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+import json
+import os
+from cryptography.fernet import Fernet
 from flask import Flask
 from flask_login import LoginManager, UserMixin
 from flask_wtf.csrf import CSRFProtect, generate_csrf
@@ -17,7 +20,15 @@ class ReviewUser(UserMixin):
 
 
 @pytest.fixture
-def harness(monkeypatch):
+def harness(monkeypatch, tmp_path):
+    from oneirodex.utils.secret_store import read_global_secret
+    keyring = tmp_path / 'test-keyring.json'
+    keyring.write_text(json.dumps({
+        'active_key_id': 'test', 'keys': {'test': Fernet.generate_key().decode('ascii')},
+    }), encoding='utf-8')
+    if os.name != 'nt':
+        keyring.chmod(0o600)
+    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(keyring))
     app = Flask(__name__)
     app.config.update(TESTING=True, SECRET_KEY='smtp-api-test-only')
     manager = LoginManager(app)
@@ -40,6 +51,7 @@ def harness(monkeypatch):
         value['_user_id'] = 'admin'
         value['_fresh'] = True
     token = client.get('/csrf').text
+    row.read_password = lambda: read_global_secret(row, 'smtp_password')
     return client, row, session, {'X-CSRFToken': token}
 
 
@@ -87,7 +99,8 @@ def test_replace_password_never_echoes_it(harness):
     data['smtp_password'] = 'replacement-test-secret'
     response = client.put('/api/admin/smtp/settings', json=data, headers=headers)
     assert response.status_code == 200
-    assert row.smtp_password == data['smtp_password']
+    assert row.smtp_password.startswith('odrc:v1:')
+    assert row.read_password() == data['smtp_password']
     assert data['smtp_password'] not in response.text
 
 

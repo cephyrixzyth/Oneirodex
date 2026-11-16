@@ -1,14 +1,84 @@
 """Native FastAPI read APIs for household chat surfaces."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
+
+_CHAT_MESSAGE_JSON_MAX_BYTES = 64 * 1024
+_CHAT_MESSAGE_MAX_ATTACHMENT_IDS = 5
+
+
+class _ChatMessageBodyTooLarge(Exception):
+    pass
+
+
+async def _read_chat_message_json(request: Request):
+    """Read a message payload without buffering or parsing an unbounded body."""
+    declared = request.headers.get('content-length')
+    if declared is not None:
+        try:
+            declared_size = int(declared)
+        except ValueError:
+            declared_size = None
+        if declared_size is not None and declared_size > _CHAT_MESSAGE_JSON_MAX_BYTES:
+            raise _ChatMessageBodyTooLarge
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > _CHAT_MESSAGE_JSON_MAX_BYTES:
+            raise _ChatMessageBodyTooLarge
+        body.extend(chunk)
+    import json
+
+    return json.loads(bytes(body) or b'{}')
+
+
+def _chat_body_too_large_response(flask_app, request, auth):
+    from oneirodex.utils.api_contract import api_error_payload
+    from oneirodex.utils.security_headers import security_header_values
+
+    body, status = api_error_payload(
+        'Request body is too large.', code='payload_too_large', status=413,
+    )
+    response = JSONResponse(body, status_code=status)
+    if auth.should_set_session_cookie:
+        from .oidc_status import _set_session_cookie
+
+        _set_session_cookie(response, flask_app, auth)
+    for key, value in security_header_values(flask_app.config).items():
+        response.headers.setdefault(key, value)
+    return response
+
+
+def _validated_attachment_ids(payload: dict) -> list[int]:
+    raw_ids = payload.get('attachment_ids')
+    if raw_ids is None:
+        return []
+    if not isinstance(raw_ids, list):
+        raise ValueError('attachment_ids must be a list')
+    if len(raw_ids) > _CHAT_MESSAGE_MAX_ATTACHMENT_IDS:
+        raise ValueError(f'Max {_CHAT_MESSAGE_MAX_ATTACHMENT_IDS} attachments per message')
+
+    attachment_ids = []
+    for value in raw_ids:
+        if isinstance(value, bool) or not isinstance(value, (int, str)):
+            raise ValueError('Invalid attachment_ids')
+        try:
+            attachment_id = int(value)
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError('Invalid attachment_ids') from None
+        if attachment_id <= 0:
+            raise ValueError('Invalid attachment_ids')
+        attachment_ids.append(attachment_id)
+    return attachment_ids
 
 
 async def _bounded_form(request: Request, max_body_bytes: int):
@@ -75,6 +145,15 @@ class ChatReadData:
         if messages:
             mark_channel_read(channel_id, user.id, messages[-1]['id'])
         return {'messages': messages, 'channel': channel.to_dict()}
+
+    def channel_visible(self, user, channel_id: int) -> bool:
+        """Check channel access before validating query options, without read side effects."""
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.models import ChatChannel
+        from oneirodex.utils.chat import user_can_access_channel
+
+        channel = db.session.get(ChatChannel, channel_id)
+        return bool(channel and user_can_access_channel(user, channel))
 
     def search(self, user, query: str, *, limit: int):
         from oneirodex.utils.chat import search_messages
@@ -155,13 +234,7 @@ class ChatReadData:
                 parent_id = int(parent_raw)
             except (TypeError, ValueError):
                 raise ValueError('Invalid parent_message_id') from None
-        raw_ids = payload.get('attachment_ids') or []
-        if raw_ids and not isinstance(raw_ids, list):
-            raise ValueError('attachment_ids must be a list')
-        try:
-            attachment_ids = [int(value) for value in raw_ids] if raw_ids else []
-        except (TypeError, ValueError):
-            raise ValueError('Invalid attachment_ids') from None
+        attachment_ids = _validated_attachment_ids(payload)
         message = post_message(
             channel, user, payload.get('body') or '', parent_message_id=parent_id,
             attachment_ids=attachment_ids,
@@ -183,6 +256,7 @@ class ChatReadData:
 
     def attachment(self, user, file_name: str):
         from pathlib import Path
+        from sqlalchemy import select
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import ChatMessageAttachment
@@ -190,7 +264,7 @@ class ChatReadData:
         from oneirodex.utils.chat_attachments import attachments_dir
 
         row = db.session.execute(
-            db.select(ChatMessageAttachment).where(
+            select(ChatMessageAttachment).where(
                 ChatMessageAttachment.file_name == file_name
             )
         ).scalars().first()
@@ -220,6 +294,8 @@ class ChatReadData:
         return space_member_rows(space)
 
     def space_invites(self, space_id: int):
+        from sqlalchemy import select
+
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import ChatSpace, ChatSpaceInvite
 
@@ -227,7 +303,7 @@ class ChatReadData:
         if space is None:
             return None
         rows = db.session.execute(
-            db.select(ChatSpaceInvite).where(ChatSpaceInvite.space_id == space.id)
+            select(ChatSpaceInvite).where(ChatSpaceInvite.space_id == space.id)
         ).scalars().all()
         return [invite.to_dict() for invite in rows]
 
@@ -304,6 +380,14 @@ class ChatReadData:
         row = channel.to_dict()
         row['room'] = voice_room_name(channel.id)
         return {'room': voice_room_name(channel.id), 'channel': row}
+
+    def voice_space_visible(self, user, space_id: int) -> bool:
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.models import ChatSpace
+        from oneirodex.utils.chat_spaces import user_is_space_member
+
+        space = db.session.get(ChatSpace, space_id)
+        return bool(space is not None and user_is_space_member(user, space))
 
     def create_space_invite(self, space_id: int, user_id: int, expires_at, max_uses):
         from oneirodex.runtime_native.db_session import native_db as db
@@ -479,10 +563,10 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -521,7 +605,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/channels/{channel_id}/mute')
+    @router.post('/api/chat/channels/{channel_id:int}/mute')
     async def chat_channel_mute(request: Request, channel_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -544,14 +628,14 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 from pydantic import ValidationError
                 from oneirodex.schemas.chat import MuteChannelBody
                 from oneirodex.utils.validation import format_validation_errors
 
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -655,11 +739,11 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/channels/{channel_id}/archive')
+    @router.post('/api/chat/channels/{channel_id:int}/archive')
     def chat_channel_archive(channel_id: int, request: Request):
         return channel_action(request, channel_id, 'archive')
 
-    @router.post('/api/chat/channels/{channel_id}/leave')
+    @router.post('/api/chat/channels/{channel_id:int}/leave')
     def chat_channel_leave(channel_id: int, request: Request):
         return channel_action(request, channel_id, 'leave')
 
@@ -686,10 +770,10 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -769,7 +853,7 @@ def create_chat_reads_router(
                     response = JSONResponse(body, status_code=status)
                 else:
                     try:
-                        upload = form.get('file') or form.get('image')
+                        upload = first_form_upload(form, 'file') or first_form_upload(form, 'image')
                         file = None
                         if isinstance(upload, StarletteUploadFile):
                             raw = await upload.read(MAX_UPLOAD_BYTES + 1)
@@ -777,8 +861,8 @@ def create_chat_reads_router(
                                 stream=BytesIO(raw), filename=upload.filename,
                                 content_type=upload.content_type,
                             )
-                        slug = str(form.get('slug') or '')
-                        label = str(form.get('label') or '')
+                        slug = str(first_form_value(form, 'slug') or '')
+                        label = str(first_form_value(form, 'label') or '')
                     finally:
                         await form.close()
                     try:
@@ -813,7 +897,16 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/channels/{channel_id}/attachments')
+    @router.options('/api/chat/channels/{channel_id:int}/attachments')
+    async def chat_attachment_upload_options(channel_id: int):
+        # Flask automatically exposes OPTIONS for the legacy POST endpoint.
+        # Chat probes this route to decide whether to show attachment controls.
+        return Response(
+            status_code=200, headers={'Allow': 'OPTIONS, POST'},
+            media_type='text/html',
+        )
+
+    @router.post('/api/chat/channels/{channel_id:int}/attachments')
     async def chat_attachment_upload(request: Request, channel_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -855,7 +948,7 @@ def create_chat_reads_router(
                     response = JSONResponse(body, status_code=status)
                 else:
                     try:
-                        upload = form.get('file') or form.get('attachment')
+                        upload = first_form_upload(form, 'file') or first_form_upload(form, 'attachment')
                         file = None
                         if isinstance(upload, StarletteUploadFile):
                             raw = await upload.read(MAX_ATTACHMENT_BYTES + 1)
@@ -970,7 +1063,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/channels/{channel_id}/messages')
+    @router.post('/api/chat/channels/{channel_id:int}/messages')
     async def chat_message_post(request: Request, channel_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -993,35 +1086,8 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
-                except (TypeError, ValueError):
-                    payload = {}
-                if not isinstance(payload, dict):
-                    payload = {}
-                try:
-                    message = data.post_message(auth.user, channel_id, payload)
-                    if message is None:
-                        from oneirodex.utils.api_contract import api_error_payload
-
-                        body, status = api_error_payload('Not found', code='not_found')
-                        response = JSONResponse(body, status_code=status)
-                    else:
-                        from oneirodex.utils.api_contract import api_ok_payload
-
-                        response = JSONResponse(
-                            api_ok_payload({'message': message}), status_code=201,
-                        )
-                except (ValueError, PermissionError) as exc:
-                    from oneirodex.runtime_native.db_session import native_db as db
-                    from oneirodex.utils.api_contract import api_error_payload
-
-                    db.session.rollback()
-                    code = 'forbidden' if isinstance(exc, PermissionError) else 'bad_request'
-                    body, status = api_error_payload(str(exc), code=code)
-                    response = JSONResponse(body, status_code=status)
+                    channel_visible = data.channel_visible(auth.user, channel_id)
                 except Exception:  # noqa: BLE001 — keep persistence detail private
                     from oneirodex.runtime_native.db_session import native_db as db
                     from oneirodex.utils.api_contract import api_error_payload
@@ -1031,6 +1097,59 @@ def create_chat_reads_router(
                         'Could not post chat message', code='internal',
                     )
                     response = JSONResponse(body, status_code=status)
+                if response is None and not channel_visible:
+                    from oneirodex.utils.api_contract import api_error_payload
+
+                    body, status = api_error_payload('Not found', code='not_found')
+                    response = JSONResponse(body, status_code=status)
+                elif response is None:
+                    try:
+                        payload = await _read_chat_message_json(request)
+                    except _ChatMessageBodyTooLarge:
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        body, status = api_error_payload(
+                            'Request body is too large.', code='payload_too_large',
+                        )
+                        response = JSONResponse(body, status_code=status)
+                    except (TypeError, ValueError):
+                        payload = {}
+                if response is None:
+                    if not isinstance(payload, dict):
+                        payload = {}
+                    try:
+                        attachment_ids = _validated_attachment_ids(payload)
+                        if 'attachment_ids' in payload:
+                            payload['attachment_ids'] = attachment_ids
+                        message = data.post_message(auth.user, channel_id, payload)
+                        if message is None:
+                            from oneirodex.utils.api_contract import api_error_payload
+
+                            body, status = api_error_payload('Not found', code='not_found')
+                            response = JSONResponse(body, status_code=status)
+                        else:
+                            from oneirodex.utils.api_contract import api_ok_payload
+
+                            response = JSONResponse(
+                                api_ok_payload({'message': message}), status_code=201,
+                            )
+                    except (ValueError, PermissionError) as exc:
+                        from oneirodex.runtime_native.db_session import native_db as db
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        db.session.rollback()
+                        code = 'forbidden' if isinstance(exc, PermissionError) else 'bad_request'
+                        body, status = api_error_payload(str(exc), code=code)
+                        response = JSONResponse(body, status_code=status)
+                    except Exception:  # noqa: BLE001 — keep persistence detail private
+                        from oneirodex.runtime_native.db_session import native_db as db
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        db.session.rollback()
+                        body, status = api_error_payload(
+                            'Could not post chat message', code='internal',
+                        )
+                        response = JSONResponse(body, status_code=status)
             if auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 
@@ -1041,7 +1160,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/messages/{message_id}/reactions')
+    @router.post('/api/chat/messages/{message_id:int}/reactions')
     async def chat_message_reaction(request: Request, message_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1064,10 +1183,10 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1147,7 +1266,10 @@ def create_chat_reads_router(
                             path, media_type=mime, filename=original_name,
                             content_disposition_type='attachment' if download else 'inline',
                         )
-                        response.headers['Cache-Control'] = 'private, max-age=3600'
+                        # Attachment access is channel-ACL scoped. Prevent a
+                        # shared browser profile from reusing one account's
+                        # cached bytes after an account switch.
+                        response.headers['Cache-Control'] = 'private, no-store'
                 except Exception:  # noqa: BLE001 — keep storage detail private
                     from oneirodex.utils.api_contract import api_error_payload
 
@@ -1190,10 +1312,10 @@ def create_chat_reads_router(
             elif response is None:
                 response = _admin_auth_error(flask_app, request, login_manager, auth)
             if response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1239,7 +1361,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/spaces/{space_id}/channels')
+    @router.post('/api/chat/spaces/{space_id:int}/channels')
     async def chat_space_channel_create(request: Request, space_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1264,10 +1386,10 @@ def create_chat_reads_router(
             elif response is None:
                 response = _admin_auth_error(flask_app, request, login_manager, auth)
             if response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1307,7 +1429,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.api_route('/api/chat/spaces/{space_id}/members', methods=['GET', 'HEAD'])
+    @router.api_route('/api/chat/spaces/{space_id:int}/members', methods=['GET', 'HEAD'])
     def chat_space_members(request: Request, space_id: int):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -1357,7 +1479,7 @@ def create_chat_reads_router(
                 response.body = b''
             return response
 
-    @router.post('/api/chat/spaces/{space_id}/members')
+    @router.post('/api/chat/spaces/{space_id:int}/members')
     async def chat_space_member_add(request: Request, space_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1382,14 +1504,14 @@ def create_chat_reads_router(
             elif response is None:
                 response = _admin_auth_error(flask_app, request, login_manager, auth)
             if response is None:
-                import json
-
                 from pydantic import ValidationError
                 from oneirodex.schemas.chat_spaces import AddSpaceMemberBody
                 from oneirodex.utils.validation import format_validation_errors
 
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1425,7 +1547,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.delete('/api/chat/spaces/{space_id}/members/{user_id}')
+    @router.delete('/api/chat/spaces/{space_id:int}/members/{user_id:int}')
     def chat_space_member_remove(request: Request, space_id: int, user_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1478,7 +1600,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.api_route('/api/chat/spaces/{space_id}/invites', methods=['GET', 'HEAD'])
+    @router.api_route('/api/chat/spaces/{space_id:int}/invites', methods=['GET', 'HEAD'])
     def chat_space_invites(request: Request, space_id: int):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -1530,7 +1652,7 @@ def create_chat_reads_router(
                 response.body = b''
             return response
 
-    @router.post('/api/chat/spaces/{space_id}/invites')
+    @router.post('/api/chat/spaces/{space_id:int}/invites')
     async def chat_space_invite_create(request: Request, space_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1555,11 +1677,12 @@ def create_chat_reads_router(
             elif response is None:
                 response = _admin_auth_error(flask_app, request, login_manager, auth)
             if response is None:
-                import json
                 from datetime import datetime, timedelta, timezone
 
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1626,7 +1749,7 @@ def create_chat_reads_router(
                 response.headers.setdefault(key, value)
             return response
 
-    @router.post('/api/chat/spaces/invites/{invite_id}/revoke')
+    @router.post('/api/chat/spaces/invites/{invite_id:int}/revoke')
     def chat_space_invite_revoke(request: Request, invite_id: int):
         from .csrf_compat import csrf_error_response
 
@@ -1693,10 +1816,10 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             elif response is None:
-                import json
-
                 try:
-                    payload = json.loads(await request.body() or b'{}')
+                    payload = await _read_chat_message_json(request)
+                except _ChatMessageBodyTooLarge:
+                    return _chat_body_too_large_response(flask_app, request, auth)
                 except (TypeError, ValueError):
                     payload = {}
                 if not isinstance(payload, dict):
@@ -1752,18 +1875,27 @@ def create_chat_reads_router(
                 response = JSONResponse(body, status_code=status)
             else:
                 try:
-                    payload = data.voice_room(auth.user, space_id, channel_id)
-                    if payload is None:
+                    if (
+                        hasattr(data, 'voice_space_visible')
+                        and not data.voice_space_visible(auth.user, space_id)
+                    ):
                         from oneirodex.utils.api_contract import api_error_payload
 
-                        body, status = api_error_payload(
-                            'Voice channel not found', code='not_found',
-                        )
+                        body, status = api_error_payload('Space not found', code='not_found')
                         response = JSONResponse(body, status_code=status)
                     else:
-                        from oneirodex.utils.api_contract import api_ok_payload
+                        payload = data.voice_room(auth.user, space_id, channel_id)
+                        if payload is None:
+                            from oneirodex.utils.api_contract import api_error_payload
 
-                        response = JSONResponse(api_ok_payload(payload))
+                            body, status = api_error_payload(
+                                'Voice channel not found', code='not_found',
+                            )
+                            response = JSONResponse(body, status_code=status)
+                        else:
+                            from oneirodex.utils.api_contract import api_ok_payload
+
+                            response = JSONResponse(api_ok_payload(payload))
                 except Exception:  # noqa: BLE001 — keep the legacy read failure private
                     from oneirodex.utils.api_contract import api_error_payload
 
@@ -1826,7 +1958,7 @@ def create_chat_reads_router(
                 response.body = b''
             return response
 
-    @router.api_route('/api/chat/channels/{channel_id}/messages', methods=['GET', 'HEAD'])
+    @router.api_route('/api/chat/channels/{channel_id:int}/messages', methods=['GET', 'HEAD'])
     def chat_messages(request: Request, channel_id: int):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
@@ -1845,12 +1977,17 @@ def create_chat_reads_router(
                     detail={'required_scope': 'read:social'},
                 )
                 response = JSONResponse(body, status_code=status)
+            elif not data.channel_visible(auth.user, channel_id):
+                from oneirodex.utils.api_contract import api_error_payload
+
+                body, status = api_error_payload('Not found', code='not_found')
+                response = JSONResponse(body, status_code=status)
             else:
                 try:
                     from oneirodex.utils.chat import parse_chat_limit
 
                     limit = parse_chat_limit(
-                        request.query_params.get('limit'), default=50, maximum=100,
+                        first_query_value(request.query_params, 'limit'), default=50, maximum=100,
                     )
                 except ValueError as exc:
                     from oneirodex.utils.api_contract import api_error_payload
@@ -1858,8 +1995,8 @@ def create_chat_reads_router(
                     body, status = api_error_payload(str(exc), code='bad_request')
                     response = JSONResponse(body, status_code=status)
                 else:
-                    before = request.query_params.get('before')
-                    since = request.query_params.get('since')
+                    before = first_query_value(request.query_params, 'before')
+                    since = first_query_value(request.query_params, 'since')
                     before_id = int(before) if before and str(before).isdigit() else None
                     since_id = int(since) if since and str(since).isdigit() else None
                     try:
@@ -1913,12 +2050,12 @@ def create_chat_reads_router(
                 )
                 response = JSONResponse(body, status_code=status)
             else:
-                query = (request.query_params.get('q') or '').strip()
+                query = (first_query_value(request.query_params, 'q') or '').strip()
                 try:
                     from oneirodex.utils.chat import parse_chat_limit
 
                     limit = parse_chat_limit(
-                        request.query_params.get('limit'), default=20, maximum=50,
+                        first_query_value(request.query_params, 'limit'), default=20, maximum=50,
                     )
                     response = JSONResponse({
                         'results': data.search(auth.user, query, limit=limit), 'q': query,

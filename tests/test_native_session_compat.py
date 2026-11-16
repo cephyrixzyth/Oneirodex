@@ -172,4 +172,3 @@ def test_module_has_no_flask_or_flask_wtf_imports() -> None:
     )
     assert "flask" not in imported
     assert "flask_wtf" not in imported
-

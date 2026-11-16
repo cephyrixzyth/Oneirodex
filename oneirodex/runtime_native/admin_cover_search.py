@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
@@ -55,10 +56,15 @@ def create_admin_cover_search_router(
             if auth.token is None else None
         if csrf is not None:
             return _finish(csrf, flask_app, auth, scope)
+        body = await _json_object(request)
+        from .bounded_request_body import BODY_TOO_LARGE
+        if body is BODY_TOO_LARGE:
+            response = _api_error('Request body is too large.', 'payload_too_large')
+            return _finish(response, flask_app, auth, scope)
         try:
             from oneirodex.schemas.admin_images import CoverSearchBody
             from oneirodex.utils.validation import format_validation_errors
-            model = CoverSearchBody.model_validate(await _json_object(request))
+            model = CoverSearchBody.model_validate(body)
         except ValidationError as exc:
             response = _validation_error(exc)
             return _finish(response, flask_app, auth, scope)
@@ -77,7 +83,14 @@ def create_admin_cover_search_router(
             limit = min(int(model.limit or model.limit_per_provider or 8), 20)
         except (TypeError, ValueError):
             limit = 8
-        result = data.search(query, providers, limit)
+        try:
+            result = await run_in_threadpool(data.search, query, providers, limit)
+        except Exception:
+            flask_app.logger.exception('Cover search failed')
+            return _finish(
+                _api_error('Cover search failed. Try again.', 'internal'),
+                flask_app, auth, scope,
+            )
         result = {
             **result, 'game_uuid': game_uuid,
             'image_save_path': data.image_path(flask_app.config),
@@ -97,18 +110,30 @@ def create_admin_cover_search_router(
         if csrf is not None:
             return _finish(csrf, flask_app, auth, scope)
         body = await _json_object(request)
+        from .bounded_request_body import BODY_TOO_LARGE
+        if body is BODY_TOO_LARGE:
+            response = _api_error('Request body is too large.', 'payload_too_large')
+            return _finish(response, flask_app, auth, scope)
         limit_games = _bounded_int(body.get('limit_games') or body.get('limit'), 25, 100)
         limit_per = _bounded_int(body.get('limit_per_provider'), 5, 15)
-        result = data.batch_search(
-            library_uuid=(body.get('library_uuid') or '').strip() or None,
-            platform=(body.get('platform') or body.get('system') or '').strip() or None,
-            service=(body.get('service') or '').strip() or None,
-            missing_cover=bool(body.get('missing_cover', True)),
-            limit_games=limit_games,
-            providers=_providers(body.get('providers')),
-            limit_per_provider=limit_per,
-            config=flask_app.config,
-        )
+        try:
+            result = await run_in_threadpool(
+                data.batch_search,
+                library_uuid=(body.get('library_uuid') or '').strip() or None,
+                platform=(body.get('platform') or body.get('system') or '').strip() or None,
+                service=(body.get('service') or '').strip() or None,
+                missing_cover=bool(body.get('missing_cover', True)),
+                limit_games=limit_games,
+                providers=_providers(body.get('providers')),
+                limit_per_provider=limit_per,
+                config=flask_app.config,
+            )
+        except Exception:
+            flask_app.logger.exception('Batch cover search failed')
+            return _finish(
+                _api_error('Cover search failed. Try again.', 'internal'),
+                flask_app, auth, scope,
+            )
         return _finish(JSONResponse(result), flask_app, auth, scope)
 
     return router
@@ -142,8 +167,14 @@ def _authorize(request, app, find_user, find_token, commit_token_touch,
 
 
 async def _json_object(request):
+    import json
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+    raw_body = await read_bounded_body(request, 64 * 1024)
+    if raw_body is BODY_TOO_LARGE:
+        return BODY_TOO_LARGE
     try:
-        body = await request.json()
+        body = json.loads(raw_body or b'null')
     except Exception:
         return {}
     return body if isinstance(body, dict) else {}

@@ -6,17 +6,19 @@ from sqlalchemy import select
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.utils.email_rendering import render_invite_email
+from oneirodex.utils.smtp_transport import open_smtp_connection, upgrade_smtp_connection
 
 def get_smtp_settings():
     """Get SMTP settings from database."""
     settings = global_settings_row()
+    from oneirodex.utils.secret_store import read_global_secret
     
     if settings and settings.smtp_enabled:
         return {
             'MAIL_SERVER': settings.smtp_server,
             'MAIL_PORT': settings.smtp_port,
             'MAIL_USERNAME': settings.smtp_username,
-            'MAIL_PASSWORD': settings.smtp_password,
+            'MAIL_PASSWORD': read_global_secret(settings, 'smtp_password'),
             'MAIL_USE_TLS': settings.smtp_use_tls,
             'MAIL_DEFAULT_SENDER': settings.smtp_default_sender,
             'SMTP_ENABLED': settings.smtp_enabled,
@@ -58,6 +60,8 @@ def is_smtp_config_valid():
         port = int(smtp_settings['MAIL_PORT'])
         if port <= 0 or port > 65535:
             return False, "Invalid port number"
+        if port == 465 and not smtp_settings['MAIL_USE_TLS']:
+            return False, "TLS is required for SMTP port 465"
     except (TypeError, ValueError):
         return False, "Port must be a valid number"
     
@@ -150,14 +154,16 @@ def send_email(to, subject, template):
         
         print("Attempting to send email...")
         print("=== SMTP Transaction Start ===")
-        with smtplib.SMTP(mail_server, mail_port, timeout=30) as server:
+        with open_smtp_connection(
+            mail_server, mail_port, use_tls=smtp_settings['MAIL_USE_TLS'], timeout=30
+        ) as server:
             print("1. Server connection established")
             # No smtplib debug output: it prints the AUTH exchange, which
             # carries the base64 username and password.
             
-            if smtp_settings['MAIL_USE_TLS']:
+            if smtp_settings['MAIL_USE_TLS'] and int(mail_port) != 465:
                 print("2. Starting TLS handshake")
-                server.starttls()
+                upgrade_smtp_connection(server, mail_port, use_tls=True)
                 print("3. TLS handshake completed")
             
             print("4. Attempting login")
@@ -232,9 +238,11 @@ def send_email_quiet(to, subject, html_body, *, preflight=False, audit_user=None
         msg['From'] = smtp_settings['MAIL_DEFAULT_SENDER']
         msg['To'] = to
 
-        with smtplib.SMTP(mail_server, mail_port, timeout=30) as server:
-            if smtp_settings['MAIL_USE_TLS']:
-                server.starttls()
+        with open_smtp_connection(
+            mail_server, mail_port, use_tls=smtp_settings['MAIL_USE_TLS'], timeout=30
+        ) as server:
+            if smtp_settings['MAIL_USE_TLS'] and int(mail_port) != 465:
+                upgrade_smtp_connection(server, mail_port, use_tls=True)
             server.login(smtp_settings['MAIL_USERNAME'], smtp_settings['MAIL_PASSWORD'])
             server.send_message(msg)
 

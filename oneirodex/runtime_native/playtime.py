@@ -10,7 +10,9 @@ from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .oidc_status import _set_session_cookie
-from .request_auth import request_auth_context
+from .request_auth import request_auth_context, require_bearer_scope
+
+_MAX_JSON_BODY_BYTES = 64 * 1024
 
 
 class PlaytimeData:
@@ -20,11 +22,14 @@ class PlaytimeData:
 
     def start(self, user, body):
         from oneirodex.utils.playtime import start_session
+        from oneirodex.runtime_native.db_session import native_db as db
 
-        return start_session(
+        row = start_session(
             user.id, body.game_uuid, client=body.client,
             config=self.flask_app.config if self.flask_app is not None else None,
         )
+        db.session.refresh(row)
+        return row
 
     def session(self, user, session_id: int):
         from oneirodex.runtime_native.db_session import native_db as db
@@ -35,16 +40,22 @@ class PlaytimeData:
 
     def heartbeat(self, session):
         from oneirodex.utils.playtime import heartbeat_session
+        from oneirodex.runtime_native.db_session import native_db as db
 
-        return heartbeat_session(session)
+        row = heartbeat_session(session)
+        db.session.refresh(row)
+        return row
 
     def stop(self, session):
         from oneirodex.utils.playtime import end_session
+        from oneirodex.runtime_native.db_session import native_db as db
 
-        return end_session(
+        row = end_session(
             session,
             config=self.flask_app.config if self.flask_app is not None else None,
         )
+        db.session.refresh(row)
+        return row
 
     def me(self, user):
         from sqlalchemy import select
@@ -165,10 +176,23 @@ def create_playtime_router(
                     is_json = content_type == 'application/json' or (
                         content_type.startswith('application/') and content_type.endswith('+json')
                     )
-                    payload = await request.json() if is_json else {}
-                    if not isinstance(payload, dict):
+                    if is_json:
+                        from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+                        raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+                        if raw_body is BODY_TOO_LARGE:
+                            response = _api_error('Request body is too large.', 'payload_too_large')
+                            payload = None
+                        else:
+                            import json
+
+                            payload = json.loads(raw_body or b'{}')
+                    else:
                         payload = {}
-                    body = StartPlaytimeSessionBody.model_validate(payload)
+                    if response is None:
+                        if payload is None:
+                            payload = {}
+                        body = StartPlaytimeSessionBody.model_validate(payload)
                 except ValidationError as exc:
                     response = _api_error(
                         'Invalid request.', 'unprocessable',
@@ -248,7 +272,9 @@ def create_playtime_router(
                          load_user_id, login_manager)
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
             if response is None:
-                response = _json_response(flask_app, data.me(auth.user))
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    response = _json_response(flask_app, data.me(auth.user))
             _finish(response, flask_app, auth)
             if request.method == 'HEAD':
                 response.body = b''
@@ -261,6 +287,8 @@ def create_playtime_router(
             auth = _auth(request, flask_app, find_user, find_token, commit_token_touch,
                          load_user_id, login_manager)
             response = _login_redirect(flask_app, request, login_manager, auth) if auth.user is None else None
+            if response is None:
+                response = require_bearer_scope(auth, 'read:library')
             if response is None:
                 _row, payload = data.game(auth.user, game_uuid)
                 response = (
@@ -281,11 +309,13 @@ def create_playtime_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                svg, error = data.share_svg(auth.user, game_uuid)
-                response = (
-                    _api_error(error[0], error[1]) if error
-                    else Response(content=svg, media_type='image/svg+xml')
-                )
+                response = require_bearer_scope(auth, 'read:library')
+                if response is None:
+                    svg, error = data.share_svg(auth.user, game_uuid)
+                    response = (
+                        _api_error(error[0], error[1]) if error
+                        else Response(content=svg, media_type='image/svg+xml')
+                    )
             _finish(response, flask_app, auth)
             if request.method == 'HEAD':
                 response.body = b''

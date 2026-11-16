@@ -81,3 +81,15 @@ def test_scan_match_config_write_preserves_raw_response_shape():
     assert response.status_code == 200
     assert response.json() == {'max_depth': 5, 'success': True}
     assert data.saved_scan == {'max_depth': 5}
+
+
+def test_policy_config_head_preserves_legacy_non_get_validation():
+    client = make_client()
+    for path in (
+        '/api/admin/remote-play/config',
+        '/api/admin/scan-match/config',
+    ):
+        response = client.head(path)
+        assert response.status_code == 400
+        assert response.content == b''
+        assert response.headers['content-length'] == '118'

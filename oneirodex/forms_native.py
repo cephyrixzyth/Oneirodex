@@ -24,6 +24,8 @@ def normalize_tile_percent(raw) -> str:
 
 def stored_preference_formdata(prefs) -> dict:
     return {
+        # Match the legacy Preferences form and UserPreference model default
+        # when a user has not persisted a page-size choice yet.
         'items_per_page': str(getattr(prefs, 'items_per_page', None) or 50),
         'default_sort': getattr(prefs, 'default_sort', None) or 'name',
         'default_sort_order': getattr(prefs, 'default_sort_order', None) or 'asc',
@@ -35,6 +37,16 @@ def stored_preference_formdata(prefs) -> dict:
         'browser_player_engine': getattr(prefs, 'browser_player_engine', None) or '',
         'preferred_game_locale': getattr(prefs, 'preferred_game_locale', None) or 'en-US',
     }
+
+
+def preference_update_formdata(prefs, payload) -> dict:
+    """Merge a partial preferences update using the legacy no-row defaults."""
+    values = stored_preference_formdata(prefs)
+    for key in values:
+        if key in payload:
+            raw = payload[key]
+            values[key] = 'true' if raw is True else 'false' if raw is False else str(raw)
+    return values
 
 
 class UserPreferencesForm(Form):
@@ -120,4 +132,5 @@ class UserPreferencesForm(Form):
 
 __all__ = [
     'UserPreferencesForm', 'normalize_tile_percent', 'stored_preference_formdata',
+    'preference_update_formdata',
 ]

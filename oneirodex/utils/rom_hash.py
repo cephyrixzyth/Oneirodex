@@ -6,11 +6,13 @@ import hashlib
 import os
 import tempfile
 import zlib
+import zipfile
 from pathlib import Path
 from typing import BinaryIO
 
 from oneirodex.utils.rom_archive import ARCHIVE_EXTENSIONS, PLATFORM_DUMP_SUFFIXES
 from oneirodex.utils.security import is_plain_file_within
+from oneirodex.utils.rom_archive_types import ArchiveRomError
 
 # Prefer single-file ROM dumps when a library path is a folder.
 _ROM_SUFFIXES = frozenset({
@@ -38,8 +40,23 @@ def resolve_hashable_file(path: str | Path) -> Path | None:
     if root is None:
         return None
     try:
+        # Reject a path that reaches the file through a symlinked directory.
+        # Checking only the final file misses e.g. ``library/alias/game.nes``
+        # when ``alias`` points outside the library: the file itself is not a
+        # symlink and resolving against its lexical parent makes the escape
+        # look contained.
+        absolute = Path(os.path.abspath(root))
+        for component in (absolute, *absolute.parents):
+            if component.is_symlink():
+                return None
+            is_junction = getattr(component, 'is_junction', None)
+            if callable(is_junction) and is_junction():
+                return None
         if root.is_file():
-            return root
+            # A Game may point directly at a planted symlink, not only at a
+            # directory containing one. Keep the direct-file case under the
+            # same plain-file rule used while resolving folder contents.
+            return root if is_plain_file_within(root.parent, root) else None
         if not root.is_dir():
             return None
     except OSError:
@@ -160,13 +177,13 @@ def _select_inner_hash_members(
 
 
 def _hash_zip_member(archive_path: str, member: str) -> dict[str, str] | None:
-    import zipfile
+    from oneirodex.utils.rom_archive_zip import open_bounded_zip
 
     try:
-        with zipfile.ZipFile(archive_path, 'r') as archive:
+        with open_bounded_zip(archive_path) as archive:
             with archive.open(member) as handle:
                 return hash_fileobj(handle)
-    except (OSError, KeyError, zipfile.BadZipFile):
+    except (OSError, KeyError, zipfile.BadZipFile, ArchiveRomError):
         return None
 
 

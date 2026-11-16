@@ -185,7 +185,13 @@ def batch_clear_unmatched_folders():
             cleared += 1
         except Exception as exc:
             db.session.rollback()
-            results.append({'id': folder_id, 'ok': False, 'error': str(exc)})
+            current_app.logger.warning(
+                'batch unmatched clear failed (%s)', type(exc).__name__,
+            )
+            results.append({
+                'id': folder_id, 'ok': False,
+                'error': 'Could not clear unmatched folder',
+            })
 
     return api_ok({
         'cleared': cleared,
@@ -251,10 +257,26 @@ def batch_mark_unmatched_kind():
             marked += 1
         except ValueError as exc:
             db.session.rollback()
-            results.append({'id': folder_id, 'ok': False, 'error': str(exc)})
+            # Preserve the helper's two declared validation messages, but do
+            # not assume every ValueError raised downstream is user-safe.
+            safe_errors = {
+                'Unmatched folder path required',
+                'Unmatched folder has no library_uuid',
+            }
+            error = str(exc)
+            results.append({
+                'id': folder_id, 'ok': False,
+                'error': error if error in safe_errors else 'Could not mark unmatched folder kind',
+            })
         except Exception as exc:
             db.session.rollback()
-            results.append({'id': folder_id, 'ok': False, 'error': str(exc)})
+            current_app.logger.warning(
+                'batch unmatched kind update failed (%s)', type(exc).__name__,
+            )
+            results.append({
+                'id': folder_id, 'ok': False,
+                'error': 'Could not mark unmatched folder kind',
+            })
 
     return api_ok({
         'item_kind': kind,
@@ -297,7 +319,13 @@ def batch_fix_unmatched_duplicates():
             fixed += 1
         except Exception as exc:
             db.session.rollback()
-            results.append({'id': folder_id, 'ok': False, 'error': str(exc)})
+            current_app.logger.warning(
+                'batch duplicate fix failed (%s)', type(exc).__name__,
+            )
+            results.append({
+                'id': folder_id, 'ok': False,
+                'error': 'Could not update duplicate match',
+            })
 
     log_system_event(
         f"Batch duplicate fix {action} by {getattr(current_user, 'name', 'admin')}: {fixed}/{len(ids)}",
@@ -347,7 +375,13 @@ def batch_amend_unmatched_names():
             amended += 1
         except Exception as exc:
             db.session.rollback()
-            results.append({'id': folder_id, 'ok': False, 'error': str(exc)})
+            current_app.logger.warning(
+                'batch unmatched name amend failed (%s)', type(exc).__name__,
+            )
+            results.append({
+                'id': folder_id, 'ok': False,
+                'error': 'Could not amend unmatched folder',
+            })
 
     if isinstance(items, list) and items:
         if len(items) > UNMATCHED_BATCH_ID_CAP:

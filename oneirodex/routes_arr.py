@@ -46,7 +46,7 @@ from oneirodex.utils.module_status import (
 )
 from oneirodex.schemas.arr import ArrDownloadBody, ArrHardlinkPreviewBody
 from oneirodex.utils.quality_profiles import score_release_title
-from oneirodex.utils.security import validate_user_outbound_http_url
+from oneirodex.utils.security import validate_download_client_url
 from oneirodex.utils.validation import validate_body
 
 arr_bp = Blueprint('arr', __name__)
@@ -281,11 +281,10 @@ def arr_download(body: ArrDownloadBody):
     if not arr_module_enabled():
         return _arr_disabled()
     url = (body.download_url or body.url or '').strip()
-    if url.lower().startswith('http://') or url.lower().startswith('https://'):
-        ok, result = validate_user_outbound_http_url(url)
-        if not ok:
-            return api_error(result, code='bad_request')
-        url = result
+    ok, result = validate_download_client_url(url)
+    if not ok:
+        return api_error(result, code='bad_request')
+    url = result
     try:
         result = qbittorrent_add_url(url)
     except (RuntimeError, requests.RequestException) as exc:

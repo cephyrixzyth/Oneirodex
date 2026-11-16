@@ -1,4 +1,7 @@
 import pytest
+import os
+import json
+from cryptography.fernet import Fernet
 import json
 from unittest.mock import patch, Mock, MagicMock
 from uuid import uuid4
@@ -7,6 +10,17 @@ from oneirodex import create_app, db
 from oneirodex.models import User, GlobalSettings
 from oneirodex.utils.smtp_test import SMTPTester
 from sqlalchemy import select, delete
+
+
+@pytest.fixture(autouse=True)
+def reusable_secret_keyring(tmp_path, monkeypatch):
+    path = tmp_path / 'test-keyring.json'
+    path.write_text(json.dumps({
+        'active_key_id': 'test', 'keys': {'test': Fernet.generate_key().decode('ascii')},
+    }), encoding='utf-8')
+    if os.name != 'nt':
+        path.chmod(0o600)
+    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
 
 
 
@@ -67,6 +81,22 @@ def create_test_settings(db_session):
 
 class TestSmtpSettings:
     """Test the smtp_settings route."""
+
+    def test_post_invalid_json_preserves_bad_request(self, client, admin_user):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+            sess['_fresh'] = True
+
+        response = client.post(
+            '/admin/smtp_settings', data='not-json',
+            content_type='application/json',
+        )
+        assert response.status_code == 400
+        assert response.get_data(as_text=True) == (
+            '<!doctype html>\n<html lang=en>\n<title>400 Bad Request</title>\n'
+            '<h1>Bad Request</h1>\n'
+            '<p>The browser (or proxy) sent a request that this server could not understand.</p>\n'
+        )
     
     def test_get_requires_login(self, client, admin_user):
         """Test that GET request requires login."""
@@ -176,7 +206,8 @@ class TestSmtpSettings:
         assert settings.smtp_server == 'smtp.example.com'
         # Note: smtp_port is not set when smtp_enabled is False, per the actual code logic
         assert settings.smtp_username == 'test@example.com'
-        assert settings.smtp_password == 'testpass'
+        from oneirodex.utils.secret_store import read_global_secret
+        assert read_global_secret(settings, 'smtp_password') == 'testpass'
         assert settings.smtp_use_tls is True  # Default value
         assert settings.smtp_default_sender == 'noreply@example.com'
     
@@ -214,7 +245,8 @@ class TestSmtpSettings:
         assert settings.smtp_server == 'smtp.gmail.com'
         assert settings.smtp_port == 587
         assert settings.smtp_username == 'test@gmail.com'
-        assert settings.smtp_password == 'testpass123'
+        from oneirodex.utils.secret_store import read_global_secret
+        assert read_global_secret(settings, 'smtp_password') == 'testpass123'
         assert settings.smtp_use_tls is True
         assert settings.smtp_default_sender == 'noreply@gmail.com'
     
@@ -250,7 +282,8 @@ class TestSmtpSettings:
         assert updated_settings.smtp_server == 'smtp.updated.com'
         assert updated_settings.smtp_port == 465
         assert updated_settings.smtp_username == 'updated@example.com'
-        assert updated_settings.smtp_password == 'newpassword'
+        from oneirodex.utils.secret_store import read_global_secret
+        assert read_global_secret(updated_settings, 'smtp_password') == 'newpassword'
         assert updated_settings.smtp_use_tls is False
         assert updated_settings.smtp_default_sender == 'updated@example.com'
     

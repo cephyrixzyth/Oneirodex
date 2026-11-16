@@ -807,7 +807,7 @@ class TestMoveGameToLibraryAPI:
 
         assert response.status_code == 403
 
-        assert 'librarian' in response.get_json()['error'].lower()
+        assert response.get_json()['error'] == 'Librarian or admin required'
 
 
 

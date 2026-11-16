@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from oneirodex.runtime_native import discover_reads
 from oneirodex.runtime_native.discover_reads import create_discover_reads_router
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie, generate_csrf_token, load_session_cookie,
@@ -83,7 +84,11 @@ class FakeDiscoverData:
 def make_client(*, authenticated=True, data=None, blueprint_login_view=None):
     flask_app = Flask(__name__)
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('Flask app context used'))
-    flask_app.config.update(SECRET_KEY='native-discover-reads-secret', TESTING=True)
+    flask_app.config.update(
+        SECRET_KEY='native-discover-reads-secret',
+        SESSION_COOKIE_SAMESITE='Lax',
+        TESTING=True,
+    )
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     flask_app.add_url_rule('/member-login', endpoint='member_login', view_func=lambda: 'login')
     user = SimpleNamespace(
@@ -186,10 +191,15 @@ def test_missing_row_returns_not_found_with_identifier_detail():
 def test_anonymous_requests_redirect_with_login_flash_and_next():
     data = FakeDiscoverData()
     client = make_client(authenticated=False, data=data, blueprint_login_view='/member-login')
-    for path in ('/api/discover/sections?from=home', '/api/discover/rows/recent?offset=10'):
+    for path in (
+        '/api/discover/sections?from=home',
+        '/api/discover/rows/recent?offset=10',
+        '/api/discover/surprise?genre=not-an-id',
+    ):
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 302
         assert response.headers['location'].startswith('/member-login?next=')
+        assert 'SameSite=Lax' in response.headers['set-cookie']
         session = load_session_cookie(
             response.cookies['session'], 'native-discover-reads-secret', max_age=31_536_000
         )
@@ -218,6 +228,10 @@ def test_zone_success_uses_api_ok_and_preserves_slug():
     assert response.json() == {
         **payload, 'ok': True, 'error': None, 'error_code': None, 'success': True,
     }
+    assert response.content == (
+        b'{"error":null,"error_code":null,"feed_token":"zone-feed","ok":true,'
+        b'"sections":[{"id":"row-1"}],"slug":"by-era","success":true}\n'
+    )
     assert data.zone_calls == [(151, 'by-era')]
 
 
@@ -234,6 +248,11 @@ def test_zone_not_found_includes_slug_detail():
         'message': 'That Discover zone is not available.',
         'success': False,
     }
+    assert response.content == (
+        b'{"detail":"missing-zone","error":"That Discover zone is not available.",'
+        b'"error_code":"not_found","message":"That Discover zone is not available.",'
+        b'"ok":false,"success":false}\n'
+    )
 
 
 def test_genre_hub_preserves_multi_segment_decoded_genre_path():
@@ -323,6 +342,25 @@ def test_pins_put_preserves_member_csrf_and_response_contract():
     assert data.save_pins_calls == [(151, {'pins': ['recent'], 'hidden': ['played']})]
 
 
+def test_pins_put_rejects_oversized_json_before_save(monkeypatch):
+    monkeypatch.setattr(discover_reads, '_MAX_JSON_BODY_BYTES', 8)
+    data = FakeDiscoverData()
+    client = make_client(data=data)
+    session_data = {'_user_id': '151:fp'}
+    csrf = generate_csrf_token(session_data, 'native-discover-reads-secret')
+    client.cookies.set('session', dump_session_cookie(session_data, 'native-discover-reads-secret'))
+
+    response = client.put(
+        '/api/discover/pins',
+        content=b'{"pins":"' + b'x' * 32 + b'"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.save_pins_calls == []
+
+
 def test_pins_put_maps_validation_errors_to_legacy_api_codes():
     class ErrorData(FakeDiscoverData):
         def save_pins(self, _user, payload):
@@ -409,13 +447,18 @@ def test_anonymous_surprise_and_pins_redirect_without_adapter_calls():
     assert data.pins_calls == []
 
 
-def test_head_surprise_and_pins_keep_content_length_but_return_no_body():
+def test_head_surprise_reads_but_pins_matches_legacy_method_branch():
     data = FakeDiscoverData()
     client = make_client(data=data)
-    for path in ('/api/discover/surprise', '/api/discover/pins'):
-        get_response = client.get(path)
-        head_response = client.head(path)
-        assert head_response.status_code == 200
-        assert head_response.content == b''
-        assert head_response.headers['content-length'] == str(len(get_response.content))
-        assert head_response.headers['X-Content-Type-Options'] == 'nosniff'
+    surprise = client.get('/api/discover/surprise')
+    surprise_head = client.head('/api/discover/surprise')
+    assert surprise_head.status_code == 200
+    assert surprise_head.content == b''
+    assert surprise_head.headers['content-length'] == str(len(surprise.content))
+    assert surprise_head.headers['X-Content-Type-Options'] == 'nosniff'
+
+    client.get('/api/discover/pins')
+    pins_head = client.head('/api/discover/pins')
+    assert pins_head.status_code == 400
+    assert pins_head.content == b''
+    assert pins_head.headers['content-length'] == '190'

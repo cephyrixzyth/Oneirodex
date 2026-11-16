@@ -2,19 +2,24 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from email import policy
-from email.parser import BytesParser
 from io import BytesIO
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, RedirectResponse
+from starlette.datastructures import UploadFile
+from starlette.exceptions import HTTPException
+from starlette.responses import JSONResponse, RedirectResponse, Response
 from werkzeug.datastructures import FileStorage
 
 from .acquire_status import _login_redirect
-from .csrf_compat import csrf_error_response
+from .csrf_compat import csrf_error_response, csrf_html_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+
+
+_AVATAR_MAX_BODY_BYTES = 5 * 1024 * 1024 + 64 * 1024
+_AVATAR_MAX_FILES = 1
+_AVATAR_MAX_FIELDS = 1
 
 
 class AccountAvatarUploadData:
@@ -30,6 +35,14 @@ class AccountAvatarUploadData:
 
         return avatar_url(path)
 
+    def prepare_cleanup(self, user, previous_path: str | None, new_path: str, flask_app) -> None:
+        from oneirodex.runtime_native.db_session import native_db
+        from oneirodex.utils.user_deletion import enqueue_avatar_replacement_cleanup
+
+        enqueue_avatar_replacement_cleanup(
+            native_db.session, flask_app, user.id, previous_path, new_path,
+        )
+
     def commit(self):
         from oneirodex.runtime_native.db_session import native_db as db
 
@@ -39,6 +52,34 @@ class AccountAvatarUploadData:
         from oneirodex.runtime_native.db_session import native_db as db
 
         db.session.rollback()
+
+
+async def _save_avatar_cancellable(data, file, user, flask_app, previous_path):
+    """Finish and roll back staged avatar work before propagating cancellation.
+
+    Starlette's thread-pool await can be cancelled while its synchronous worker
+    keeps running. Avatar writes are staged before the route commits the user
+    pointer, so let the worker finish, roll back its ORM mutation, and remove
+    its newly written files before the request scope closes.
+    """
+    from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
+
+    def rollback_uncommitted_avatar(result):
+        path, _error = result
+        try:
+            data.rollback()
+        finally:
+            if path:
+                from oneirodex.utils.avatar import finalize_avatar_change
+
+                finalize_avatar_change(
+                    flask_app, previous_path, path, committed=False,
+                )
+
+    return await run_image_work_in_threadpool(
+        data.save, file, user, flask_app,
+        on_cancel=rollback_uncommitted_avatar,
+    )
 
 
 def create_account_avatar_upload_router(
@@ -73,12 +114,17 @@ def create_account_avatar_upload_router(
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:
-                file, too_large = await _avatar_upload(request)
+                file, too_large, too_many_parts = await _avatar_upload(request)
                 from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
 
                 if too_large:
                     payload, status = api_error_payload(
                         'Image is larger than the 5MB limit.', code='unprocessable'
+                    )
+                    response = JSONResponse(payload, status_code=status)
+                elif too_many_parts:
+                    payload, status = api_error_payload(
+                        'Avatar form contains too many parts.', code='payload_too_large'
                     )
                     response = JSONResponse(payload, status_code=status)
                 elif file is None:
@@ -87,15 +133,25 @@ def create_account_avatar_upload_router(
                     )
                     response = JSONResponse(payload, status_code=status)
                 else:
-                    path, error = data.save(file, auth.user, flask_app)
+                    previous_path = getattr(auth.user, 'avatarpath', None)
+                    path, error = await _save_avatar_cancellable(
+                        data, file, auth.user, flask_app, previous_path,
+                    )
                     if error:
                         payload, status = api_error_payload(error, code='unprocessable')
                         response = JSONResponse(payload, status_code=status)
                     else:
                         try:
+                            if hasattr(data, 'prepare_cleanup'):
+                                data.prepare_cleanup(auth.user, previous_path, path, flask_app)
                             data.commit()
                         except Exception as exc:
                             data.rollback()
+                            from oneirodex.utils.avatar import finalize_avatar_change
+
+                            finalize_avatar_change(
+                                flask_app, previous_path, path, committed=False,
+                            )
                             flask_app.logger.warning('avatar commit failed: %s', exc)
                             payload, status = api_error_payload(
                                 "Couldn't save that avatar. Try a different image.",
@@ -103,6 +159,11 @@ def create_account_avatar_upload_router(
                             )
                             response = JSONResponse(payload, status_code=status)
                         else:
+                            from oneirodex.utils.avatar import finalize_avatar_change
+
+                            finalize_avatar_change(
+                                flask_app, previous_path, path, committed=True,
+                            )
                             response = JSONResponse(api_ok_payload({
                                 'avatar_path': path,
                                 'avatar_url': data.avatar_url(path),
@@ -134,12 +195,18 @@ def create_account_avatar_upload_router(
             elif request.method in ('GET', 'HEAD'):
                 response = RedirectResponse('/library?account=avatar', status_code=302)
             else:
-                file, csrf_token, too_large = await _legacy_avatar_upload(
+                file, csrf_token, too_large, too_many_parts = await _legacy_avatar_upload(
                     request, field_name=str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'),
                 )
-                response = csrf_error_response(
-                    request, auth.session_data, flask_app.config, token=csrf_token,
-                )
+                response = None
+                if too_many_parts:
+                    response = _legacy_avatar_parts_limit_response()
+                if response is None:
+                    response = csrf_error_response(
+                        request, auth.session_data, flask_app.config, token=csrf_token,
+                    )
+                    if response is not None:
+                        response = csrf_html_error_response(response)
                 if response is None:
                     if too_large:
                         _flash(auth.session_data, 'error', 'Image is larger than the 5MB limit.')
@@ -154,17 +221,33 @@ def create_account_avatar_upload_router(
                             data.rollback()
                             _flash(auth.session_data, 'error', 'Failed to update profile. Please try again.')
                     else:
-                        path, error = data.save(file, auth.user, flask_app)
+                        previous_path = getattr(auth.user, 'avatarpath', None)
+                        path, error = await _save_avatar_cancellable(
+                            data, file, auth.user, flask_app, previous_path,
+                        )
                         if error:
                             _flash(auth.session_data, 'error', error)
                         else:
                             try:
+                                if hasattr(data, 'prepare_cleanup'):
+                                    data.prepare_cleanup(auth.user, previous_path, path, flask_app)
                                 data.commit()
+                                from oneirodex.utils.avatar import finalize_avatar_change
+
+                                finalize_avatar_change(
+                                    flask_app, previous_path, path, committed=True,
+                                )
                                 _flash(auth.session_data, 'success', 'Profile updated successfully!')
                             except Exception:
                                 data.rollback()
+                                from oneirodex.utils.avatar import finalize_avatar_change
+
+                                finalize_avatar_change(
+                                    flask_app, previous_path, path, committed=False,
+                                )
                                 _flash(auth.session_data, 'error', 'Failed to update profile. Please try again.')
-                    response = RedirectResponse('/library?account=avatar', status_code=302)
+                    if response is None:
+                        response = _legacy_redirect_response('/settings_profile_edit')
 
             if auth.should_set_session_cookie or auth.session_data.get('_flashes'):
                 _set_session_cookie(response, flask_app, auth)
@@ -185,101 +268,93 @@ def mount_account_avatar_upload_routes(app: FastAPI, flask_app, **kwargs):
     return app
 
 
-async def _avatar_upload(request: Request) -> tuple[FileStorage | None, bool]:
-    """Read a bounded multipart body and extract the first `avatar` file."""
+async def _avatar_upload(request: Request) -> tuple[FileStorage | None, bool, bool]:
+    """Read bounded multipart data and extract the `avatar` file."""
+    file, _csrf_token, too_large, too_many_parts = await _read_avatar_form(request)
+    return file, too_large, too_many_parts
+
+
+async def _read_avatar_form(
+    request: Request, *, csrf_field: str | None = None,
+) -> tuple[FileStorage | None, str | None, bool, bool]:
+    """Parse avatar multipart data with body, file, and field limits."""
     content_type = request.headers.get('content-type', '')
     if not content_type.lower().startswith('multipart/form-data'):
-        return None, False
+        return None, None, False, False
+
+    from .bounded_multipart import (
+        InvalidContentLength,
+        RequestBodyTooLarge,
+        bounded_multipart_form,
+    )
 
     try:
-        from werkzeug.http import parse_options_header
+        form = await bounded_multipart_form(
+            request,
+            max_body_bytes=_AVATAR_MAX_BODY_BYTES,
+            max_files=_AVATAR_MAX_FILES,
+            max_fields=_AVATAR_MAX_FIELDS,
+            max_part_size=_AVATAR_MAX_BODY_BYTES,
+        )
+    except (InvalidContentLength, RequestBodyTooLarge):
+        return None, None, True, False
+    except HTTPException as exc:
+        if exc.status_code == 400 and str(exc.detail).startswith((
+            'Too many files.', 'Too many fields.',
+        )):
+            return None, None, False, True
+        return None, None, False, False
 
-        _media_type, options = parse_options_header(content_type)
-        boundary = options.get('boundary')
-        if not boundary or len(boundary) > 200:
-            return None, False
-        boundary_bytes = boundary.encode('ascii')
-    except (UnicodeEncodeError, ValueError, TypeError):
-        return None, False
-
-    # File size is validated by save_avatar. This envelope cap prevents an
-    # unbounded body or unrelated fields from being buffered in memory.
-    max_body = 5 * 1024 * 1024 + 64 * 1024
-    body = bytearray()
-    async for chunk in request.stream():
-        body.extend(chunk)
-        if len(body) > max_body:
-            return None, True
-
-    message = BytesParser(policy=policy.default).parsebytes(
-        b'Content-Type: multipart/form-data; boundary='
-        + boundary_bytes
-        + b'\r\nMIME-Version: 1.0\r\n\r\n'
-        + bytes(body)
-    )
-    if not message.is_multipart():
-        return None, False
-    for part in message.iter_parts():
-        if part.get_content_disposition() != 'form-data':
-            continue
-        if part.get_param('name', header='content-disposition') != 'avatar':
-            continue
-        filename = part.get_filename() or ''
-        payload = part.get_payload(decode=True) or b''
-        return FileStorage(
-            stream=BytesIO(payload), filename=filename,
-            content_type=part.get_content_type(),
-        ), False
-    return None, False
+    file = None
+    csrf_token = None
+    try:
+        for name, value in form.multi_items():
+            if csrf_field is not None and name == csrf_field and isinstance(value, str):
+                csrf_token = value
+            elif name == 'avatar' and isinstance(value, UploadFile):
+                payload = await value.read()
+                file = FileStorage(
+                    stream=BytesIO(payload),
+                    filename=value.filename or '',
+                    content_type=value.content_type or 'application/octet-stream',
+                )
+    finally:
+        await form.close()
+    return file, csrf_token, False, False
 
 
 async def _legacy_avatar_upload(
     request: Request, *, field_name: str = 'csrf_token',
-) -> tuple[FileStorage | None, str | None, bool]:
+) -> tuple[FileStorage | None, str | None, bool, bool]:
     """Read the classic multipart form, including its hidden CSRF field."""
-    content_type = request.headers.get('content-type', '')
-    if not content_type.lower().startswith('multipart/form-data'):
-        return None, None, False
-    try:
-        from werkzeug.http import parse_options_header
+    return await _read_avatar_form(request, csrf_field=field_name)
 
-        _media_type, options = parse_options_header(content_type)
-        boundary = options.get('boundary')
-        if not boundary or len(boundary) > 200:
-            return None, None, False
-        boundary_bytes = boundary.encode('ascii')
-    except (UnicodeEncodeError, ValueError, TypeError):
-        return None, None, False
-    max_body = 5 * 1024 * 1024 + 64 * 1024
-    body = bytearray()
-    async for chunk in request.stream():
-        body.extend(chunk)
-        if len(body) > max_body:
-            return None, None, True
-    message = BytesParser(policy=policy.default).parsebytes(
-        b'Content-Type: multipart/form-data; boundary=' + boundary_bytes
-        + b'\r\nMIME-Version: 1.0\r\n\r\n' + bytes(body)
+
+def _legacy_avatar_parts_limit_response() -> Response:
+    """Return Werkzeug's standard HTML 413 page without trusting a partial form."""
+    from werkzeug.exceptions import RequestEntityTooLarge
+
+    response = RequestEntityTooLarge().get_response()
+    return Response(
+        content=response.get_data(),
+        status_code=response.status_code,
+        media_type='text/html',
     )
-    if not message.is_multipart():
-        return None, None, False
-    csrf_token = None
-    file = None
-    for part in message.iter_parts():
-        if part.get_content_disposition() != 'form-data':
-            continue
-        name = part.get_param('name', header='content-disposition')
-        if name == field_name and not part.get_filename():
-            csrf_token = (part.get_payload(decode=True) or b'').decode('utf-8', 'replace')
-        elif name == 'avatar' and part.get_filename():
-            file = FileStorage(
-                stream=BytesIO(part.get_payload(decode=True) or b''),
-                filename=part.get_filename() or '',
-                content_type=part.get_content_type(),
-            )
-    return file, csrf_token, False
 
 
 def _flash(session_data, category, message):
     flashes = list(session_data.get('_flashes') or [])
     flashes.append((category, message))
     session_data['_flashes'] = flashes
+
+
+def _legacy_redirect_response(location: str) -> Response:
+    """Keep Werkzeug's HTML redirect response for classic form submissions."""
+    from werkzeug.utils import redirect
+
+    legacy_response = redirect(location)
+    return Response(
+        content=legacy_response.get_data(),
+        status_code=legacy_response.status_code,
+        headers=dict(legacy_response.headers),
+    )

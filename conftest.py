@@ -1,7 +1,22 @@
 import pytest
 import os
+import json
+from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 from database_test_guard import validate_test_database_url as _validate_test_database_url
+
+
+@pytest.fixture
+def reusable_secret_keyring(tmp_path, monkeypatch):
+    """Give tests exercising secret writes an ephemeral key, never an operator key."""
+    path = tmp_path / 'reusable-secret-test-keyring.json'
+    path.write_text(json.dumps({
+        'active_key_id': 'pytest',
+        'keys': {'pytest': Fernet.generate_key().decode('ascii')},
+    }), encoding='utf-8')
+    if os.name != 'nt':
+        path.chmod(0o600)
+    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
 
 # Load .env file to ensure TEST_DATABASE_URL is available
 load_dotenv()
@@ -99,7 +114,21 @@ def app():
             "Tests cannot proceed with wrong database configuration."
         )
     
-    yield app
+    try:
+        yield app
+    finally:
+        # Pytest can retain app objects via failure tracebacks. Returning a
+        # session connection to its pool is insufficient: that app's idle pool
+        # otherwise keeps PostgreSQL clients alive until nondeterministic GC.
+        # The DB-free configuration guards inject db=None and a config-only
+        # app stub. They have no session or pool to release.
+        if db is not None:
+            with app.app_context():
+                try:
+                    db.session.remove()
+                finally:
+                    for engine in db.engines.values():
+                        engine.dispose()
 
 # ---------------------------------------------------------------------------
 # Per-test database isolation (spec §3.2)

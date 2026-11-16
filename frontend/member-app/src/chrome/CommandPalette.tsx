@@ -5,7 +5,7 @@ import { useShellConfig, useViewer } from '@oneirodex/ui'
 import { searchGames } from '../api/collections'
 import { fetchPaletteSuggest } from '../api/palette'
 import { openPreferencesModal } from '../api/preferences'
-import { mergeSuggestRecent, readRecentTitles, recordRecentTitle } from '../utils/recentTitles'
+import { clearLegacyRecentTitles, mergeSuggestRecent } from '../utils/recentTitles'
 import { requestOpenChatPanel } from '../hooks/chatPanelApi'
 import { requestOpenSocialCompanion } from '../hooks/socialCompanionApi'
 import { getMoreLinks, getPrimaryLinks } from './navConfig'
@@ -142,6 +142,7 @@ export function CommandPalette({ open: openProp, onOpenChange, defaultOpen = fal
     recent: [],
     popular: [],
   })
+  const [suggestStatus, setSuggestStatus] = useState('idle') // idle | loading | ready | error
 
   const setOpen = useCallback(
     (next: any) => {
@@ -186,27 +187,32 @@ export function CommandPalette({ open: openProp, onOpenChange, defaultOpen = fal
   }, [open])
 
   useEffect(() => {
+    clearLegacyRecentTitles()
     if (!open) {
+      setSuggest({ recent: [], popular: [] })
+      setSuggestStatus('idle')
       return undefined
     }
     const controller = new AbortController()
+    setSuggest({ recent: [], popular: [] })
+    setSuggestStatus('loading')
     fetchPaletteSuggest({ signal: controller.signal })
       .then((data) => {
         if (controller.signal.aborted) return
         setSuggest({
-          recent: mergeSuggestRecent(data.recent, readRecentTitles()),
+          recent: mergeSuggestRecent(data.recent),
           popular: Array.isArray(data.popular) ? data.popular : [],
         })
+        setSuggestStatus('ready')
       })
       .catch((err: any) => {
         if (err?.name === 'AbortError') return
-        setSuggest({
-          recent: mergeSuggestRecent([], readRecentTitles()),
-          popular: [],
-        })
+        if (controller.signal.aborted) return
+        setSuggest({ recent: [], popular: [] })
+        setSuggestStatus('error')
       })
     return () => controller.abort()
-  }, [open])
+  }, [open, viewer.userId])
 
   useEffect(() => {
     if (!open) {
@@ -287,7 +293,6 @@ export function CommandPalette({ open: openProp, onOpenChange, defaultOpen = fal
   function openTitle(hit: any) {
     const uuid = hit?.uuid || hit?.id
     if (!uuid) return
-    recordRecentTitle({ uuid, name: hit.name || 'Untitled' })
     setOpen(false)
     navigate(`/game_details/${encodeURIComponent(uuid)}`)
   }
@@ -319,6 +324,12 @@ export function CommandPalette({ open: openProp, onOpenChange, defaultOpen = fal
                 ? 'No matching library titles.'
                 : 'No matching commands.'}
         </Command.Empty>
+
+        {showSuggest && suggestStatus === 'error' ? (
+          <div className="od-cmdk__empty" role="status">
+            Suggestions are unavailable. Title search is still available.
+          </div>
+        ) : null}
 
         {recentTiles.length > 0 ? (
           <Command.Group heading="Recent titles" className="od-cmdk__group">

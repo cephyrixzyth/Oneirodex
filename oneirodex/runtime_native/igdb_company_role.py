@@ -9,6 +9,7 @@ from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class IGDBCompanyRoleData:
@@ -39,7 +40,7 @@ class IGDBCompanyRoleData:
 
         query_fields = '''fields id, name, cover, summary, url, release_dates.date, platforms.name, genres.name, themes.name, game_modes.name,
                           screenshots, videos.video_id, first_release_date, aggregated_rating, involved_companies, player_perspectives.name,
-                          aggregated_rating_count, rating, rating_count, slug, status, category, total_rating, 
+                          aggregated_rating_count, rating, rating_count, slug, status, category, total_rating,
                           total_rating_count, storyline;'''
         query_filter = f'search "{game_name}";'
         if platform_id and platform_id.isdigit():
@@ -79,12 +80,12 @@ def create_igdb_company_role_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                game_id = request.query_params.get('game_igdb_id')
-                company_id = request.query_params.get('company_id')
+                game_id = first_query_value(request.query_params, 'game_igdb_id')
+                company_id = first_query_value(request.query_params, 'company_id')
                 if not game_id or not company_id or not game_id.isdigit() or not company_id.isdigit():
                     response = _api_error(
-                        'Invalid input. Both game_igdb_id and company_id must be numeric.',
-                        'bad_request', 400,
+                        'Invalid input. Both game_igdb_id and company_id must be provided and numeric.',
+                        'bad_request', 400, config=flask_app.config,
                     )
                 else:
                     try:
@@ -92,10 +93,14 @@ def create_igdb_company_role_router(
                     except Exception:
                         response = _api_error(
                             'An error occurred processing your request.', 'internal', 500,
+                            config=flask_app.config,
                         )
                     else:
                         if not rows or (isinstance(rows, dict) and 'error' in rows):
-                            response = _api_error('No data found or error in response.', 'not_found', 404)
+                            response = _api_error(
+                                'No data found or error in response.', 'not_found', 404,
+                                config=flask_app.config,
+                            )
                         else:
                             response = None
                             for row in rows:
@@ -117,7 +122,7 @@ def create_igdb_company_role_router(
                             if response is None:
                                 response = _api_error(
                                     'Company with given ID not found in the specified game.',
-                                    'not_found', 404,
+                                    'not_found', 404, config=flask_app.config,
                                 )
             from oneirodex.utils.security_headers import security_header_values
 
@@ -144,23 +149,33 @@ def create_igdb_company_role_router(
             if auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
-                igdb_id = request.query_params.get('igdb_id')
+                igdb_id = first_query_value(request.query_params, 'igdb_id')
                 if not igdb_id:
-                    response = _api_error('IGDB ID is required', 'bad_request', 400)
+                    response = _api_error(
+                        'IGDB ID is required', 'bad_request', 400, config=flask_app.config,
+                    )
                 elif not igdb_id.isascii() or not igdb_id.isdigit():
-                    response = _api_error('IGDB ID must be numeric', 'bad_request', 400)
+                    response = _api_error(
+                        'IGDB ID must be numeric', 'bad_request', 400, config=flask_app.config,
+                    )
                 else:
                     try:
                         result = data.search_game_by_id(igdb_id)
                     except Exception:
-                        response = _api_error('Request failed', 'internal', 500)
+                        response = _api_error(
+                            'Request failed', 'internal', 500, config=flask_app.config,
+                        )
                     else:
                         if isinstance(result, dict) and 'error' in result:
-                            response = _api_error(str(result['error']), 'internal', 500)
+                            response = _api_error(
+                                str(result['error']), 'internal', 500, config=flask_app.config,
+                            )
                         elif result:
                             response = JSONResponse(result[0])
                         else:
-                            response = _api_error('Game not found', 'not_found', 404)
+                            response = _api_error(
+                                'Game not found', 'not_found', 404, config=flask_app.config,
+                            )
             from oneirodex.utils.security_headers import security_header_values
 
             response.headers.setdefault('Cache-Control', 'no-store')
@@ -191,15 +206,22 @@ def create_igdb_company_role_router(
                 platforms = request.query_params.getlist('platform_id')
                 platform_id = platforms[0] if platforms else None
                 if not game_name:
-                    response = _api_error('No game name provided', 'bad_request', 400)
+                    response = _api_error(
+                        'No game name provided', 'bad_request', 400, config=flask_app.config,
+                    )
                 else:
                     try:
                         results = data.search_games_by_name(game_name, platform_id)
                     except Exception:
-                        response = _api_error('Request failed', 'internal', 500)
+                        response = _api_error(
+                            'Request failed', 'internal', 500, config=flask_app.config,
+                        )
                     else:
                         if isinstance(results, dict) and 'error' in results:
-                            response = _api_error(str(results['error']), 'bad_gateway', 502)
+                            response = _api_error(
+                                str(results['error']), 'bad_gateway', 502,
+                                config=flask_app.config,
+                            )
                         else:
                             response = JSONResponse({'results': results})
             from oneirodex.utils.security_headers import security_header_values
@@ -215,11 +237,12 @@ def create_igdb_company_role_router(
     return router
 
 
-def _api_error(message: str, code: str, status: int) -> Response:
+def _api_error(message: str, code: str, status: int, *, config) -> Response:
     from oneirodex.utils.api_contract import api_error_payload
+    from .runtime_context import native_json_response
 
     payload, _ = api_error_payload(message, code=code, status=status)
-    return JSONResponse(payload, status_code=status)
+    return native_json_response(payload, config=config, status=status)
 
 
 def mount_igdb_company_role_routes(app: FastAPI, flask_app, **kwargs):

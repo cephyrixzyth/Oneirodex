@@ -7,6 +7,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 
 from oneirodex.runtime_native.library_tools_mutations import (
@@ -16,16 +18,34 @@ from oneirodex.runtime_native.library_tools_mutations import (
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
 
+def test_game_path_readability_accepts_a_regular_file(tmp_path):
+    target = tmp_path / 'game.rom'
+    target.write_bytes(b'rom')
+
+    assert LibraryToolsMutationData().game_path_readable(str(target)) is True
+    assert LibraryToolsMutationData().game_path_readable(str(tmp_path / 'missing.rom')) is False
+
+
 def test_native_library_data_methods_use_scoped_session_without_app_context(monkeypatch):
     import oneirodex
     from oneirodex.models import Game, Library
 
     game = SimpleNamespace(uuid='g1', name='Original', full_disk_path='/safe/Original')
     library = SimpleNamespace(uuid='l1')
-    rows = {('Game', 'g1'): game, ('Library', 'l1'): library}
+    rows = {('Library', 'l1'): library}
+
+    def execute(query):
+        model = query.column_descriptions[0]['entity']
+        filters = query.whereclause
+        if model is Game and str(filters.right.value) == game.uuid:
+            row = game
+        else:
+            row = None
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: row))
+
     fake_session = SimpleNamespace(
         get=lambda model, key: rows.get((model.__name__, key)),
-        execute=lambda *_: SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: None)),
+        execute=execute,
         commit=lambda: None,
         rollback=lambda: None,
     )
@@ -64,6 +84,50 @@ def test_native_library_data_methods_use_scoped_session_without_app_context(monk
     assert freshness_calls == [(('l1',), {'limit': 7, 'only_missing': False, 'app': app})]
 
 
+def test_link_existing_game_database_failure_rolls_back_and_logs_sanitized_event(monkeypatch):
+    import oneirodex
+    from sqlalchemy.exc import SQLAlchemyError
+    from oneirodex.models import Game
+
+    game = SimpleNamespace(uuid='g1', name='Original', full_disk_path='/safe/Original')
+    rolled_back = []
+    events = []
+
+    def execute(query):
+        model = query.column_descriptions[0]['entity']
+        row = game if model is Game else None
+        return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: row))
+
+    def fail_commit():
+        raise SQLAlchemyError('postgresql://user:private@db/library')
+
+    fake_session = SimpleNamespace(
+        execute=execute, commit=fail_commit,
+        rollback=lambda: rolled_back.append(True), delete=lambda _row: None,
+    )
+    monkeypatch.setattr(oneirodex, 'db', SimpleNamespace(session=fake_session))
+    monkeypatch.setattr('oneirodex.utils.rom_language.apply_rom_language_fields', lambda *_: None)
+    monkeypatch.setattr(
+        'oneirodex.utils.event_logging.log_system_event',
+        lambda *args, **kwargs: events.append((args, kwargs)),
+    )
+
+    linked, error = LibraryToolsMutationData().link_existing_game(
+        Flask('link-existing-game-db-failure'), 'g1', '/safe/NewFolder', 'Admin', 42,
+    )
+
+    assert linked is None and error == 'internal'
+    assert rolled_back == [True]
+    assert len(events) == 1
+    assert events[0][0] == (
+        "Database error linking existing game 'g1' to folder by admin Admin",
+    )
+    assert events[0][1] == {
+        'event_type': 'error', 'event_level': 'error', 'audit_user': 42,
+    }
+    assert 'private' not in events[0][0][0]
+
+
 def test_native_steam_backfill_uses_scoped_session_without_app_context(monkeypatch):
     import oneirodex
 
@@ -92,6 +156,7 @@ class FakeData:
     def __init__(self):
         self.calls = []
         self.game_row = SimpleNamespace(uuid='g1', name='Original', full_disk_path='/safe/Original')
+        self.link_error_code = None
 
     def safe_path(self, _app, path):
         return str(path).startswith('/safe'), 'outside allowed roots'
@@ -110,12 +175,17 @@ class FakeData:
         self.calls.append(('write_proposals', rows))
         return [{'path': row['path'], 'ok': True} for row in rows]
 
-    def directory_readable(self, path):
-        self.calls.append(('directory_readable', path))
-        return path == '/safe/NewFolder'
+    def game_path_readable(self, path):
+        self.calls.append(('game_path_readable', path))
+        return path in {'/safe/NewFolder', '/safe/NewFile.rom'}
+
+    def log_unsafe_existing_game_path(self, path, reason, actor_name, actor_id):
+        self.calls.append(('unsafe_link_path', path, reason, actor_name, actor_id))
 
     def link_existing_game(self, _app, game_uuid, path, actor, _actor_id):
         self.calls.append(('link_existing_game', game_uuid, path, actor))
+        if self.link_error_code:
+            return None, self.link_error_code
         return {'game_uuid': game_uuid, 'game_name': 'Original',
                 'full_disk_path': path, 'removed_from_unmatched': True}, None
 
@@ -156,24 +226,26 @@ def runtime():
                             SECURITY_HEADERS_ENABLED=True, WTF_CSRF_ENABLED=False)
     users = {
         'admin': SimpleNamespace(id=7, name='admin', role='admin', state=True, is_active=True,
-                                 is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                 is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'member': SimpleNamespace(id=8, role='user', state=True, is_active=True,
-                                  is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                  is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
     }
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda identity: next(
-        (user for user in users.values() if identity == f'{user.id}:fp'), None))
+        (user for user in users.values() if identity.split(':', 1)[0] == str(user.id)), None))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     data = FakeData()
+    tokens = {}
     app = FastAPI()
     app.state.flask_app = flask_app
+    app.state.tokens = tokens
     app.include_router(create_library_tools_mutations_router(
         flask_app, find_user=lambda uid: next((u for u in users.values() if u.id == uid), None),
-        find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
+        find_token=lambda prefix: tokens.get(prefix), commit_token_touch=lambda _token: None,
         load_user_id=lambda identity: manager.user_callback(identity), login_manager=manager,
         data_access=data))
-    cookies = {name: dump_session_cookie({'_user_id': f'{user.id}:fp', '_fresh': True},
+    cookies = {name: dump_session_cookie({'_user_id': login_identity_for(user.id), '_fresh': True},
                                          'mutation-secret') for name, user in users.items()}
     return app, data, cookies
 
@@ -228,7 +300,13 @@ def test_mutations_reject_invalid_body_before_adapter_work(runtime):
     # A malformed JSON shape is rejected without touching an injected adapter.
     response = request(app, '/api/library_tools/doctor/write_proposals', cookie=cookies['admin'],
                        json={'rows': 'nope'})
-    assert response.status_code == 400
+    assert response.status_code == 422
+    assert not data.calls
+
+    extra = request(app, '/api/library_tools/doctor/write_proposals', cookie=cookies['admin'],
+                    json={'rows': [], 'unexpected': True})
+    assert extra.status_code == 422
+    assert 'unexpected' in extra.json()['detail']
     assert not data.calls
 
 
@@ -253,7 +331,13 @@ def test_link_existing_game_checks_path_and_preserves_response(runtime):
     assert ok.status_code == 200
     assert ok.json()['removed_from_unmatched'] is True
     assert ok.json()['library_uuid'] == 'lib1'
+    file_ok = request(app, '/api/library_tools/link_existing_game', cookie=cookies['admin'],
+                      json={'game_uuid': 'g1', 'full_disk_path': '/safe/NewFile.rom',
+                            'library_uuid': 'lib1'})
+    assert file_ok.status_code == 200
+    assert file_ok.json()['full_disk_path'] == '/safe/NewFile.rom'
     assert ('link_existing_game', 'g1', '/safe/NewFolder', 'admin') in data.calls
+    assert ('link_existing_game', 'g1', '/safe/NewFile.rom', 'admin') in data.calls
 
 
 def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime):
@@ -261,7 +345,7 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
 
     app, data, _cookies = runtime
     app.state.flask_app.config['WTF_CSRF_ENABLED'] = True
-    session = {'_user_id': '7:fp', '_fresh': True}
+    session = {'_user_id': login_identity_for(7), '_fresh': True}
     csrf = generate_csrf_token(session, 'mutation-secret')
     cookie = dump_session_cookie(session, 'mutation-secret')
     with TestClient(app) as client:
@@ -274,11 +358,142 @@ def test_legacy_link_existing_game_form_checks_hidden_csrf_and_redirects(runtime
             'game_uuid': 'g1', 'full_disk_path': '/safe/NewFolder',
             'library_uuid': 'lib1', 'from_unmatched': 'true', 'csrf_token': csrf,
         }, follow_redirects=False)
+        accepted_from_identify = client.post('/link_existing_game', data={
+            'game_uuid': 'g1', 'full_disk_path': '/safe/NewFolder',
+            'library_uuid': 'lib1', 'from_unmatched': 'false', 'csrf_token': csrf,
+        }, follow_redirects=False)
+        accepted_file = client.post('/link_existing_game', data={
+            'game_uuid': 'g1', 'full_disk_path': '/safe/NewFile.rom',
+            'library_uuid': 'lib1', 'from_unmatched': 'true', 'csrf_token': csrf,
+        }, follow_redirects=False)
+        rejected_path = client.post('/link_existing_game', data={
+            'game_uuid': 'g1', 'full_disk_path': '/outside/New Folder',
+            'from_unmatched': 'true', 'csrf_token': csrf,
+        }, follow_redirects=False)
 
     assert rejected.status_code == 400
+    assert rejected.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is missing.</p>' in rejected.content
     assert accepted.status_code == 302
-    assert accepted.headers['location'] == '/admin/scan_management?active_tab=unmatched'
+    assert accepted.headers['location'] == '/scan_management?active_tab=unmatched'
+    assert accepted_from_identify.status_code == 302
+    assert accepted_from_identify.headers['location'] == '/scan_management?active_tab=unmatched'
+    assert accepted_file.status_code == 302
+    assert accepted_file.headers['location'] == '/scan_management?active_tab=unmatched'
+    assert rejected_path.status_code == 302
+    assert rejected_path.headers['location'] == (
+        '/add_game_manual?full_disk_path=/outside/New+Folder&from_unmatched=true'
+    )
     assert ('link_existing_game', 'g1', '/safe/NewFolder', 'admin') in data.calls
+    assert ('link_existing_game', 'g1', '/safe/NewFile.rom', 'admin') in data.calls
+    assert ('unsafe_link_path', '/outside/New Folder', 'outside allowed roots', 'admin', 7) in data.calls
+
+
+def test_legacy_link_existing_game_login_and_admin_redirects(runtime):
+    from http.cookies import SimpleCookie
+    from starlette.testclient import TestClient
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+
+    app, data, cookies = runtime
+    with TestClient(app) as client:
+        anonymous = client.post('/link_existing_game', data={}, follow_redirects=False)
+    with TestClient(app) as client:
+        client.cookies.set('session', cookies['member'])
+        member = client.post('/link_existing_game', data={}, follow_redirects=False)
+        cookie = SimpleCookie()
+        cookie.load(next(value for value in member.headers.get_list('set-cookie')
+                         if value.startswith('session=')))
+        session_cookie = cookie['session'].value
+
+    session = load_session_cookie(session_cookie, 'mutation-secret', max_age=31_536_000)
+    assert anonymous.status_code == member.status_code == 302
+    assert anonymous.headers['location'] == '/login?next=%2Flink_existing_game'
+    assert member.headers['location'] == '/login'
+    assert ('danger', 'You must be an admin to access this page.') in session['_flashes']
+    assert not data.calls
+
+
+def test_legacy_link_existing_game_bearer_token_requires_admin_scope(runtime):
+    import hashlib
+    from starlette.testclient import TestClient
+
+    app, data, _cookies = runtime
+    secret = 'synthetic-read-only-secret'
+    app.state.tokens['scope1'] = SimpleNamespace(
+        user_id=7, token_hash=hashlib.sha256(secret.encode()).hexdigest(),
+        revoked_at=None, expires_at=None, scopes=['read:library'],
+        has_scope=lambda scope: scope == 'read:library',
+    )
+    app.state.flask_app.config['WTF_CSRF_ENABLED'] = True
+    session = {}
+    csrf = generate_csrf_token(session, 'mutation-secret')
+    cookie = dump_session_cookie(session, 'mutation-secret')
+    with TestClient(app) as client:
+        client.cookies.set('session', cookie)
+        response = client.post('/link_existing_game', data={
+            'game_uuid': 'g1', 'full_disk_path': '/safe/NewFolder',
+            'csrf_token': csrf,
+        }, headers={
+            'Authorization': f'Bearer gt_scope1_{secret}',
+            'X-CSRFToken': csrf,
+        }, follow_redirects=False)
+
+    assert response.status_code == 403
+    assert response.json() == {
+        'error': 'This token does not have the admin scope',
+        'error_code': 'forbidden',
+        'message': 'This token does not have the admin scope',
+        'ok': False,
+        'success': False,
+    }
+    assert not data.calls
+
+
+def test_legacy_link_existing_game_empty_form_matches_flask_redirect(runtime):
+    from starlette.testclient import TestClient
+
+    app, _data, _cookies = runtime
+    app.state.flask_app.config['WTF_CSRF_ENABLED'] = True
+    session = {'_user_id': login_identity_for(7), '_fresh': True}
+    csrf = generate_csrf_token(session, 'mutation-secret')
+    cookie = dump_session_cookie(session, 'mutation-secret')
+
+    with TestClient(app) as client:
+        client.cookies.set('session', cookie)
+        response = client.post('/link_existing_game', data={},
+                               headers={'X-CSRFToken': csrf}, follow_redirects=False)
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/add_game_manual?from_unmatched=false'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<a href="/add_game_manual?from_unmatched=false">' in response.content
+
+
+def test_legacy_link_existing_game_database_failure_uses_legacy_flash(runtime):
+    from http.cookies import SimpleCookie
+    from starlette.testclient import TestClient
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+
+    app, data, cookies = runtime
+    data.link_error_code = 'internal'
+    with TestClient(app) as client:
+        client.cookies.set('session', cookies['admin'])
+        response = client.post('/link_existing_game', data={
+            'game_uuid': 'g1', 'full_disk_path': '/safe/NewFolder',
+        }, follow_redirects=False)
+        cookie = SimpleCookie()
+        cookie.load(next(value for value in response.headers.get_list('set-cookie')
+                         if value.startswith('session=')))
+        session_cookie = cookie['session'].value
+
+    session = load_session_cookie(session_cookie, 'mutation-secret', max_age=31_536_000)
+    assert response.status_code == 302
+    assert response.headers['location'] == (
+        '/add_game_manual?full_disk_path=/safe/NewFolder&from_unmatched=false'
+    )
+    assert (
+        'error', 'An error occurred while linking the game. Please try again.'
+    ) in session['_flashes']
 
 
 def test_rename_apply_validates_plan_before_adapter_mutation(runtime):
@@ -294,6 +509,29 @@ def test_rename_apply_validates_plan_before_adapter_mutation(runtime):
     assert ok.status_code == 200
     assert ok.json()['full_disk_path'] == '/safe/Renamed'
     assert data.calls[-1][0] == 'apply_rename'
+
+
+def test_unhandled_rename_apply_failure_is_logged_and_redacted(runtime, monkeypatch, caplog):
+    app, data, cookies = runtime
+
+    def fail_apply(*_args, **_kwargs):
+        raise RuntimeError('postgresql://parity-user:secret@db/private')
+
+    data.apply_rename = fail_apply
+    response = request(
+        app, '/api/library_tools/rename/apply', cookie=cookies['admin'],
+        json={'game_uuid': 'g1', 'plan': [{'kind': 'root_folder',
+                                           'from_path': '/safe/Original',
+                                           'to_path': '/safe/Renamed'}]},
+    )
+
+    assert response.status_code == 500
+    assert response.json()['message'] == (
+        'Something went wrong on our end. The error has been logged.'
+    )
+    assert 'parity-user' not in response.text
+    assert any('Unhandled exception during POST /api/library_tools/rename/apply'
+               in record.getMessage() for record in caplog.records)
 
 
 def test_doctor_apply_renames_filters_paths_and_keeps_result_shape(runtime):
@@ -322,3 +560,22 @@ def test_backfill_and_freshness_delegate_operations_and_preserve_contracts(runti
                          'only_incomplete': True, 'cascade': False}) in data.calls
     assert ('freshness', 'lib1', 50, False) in data.calls
 
+
+@pytest.mark.parametrize('raw', [b'{', b'[1]', b'true', b'"non-empty"'])
+def test_backfill_rejects_malformed_or_non_object_json_without_invoking_backfill(runtime, raw):
+    app, data, cookies = runtime
+
+    async def run():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookies['admin'])
+            return await client.post(
+                '/api/library_tools/backfill_steam_metadata', content=raw,
+                headers={'Content-Type': 'application/json'}, follow_redirects=False,
+            )
+
+    response = asyncio.run(run())
+    assert response.status_code == 400
+    assert response.json()['error_code'] == 'bad_request'
+    assert 'backfill' not in [call[0] for call in data.calls]

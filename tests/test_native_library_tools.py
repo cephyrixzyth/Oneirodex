@@ -7,12 +7,18 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 
 from oneirodex.runtime_native.library_tools import create_library_tools_router
+from oneirodex.runtime_native.library_tools_mutations import create_library_tools_mutations_router
 from oneirodex.runtime_native.library_tools import LibraryToolsData
 from oneirodex.runtime_native.library_tools_manual_identify import ManualIdentifyListData
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.routes_apis import apis_bp
+import oneirodex.routes_apis.library_tools  # register the legacy route on apis_bp
+from asgi import _install_native_api_error_handlers
 
 
 class FakeToolsData:
@@ -88,16 +94,19 @@ def runtime():
     )
     users = {
         'admin': SimpleNamespace(id=7, role='admin', state=True, is_active=True,
-                                 is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                 is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
         'member': SimpleNamespace(id=8, role='user', state=True, is_active=True,
-                                  is_authenticated=True, session_fingerprint=lambda: 'fp'),
+                                  is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef'),
     }
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
     manager.user_loader(lambda identity: next(
-        (user for user in users.values() if identity == f'{user.id}:fp'), None,
+        (user for user in users.values() if identity.split(':', 1)[0] == str(user.id)), None,
     ))
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
+    flask_app.add_url_rule('/api/options-mixed', endpoint='options_mixed',
+                           view_func=lambda: 'ok', methods=['GET', 'POST'])
+    flask_app.register_blueprint(apis_bp, url_prefix='/api')
     fake = FakeToolsData()
     app = FastAPI()
     app.include_router(create_library_tools_router(
@@ -106,8 +115,20 @@ def runtime():
         load_user_id=lambda identity: manager.user_callback(identity),
         login_manager=manager, data_access=fake,
     ))
+    app.include_router(create_library_tools_mutations_router(
+        flask_app, find_user=lambda uid: next((u for u in users.values() if u.id == uid), None),
+        find_token=lambda _prefix: None, commit_token_touch=lambda _token: None,
+        load_user_id=lambda identity: manager.user_callback(identity),
+        login_manager=manager, data_access=fake,
+    ))
+    app.state.legacy_flask_app = flask_app
+    app.add_api_route('/api/options-mixed', lambda: 'ok', methods=['GET', 'POST'])
+    app.state.legacy_options_allow = flask_app.test_client().options(
+        '/api/options-mixed'
+    ).headers['Allow']
+    _install_native_api_error_handlers(app, flask_app, flask_app.logger, routing_app=flask_app)
     cookies = {name: dump_session_cookie(
-        {'_user_id': f'{user.id}:fp', '_fresh': True}, 'library-tools-test-secret'
+        {'_user_id': login_identity_for(user.id), '_fresh': True}, 'library-tools-test-secret'
     ) for name, user in users.items()}
     return app, fake, cookies
 
@@ -133,6 +154,7 @@ def test_admin_read_routes_preserve_contracts_and_safe_paths(runtime):
     proposals = _request(app, '/api/library_tools/proposals', cookie=cookies['admin'])
     scan = _request(app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
                     method='POST', json={'roots': ['/safe']})
+    scan_options = _request(app, '/api/library_tools/proposals/scan_roots', method='OPTIONS')
     doctor = _request(app, '/api/library_tools/doctor/dry_run', cookie=cookies['admin'],
                       method='POST', json={'roots': ['/safe'], 'limit': 8})
 
@@ -142,9 +164,188 @@ def test_admin_read_routes_preserve_contracts_and_safe_paths(runtime):
     assert propose.json()['auto_create'] is False
     assert proposals.json()['proposals'][0]['proposal']['igdb_id'] == 44
     assert scan.json()['proposals'] == [{'path': '/safe/Game', 'proposal': {'igdb_id': 44}}]
+    assert scan_options.status_code == 200
+    assert scan_options.headers['content-type'] == 'text/html; charset=utf-8'
+    assert scan_options.headers['allow'] == 'OPTIONS, POST'
+    assert scan_options.headers['content-length'] == '0'
+    assert scan_options.content == b''
     assert doctor.json()['count'] == 1
     assert ('walk', '/safe') in data.calls
     assert ('doctor', ['/safe'], '{title}', 8) in data.calls
+
+
+def test_automatic_options_preserves_flask_method_order(runtime):
+    app, _data, _cookies = runtime
+    response = _request(app, '/api/options-mixed', method='OPTIONS')
+
+    assert response.status_code == 200
+    assert response.headers['allow'] == app.state.legacy_options_allow
+    assert response.content == b''
+
+
+def test_auto_options_combines_methods_from_split_native_routers():
+    from fastapi import FastAPI
+    from starlette.requests import Request
+    from oneirodex.runtime_native.response_compat import flask_auto_options_response
+
+    get_app = FastAPI()
+    post_app = FastAPI()
+
+    @get_app.get('/shared')
+    async def read_shared():
+        return {}
+
+    @post_app.post('/shared')
+    async def write_shared():
+        return {}
+
+    request = Request({
+        'type': 'http', 'method': 'OPTIONS', 'path': '/shared',
+        'raw_path': b'/shared', 'query_string': b'', 'headers': [],
+        'scheme': 'http', 'server': ('testserver', 80),
+        'client': ('testclient', 50000),
+    })
+    response = flask_auto_options_response(
+        {}, request, route_app=[get_app, post_app],
+    )
+
+    assert response is not None
+    assert response.status_code == 200
+    assert set(response.headers['allow'].split(', ')) == {
+        'OPTIONS', 'HEAD', 'GET', 'POST',
+    }
+
+
+def test_auto_options_ignores_member_shell_catchall_for_non_page_paths():
+    from fastapi import FastAPI
+    from starlette.requests import Request
+    from oneirodex.runtime_native.response_compat import flask_auto_options_response
+
+    delete_app = FastAPI()
+    member_shell_app = FastAPI()
+
+    @delete_app.delete('/api/resource/{resource_id}')
+    async def delete_resource(resource_id: str):
+        return {}
+
+    @member_shell_app.get('/{member_path:path}')
+    async def member_shell(member_path: str):
+        return {}
+
+    def options(path):
+        request = Request({
+            'type': 'http', 'method': 'OPTIONS', 'path': path,
+            'raw_path': path.encode(), 'query_string': b'', 'headers': [],
+            'scheme': 'http', 'server': ('testserver', 80),
+            'client': ('testclient', 50000),
+        })
+        return flask_auto_options_response(
+            {}, request, route_app=[delete_app, member_shell_app],
+        )
+
+    delete_response = options('/api/resource/1')
+    member_response = options('/discover')
+
+    assert delete_response is not None
+    assert set(delete_response.headers['allow'].split(', ')) == {'DELETE', 'OPTIONS'}
+    assert member_response is not None
+    assert set(member_response.headers['allow'].split(', ')) == {'GET', 'HEAD', 'OPTIONS'}
+
+
+def test_auto_options_combines_static_and_dynamic_sibling_methods():
+    from fastapi import FastAPI
+    from starlette.requests import Request
+    from oneirodex.runtime_native.response_compat import flask_auto_options_response
+
+    static_app = FastAPI()
+    dynamic_app = FastAPI()
+
+    @static_app.get('/api/ownership/connections')
+    async def list_connections():
+        return {}
+
+    @dynamic_app.post('/api/ownership/{store:str}')
+    async def connect_store(store: str):
+        return {}
+
+    @dynamic_app.delete('/api/ownership/{store:str}')
+    async def disconnect_store(store: str):
+        return {}
+
+    request = Request({
+        'type': 'http', 'method': 'OPTIONS', 'path': '/api/ownership/connections',
+        'raw_path': b'/api/ownership/connections', 'query_string': b'', 'headers': [],
+        'scheme': 'http', 'server': ('testserver', 80),
+        'client': ('testclient', 50000),
+    })
+    response = flask_auto_options_response({}, request, route_app=[static_app, dynamic_app])
+
+    assert response is not None
+    assert set(response.headers['allow'].split(', ')) == {
+        'GET', 'HEAD', 'OPTIONS', 'POST', 'DELETE',
+    }
+
+
+def test_explicit_options_match_does_not_treat_mount_as_handler():
+    from fastapi import FastAPI
+    from asgi import LazyASGIApp
+
+    child = FastAPI()
+
+    @child.delete('/delete-only')
+    async def delete_only():
+        return {}
+
+    @child.options('/custom-options')
+    async def custom_options():
+        return {}
+
+    parent = FastAPI()
+    parent.mount('/api', child)
+
+    def scope(path):
+        return {
+            'type': 'http', 'method': 'OPTIONS', 'path': path,
+            'raw_path': path.encode(), 'root_path': '',
+            'query_string': b'', 'headers': [],
+        }
+
+    assert not LazyASGIApp._matches_native_options_route(
+        parent, scope('/api/delete-only'),
+    )
+    assert LazyASGIApp._matches_native_options_route(
+        parent, scope('/api/custom-options'),
+    )
+
+
+def test_propose_leaf_options_matches_legacy_method_order(runtime):
+    app, _data, _cookies = runtime
+    path = '/api/library_tools/propose_leaf_libraries'
+    legacy = app.state.legacy_flask_app.test_client().options(path)
+    native = _request(app, path, method='OPTIONS')
+
+    assert native.status_code == legacy.status_code == 200
+    assert native.headers['content-type'] == legacy.headers['Content-Type']
+    # Current host Flask may order this list differently than the pinned 1.1.8
+    # image; the exact-image replay fixes the compatibility order below.
+    expected_methods = {'HEAD', 'GET', 'OPTIONS', 'POST'}
+    assert set(legacy.headers['Allow'].split(', ')) == expected_methods
+    assert set(native.headers['allow'].split(', ')) == expected_methods
+    assert native.headers['content-length'] == '0'
+    assert native.content == legacy.data == b''
+
+
+def test_propose_leaf_malformed_json_keeps_structured_client_error(runtime):
+    app, data, cookies = runtime
+    response = _request(
+        app, '/api/library_tools/propose_leaf_libraries', cookie=cookies['admin'],
+        method='POST', content=b'{', headers={'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['error_code'] == 'bad_request'
+    assert response.json()['error'] == 'root path required'
+    assert not any(call[0] == 'propose' for call in data.calls)
 
 
 def test_admin_required_and_out_of_root_path_rejected_before_adapter_work(runtime):
@@ -159,6 +360,66 @@ def test_admin_required_and_out_of_root_path_rejected_before_adapter_work(runtim
     assert unsafe.json()['proposals'] == []
     assert not any(call[0] == 'walk' for call in data.calls)
     assert not any(call[0] == 'propose' for call in data.calls)
+
+
+def test_proposal_scan_roots_matches_legacy_body_validation(runtime):
+    app, data, cookies = runtime
+    malformed = _request(
+        app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
+        method='POST', content=b'{', headers={'Content-Type': 'application/json'},
+    )
+    wrong_type = _request(
+        app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
+        method='POST', json={'roots': 'not-a-list'},
+    )
+    extra = _request(
+        app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
+        method='POST', json={'roots': [], 'unexpected': True},
+    )
+
+    for response, field in ((malformed, '__root__'), (wrong_type, 'roots'),
+                            (extra, 'unexpected')):
+        assert response.status_code == 422
+        assert response.json()['error'] == 'Invalid request.'
+        assert response.json()['error_code'] == 'unprocessable'
+        assert field in response.json()['detail']
+    assert not any(call[0] == 'walk' for call in data.calls)
+
+    empty = _request(
+        app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
+        method='POST', json={},
+    )
+    assert empty.status_code == 200
+    assert empty.json()['proposals'] == []
+
+
+@pytest.mark.parametrize('identity', [None, 'member'])
+@pytest.mark.parametrize('path', [
+    '/api/library_tools/doctor/dry_run',
+    '/api/library_tools/doctor/write_proposals',
+    '/api/library_tools/doctor/apply_renames',
+])
+def test_library_doctor_auth_matches_legacy_flask(runtime, identity, path):
+    app, _data, cookies = runtime
+    legacy_client = app.state.legacy_flask_app.test_client()
+    cookie = cookies[identity] if identity else None
+    if identity:
+        with legacy_client.session_transaction() as session:
+            session['_user_id'] = login_identity_for(8)
+            session['_fresh'] = True
+
+    legacy = legacy_client.post(
+        path, json={'roots': ['/safe'], 'rows': []},
+    )
+    native = _request(
+        app, path, cookie=cookie, method='POST',
+        json={'roots': ['/safe'], 'rows': []},
+    )
+
+    assert native.status_code == legacy.status_code
+    assert native.headers.get('location') == legacy.headers.get('Location')
+    assert native.headers.get('content-type') == legacy.headers.get('Content-Type')
+    assert native.content == legacy.data
 
 
 def test_import_preview_json_and_multipart_use_injected_parser(runtime):
@@ -177,6 +438,30 @@ def test_import_preview_json_and_multipart_use_injected_parser(runtime):
     assert multipart.json()['auto_create'] is False
     assert ('import', {'items': []}, False, ('/safe',)) in data.calls
     assert ('import', 'path,name\r\n/safe,Library', True, ('/safe',)) in data.calls
+
+
+def test_library_tools_rejects_oversized_json_and_multipart_before_processing(runtime):
+    app, data, cookies = runtime
+    app.state.legacy_flask_app.config['MAX_CONTENT_LENGTH'] = 128
+
+    oversized_multipart = _request(
+        app, '/api/library_tools/import_leaf_libraries/preview',
+        cookie=cookies['admin'], method='POST',
+        content=(b'--x\r\nContent-Disposition: form-data; name="file"; filename="items.csv"\r\n'
+                 b'Content-Type: text/csv\r\n\r\n' + b'x' * 256 + b'\r\n--x--\r\n'),
+        headers={'Content-Type': 'multipart/form-data; boundary=x'},
+    )
+    oversized_json = _request(
+        app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
+        method='POST', content=b'{"roots":[],"padding":"' + b'x' * (64 * 1024) + b'"}',
+        headers={'Content-Type': 'application/json'},
+    )
+
+    assert oversized_multipart.status_code == oversized_json.status_code == 413
+    assert oversized_multipart.json()['error_code'] == 'payload_too_large'
+    assert oversized_json.json()['error_code'] == 'payload_too_large'
+    assert not any(call[0] == 'import' for call in data.calls)
+    assert not any(call[0] == 'walk' for call in data.calls)
 
 
 def test_native_library_helpers_use_explicit_config_without_app_context(tmp_path, monkeypatch):
@@ -204,4 +489,3 @@ def test_native_library_helpers_use_explicit_config_without_app_context(tmp_path
         monkeypatch.setattr(gamenames, 'get_game_names_from_folder', lambda *args, **kwargs: ['Folder'])
         assert data.games_in_files(flask_app, str(tmp_path), ['.iso']) == ['Disc']
         assert data.games_in_folder(flask_app, str(tmp_path), SimpleNamespace(scan_depth=1)) == ['Folder']
-

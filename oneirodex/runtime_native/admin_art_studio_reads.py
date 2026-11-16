@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse, Response
 
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 
 class AdminArtStudioReadData:
@@ -99,8 +100,8 @@ async def _handle_read(
                     items, choices = data.system_marks_catalog()
                     payload = {'items': items, 'count': len(items), 'all_platforms': choices}
                 else:
-                    theme = (request.query_params.get('theme') or '').strip()
-                    platform = (request.query_params.get('platform') or '').strip()
+                    theme = (first_query_value(request.query_params, 'theme') or '').strip()
+                    platform = (first_query_value(request.query_params, 'platform') or '').strip()
                     if not theme or not platform:
                         response = _error('theme and platform are required', 'bad_request')
                         payload = None

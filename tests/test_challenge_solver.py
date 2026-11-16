@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ipaddress
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,6 +27,16 @@ def _mock_response(status: int, text: str = '', headers: dict | None = None) -> 
     return resp
 
 
+def _stream_response(status: int, body: bytes, headers: dict | None = None) -> requests.Response:
+    resp = requests.Response()
+    resp.status_code = status
+    resp.headers.update(headers or {})
+    resp.raw = BytesIO(body)
+    resp._content = False
+    resp.url = 'https://example.test/search'
+    return resp
+
+
 def test_is_challenge_response_cloudflare_503():
     body = '<html><title>Just a moment...</title><body>Checking your browser before accessing cloudflare</body></html>'
     assert is_challenge_response(_mock_response(503, body)) is True
@@ -40,7 +52,7 @@ def test_is_challenge_response_403_single_marker_not_enough():
 
 def test_challenge_solver_client_parses_flaresolverr_solution():
     session = MagicMock()
-    session.post.return_value = MagicMock(
+    response = MagicMock(
         status_code=200,
         content=b'{"status":"ok","solution":{"url":"https://idx.test/results","status":200,"response":"[{\\"title\\":\\"Ok\\"}]","cookies":[{"name":"cf_clearance","value":"abc"}],"userAgent":"Mozilla/5.0"}}',
         json=lambda: {
@@ -55,31 +67,75 @@ def test_challenge_solver_client_parses_flaresolverr_solution():
         },
     )
     client = ChallengeSolverClient('http://solver:8191', session=session)
-    solution = client.request_get('https://idx.test/results')
+    with patch('oneirodex.utils.challenge_solver.safe_request_limited', return_value=response) as safe_post:
+        solution = client.request_get('https://idx.test/results')
     assert isinstance(solution, SolverSolution)
     assert solution.status_code == 200
     assert solution.body == '[{"title":"Ok"}]'
     assert solution.cookie_header() == 'cf_clearance=abc'
     assert solution.user_agent == 'Mozilla/5.0 Test'
-    session.post.assert_called_once()
-    call_args = session.post.call_args
-    assert call_args[0][0] == 'http://solver:8191/v1'
+    safe_post.assert_called_once()
+    call_args = safe_post.call_args
+    assert call_args[0] == ('POST', 'http://solver:8191/v1')
     assert call_args[1]['json']['cmd'] == 'request.get'
-    assert call_args[1]['allow_redirects'] is False
+    assert call_args[1]['validator'].__name__ == 'validate_connector_http_url'
+    assert call_args[1]['max_redirects'] == 0
+    assert call_args[1]['max_response_bytes'] == 16 * 1024 * 1024
+    assert call_args[1]['session'] is session
 
 
 def test_challenge_solver_rejects_redirects():
     session = MagicMock()
-    session.post.return_value = MagicMock(status_code=307)
     client = ChallengeSolverClient('http://solver:8191', session=session)
-    with pytest.raises(RuntimeError, match='redirect refused'):
-        client.request_get('https://idx.test/results')
-    assert session.post.call_args.kwargs['allow_redirects'] is False
+    with patch(
+        'oneirodex.utils.challenge_solver.safe_request_limited',
+        side_effect=requests.TooManyRedirects,
+    ) as safe_post:
+        with pytest.raises(RuntimeError, match='redirect refused'):
+            client.request_get('https://idx.test/results')
+    assert safe_post.call_args.kwargs['max_redirects'] == 0
+
+
+def test_challenge_solver_transport_pins_the_resolved_destination(monkeypatch):
+    solver_body = b'{"status":"ok","solution":{"url":"https://idx.test/x","status":200,"response":"ok"}}'
+
+    class NoNetworkSession(requests.Session):
+        def __init__(self):
+            super().__init__()
+            self.calls = []
+
+        def request(self, method, url, **kwargs):
+            self.calls.append((method, url, kwargs))
+            response = requests.Response()
+            response.status_code = 200
+            response.url = url
+            response.raw = BytesIO(solver_body)
+            response._content = False
+            return response
+
+    monkeypatch.setattr(
+        'oneirodex.utils.security._resolve_host',
+        lambda _host: [ipaddress.ip_address('93.184.216.34')],
+    )
+    session = NoNetworkSession()
+    client = ChallengeSolverClient('http://solver.example:8191', session=session)
+
+    solution = client.request_get('https://idx.test/x')
+
+    assert solution.body == 'ok'
+    assert len(session.calls) == 1
+    method, url, kwargs = session.calls[0]
+    assert method == 'POST'
+    assert url == 'http://93.184.216.34:8191/v1'
+    assert kwargs['headers']['Host'] == 'solver.example:8191'
+    assert kwargs['stream'] is True
+    assert kwargs['json']['cmd'] == 'request.get'
+    session.close()
 
 
 def test_challenge_solver_client_trawl_scrape():
     session = MagicMock()
-    session.post.return_value = MagicMock(
+    response = MagicMock(
         status_code=200,
         content=b'{}',
         json=lambda: {
@@ -94,17 +150,17 @@ def test_challenge_solver_client_trawl_scrape():
         },
     )
     client = ChallengeSolverClient('http://trawl:8191', provider='trawl', max_tier=5, session=session)
-    solution = client.request_get('https://idx.test/x')
+    with patch('oneirodex.utils.challenge_solver.safe_request_limited', return_value=response) as safe_post:
+        solution = client.request_get('https://idx.test/x')
     assert solution.body == 'ok'
-    assert session.post.call_args[0][0] == 'http://trawl:8191/scrape'
-    assert session.post.call_args[1]['json']['maxTier'] == 4
-    assert session.post.call_args.kwargs['allow_redirects'] is False
+    assert safe_post.call_args[0][1] == 'http://trawl:8191/scrape'
+    assert safe_post.call_args.kwargs['json']['maxTier'] == 4
 
 
 def test_challenge_solver_trawl_fallback_does_not_log_remote_error_text(caplog):
     secret_url = 'https://indexer.example/search?passkey=private-passkey'
     session = MagicMock()
-    session.post.side_effect = [
+    responses = [
         MagicMock(
             status_code=200,
             content=b'{"status":"error"}',
@@ -127,7 +183,11 @@ def test_challenge_solver_trawl_fallback_does_not_log_remote_error_text(caplog):
     client = ChallengeSolverClient('http://solver:8191', provider='trawl', session=session)
 
     with caplog.at_level('DEBUG', logger='oneirodex.utils.challenge_solver'):
-        solution = client.request_get(secret_url)
+        with patch(
+            'oneirodex.utils.challenge_solver.safe_request_limited',
+            side_effect=responses,
+        ):
+            solution = client.request_get(secret_url)
 
     assert solution.body == 'ok'
     assert 'private-passkey' not in caplog.text
@@ -228,6 +288,97 @@ def test_fetch_with_challenge_retry_disabled_unchanged(app, db_session, monkeypa
     assert mock_get.call_count == 1
     assert mock_solve.call_count == 0
     assert resp.status_code == 503
+
+
+def test_fetch_with_challenge_retry_bounds_streamed_response_and_keeps_small_control(monkeypatch):
+    from oneirodex.utils.http_safe import ResponseTooLarge
+
+    small = _stream_response(200, b'{"results":[]}')
+    session = requests.Session()
+    monkeypatch.setattr(session, 'get', MagicMock(return_value=small))
+    response = fetch_with_challenge_retry(
+        'get', 'https://indexer.example/search', session=session,
+        max_response_bytes=64,
+    )
+    assert response.text == '{"results":[]}'
+    assert session.get.call_args.kwargs['stream'] is True
+    session.close()
+
+    large = _stream_response(200, b'x' * 65)
+    session = requests.Session()
+    monkeypatch.setattr(session, 'get', MagicMock(return_value=large))
+    with pytest.raises(ResponseTooLarge):
+        fetch_with_challenge_retry(
+            'get', 'https://indexer.example/search', session=session,
+            max_response_bytes=64,
+        )
+    assert large.raw.closed
+    session.close()
+
+
+def test_bounded_fetch_keeps_the_validated_safe_request_path(monkeypatch):
+    from oneirodex.utils import http_safe
+
+    response = _stream_response(200, b'{"results":[]}')
+    session = requests.Session()
+    seen = {}
+
+    def fake_safe_request(method, url, *, validator, session, **kwargs):
+        seen.update(method=method, url=url, validator=validator, session=session, **kwargs)
+        return response
+
+    monkeypatch.setattr(http_safe, 'safe_request', fake_safe_request)
+
+    def validator(url):
+        return True, url
+
+    bounded = fetch_with_challenge_retry(
+        'get', 'https://indexer.example/search', session=session,
+        validator=validator, max_response_bytes=64,
+    )
+
+    assert bounded.text == '{"results":[]}'
+    assert seen['session'] is session
+    assert seen['validator'] is validator
+    assert seen['stream'] is True
+    session.close()
+
+
+def test_fetch_with_challenge_retry_bounds_challenge_detection_and_retry(monkeypatch):
+    from oneirodex.utils import challenge_solver
+    from oneirodex.utils.http_safe import ResponseTooLarge
+
+    challenge = _stream_response(
+        503, b'<title>Just a moment...</title>' + b'x' * 80,
+    )
+    session = requests.Session()
+    monkeypatch.setattr(session, 'get', MagicMock(return_value=challenge))
+    solver = MagicMock()
+    monkeypatch.setattr(challenge_solver, 'challenge_solver_enabled', lambda *_args: True)
+    monkeypatch.setattr(challenge_solver, '_solver_client', lambda *_args: solver)
+    with pytest.raises(ResponseTooLarge):
+        fetch_with_challenge_retry(
+            'get', 'https://indexer.example/search', session=session,
+            max_response_bytes=64,
+        )
+    solver.request_get.assert_not_called()
+    session.close()
+
+    first = _stream_response(503, b'<title>Just a moment...</title>')
+    retry = _stream_response(503, b'<title>Just a moment...</title>')
+    session = requests.Session()
+    monkeypatch.setattr(session, 'get', MagicMock(side_effect=[first, retry]))
+    solver.request_get.return_value = SolverSolution(
+        url='https://indexer.example/search', status_code=200,
+        body='x' * 65, headers={}, cookies=[], user_agent=None,
+    )
+    with pytest.raises(ResponseTooLarge):
+        fetch_with_challenge_retry(
+            'get', 'https://indexer.example/search', session=session,
+            max_response_bytes=64,
+        )
+    assert session.get.call_count == 2
+    session.close()
 
 
 def test_challenge_solver_failure_does_not_retain_or_log_url_secrets(monkeypatch, caplog):

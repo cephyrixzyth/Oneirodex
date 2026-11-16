@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { Page } from './Page'
+import { AdminLink } from './AdminLink'
 
 interface HubLink {
   href: string
@@ -43,9 +44,9 @@ export function HubPage({
           <ul className="od-settings-list">
             {links.map((link) => (
               <li key={link.href}>
-                <a className="od-settings-row" href={link.href}>
+                <AdminLink className="od-settings-row" to={link.href}>
                   <span className="od-settings-row__title">{link.label}</span>
-                </a>
+                </AdminLink>
               </li>
             ))}
           </ul>

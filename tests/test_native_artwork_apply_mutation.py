@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.artwork_apply_mutation import create_artwork_apply_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 
@@ -16,7 +18,7 @@ def make_client(*, data=None, role='admin'):
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     user = SimpleNamespace(
         id=7, role=role, is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fp',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={}, login_message='Please log in.',
@@ -37,7 +39,7 @@ def make_client(*, data=None, role='admin'):
     ))
     client = TestClient(app)
     client.cookies.set('session', dump_session_cookie(
-        {'_user_id': '7:fp', '_fresh': True}, 'native-artwork-apply-secret',
+        {'_user_id': login_identity_for(7), '_fresh': True}, 'native-artwork-apply-secret',
     ))
     return client
 
@@ -53,6 +55,34 @@ def test_apply_artwork_preserves_provider_and_kind_alias():
         'game_uuid': 'game-1', 'url': 'https://images.invalid/game.jpg',
         'provider': 'igdb', 'image_type': 'cover',
     }
+
+
+def test_apply_artwork_rejects_json_bytes_with_non_json_media_type():
+    calls = []
+    data = SimpleNamespace(
+        game_exists=lambda _uuid: True,
+        apply=lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    response = make_client(data=data).post(
+        '/api/games/game-1/artwork/steamgriddb',
+        data='{"url":"https://images.invalid/game.jpg"}',
+        headers={'Content-Type': 'text/plain'},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['error_code'] == 'unprocessable'
+    assert calls == []
+
+
+def test_apply_artwork_accepts_vendor_json_media_type():
+    response = make_client().post(
+        '/api/games/game-1/artwork/steamgriddb',
+        data='{"url":"https://images.invalid/game.jpg"}',
+        headers={'Content-Type': 'application/vnd.api+json'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['url'] == 'https://images.invalid/game.jpg'
 
 
 def test_apply_artwork_validation_and_game_not_found_do_not_apply():

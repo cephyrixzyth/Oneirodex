@@ -85,7 +85,7 @@ Write **Oneirodex** in UI, Help, README, and operator docs. **P3b landed 2026-08
 | Commit | Only when the user says commit / ship / push |
 | Push | **Always** after ship/commit (`ship-ready` pushes to origin); PR only when asked |
 | Tests | Smallest relevant pytest/vitest slice — never claim "all green" after a partial run |
-| Admin UI | Hybrid React shell + Jinja forms OK until migrated |
+| Admin UI | React shell is the production path; keep legacy compatibility handlers working until their routes migrate, and do not add new Jinja templates |
 | Branch | Stay on the current feature branch unless asked |
 | Secrets | Never commit `.env` / tokens; never stage `docs/_private/` |
 | Force-push | Never to `main`; no `--no-verify` unless the user demands it |

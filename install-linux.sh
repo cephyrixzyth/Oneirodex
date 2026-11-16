@@ -39,6 +39,7 @@ SECRET_KEY=""
 GAMES_DIR=""
 LIBRARY_ROOTS=""
 FORCE_INSTALL=false
+PRESERVED_CONFIGURATION=false
 DEV_MODE=false
 SKIP_DB=false
 CUSTOM_PORT="5006"
@@ -282,7 +283,7 @@ show_help() {
     echo "  ./install-linux.sh [OPTIONS]"
     echo
     echo "OPTIONS:"
-    echo "  --force           Override existing installation"
+    echo "  --force           Regenerate existing .env settings (backup and signing key retained)"
     echo "  --dev            Install development dependencies"
     echo "  --no-db          Skip database setup (use existing)"
     echo "  --verbose, -v    Show detailed installation output"
@@ -308,7 +309,7 @@ show_help() {
 
 # Backup existing configuration files
 backup_existing_config() {
-    if [ -f "$SCRIPT_DIR/.env" ]; then
+    if [ -f "$SCRIPT_DIR/.env" ] && [ "$FORCE_INSTALL" = true ]; then
         print_step "Backing up existing configuration..."
         cp "$SCRIPT_DIR/.env" "$SCRIPT_DIR/.env.backup.$(date +%Y%m%d-%H%M%S)"
         print_success "Configuration backed up"
@@ -453,6 +454,19 @@ install_prerequisites() {
         return 1
     fi
     print_success "Python3 installed: $(python3 --version)"
+
+    if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+        print_error "Node.js 22 and npm are required to build the Oneirodex SPAs."
+        print_info "Install Node.js 22 from your distribution's supported source, then re-run."
+        return 1
+    fi
+    local node_version
+    node_version="$(node -p 'process.versions.node')"
+    if [[ "$node_version" != 22.* ]]; then
+        print_error "Node.js 22 is required; found $node_version"
+        return 1
+    fi
+    print_success "Node.js $node_version available"
 
     if ! python3 -m pip --version >/dev/null 2>&1; then
         print_error "pip installation failed"
@@ -618,6 +632,13 @@ test_database_connection() {
 
 # Start and configure PostgreSQL
 setup_postgresql() {
+    if [ -f "$SCRIPT_DIR/.env" ] && [ "$FORCE_INSTALL" != true ]; then
+        print_info "Keeping database settings from the existing .env; skipping database provisioning."
+        # Do not rotate the role password while retaining its old connection URL,
+        # or probe it later using unused installer-generated credentials.
+        SKIP_DB=true
+        return 0
+    fi
     if [ "$SKIP_DB" = true ]; then
         print_info "Skipping PostgreSQL setup (--no-db flag)"
         return 0
@@ -765,9 +786,27 @@ setup_python_environment() {
     fi
 }
 
+build_native_spas() {
+    print_step "Building all five native installer SPAs with Node 22..."
+    cd "$SCRIPT_DIR"
+    execute_quiet "install Node workspace dependencies" npm ci --no-audit --no-fund
+    execute_quiet "build native installer SPAs" npm run build:native-spas
+    print_success "Member, member-auth, admin, admin-pilot and ops-glance bundles built"
+}
+
 # Configure application settings
 configure_application() {
     print_step "Configuring Oneirodex application..."
+
+    if [ -f "$SCRIPT_DIR/.env" ] && [ "$FORCE_INSTALL" != true ]; then
+        PRESERVED_CONFIGURATION=true
+        chmod 600 "$SCRIPT_DIR/.env"
+        chmod +x "$SCRIPT_DIR"/*.sh
+        print_success "Existing .env preserved"
+        print_info "Use --force to regenerate installer settings; reapply custom values from the backup."
+        return 0
+    fi
+    PRESERVED_CONFIGURATION=false
 
     # Keep the tracked config.py as the source of truth and preserve the
     # signing key across reinstalls.
@@ -864,6 +903,7 @@ SECRET_KEY=$SECRET_KEY
 UPLOAD_FOLDER=$SCRIPT_DIR/oneirodex/static/library
 
 # Development mode
+PORT=$CUSTOM_PORT
 DEV_MODE=${DEV_MODE:-false}
 EOF
 
@@ -885,11 +925,10 @@ validate_installation() {
     if [ -d "$SCRIPT_DIR/venv" ]; then
         source "$SCRIPT_DIR/venv/bin/activate"
 
-        # Test Flask app creation
-        if python3 -c "from oneirodex import create_app; app = create_app(); print('Flask app creation: OK')" >/dev/null 2>&1; then
-            print_success "Flask application setup validated"
+        if python3 "$SCRIPT_DIR/scripts/validate-native-install.py"; then
+            print_success "Native runtime and frontend assets validated"
         else
-            print_error "Flask application validation failed"
+            print_error "Native runtime or frontend asset validation failed"
             return 1
         fi
     else
@@ -926,13 +965,17 @@ show_summary() {
     echo -e "${GREEN}╰──────────────────────────────────────────────────────────────────────╯${NC}"
     echo -e "${CYAN}  ONEI > Your worlds are waiting at the gate.${NC}"
     echo
-    echo -e "${CYAN}  Launch gate:${NC} http://localhost:$CUSTOM_PORT"
-    echo -e "${CYAN}  Game cache:${NC} $GAMES_DIR"
-    if [ -n "$LIBRARY_ROOTS" ]; then
-        echo -e "${CYAN}  Trail markers:${NC} $LIBRARY_ROOTS"
-    fi
-    if [ "$SKIP_DB" != true ]; then
-        echo -e "${CYAN}  Camp ledger:${NC} oneirodex (credentials stored in .env)"
+    if [ "$PRESERVED_CONFIGURATION" = true ]; then
+        print_info "Existing .env preserved; its port, paths and other settings remain active."
+    else
+        echo -e "${CYAN}  Launch gate:${NC} http://localhost:$CUSTOM_PORT"
+        echo -e "${CYAN}  Game cache:${NC} $GAMES_DIR"
+        if [ -n "$LIBRARY_ROOTS" ]; then
+            echo -e "${CYAN}  Trail markers:${NC} $LIBRARY_ROOTS"
+        fi
+        if [ "$SKIP_DB" != true ]; then
+            echo -e "${CYAN}  Camp ledger:${NC} oneirodex (credentials stored in .env)"
+        fi
     fi
     echo -e "${CYAN}  Start command:${NC} ./startweb.sh"
     echo -e "${CYAN}  Stop:${NC} Press Ctrl+C"
@@ -953,17 +996,23 @@ show_summary() {
     if [ "$start_it" = true ]; then
         echo
         print_info "Opening the launch gate..."
-        print_info "Open your browser to http://localhost:$CUSTOM_PORT when ready"
+        if [ "$PRESERVED_CONFIGURATION" != true ]; then
+            print_info "Open your browser to http://localhost:$CUSTOM_PORT when ready"
+        fi
         print_info "Press Ctrl+C to stop the application"
         echo
 
         # Export PORT for startweb.sh
-        export PORT="$CUSTOM_PORT"
+        if [ "$PRESERVED_CONFIGURATION" != true ]; then
+            export PORT="$CUSTOM_PORT"
+        fi
         exec ./startweb.sh
     else
         echo
         print_info "To start Oneirodex later, run: ./startweb.sh"
-        print_info "Then open your browser to: http://localhost:$CUSTOM_PORT"
+        if [ "$PRESERVED_CONFIGURATION" != true ]; then
+            print_info "Then open your browser to: http://localhost:$CUSTOM_PORT"
+        fi
     fi
 }
 
@@ -1028,6 +1077,10 @@ main() {
 
     # Setup Python environment
     if ! setup_python_environment; then
+        exit 1
+    fi
+
+    if ! build_native_spas; then
         exit 1
     fi
 

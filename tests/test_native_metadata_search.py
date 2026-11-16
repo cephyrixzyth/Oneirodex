@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.metadata_search import create_metadata_search_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 
@@ -35,7 +37,7 @@ def _client(*, role='admin', authenticated=True):
     user = SimpleNamespace(
         id=94, user_id='metadata-search-user', role=role,
         is_active=True, state=True, is_authenticated=True,
-        session_fingerprint=lambda: 'fingerprint',
+        session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -59,7 +61,7 @@ def _client(*, role='admin', authenticated=True):
     client = TestClient(app)
     if authenticated:
         client.cookies.set('session', dump_session_cookie(
-            {'_user_id': '94:fingerprint', '_fresh': True},
+            {'_user_id': login_identity_for(94), '_fresh': True},
             flask_app.config['SECRET_KEY'],
         ))
     return client, data

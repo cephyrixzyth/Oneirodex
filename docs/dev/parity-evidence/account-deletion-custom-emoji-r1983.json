@@ -1,0 +1,20 @@
+{
+  "review_id": "R1983",
+  "title": "Classify custom emoji as retained shared household content",
+  "owner_decision": "Delete live private user data; do not delete shared household records merely because a departing user authored or uploaded them.",
+  "classification": "Intentional shared-record retention under ADR 0013. The initial candidate interpretation as user-owned content conflicted with the accepted policy and has been corrected.",
+  "disposition": {
+    "row": "Retain the CustomEmoji row because household users share the resource.",
+    "file": "Retain the image file with the shared row.",
+    "uploader": "The existing users foreign key uses ON DELETE SET NULL, so the uploader identity is removed when the user row is deleted."
+  },
+  "verification": {
+    "command": "python -m pytest tests/test_admin_user_delete_retention.py tests/test_user_deletion_inventory.py -q",
+    "result": "passed: 6 tests on Python 3.14.10 and PostgreSQL 17.6",
+    "assertions": "After deletion, the custom emoji row remains, uploaded_by_user_id is NULL, and the shared image file remains. The same run verifies retained chat history, audit redaction, duplicate-log redaction, owned-file cleanup and FK inventory."
+  },
+  "limits": [
+    "This disposition applies to the shared household emoji resource and does not change cancellation cleanup for an upload whose request is cancelled before acceptance.",
+    "The full retained-record text review and deployed-schema comparison remain open."
+  ]
+}

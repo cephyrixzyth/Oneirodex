@@ -64,6 +64,7 @@ else now.
 - Open Chat, select a channel, click **Mute** / **Unmute**.
 - Muted channels show `muted` in the sidebar.
 - While muted, you still see messages in Chat, but @mentions and DM notifications for that thread are suppressed.
+- Chat JSON write requests are limited to 64 KiB; attachment uploads use their separate upload limit.
 
 ## Create / manage household rooms
 
@@ -95,7 +96,9 @@ outside it cannot list its channels, read its messages, or join its voice.
   the selected space appear beside it.
 - Create a space, then add channels to it with a `text` or `voice` kind.
 - **Invites** are codes you generate and share. Redeem one to join; an owner can
-  revoke a code, and revoking does not remove people who already joined.
+  revoke a code, and revoking does not remove people who already joined. Redeeming
+  again as a current member is idempotent and does not use another slot; a use is
+  counted only when a new member joins.
 - Voice channels get a room of their own — joining one requires membership of
   that space, checked server-side every time a token is minted.
 
@@ -123,7 +126,7 @@ outside it cannot list its channels, read its messages, or join its voice.
 - Members (`user` / librarian / admin) can attach images and small files in household rooms and DMs. **Child accounts cannot upload** (same policy as camera/screenshare).
 - Flow: upload first (`POST /api/chat/channels/<id>/attachments` multipart field `file`), then send with `attachment_ids` on `POST …/messages`. Body may be empty when attachments are present.
 - Limits: **5 MB** per file · **5** attachments per message · **1 GiB and 10,000 files total** across this Oneirodex installation by default · types: `png` / `jpg` / `webp` / `gif` / `txt` / `csv` / `pdf`. The server operator can raise the storage and file-count limits with `CHAT_ATTACHMENT_STORAGE_MAX_BYTES` and `CHAT_ATTACHMENT_STORAGE_MAX_FILES`.
-- Message payloads include `attachments: [{id, url, mime, name, size}]` (URL under `/static/library/chat-attachments/…`).
+- Message payloads include `attachments: [{id, url, mime, name, size}]` (URL under `/api/chat/attachments/…`). The server checks channel access when serving each file, and browsers are told not to cache the private attachment response.
 
 ## Voice (LiveKit)
 

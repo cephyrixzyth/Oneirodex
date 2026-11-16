@@ -14,6 +14,8 @@ from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
 from .request_auth import request_auth_context
 
+_MAX_JSON_BODY_BYTES = 64 * 1024
+
 _logger = logging.getLogger(__name__)
 _FALLBACK = {'enabled': False, 'idle_timeout': 0, 'settings': None}
 
@@ -174,8 +176,21 @@ def create_attract_mode_router(
                     _login_redirect(flask_app, request, login_manager, auth), request, auth,
                 )
 
+            from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+            raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+            if raw_body is BODY_TOO_LARGE:
+                from oneirodex.utils.api_contract import api_error_payload
+
+                payload, status = api_error_payload(
+                    'Request body is too large.', code='payload_too_large',
+                )
+                return finish(JSONResponse(payload, status_code=status), request, auth)
+
             try:
-                body = await request.json()
+                import json
+
+                body = json.loads(raw_body or b'{}')
             except Exception:  # noqa: BLE001 — mirrors Flask get_json failure handling
                 body = None
             if not isinstance(body, dict) or not body:

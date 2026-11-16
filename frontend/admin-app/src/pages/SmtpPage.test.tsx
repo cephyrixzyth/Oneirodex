@@ -1,8 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { SmtpPage } from './SmtpPage'
-import { getJson, putJson, postJson } from '../api/adminApi'
-vi.mock('../api/adminApi', () => ({ getJson: vi.fn(), putJson: vi.fn(), postJson: vi.fn() }))
+import { getJson, postJson } from '../api/adminApi'
+vi.mock('../api/adminApi', () => ({ getJson: vi.fn(), postJson: vi.fn() }))
 afterEach(() => vi.resetAllMocks())
 const state = {
   smtp_enabled: true,
@@ -14,26 +14,56 @@ const state = {
   password_saved: true,
 }
 
-test('loads safe settings, saves blank password, and tests only saved connection', async () => {
+test('loads safe settings, saves blank password, and tests the saved connection while edits are pending', async () => {
   vi.mocked(getJson).mockResolvedValue({ settings: state })
-  vi.mocked(putJson).mockResolvedValue({ settings: { ...state, smtp_port: 2525 } })
-  vi.mocked(postJson).mockResolvedValue({ ok: true })
+  vi.mocked(postJson)
+    .mockResolvedValueOnce({ success: true, result: 'connected' })
+    .mockResolvedValueOnce({ success: true, status: 'success', message: 'saved' })
   render(<SmtpPage />)
+  expect(await screen.findByRole('heading', { name: 'SMTP Settings' })).toBeVisible()
+  await waitFor(() => expect(document.title).toBe('SMTP · Oneirodex Admin'))
   const port = await screen.findByLabelText('Port')
+  expect(screen.getByLabelText(/SMTP Server/)).toBeRequired()
+  expect(screen.getByLabelText('Enable SMTP')).toHaveAttribute('id', 'smtp_enabled')
+  expect(screen.getByLabelText(/SMTP Server/)).toHaveAttribute('id', 'smtp_server')
+  expect(port).toHaveAttribute('id', 'smtp_port')
+  expect(screen.getByLabelText('Username')).toHaveAttribute('id', 'smtp_username')
+  expect(screen.getByLabelText('Password')).toHaveAttribute('id', 'smtp_password')
+  expect(screen.getByLabelText('Use TLS')).toHaveAttribute('id', 'smtp_use_tls')
+  expect(screen.getByLabelText('Default Sender Email')).toHaveAttribute('id', 'smtp_default_sender')
   expect(screen.getByLabelText('Password')).toHaveValue('')
+  const saveActions = screen
+    .getByRole('button', { name: 'Save Settings' })
+    .closest('.od-admin-actions.od-smtp-actions')
+  const settingsFields = screen.getByRole('group', { name: 'Connection settings' })
+  expect(saveActions).not.toBeNull()
+  expect(
+    saveActions!.compareDocumentPosition(settingsFields!) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy()
   fireEvent.change(port, { target: { value: '2525' } })
-  expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
-  expect(await screen.findByText('SMTP settings saved.')).toBeInTheDocument()
-  expect(putJson).toHaveBeenCalledWith(
-    '/api/admin/smtp/settings',
-    expect.objectContaining({ smtp_password: '', smtp_port: '2525' }),
-  )
-  fireEvent.click(screen.getByRole('button', { name: 'Test connection' }))
+  expect(screen.getByRole('button', { name: 'Test Settings' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Test Settings' }))
   expect(
     await screen.findByText('SMTP connection successful. No email was sent.'),
   ).toBeInTheDocument()
-  expect(postJson).toHaveBeenCalledWith('/api/admin/smtp/test')
+  expect(postJson).toHaveBeenCalledWith('/admin/smtp_test')
+  fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
+  expect(await screen.findByText('SMTP settings saved successfully')).toBeInTheDocument()
+  expect(postJson).toHaveBeenCalledWith(
+    '/admin/smtp_settings',
+    expect.objectContaining({ smtp_password: '', smtp_port: '2525' }),
+  )
+})
+
+test('connection test failure shows one persistent page error', async () => {
+  vi.mocked(getJson).mockResolvedValue({ settings: state })
+  vi.mocked(postJson).mockResolvedValue({ success: false, message: 'SMTP connection failed' })
+  render(<SmtpPage />)
+  await screen.findByLabelText(/SMTP Server/)
+  fireEvent.click(screen.getByRole('button', { name: 'Test Settings' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'SMTP connection failed: SMTP connection failed',
+  )
 })
 
 test('load failure guards save and test; retry recovers', async () => {
@@ -42,30 +72,108 @@ test('load failure guards save and test; retry recovers', async () => {
     .mockResolvedValueOnce({ settings: state })
   render(<SmtpPage />)
   expect(await screen.findByRole('alert')).toHaveTextContent('Settings unavailable')
-  expect(screen.getByRole('button', { name: 'Save settings' })).toBeDisabled()
-  expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Save Settings' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Test Settings' })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: 'Retry loading settings' }))
-  expect(await screen.findByLabelText('SMTP server')).toHaveValue('smtp.example.com')
-  expect(screen.getByRole('button', { name: 'Save settings' })).toBeEnabled()
+  expect(await screen.findByLabelText(/SMTP Server/)).toHaveValue('smtp.example.com')
+  expect(screen.getByRole('button', { name: 'Save Settings' })).toBeEnabled()
 })
 
 test('save failure retains draft including replacement password', async () => {
   vi.mocked(getJson).mockResolvedValue({ settings: state })
-  vi.mocked(putJson).mockRejectedValue(new Error('Could not save SMTP settings'))
+  vi.mocked(postJson).mockRejectedValue(new Error('Could not save SMTP settings'))
   render(<SmtpPage />)
   const password = await screen.findByLabelText('Password')
   fireEvent.change(password, { target: { value: 'draft-test-password' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('Could not save SMTP settings')
+  fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Error saving SMTP settings: Could not save SMTP settings',
+  )
   expect(password).toHaveValue('draft-test-password')
-  expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Test Settings' })).toBeEnabled()
 })
 
-test('disabled SMTP cannot test, and help remains available', async () => {
-  vi.mocked(getJson).mockResolvedValue({ settings: { ...state, smtp_enabled: false } })
+test('editing a field clears stale action feedback', async () => {
+  vi.mocked(getJson).mockResolvedValue({ settings: state })
+  vi.mocked(postJson).mockRejectedValue(new Error('Could not save SMTP settings'))
   render(<SmtpPage />)
-  await screen.findByLabelText('SMTP server')
-  expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled()
-  expect(screen.getByText('SMTP setup help')).toBeInTheDocument()
-  expect(postJson).not.toHaveBeenCalled()
+  const server = await screen.findByLabelText(/SMTP Server/)
+  fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not save SMTP settings')
+  fireEvent.change(server, { target: { value: 'smtp.updated.example' } })
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+})
+
+test('disabled SMTP still tests the saved configuration, and help remains available', async () => {
+  vi.mocked(getJson).mockResolvedValue({ settings: { ...state, smtp_enabled: false } })
+  vi.mocked(postJson).mockResolvedValue({ success: true, result: 'connected' })
+  render(<SmtpPage />)
+  await screen.findByLabelText(/SMTP Server/)
+  expect(screen.getByRole('button', { name: 'Test Settings' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'SMTP help' })).toHaveAttribute(
+    'aria-haspopup',
+    'dialog',
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Test Settings' }))
+  expect(
+    await screen.findByText('SMTP connection successful. No email was sent.'),
+  ).toBeInTheDocument()
+  expect(postJson).toHaveBeenCalledWith('/admin/smtp_test')
+})
+
+test('SMTP heading help opens accessible guidance and traps focus until closed', async () => {
+  vi.mocked(getJson).mockResolvedValue({ settings: state })
+  render(<SmtpPage />)
+  await screen.findByLabelText(/SMTP Server/)
+
+  const trigger = screen.getByRole('button', { name: 'SMTP help' })
+  expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  fireEvent.click(trigger)
+
+  const dialog = await screen.findByRole('dialog', { name: 'How to Get SMTP Server Information' })
+  expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  expect(
+    screen.getByRole('heading', {
+      name: /Internet Service Provider’s SMTP Server \(Recommended\)/,
+    }),
+  ).toBeVisible()
+  expect(screen.getByText('Contact your ISP’s customer support')).toBeVisible()
+  expect(screen.getByText('smtp.gmail.com')).toBeVisible()
+  expect(screen.getByText('587')).toBeVisible()
+  expect(screen.getByText('SMTP2GO')).toBeVisible()
+  expect(dialog).toHaveTextContent('does not send email or confirm delivery')
+  expect(screen.getByRole('button', { name: 'Close SMTP help' })).toHaveFocus()
+
+  fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+  expect(screen.getByRole('button', { name: /^Close$/ })).toHaveFocus()
+  fireEvent.keyDown(document, { key: 'Tab' })
+  expect(screen.getByRole('button', { name: 'Close SMTP help' })).toHaveFocus()
+
+  fireEvent.keyDown(document, { key: 'Escape' })
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  expect(trigger).toHaveFocus()
+
+  fireEvent.click(trigger)
+  await screen.findByRole('dialog', { name: 'How to Get SMTP Server Information' })
+  fireEvent.click(screen.getByRole('button', { name: /^Close$/ }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(trigger).toHaveFocus()
+})
+
+test('legacy save posts form values without the modern API field restrictions', async () => {
+  vi.mocked(getJson).mockResolvedValue({ settings: { ...state, smtp_enabled: false } })
+  vi.mocked(postJson).mockResolvedValue({ status: 'success', message: 'saved' })
+  render(<SmtpPage />)
+  const server = await screen.findByLabelText(/SMTP Server/)
+  const sender = screen.getByLabelText('Default Sender Email')
+  const legacyLongValue = 'x'.repeat(256)
+  fireEvent.change(server, { target: { value: legacyLongValue } })
+  fireEvent.change(sender, { target: { value: 'not-an-email' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }))
+  expect(await screen.findByText('SMTP settings saved successfully')).toBeInTheDocument()
+  expect(postJson).toHaveBeenCalledWith(
+    '/admin/smtp_settings',
+    expect.objectContaining({ smtp_server: legacyLongValue, smtp_default_sender: 'not-an-email' }),
+  )
 })

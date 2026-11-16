@@ -13,6 +13,7 @@ path. These tests cover the importable half: no network, no database.
 from __future__ import annotations
 
 import os
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -69,15 +70,33 @@ def without_the_bundle(tmp_path, monkeypatch):
     monkeypatch.setattr(
         font_install, 'BUNDLED_FONTS_DIR', str(tmp_path / 'deliberately-absent')
     )
+    fake_font = b'\x00\x01\x00\x00' + b'x' * 64
+    monkeypatch.setattr(
+        font_install, 'FONT_SHA256',
+        {name: hashlib.sha256(fake_font).hexdigest() for name in font_install.FONT_SOURCES},
+    )
     return font_install
 
 
 class _FakeResponse:
-    def __init__(self, payload: bytes):
+    def __init__(self, payload: bytes, *, content_length: int | None = None):
         self._payload = payload
+        self.headers = (
+            {'Content-Length': str(content_length)}
+            if content_length is not None else {}
+        )
+        self.status_code = 200
+        self.closed = False
 
-    def read(self) -> bytes:
-        return self._payload
+    def iter_content(self, chunk_size=65536):
+        for offset in range(0, len(self._payload), chunk_size):
+            yield self._payload[offset:offset + chunk_size]
+
+    def raise_for_status(self):
+        return None
+
+    def close(self):
+        self.closed = True
 
     def __enter__(self):
         return self
@@ -86,51 +105,159 @@ class _FakeResponse:
         return False
 
 
-class _FakeOpener:
-    """Counts calls, so a test cannot silently stop exercising the network."""
-
-    addheaders: list = []
-
+class _FakeFetcher:
+    """Counts safe_get calls so fallback coverage cannot silently disappear."""
     def __init__(self, payload: bytes):
         self._payload = payload
         self.calls = 0
+        self.kwargs = []
 
-    def open(self, url, timeout=None):
+    def __call__(self, url, **kwargs):
         self.calls += 1
+        self.kwargs.append(kwargs)
         return _FakeResponse(self._payload)
 
 
-def test_install_rejects_an_html_error_page(tmp_path, app, monkeypatch, without_the_bundle):
+def test_install_rejects_an_html_error_page(tmp_path, monkeypatch, without_the_bundle):
     """The usual upstream failure is an HTML page served under a .ttf name.
     Writing it would leave a file that exists, never renders, and stops this
     ever retrying — the worst of the three outcomes."""
     font_install = without_the_bundle
-    opener = _FakeOpener(b'<!doctype html><title>404</title>')
-    monkeypatch.setattr(font_install.urllib.request, 'build_opener', lambda: opener)
+    fetcher = _FakeFetcher(b'<!doctype html><title>404</title>')
+    monkeypatch.setattr(font_install, 'safe_get', fetcher)
 
     written = font_install.install_builtin_fonts(str(tmp_path))
 
-    assert opener.calls == len(font_install.FONT_SOURCES), (
+    assert fetcher.calls == len(font_install.FONT_SOURCES), (
         'the download path never ran, so this asserts nothing'
     )
+    assert all(call['validator'] is font_install.validate_user_outbound_http_url for call in fetcher.kwargs)
+    assert all(call['stream'] is True and call['timeout'] == 60 for call in fetcher.kwargs)
     assert written == 0
     assert list(tmp_path.iterdir()) == []
 
 
-def test_install_writes_a_real_font(tmp_path, app, monkeypatch, without_the_bundle):
+def test_install_rejects_font_with_unexpected_digest_and_preserves_existing(
+    tmp_path, monkeypatch, without_the_bundle
+):
     font_install = without_the_bundle
-    opener = _FakeOpener(b'\x00\x01\x00\x00' + b'x' * 64)
-    monkeypatch.setattr(font_install.urllib.request, 'build_opener', lambda: opener)
+    name = next(iter(font_install.FONT_SOURCES))
+    original = b'previous-reviewed-font'
+    (tmp_path / name).write_bytes(original)
+    monkeypatch.setattr(font_install, 'FONT_SHA256', {name: '0' * 64})
+    monkeypatch.setattr(font_install, 'safe_get', _FakeFetcher(b'\x00\x01\x00\x00' + b'x' * 64))
+
+    assert font_install.install_builtin_fonts(str(tmp_path), force=True) == 0
+    assert (tmp_path / name).read_bytes() == original
+    assert not list(tmp_path.glob('*.tmp'))
+
+
+def test_manual_font_fetch_rejects_unexpected_digest_before_publication(tmp_path, monkeypatch):
+    import importlib.util
+
+    script_path = ROOT / 'scripts' / 'fetch-fonts.py'
+    spec = importlib.util.spec_from_file_location('fetch_fonts_script', script_path)
+    assert spec and spec.loader
+    fetch_fonts = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fetch_fonts)
+    name = 'PressStart2P-Regular.ttf'
+    destination = tmp_path / name
+    previous = b'previous-reviewed-font'
+    destination.write_bytes(previous)
+    payload = b'\x00\x01\x00\x00' + b'x' * 64
+    monkeypatch.setattr(fetch_fonts, 'download_builtin_font', lambda _url: payload)
+
+    ok, detail = fetch_fonts.fetch(
+        'https://fonts.example.invalid/font.ttf', destination,
+        expected_sha256='0' * 64,
+    )
+
+    assert not ok
+    assert detail == 'SHA-256 mismatch'
+    assert destination.read_bytes() == previous
+    assert not list(tmp_path.glob('*.tmp'))
+
+
+def test_install_writes_a_real_font(tmp_path, monkeypatch, without_the_bundle):
+    font_install = without_the_bundle
+    fetcher = _FakeFetcher(b'\x00\x01\x00\x00' + b'x' * 64)
+    monkeypatch.setattr(font_install, 'safe_get', fetcher)
 
     written = font_install.install_builtin_fonts(str(tmp_path))
 
-    assert opener.calls == len(font_install.FONT_SOURCES)
+    assert fetcher.calls == len(font_install.FONT_SOURCES)
     assert written == len(font_install.FONT_SOURCES)
     # And a second call is a no-op, so boot does not re-download every start.
     assert font_install.install_builtin_fonts(str(tmp_path)) == 0
 
 
-def test_bundle_short_circuits_the_download(tmp_path, app, monkeypatch):
+def test_install_continues_after_font_write_failure(
+    tmp_path, monkeypatch, without_the_bundle, caplog
+):
+    """An unwritable destination must not abort later fallback faces or boot."""
+    font_install = without_the_bundle
+    fetcher = _FakeFetcher(b'\x00\x01\x00\x00' + b'x' * 64)
+
+    temporary_paths = []
+
+    class PartialWriter:
+        def __init__(self, path):
+            self.name = str(path)
+            self.path = path
+
+        def __enter__(self):
+            self.path.write_bytes(b'partial')
+            return self
+
+        def write(self, _payload):
+            raise OSError('test volume filled during write')
+
+        def __exit__(self, *exc):
+            return False
+
+    def fail_during_write(*args, **kwargs):
+        path = tmp_path / f'partial-{len(temporary_paths)}.tmp'
+        temporary_paths.append(path)
+        return PartialWriter(path)
+
+    monkeypatch.setattr(font_install, 'safe_get', fetcher)
+    monkeypatch.setattr(font_install.tempfile, 'NamedTemporaryFile', fail_during_write)
+
+    assert font_install.install_builtin_fonts(str(tmp_path)) == 0
+    assert fetcher.calls == len(font_install.FONT_SOURCES)
+    assert list(tmp_path.iterdir()) == []
+    assert len(temporary_paths) == len(font_install.FONT_SOURCES)
+    assert 'filesystem write failure (OSError)' in caplog.text
+    assert str(tmp_path) not in caplog.text
+
+    # The absent destination remains eligible for retry on the next boot.
+    assert font_install.install_builtin_fonts(str(tmp_path)) == 0
+    assert fetcher.calls == 2 * len(font_install.FONT_SOURCES)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_install_rejects_oversized_font_response(tmp_path, monkeypatch, without_the_bundle):
+    font_install = without_the_bundle
+
+    class OversizedFetcher:
+        calls = 0
+
+        def __call__(self, url, **kwargs):
+            self.calls += 1
+            return _FakeResponse(
+                b'\x00\x01\x00\x00' + b'x' * 4,
+                content_length=font_install.MAX_BUILTIN_FONT_BYTES + 1,
+            )
+
+    fetcher = OversizedFetcher()
+    monkeypatch.setattr(font_install, 'safe_get', fetcher)
+
+    assert font_install.install_builtin_fonts(str(tmp_path)) == 0
+    assert fetcher.calls == len(font_install.FONT_SOURCES)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_bundle_short_circuits_the_download(tmp_path, monkeypatch):
     """The shipped behaviour, asserted where the fallback tests used to imply it.
 
     On a normal install the bundle satisfies every face and the network is never
@@ -139,10 +266,10 @@ def test_bundle_short_circuits_the_download(tmp_path, app, monkeypatch):
     """
     import oneirodex.utils.font_install as font_install
 
-    def _no_network():
+    def _no_network(*args, **kwargs):
         raise AssertionError('install_builtin_fonts reached the network')
 
-    monkeypatch.setattr(font_install.urllib.request, 'build_opener', _no_network)
+    monkeypatch.setattr(font_install, 'safe_get', _no_network)
 
     written = font_install.install_builtin_fonts(str(tmp_path))
     assert written == len(font_install.FONT_SOURCES)

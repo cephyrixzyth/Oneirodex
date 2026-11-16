@@ -11,12 +11,55 @@ name: Desktop build
 # .msi and .rpm remain out until their native build environments are verified.
 # The current stable semver is compatible, but does not enable untested targets.
 #
-# Releases: a `v*` tag push, or a manual run with `release_tag`, attaches every
-# installer to that GitHub release (the `release` job). Nothing else creates one.
+# Releases: a `v*` tag push, or a guarded manual run with `release_tag`, attaches
+# installers to an existing GitHub release. Source/tag/version checks run first.
 
 on:
   workflow_dispatch:
     inputs:
+      probe_only:
+        description: 'Run only the ordinary-user macOS coalition probe; no installer build or release.'
+        required: false
+        type: boolean
+        default: false
+      packaged_smoke_only:
+        description: 'Only install and inspect a pinned Windows companion artifact on a disposable runner; no build or release.'
+        required: false
+        type: boolean
+        default: false
+      windows_user_fixture_only:
+        description: 'Only qualify a disposable ordinary Windows account/private desktop; no app installation, build or release.'
+        required: false
+        type: boolean
+        default: false
+      linux_packaged_smoke_only:
+        description: 'Only install and inspect the pinned Linux companion artifact on a disposable runner; no product build or release.'
+        required: false
+        type: boolean
+        default: false
+      package_source_run:
+        description: 'Successful review-branch push run that produced the selected platform package.'
+        required: false
+        default: ''
+      package_source_commit:
+        description: 'Exact 40-character source commit expected for that artifact.'
+        required: false
+        default: ''
+      package_archive_digest:
+        description: 'Pinned 64-character SHA256 of the selected platform artifact ZIP.'
+        required: false
+        default: ''
+      probe_domain:
+        description: 'Own-user domain for an explicit probe-only experiment; GUI mode also records a user-domain control.'
+        required: false
+        type: choice
+        default: user
+        options: [user, gui]
+      probe_family:
+        description: 'Also run owned descendant/guardian-loss controls; requires probe_only=true and probe_domain=gui.'
+        required: false
+        type: boolean
+        default: false
       release_tag:
         description: 'Attach the built installers to this existing GitHub release (e.g. v1.1.1). Leave empty to only build.'
         required: false
@@ -37,6 +80,11 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/desktop-build.yml'
+      - 'scripts/ci/test-real-game-archive-enospc.sh'
+      - 'scripts/ci/probe-macos-launch-coalition.py'
+      - 'scripts/ci/test_macos_launch_coalition_probe.py'
+      - 'scripts/ci/probe-macos-coalition-family.py'
+      - 'scripts/ci/test_macos_coalition_family.py'
   pull_request:
     paths:
       - 'clients/desktop/**'
@@ -45,12 +93,66 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/desktop-build.yml'
+      - 'scripts/ci/test-real-game-archive-enospc.sh'
+      - 'scripts/ci/probe-macos-launch-coalition.py'
+      - 'scripts/ci/test_macos_launch_coalition_probe.py'
+      - 'scripts/ci/probe-macos-coalition-family.py'
+      - 'scripts/ci/test_macos_coalition_family.py'
 
 permissions:
   contents: read
 
 jobs:
+  macos-coalition-probe:
+    if: github.event_name != 'workflow_dispatch' || (inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true && inputs.linux_packaged_smoke_only != true)
+    name: macOS coalition API/isolation probe
+    runs-on: macos-latest
+    timeout-minutes: 5
+    env:
+      PROBE_DOMAIN: ${{ github.event_name == 'workflow_dispatch' && inputs.probe_only && inputs.probe_domain || 'gui' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Controller safety checks
+        run: |
+          mkdir -p .artifacts
+          python3 scripts/ci/test_macos_launch_coalition_probe.py
+          python3 scripts/ci/test_macos_coalition_family.py
+
+      - name: Validate explicit family experiment selection
+        if: github.event_name == 'workflow_dispatch' && inputs.probe_family
+        env:
+          PROBE_ONLY: ${{ inputs.probe_only }}
+        run: test "$PROBE_ONLY" = "true" && test "$PROBE_DOMAIN" = "gui"
+
+      - name: Same-host user-domain control for an explicit GUI experiment
+        if: github.event_name == 'workflow_dispatch' && inputs.probe_only && inputs.probe_domain == 'gui'
+        run: |
+          set +e
+          python3 scripts/ci/probe-macos-launch-coalition.py --domain user --output "$RUNNER_TEMP/oneirodex-macos-coalition-control.json"
+          control_code=$?
+          case "$control_code" in
+            0|2) exit 0 ;;
+            *) exit "$control_code" ;;
+          esac
+
+      - name: Probe selected ordinary-user domain
+        run: python3 scripts/ci/probe-macos-launch-coalition.py --domain "$PROBE_DOMAIN" --output "$RUNNER_TEMP/oneirodex-macos-coalition-probe.json"
+
+      - name: Probe owned native families and guardian-loss survival
+        if: github.event_name == 'workflow_dispatch' && inputs.probe_only && inputs.probe_domain == 'gui' && inputs.probe_family
+        run: python3 scripts/ci/probe-macos-coalition-family.py --output "$RUNNER_TEMP/oneirodex-macos-coalition-family.json"
+
+      - name: Preserve capability result, including unsupported/failure
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: oneirodex-macos-coalition-probe
+          path: ${{ runner.temp }}/oneirodex-macos-coalition-*.json
+          if-no-files-found: error
+
   rust-checks:
+    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true && inputs.linux_packaged_smoke_only != true)
     name: rust · fmt + clippy + test
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -117,7 +219,11 @@ jobs:
       - name: cargo test
         run: cargo test
 
+      - name: Real game archive volume exhaustion and retry
+        run: bash ../../../scripts/ci/test-real-game-archive-enospc.sh
+
   build:
+    if: github.event_name != 'workflow_dispatch' || (inputs.probe_only != true && inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true && inputs.linux_packaged_smoke_only != true)
     name: ${{ matrix.label }} · ${{ matrix.flavor }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -242,6 +348,13 @@ jobs:
       - name: Build (unsigned)
         run: npm run tauri:build${{ matrix.flavor == 'thin' && ':thin' || '' }} ${{ matrix.extra_args }}
 
+      - name: Native Rust tests
+        # Exercise native process/filesystem behavior on each host OS. The
+        # separate rust-checks job runs only on Linux; npm test covers JS.
+        if: matrix.flavor == 'full'
+        working-directory: clients/desktop/src-tauri
+        run: cargo test --lib --locked
+
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -252,28 +365,303 @@ jobs:
           # not to mean while bundle.active was false.
           if-no-files-found: error
 
+  windows-packaged-probe:
+    name: ${{ inputs.windows_user_fixture_only && 'Windows ordinary-user fixture qualification' || 'Windows installed companion cold-start probe' }}
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_packaged_smoke_only != true && (inputs.packaged_smoke_only == true || inputs.windows_user_fixture_only == true)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+
+      - name: Validate package-only selection
+        shell: pwsh
+        env:
+          PROBE_ONLY: ${{ inputs.probe_only }}
+          PROBE_FAMILY: ${{ inputs.probe_family }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          FIXTURE_ONLY: ${{ inputs.windows_user_fixture_only }}
+          PACKAGED_SMOKE_ONLY: ${{ inputs.packaged_smoke_only }}
+          PACKAGE_SOURCE_RUN: ${{ inputs.package_source_run }}
+          PACKAGE_SOURCE_COMMIT: ${{ inputs.package_source_commit }}
+          PACKAGE_ARCHIVE_DIGEST: ${{ inputs.package_archive_digest }}
+        run: |
+          if ($env:PROBE_ONLY -eq 'true' -or $env:PROBE_FAMILY -eq 'true' -or $env:RELEASE_TAG) {
+            throw 'Package-only mode cannot select a coalition experiment or release.'
+          }
+          if ($env:FIXTURE_ONLY -eq 'true') {
+            if ($env:PACKAGED_SMOKE_ONLY -eq 'true' -or $env:PACKAGE_SOURCE_RUN -or
+                $env:PACKAGE_SOURCE_COMMIT -or $env:PACKAGE_ARCHIVE_DIGEST) {
+              throw 'Fixture-only mode cannot select a package or package identity inputs.'
+            }
+          } elseif ($env:PACKAGED_SMOKE_ONLY -ne 'true' -or
+              $env:PACKAGE_SOURCE_RUN -notmatch '^[1-9][0-9]*$' -or
+              $env:PACKAGE_SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$' -or
+              $env:PACKAGE_ARCHIVE_DIGEST -notmatch '^[a-f0-9]{64}$') {
+            throw 'Package-only mode requires explicit source and archive identity pins.'
+          }
+
+      - name: Probe guard contracts
+        if: inputs.packaged_smoke_only == true
+        run: python -m unittest discover -s scripts/ci -p 'test_windows_*.py'
+
+      - name: Standard-user fixture guard contracts
+        if: inputs.windows_user_fixture_only == true
+        run: python -m unittest discover -s scripts/ci -p 'test_windows_user_fixture*.py'
+
+      - name: Qualify the disposable standard-user fixture without an app
+        if: inputs.windows_user_fixture_only == true
+        shell: pwsh
+        run: |
+          $fixtureRoot = Join-Path $env:RUNNER_TEMP ('oneirodex-standard-user-fixture-' + $env:GITHUB_RUN_ID)
+          $fixtureOutput = & python scripts/ci/probe_windows_user_fixture.py --execute --gui-prerequisites --work-dir $fixtureRoot
+          $fixtureExit = $LASTEXITCODE
+          $fixtureOutput | Out-File -LiteralPath (Join-Path $env:RUNNER_TEMP 'oneirodex-standard-user-fixture-status.json') -Encoding utf8
+          Write-Output $fixtureOutput
+          exit $fixtureExit
+
+      - name: Install pinned CDP client
+        if: inputs.packaged_smoke_only == true
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: python -m pip install --disable-pip-version-check playwright==1.65.1
+
+      - name: Install and exercise the actual companion package
+        if: inputs.packaged_smoke_only == true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_SOURCE_RUN: ${{ inputs.package_source_run }}
+          PACKAGE_SOURCE_COMMIT: ${{ inputs.package_source_commit }}
+          PACKAGE_ARCHIVE_DIGEST: ${{ inputs.package_archive_digest }}
+        run: |
+          $probeRoot = Join-Path $env:RUNNER_TEMP 'oneirodex-packaged-probe'
+          $probeOutput = & python scripts/ci/probe_windows_packaged.py --execute --source-run $env:PACKAGE_SOURCE_RUN --expected-source $env:PACKAGE_SOURCE_COMMIT --artifact-digest $env:PACKAGE_ARCHIVE_DIGEST --work-dir $probeRoot
+          $probeExit = $LASTEXITCODE
+          $probeOutput | Out-File -LiteralPath (Join-Path $env:RUNNER_TEMP 'oneirodex-packaged-probe-status.json') -Encoding utf8
+          Write-Output $probeOutput
+          exit $probeExit
+
+      - name: Retain sanitized package probe receipt
+        if: always() && inputs.packaged_smoke_only == true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: oneirodex-windows-packaged-probe
+          path: ${{ runner.temp }}/oneirodex-packaged-probe-status.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Retain sanitized standard-user fixture receipt
+        if: always() && inputs.windows_user_fixture_only == true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: oneirodex-windows-standard-user-fixture
+          path: ${{ runner.temp }}/oneirodex-standard-user-fixture-status.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  linux-packaged-probe:
+    name: Linux installed companion cold-start probe
+    if: github.event_name == 'workflow_dispatch' && inputs.linux_packaged_smoke_only == true
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: oneirodex-ci-control-only
+          POSTGRES_DB: oneirodex_ci_control_test
+        ports:
+          - '127.0.0.1:5432:5432'
+        options: >-
+          --health-cmd "pg_isready -U postgres -d oneirodex_ci_control_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ONEIRODEX_CI_CONTROL_DATABASE_URL: postgresql://postgres:oneirodex-ci-control-only@127.0.0.1:5432/oneirodex_ci_control_test
+      LINUX_PACKAGED_SMOKE_ONLY: ${{ inputs.linux_packaged_smoke_only }}
+      WINDOWS_PACKAGED_SMOKE_ONLY: ${{ inputs.packaged_smoke_only }}
+      WINDOWS_USER_FIXTURE_ONLY: ${{ inputs.windows_user_fixture_only }}
+      PROBE_ONLY: ${{ inputs.probe_only }}
+      PROBE_FAMILY: ${{ inputs.probe_family }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      PACKAGE_SOURCE_RUN: ${{ inputs.package_source_run }}
+      PACKAGE_SOURCE_COMMIT: ${{ inputs.package_source_commit }}
+      PACKAGE_ARCHIVE_DIGEST: ${{ inputs.package_archive_digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Validate exclusive Linux package selection
+        run: |
+          python - <<'PY'
+          import os,sys
+          sys.path.insert(0,'scripts/ci')
+          from probe_linux_packaged import validate_selection,ProbeFailure
+          try:
+              validate_selection(os.environ)
+          except ProbeFailure as error:
+              print(str(error))
+              raise SystemExit(1)
+          PY
+      - name: Linux package guard and lifecycle contracts
+        run: python -m unittest discover -s scripts/ci -p 'test_linux_*.py'
+      - name: Prepare hash-locked native backend environment
+        run: |
+          test ! -e .env
+          python -m venv venv
+          venv/bin/python -m pip install --require-hashes -r requirements.lock
+          venv/bin/python -m unittest discover -s tests -p test_native_companion_cors.py -v
+          venv/bin/python -m unittest discover -s tests -p test_native_bearer_denial.py -v
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Build all five real server SPAs from source
+        run: |
+          npm ci
+          npm run build:native-spas
+      - name: Install native Linux test prerequisites
+        run: |
+          sudo -n apt-get update
+          native_driver_version=$(apt-cache policy webkit2gtk-driver | awk '/Candidate:/ {print $2; exit}')
+          native_webview_version=$(apt-cache policy libwebkit2gtk-4.1-0 | awk '/Candidate:/ {print $2; exit}')
+          native_keyring_version=$(apt-cache policy gnome-keyring | awk '/Candidate:/ {print $2; exit}')
+          native_thunar_version=$(apt-cache policy thunar | awk '/Candidate:/ {print $2; exit}')
+          native_xfconf_version=$(apt-cache policy xfconf | awk '/Candidate:/ {print $2; exit}')
+          [[ "$native_driver_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
+          [[ "$native_webview_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
+          [[ "$native_keyring_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
+          [[ "$native_thunar_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
+          [[ "$native_xfconf_version" =~ ^[0-9][A-Za-z0-9.+:~_-]*$ ]]
+          sudo -n apt-get install -y "webkit2gtk-driver=$native_driver_version" "libwebkit2gtk-4.1-0=$native_webview_version" "gnome-keyring=$native_keyring_version" "thunar=$native_thunar_version" "xfconf=$native_xfconf_version" xvfb xauth dbus-x11 xdotool xclip xdg-utils x11-utils
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
+      - name: Install pinned external native driver
+        run: cargo install tauri-driver --version '=2.1.0' --locked --root "$RUNNER_TEMP/oneirodex-tauri-driver"
+      - name: Install and exercise the pinned Linux package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          venv/bin/python scripts/ci/probe_linux_packaged.py --execute --connected \
+            --source-run "$PACKAGE_SOURCE_RUN" --source-commit "$PACKAGE_SOURCE_COMMIT" \
+            --archive-digest "$PACKAGE_ARCHIVE_DIGEST" \
+            --work-dir "$RUNNER_TEMP/oneirodex-linux-packaged-$GITHUB_RUN_ID" \
+            > "$RUNNER_TEMP/oneirodex-linux-packaged-status.json"
+          probe_exit=$?
+          cat "$RUNNER_TEMP/oneirodex-linux-packaged-status.json"
+          exit "$probe_exit"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: oneirodex-linux-packaged-probe
+          path: ${{ runner.temp }}/oneirodex-linux-packaged-status.json
+          if-no-files-found: warn
+          retention-days: 7
+
   release:
     name: attach installers to the GitHub release
     needs: build
-    # Only a tag push or an explicit release_tag publishes anything. Ordinary
-    # branch pushes and pull requests stop at workflow artifacts.
+    # Manual release builds must come from the default branch or from the
+    # exact release tag being attached. The validation step also checks that
+    # the tag version and commit match the source that produced these files.
     if: >-
-      (github.event_name == 'push' && github.ref_type == 'tag') ||
-      (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+      (github.event_name != 'workflow_dispatch' || inputs.probe_only != true) &&
+      (github.event_name != 'workflow_dispatch' || inputs.packaged_smoke_only != true) &&
+      (github.event_name != 'workflow_dispatch' || inputs.windows_user_fixture_only != true) &&
+      (github.event_name != 'workflow_dispatch' || inputs.linux_packaged_smoke_only != true) &&
+      ((github.event_name == 'push' && github.ref_type == 'tag') ||
+       (github.event_name == 'workflow_dispatch' && inputs.release_tag != '' &&
+         (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) ||
+          (github.ref_type == 'tag' && github.ref_name == inputs.release_tag))))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
 
     steps:
-      - name: Download every installer
+      - name: Check out source and tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate release tag and source commit
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            tag="$REF_NAME"
+          else
+            tag="$RELEASE_TAG"
+          fi
+          version="$(tr -d '\r\n' < VERSION)"
+          if [[ "$tag" != "v$version" ]]; then
+            echo "::error::Release tag must be v$version to match VERSION."
+            exit 1
+          fi
+          if ! git show-ref --verify --quiet "refs/tags/$tag"; then
+            git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag"
+          fi
+          tag_commit="$(git rev-parse "refs/tags/$tag^{commit}")"
+          if [[ "$tag_commit" != "$SOURCE_SHA" ]]; then
+            echo "::error::Release tag must point to the commit used to build these installers."
+            exit 1
+          fi
+          git fetch --no-tags origin "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH"
+          if ! git merge-base --is-ancestor "$tag_commit" "refs/remotes/origin/$DEFAULT_BRANCH"; then
+            echo "::error::Release source must be reachable from the default branch."
+            exit 1
+          fi
+
+      - name: Confirm the GitHub release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+        run: gh release view "$RELEASE_TAG" --json tagName
+
+      # Only installer bundles are release assets. Other jobs upload diagnostics
+      # under the same `oneirodex-` prefix (the macOS coalition probe does on
+      # every push), so the installer artifacts are selected by flavor rather
+      # than with one broad pattern.
+      - name: Download full installers
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: installers
-          pattern: oneirodex-*
+          pattern: oneirodex-full-*
 
-      - name: List what will be attached
-        run: find installers -type f | sort
+      - name: Download thin installers
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: installers
+          pattern: oneirodex-thin-*
+
+      - name: Confirm exactly the eight installers will be attached
+        run: |
+          set -euo pipefail
+          find installers -type f | sort
+          count="$(find installers -type f | wc -l)"
+          unexpected="$(find installers -type f ! -name '*.exe' ! -name '*.dmg' ! -name '*.deb' ! -name '*.AppImage' | wc -l)"
+          if [ "$count" -ne 8 ] || [ "$unexpected" -ne 0 ]; then
+            echo "::error::Expected eight installer files and nothing else; found $count files, $unexpected of an unexpected type."
+            exit 1
+          fi
 
       # Installer names are unique per flavor (Oneirodex vs OneirodexThin) and
       # per platform extension, so they can sit side by side on one release.

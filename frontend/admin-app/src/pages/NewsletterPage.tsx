@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+
+import { useParams } from 'react-router-dom'
 import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
 import { getJson, postJson } from '../api/adminApi'
 import { Page } from '../components/Page'
 import { DataTable } from '../components/DataTable'
 import { errorText } from '../utils/errorText'
 import './NewsletterPage.css'
+import { AdminLink } from '../components/AdminLink'
 
 type Entry = {
   id: number
@@ -28,6 +30,17 @@ type State = {
 const API = '/api/admin/newsletters'
 const statusLabel = (status: string) =>
   ({ pending: 'Pending', sent: 'Sent', failed: 'Failed' })[status] || 'Unknown'
+const statusTone = (status: string): 'warn' | 'good' | 'danger' | 'muted' => {
+  if (status === 'pending') return 'warn'
+  if (status === 'sent') return 'good'
+  if (status === 'failed') return 'danger'
+  return 'muted'
+}
+const formatNewsletterDate = (value: string | null | undefined) => {
+  if (!value) return '--'
+  const match = value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/)
+  return match ? `${match[1]} ${match[2]}` : value
+}
 export function NewsletterPage() {
   const { newsletterId } = useParams()
   const validId = !newsletterId || /^[0-9]+$/.test(newsletterId)
@@ -138,9 +151,12 @@ export function NewsletterPage() {
     >
       <PageStatus loading={loading} loadingMessage="Loading newsletters..." error={error || null} />
       {loadFailed && validId ? (
-        <Button disabled={loading} onClick={() => setReload((value) => value + 1)}>
-          Retry loading newsletters
-        </Button>
+        <div className="od-newsletter-detail__actions">
+          <Button disabled={loading} onClick={() => setReload((value) => value + 1)}>
+            Retry loading newsletters
+          </Button>
+          {newsletterId ? <AdminLink to="/admin/newsletter">Back to newsletters</AdminLink> : null}
+        </div>
       ) : null}
       {message ? (
         <PageStatus announcement="status" className="od-admin-hint">
@@ -150,26 +166,43 @@ export function NewsletterPage() {
       {newsletterId ? (
         <>
           {detail ? (
-            <section className="od-admin-panel">
-              <dl>
-                <dt>Sent by</dt>
-                <dd>{detail.sender}</dd>
-                <dt>Date</dt>
-                <dd>{detail.sent_date || '--'}</dd>
-                <dt>Recipients</dt>
-                <dd>{detail.recipient_count}</dd>
-                <dt>Status</dt>
-                <dd>{statusLabel(detail.status)}</dd>
+            <section className="od-admin-panel od-newsletter-detail">
+              <dl
+                className={`od-newsletter-detail__summary${detail.delivery_error ? ' od-newsletter-detail__summary--with-error' : ''}`}
+              >
+                <div className="od-newsletter-detail__field">
+                  <dt>Sent by</dt>
+                  <dd>{detail.sender || '--'}</dd>
+                </div>
+                <div className="od-newsletter-detail__field">
+                  <dt>Date</dt>
+                  <dd>{formatNewsletterDate(detail.sent_date)}</dd>
+                </div>
+                <div className="od-newsletter-detail__field">
+                  <dt>Recipients</dt>
+                  <dd>{detail.recipient_count}</dd>
+                </div>
+                <div className="od-newsletter-detail__field">
+                  <dt>Status</dt>
+                  <dd>
+                    <span className={`od-badge od-badge--${statusTone(detail.status)}`}>
+                      {statusLabel(detail.status)}
+                    </span>
+                  </dd>
+                </div>
+                {detail.delivery_error ? (
+                  <div className="od-newsletter-detail__field od-newsletter-detail__field--error">
+                    <dt>Error</dt>
+                    <dd>Some recipients could not be reached.</dd>
+                  </div>
+                ) : null}
               </dl>
-              {detail.delivery_error ? (
-                <PageStatus announcement="status">{detail.delivery_error}</PageStatus>
-              ) : null}
               <div className="od-newsletter-message" aria-label="Newsletter message">
                 {detail.content}
               </div>
             </section>
           ) : null}
-          <Link to="/admin/newsletter">Back to newsletters</Link>
+          {!loadFailed ? <AdminLink to="/admin/newsletter">Back to newsletters</AdminLink> : null}
         </>
       ) : data ? (
         <>
@@ -178,14 +211,14 @@ export function NewsletterPage() {
               <strong>Newsletter sending is not ready.</strong>
               {!data.newsletter_enabled ? (
                 <p>
-                  Enable newsletters in <Link to="/admin/new_server_settings">Server settings</Link>
-                  .
+                  Enable newsletters in{' '}
+                  <AdminLink to="/admin/new_server_settings">Server settings</AdminLink>.
                 </p>
               ) : null}
               {!data.smtp_ready ? (
                 <p>
                   Configure an enabled server and sender in{' '}
-                  <Link to="/admin/smtp_settings">SMTP settings</Link>.
+                  <AdminLink to="/admin/smtp_settings">SMTP settings</AdminLink>.
                 </p>
               ) : null}
               <p>You can still review newsletter history.</p>
@@ -271,9 +304,12 @@ export function NewsletterPage() {
                   key: 'action',
                   label: 'Action',
                   render: (row) => (
-                    <Link to={`/admin/newsletter/${row.id}`} aria-label={`View ${row.subject}`}>
+                    <AdminLink
+                      to={`/admin/newsletter/${row.id}`}
+                      aria-label={`View ${row.subject}`}
+                    >
                       View
-                    </Link>
+                    </AdminLink>
                   ),
                 },
               ]}

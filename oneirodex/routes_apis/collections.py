@@ -15,7 +15,7 @@ from oneirodex.schemas.collections import (
     CreateCollectionBody,
     ReorderCollectionItemsBody,
 )
-from oneirodex.utils.library_acl import user_can_access_game
+from oneirodex.utils.library_acl import apply_game_access_filters, user_can_access_game
 from oneirodex.utils.validation import validate_body
 from oneirodex.utils.api_tokens import require_api_token_scope
 
@@ -43,19 +43,24 @@ def _collection_payload(collection: GameCollection, *, include_items=False, item
 def _item_counts_by_collection_id(collection_ids: list[int]) -> dict[int, int]:
     if not collection_ids:
         return {}
-    rows = db.session.execute(
+    query = (
         select(
             GameCollectionItem.collection_id,
             func.count(GameCollectionItem.id),
         )
+        .join(Game, Game.uuid == GameCollectionItem.game_uuid)
         .where(GameCollectionItem.collection_id.in_(collection_ids))
         .group_by(GameCollectionItem.collection_id)
-    ).all()
+    )
+    if not is_admin(current_user):
+        query = apply_game_access_filters(query, current_user)
+    rows = db.session.execute(query).all()
     return {collection_id: int(count) for collection_id, count in rows}
 
 
 @apis_bp.route('/collections', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def list_collections():
     query = select(GameCollection).order_by(GameCollection.created_at.desc())
     rows = db.session.execute(query).scalars().all()
@@ -113,9 +118,9 @@ def _is_collection_owner_or_admin(collection: GameCollection) -> bool:
 
 
 def _filtered_collection_payload(collection: GameCollection):
-    """Build detail payload; non-owner viewers only see accessible games."""
+    """Build detail payload with the current viewer's game visibility."""
     payload = _collection_payload(collection, include_items=True)
-    if _is_collection_owner_or_admin(collection):
+    if is_admin(current_user):
         return payload
     filtered = [
         item.to_dict()
@@ -129,6 +134,7 @@ def _filtered_collection_payload(collection: GameCollection):
 
 @apis_bp.route('/collections/<collection_uuid>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def get_collection(collection_uuid: str):
     collection = db.session.execute(
         select(GameCollection).filter_by(uuid=collection_uuid)
@@ -166,7 +172,7 @@ def update_collection(collection_uuid: str):
         collection.is_public = bool(data.get('is_public'))
 
     db.session.commit()
-    return jsonify(_collection_payload(collection, include_items=True))
+    return jsonify(_filtered_collection_payload(collection))
 
 
 @apis_bp.route('/collections/<collection_uuid>', methods=['DELETE'])

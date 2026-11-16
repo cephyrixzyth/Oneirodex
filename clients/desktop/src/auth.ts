@@ -23,6 +23,7 @@ export interface AuthSnapshot {
 export function createAuthStore(initial?: Partial<AuthConfig>) {
   let baseUrl = initial?.baseUrl ? requireSecureBaseUrl(initial.baseUrl) : ''
   let token: string | null = initial?.token ?? null
+  let revision = 0
 
   return {
     getBaseUrl(): string {
@@ -35,7 +36,14 @@ export function createAuthStore(initial?: Partial<AuthConfig>) {
      * every request is built from, so refusing here covers them all.
      */
     setBaseUrl(nextBaseUrl: string): void {
-      baseUrl = requireSecureBaseUrl(nextBaseUrl)
+      const checked = requireSecureBaseUrl(nextBaseUrl)
+      if (checked !== baseUrl) revision += 1
+      baseUrl = checked
+    },
+
+    /** Changes even when credentials switch away and back during a request. */
+    getRevision(): number {
+      return revision
     },
 
     getToken(): string | null {
@@ -43,6 +51,7 @@ export function createAuthStore(initial?: Partial<AuthConfig>) {
     },
 
     setToken(nextToken: string | null): void {
+      if (nextToken !== token) revision += 1
       token = nextToken
     },
 
@@ -53,7 +62,7 @@ export function createAuthStore(initial?: Partial<AuthConfig>) {
       }
       const stored = await keychain.load()
       if (stored) {
-        token = stored
+        this.setToken(stored)
       }
     },
 

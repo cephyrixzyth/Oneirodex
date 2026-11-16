@@ -14,9 +14,10 @@ export interface OneirodexClientConfig {
    */
   csrfToken?: () => string
   /**
-   * Browser transport only: called once when a response is `401`, before the
-   * `OneirodexApiError` is thrown. The SPA passes `() => { location.href =
-   * '/login' }`. Ignored by the Bearer transport.
+   * Browser transport only: called once when a response is `401` or a
+   * same-origin login redirect was followed, before `OneirodexApiError` is
+   * thrown. The SPA passes `() => { location.href = '/login' }`. Ignored by
+   * the Bearer transport.
    */
   onUnauthorized?: () => void
 }

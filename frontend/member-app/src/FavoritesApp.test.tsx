@@ -103,6 +103,58 @@ test('removes a card after it is unfavorited', async () => {
       name: 'Remove Favorite Game from favorites',
     }),
   )
-
   expect(await screen.findByText("You haven't added any favorites yet!")).toBeInTheDocument()
+})
+
+test('returns to the previous page when the last favorite on a later page is removed', async () => {
+  const user = userEvent.setup()
+  const favorite = (uuid: string, name: string) => ({
+    uuid,
+    name,
+    cover_url: '/static/favorite.jpg',
+    is_favorite: true,
+    has_local_override: false,
+    is_vr: false,
+    genres: [],
+    user_status: null,
+  })
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      jsonResponse({
+        games: [favorite('page-one', 'Favorite on page one')],
+        total: 21,
+        pages: 2,
+        current_page: 1,
+      }),
+    )
+    .mockResolvedValueOnce(
+      jsonResponse({
+        games: [favorite('page-two', 'Last favorite on page two')],
+        total: 21,
+        pages: 2,
+        current_page: 2,
+      }),
+    )
+    .mockResolvedValueOnce(jsonResponse({ is_favorite: false }))
+    .mockResolvedValueOnce(
+      jsonResponse({
+        games: [favorite('page-one', 'Favorite on page one')],
+        total: 20,
+        pages: 1,
+        current_page: 1,
+      }),
+    )
+  vi.stubGlobal('fetch', fetchMock)
+
+  render(<FavoritesApp initialConfig={{ showPlayStatus: false, isAdmin: false, perPage: 20 }} />)
+  await screen.findByText('Favorite on page one')
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  await screen.findByText('Last favorite on page two')
+  await user.click(
+    screen.getByRole('button', { name: 'Remove Last favorite on page two from favorites' }),
+  )
+  expect(await screen.findByText('Favorite on page one')).toBeInTheDocument()
+  expect(screen.getByText('Page 1 of 1')).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledWith('/api/favorites?page=1&per_page=20', expect.anything())
 })

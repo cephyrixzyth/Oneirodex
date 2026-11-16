@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   registerAccount: vi.fn(),
   requestPasswordReset: vi.fn(),
   resetPassword: vi.fn(),
+  confirmEmail: vi.fn(),
   setCsrfToken: vi.fn(),
   loadSetupState: vi.fn(),
   submitSetupStep: vi.fn(),
@@ -39,6 +40,9 @@ test('login direct entry loads CSRF state and submits credentials through the AP
   const navigate = vi.fn()
   render(<AuthApp navigate={navigate} />)
   expect(await screen.findByRole('heading', { name: 'Sign in to Oneirodex' })).toBeInTheDocument()
+  const submit = screen.getByRole('button', { name: 'Sign in' })
+  expect(submit).toHaveClass('od-btn--lg', 'auth-pilot__submit')
+  expect(submit.closest('form')).toHaveAttribute('novalidate')
   expect(api.setCsrfToken).toHaveBeenCalledWith('csrf-test')
   expect(screen.getByRole('link', { name: 'Household SSO' })).toHaveAttribute('href', '/login/oidc')
   fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'member' } })
@@ -53,6 +57,99 @@ test('login direct entry loads CSRF state and submits credentials through the AP
   expect(navigate).toHaveBeenCalledWith('/library')
 })
 
+test('login uses the legacy centered card and stacked account actions', async () => {
+  const { container } = render(<AuthApp />)
+
+  await screen.findByRole('heading', { name: 'Sign in to Oneirodex' })
+
+  const card = container.querySelector('.auth-pilot__card')
+  expect(card).toHaveClass('auth-pilot__card--login')
+  expect(card?.querySelector('.auth-pilot__brand')).toBeInTheDocument()
+  expect(card?.querySelector('.auth-pilot__form')).toHaveClass('auth-pilot__form--login')
+  expect(screen.getByRole('navigation', { name: 'Account actions' })).toHaveClass(
+    'auth-pilot__links--login',
+  )
+  expect(
+    screen.getByRole('navigation', { name: 'Account actions' }).querySelectorAll('a'),
+  ).toHaveLength(3)
+})
+
+test.each(['status', 'alert'] as const)(
+  'server login %s notices follow account actions and can be dismissed',
+  async (role) => {
+    const mount = document.createElement('div')
+    mount.id = 'member-auth-root'
+    mount.dataset.authNotices = JSON.stringify([
+      { role, message: 'Please log in to access this page.' },
+    ])
+    document.body.appendChild(mount)
+
+    render(<AuthApp />, { container: mount })
+
+    const message = await screen.findByText('Please log in to access this page.')
+    expect(message.closest('.auth-pilot__server-notice')).toHaveAttribute('role', role)
+    const accountActions = screen.getByRole('link', { name: 'Forgot password?' })
+    expect(
+      Boolean(accountActions.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }))
+    expect(screen.queryByText('Please log in to access this page.')).not.toBeInTheDocument()
+  },
+)
+
+test('password reset request success uses the dismissible login notice', async () => {
+  window.history.replaceState({}, '', '/login?password_reset_requested=1')
+  render(<AuthApp />)
+
+  const message = await screen.findByText(
+    'If that email is registered, password reset instructions were sent.',
+  )
+  expect(message.closest('.auth-pilot__server-notice')).toHaveAttribute('role', 'status')
+  fireEvent.click(screen.getByRole('button', { name: 'Dismiss notification' }))
+  expect(message).not.toBeInTheDocument()
+})
+
+test('empty login credentials show accessible required-field feedback without an API request', async () => {
+  render(<AuthApp />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Please enter your username and password.',
+  )
+  expect(api.signIn).not.toHaveBeenCalled()
+})
+
+test('login with only a username identifies the missing password without clearing the username', async () => {
+  render(<AuthApp />)
+  const username = (await screen.findByLabelText('Username')) as HTMLInputElement
+  fireEvent.change(username, { target: { value: 'member' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Please enter your password.')
+  expect(username).toHaveValue('member')
+  expect(api.signIn).not.toHaveBeenCalled()
+})
+
+test('failed login displays the error and clears both credential fields', async () => {
+  api.signIn.mockRejectedValue(
+    new Error('Invalid username or password. USERNAMES ARE CASE SENSITIVE!'),
+  )
+  render(<AuthApp />)
+  const username = (await screen.findByLabelText('Username')) as HTMLInputElement
+  const password = screen.getByLabelText('Password') as HTMLInputElement
+  fireEvent.change(username, { target: { value: 'ParityAdmin' } })
+  fireEvent.change(password, { target: { value: 'wrong-password' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Invalid username or password. USERNAMES ARE CASE SENSITIVE!',
+  )
+  await waitFor(() => {
+    expect(username).toHaveValue('')
+    expect(password).toHaveValue('')
+  })
+})
+
 test('registration preserves invite token and shows the generic account request response', async () => {
   window.history.replaceState({}, '', '/register?token=invite-token')
   api.registerAccount.mockResolvedValue({
@@ -62,9 +159,17 @@ test('registration preserves invite token and shows the generic account request 
   })
   render(<AuthApp />)
   fireEvent.change(await screen.findByLabelText('Username'), { target: { value: 'new-member' } })
+  const submit = screen.getByRole('button', { name: 'Register' })
+  expect(submit).toHaveClass('od-btn--lg', 'auth-pilot__submit')
+  expect(submit.closest('form')).toHaveAttribute('novalidate')
+  expect(
+    screen.getByText(
+      "You were invited to join this Oneirodex library. Choose a username and password to request an account. After confirming your email, you will choose the password used to sign in. You will not share the inviter's login.",
+    ),
+  ).toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@example.com' } })
   fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'secret-password' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Register' }))
   expect(await screen.findByRole('heading', { name: 'Request received' })).toBeInTheDocument()
   expect(screen.getByRole('status')).toHaveTextContent('If eligible, check your email.')
   expect(api.registerAccount).toHaveBeenCalledWith(
@@ -73,25 +178,123 @@ test('registration preserves invite token and shows the generic account request 
   )
 })
 
+test('standard registration copy matches the v1.1.8 invitation guidance', async () => {
+  window.history.replaceState({}, '', '/register')
+  render(<AuthApp />)
+
+  expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__card')).toHaveClass('auth-pilot__card--register')
+  expect(document.querySelector('.auth-pilot__form')).toHaveClass('auth-pilot__form--register')
+  expect(
+    screen.getByText('Registration requires a whitelisted email or a valid invite link.'),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument()
+  expect(screen.getByRole('navigation', { name: 'Account actions' })).toHaveClass(
+    'auth-pilot__links--register',
+  )
+  expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login')
+  expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'password')
+})
+
+test('failed registration clears only the password and keeps the other entered details', async () => {
+  window.history.replaceState({}, '', '/register')
+  api.registerAccount.mockRejectedValue(new Error('Invalid registration details.'))
+  render(<AuthApp />)
+
+  const username = await screen.findByLabelText('Username')
+  const email = screen.getByLabelText('Email')
+  const password = screen.getByLabelText('Password')
+  fireEvent.change(username, { target: { value: 'parity-member' } })
+  fireEvent.change(email, { target: { value: 'member@example.com' } })
+  fireEvent.change(password, { target: { value: 'ValidPass123!' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Register' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent('Invalid registration details.')
+  expect(username).toHaveValue('parity-member')
+  expect(email).toHaveValue('member@example.com')
+  expect(password).toHaveValue('')
+})
+
 test('reset request uses the generic recovery message', async () => {
   window.history.replaceState({}, '', '/reset_password_request')
   api.requestPasswordReset.mockResolvedValue({
     requested: true,
     message: 'If the account exists, instructions were sent.',
   })
-  render(<AuthApp />)
+  const navigate = vi.fn()
+  const { unmount } = render(<AuthApp navigate={navigate} />)
+  expect(await screen.findByRole('heading', { name: 'Reset password' })).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__card')).toHaveClass('auth-pilot__card--account')
+  expect(document.querySelector('form')).toHaveClass('auth-pilot__form--account')
+  expect(
+    screen.getByText('Enter your email and we will send a reset link if an account exists.'),
+  ).toBeInTheDocument()
+  expect(screen.getByLabelText('Email')).toHaveAttribute('placeholder', 'you@example.com')
+  const resetSubmit = screen.getByRole('button', { name: 'Send reset link' })
+  expect(resetSubmit).toHaveClass('od-btn--lg', 'auth-pilot__submit--account')
+  expect(resetSubmit.closest('form')).toHaveAttribute('novalidate')
+  expect(screen.getByRole('navigation', { name: 'Account actions' })).toHaveClass(
+    'auth-pilot__links--account',
+  )
   fireEvent.change(await screen.findByLabelText('Email'), {
     target: { value: 'member@example.com' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Send reset instructions' }))
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    'If the account exists, instructions were sent.',
-  )
+  fireEvent.click(screen.getByRole('button', { name: 'Send reset link' }))
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login?password_reset_requested=1'))
   expect(api.requestPasswordReset).toHaveBeenCalledWith('member@example.com')
+
+  unmount()
+  window.history.replaceState({}, '', '/login?password_reset_requested=1')
+  render(<AuthApp />)
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'If that email is registered, password reset instructions were sent.',
+  )
+})
+
+test('password reset confirmation uses the legacy form explanation and action label', async () => {
+  window.history.replaceState({}, '', '/reset_password/synthetic-token')
+  render(<AuthApp />)
+  expect(await screen.findByRole('heading', { name: 'Choose a new password' })).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__card')).toHaveClass('auth-pilot__card--account')
+  expect(document.querySelector('form')).toHaveClass('auth-pilot__form--account')
+  expect(
+    screen.getByText('Enter and confirm your new password to finish the reset.'),
+  ).toBeInTheDocument()
+  const resetSubmit = screen.getByRole('button', { name: 'Reset password' })
+  expect(resetSubmit).toHaveClass('od-btn--lg', 'auth-pilot__submit--account')
+  expect(resetSubmit.closest('form')).toHaveAttribute('novalidate')
+  expect(screen.getByRole('navigation', { name: 'Account actions' })).toHaveClass(
+    'auth-pilot__links--account',
+  )
+})
+
+test('successful password reset returns to sign in with the legacy success notice', async () => {
+  window.history.replaceState({}, '', '/reset_password/synthetic-token')
+  api.resetPassword.mockResolvedValue({ reset: true, next_url: '/login' })
+  const navigate = vi.fn()
+  const { unmount } = render(<AuthApp navigate={navigate} />)
+  fireEvent.change(await screen.findByLabelText('New password'), {
+    target: { value: 'new-password-123' },
+  })
+  fireEvent.change(screen.getByLabelText('Confirm password'), {
+    target: { value: 'new-password-123' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Reset password' }))
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith('/login?password_reset=1'))
+
+  unmount()
+  window.history.replaceState({}, '', '/login?password_reset=1')
+  render(<AuthApp />)
+  expect(await screen.findByRole('status')).toHaveTextContent('Your password has been reset.')
 })
 
 test('expired or invalid confirmation links surface an alert and keep the back link', async () => {
   window.history.replaceState({}, '', '/confirm/bad-token')
+  api.errorFromResponse.mockResolvedValueOnce(
+    new Error(
+      'The confirmation link is invalid or has expired. Request a new activation from an admin or try registering again with a fresh invite.',
+    ),
+  )
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
@@ -103,8 +306,78 @@ test('expired or invalid confirmation links surface an alert and keep the back l
     }),
   )
   render(<AuthApp />)
-  expect(await screen.findByRole('alert')).toHaveTextContent('Request failed')
+  expect(await screen.findByRole('heading', { name: 'Link expired' })).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__card')).toHaveClass(
+    'auth-pilot__card--account',
+    'auth-pilot__card--confirmation-error',
+  )
+  expect(screen.getByRole('navigation', { name: 'Account actions' })).toHaveClass(
+    'auth-pilot__links--account',
+    'auth-pilot__links--confirmation-error',
+  )
+  expect(
+    screen.getByText(
+      'Request a new activation from an admin or try registering again with a fresh invite.',
+    ),
+  ).toBeInTheDocument()
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Request a new activation from an admin',
+  )
+  expect(screen.getAllByRole('alert')).toHaveLength(1)
+  expect(
+    screen.getByRole('navigation', { name: 'Account actions' }).querySelectorAll('a'),
+  ).toHaveLength(1)
+  expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveClass(
+    'od-btn--primary',
+    'od-btn--lg',
+    'auth-pilot__confirmation-back',
+  )
   expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login')
+})
+
+test('email confirmation inspection is read-only until the mailbox owner sets a password', async () => {
+  window.history.replaceState({}, '', '/confirm/signed-token')
+  api.confirmEmail.mockResolvedValue({ confirmed: true, already_confirmed: false })
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    if (String(input).startsWith('/api/auth/confirm/')) {
+      return {
+        ok: true,
+        json: async () => ({ confirmed: false, already_confirmed: false }),
+      } as Response
+    }
+    return {
+      ok: true,
+      json: async () => ({ csrf_token: 'csrf-test', oidc_enabled: false }),
+    } as Response
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(<AuthApp />)
+
+  expect(await screen.findByRole('heading', { name: 'Confirm your email' })).toBeInTheDocument()
+  expect(document.querySelector('.auth-pilot__card')).toHaveClass('auth-pilot__card--account')
+  const confirmSubmit = await screen.findByRole('button', {
+    name: 'Confirm email and activate account',
+  })
+  expect(confirmSubmit).toHaveClass('od-btn--lg', 'auth-pilot__submit--account')
+  expect(confirmSubmit.closest('form')).toHaveClass('auth-pilot__form--account')
+  expect(api.confirmEmail).not.toHaveBeenCalled()
+  expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+
+  fireEvent.change(screen.getByLabelText('Choose a password'), {
+    target: { value: 'mailbox-owner-password' },
+  })
+  fireEvent.change(screen.getByLabelText('Confirm password'), {
+    target: { value: 'mailbox-owner-password' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm email and activate account' }))
+
+  await waitFor(() =>
+    expect(api.confirmEmail).toHaveBeenCalledWith('signed-token', {
+      password: 'mailbox-owner-password',
+      confirm_password: 'mailbox-owner-password',
+    }),
+  )
+  expect(await screen.findByRole('heading', { name: 'Account activated' })).toBeInTheDocument()
 })
 
 test('first-run direct entry loads the active step and submits it to the transition API', async () => {
@@ -119,20 +392,22 @@ test('first-run direct entry loads the active step and submits it to the transit
   api.submitSetupStep.mockResolvedValue({ step: 2, next_url: '/setup/smtp' })
   const navigate = vi.fn()
   render(<AuthApp navigate={navigate} />)
-  expect(await screen.findByRole('heading', { name: 'Create administrator' })).toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('Administrator username'), {
+  expect(
+    await screen.findByRole('heading', { name: 'Create your admin account' }),
+  ).toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Admin Username'), {
     target: { value: 'setup_admin' },
   })
-  fireEvent.change(screen.getByLabelText('Administrator email'), {
+  fireEvent.change(screen.getByLabelText('Admin Email'), {
     target: { value: 'setup@example.com' },
   })
   fireEvent.change(screen.getByLabelText('Password'), {
     target: { value: 'correct horse battery' },
   })
-  fireEvent.change(screen.getByLabelText('Confirm password'), {
+  fireEvent.change(screen.getByLabelText('Confirm Password'), {
     target: { value: 'correct horse battery' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Next Step' }))
   await waitFor(() =>
     expect(api.submitSetupStep).toHaveBeenCalledWith({
       step: 1,
@@ -144,6 +419,69 @@ test('first-run direct entry loads the active step and submits it to the transit
     }),
   )
   expect(navigate).toHaveBeenCalledWith('/setup/smtp')
+})
+
+test('first-run SMTP setup explains optional email without implying a saved password', async () => {
+  window.history.replaceState({}, '', '/setup/smtp')
+  api.loadSetupState.mockResolvedValue({
+    complete: false,
+    required: true,
+    step: 2,
+    platforms: [],
+    settings: {},
+  })
+  render(<AuthApp />)
+
+  expect(await screen.findByRole('heading', { name: 'Email (SMTP)' })).toBeInTheDocument()
+  expect(
+    screen.getByText('Optional — enables invites, registration mail, and password reset.'),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('checkbox', { name: 'Enable email delivery' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Skip SMTP' })).toBeInTheDocument()
+  expect(screen.queryByText(/password blank to keep the saved one/i)).not.toBeInTheDocument()
+})
+
+test('first-run password mismatch uses the legacy form validation copy', async () => {
+  window.history.replaceState({}, '', '/setup')
+  api.loadSetupState.mockResolvedValue({
+    complete: false,
+    required: true,
+    step: 1,
+    platforms: [],
+    settings: {},
+  })
+  api.submitSetupStep.mockRejectedValue(
+    Object.assign(new Error('Invalid setup transition.'), {
+      data: {
+        detail: [
+          {
+            loc: ['body', 'root'],
+            msg: 'Value error, Passwords do not match.',
+            type: 'value_error',
+          },
+        ],
+      },
+    }),
+  )
+  render(<AuthApp />)
+
+  await screen.findByRole('heading', { name: 'Create your admin account' })
+  fireEvent.change(screen.getByLabelText('Admin Username'), { target: { value: 'setup_admin' } })
+  fireEvent.change(screen.getByLabelText('Admin Email'), {
+    target: { value: 'setup@example.com' },
+  })
+  fireEvent.change(screen.getByLabelText('Password'), {
+    target: { value: 'correct horse battery' },
+  })
+  fireEvent.change(screen.getByLabelText('Confirm Password'), {
+    target: { value: 'different horse battery' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Next Step' }))
+
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Passwords must match')
+  expect(alert).not.toHaveTextContent('Invalid setup transition')
+  expect(alert).not.toHaveTextContent('root')
 })
 
 test('the IGDB skip action bypasses required credential fields and advances setup', async () => {
@@ -159,8 +497,20 @@ test('the IGDB skip action bypasses required credential fields and advances setu
   const navigate = vi.fn()
   render(<AuthApp navigate={navigate} />)
 
-  expect(await screen.findByRole('heading', { name: 'IGDB matching' })).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Skip this step' }))
+  expect(await screen.findByRole('heading', { name: 'Connect game metadata' })).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'Optional. IGDB helps identify games and fill in metadata. You can skip it and choose other supported services in the next step.',
+    ),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Twitch Developer Console' })).toHaveAttribute(
+    'rel',
+    'noopener noreferrer',
+  )
+  expect(screen.getByLabelText('Client ID')).toBeInTheDocument()
+  expect(screen.getByLabelText('Client Secret')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Save IGDB and continue' })).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Skip and continue' }))
 
   await waitFor(() =>
     expect(api.submitSetupStep).toHaveBeenCalledWith({

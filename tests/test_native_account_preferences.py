@@ -5,7 +5,12 @@ from fastapi.testclient import TestClient
 from flask import Flask
 from types import SimpleNamespace
 
+from oneirodex.runtime_native import account_preferences
 from oneirodex.runtime_native.account_preferences import create_account_preferences_router
+from oneirodex.forms_native import (
+    preference_update_formdata,
+    stored_preference_formdata,
+)
 from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
 
 
@@ -61,6 +66,25 @@ def signed_session(*, csrf=False):
     state = {'_user_id': '167:fp', '_fresh': True}
     token = generate_csrf_token(state, 'native-preferences-secret') if csrf else None
     return dump_session_cookie(state, 'native-preferences-secret'), token
+
+
+def test_unpersisted_preferences_use_legacy_page_size_default():
+    assert stored_preference_formdata(None)['items_per_page'] == '50'
+
+
+def test_partial_update_without_preference_row_uses_legacy_save_fallback():
+    values = preference_update_formdata(None, {'tile_size': '72'})
+
+    assert values['items_per_page'] == '50'
+    assert values['tile_size'] == '72'
+
+
+def test_full_update_keeps_explicit_page_size_without_preference_row():
+    values = preference_update_formdata(
+        None, {'items_per_page': 100, 'tile_size': '72'},
+    )
+
+    assert values['items_per_page'] == '100'
 
 
 def test_preferences_get_preserves_payload_and_signed_session_access():
@@ -137,6 +161,24 @@ def test_preferences_put_matches_pydantic_body_error_envelope():
     assert data.updates == []
 
 
+def test_preferences_put_caps_json_before_validation(monkeypatch):
+    data = FakePreferencesData()
+    client, _actor = make_client(data)
+    cookie, csrf = signed_session(csrf=True)
+    client.cookies.set('session', cookie)
+    monkeypatch.setattr(account_preferences, '_MAX_JSON_BODY_BYTES', 32)
+
+    response = client.put(
+        '/api/account/preferences',
+        content=b'{"theme":"' + b'x' * 64 + b'"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.updates == []
+
+
 def test_preferences_anonymous_uses_flask_login_redirect_and_flash():
     client, _actor = make_client()
 
@@ -185,4 +227,28 @@ def test_legacy_preferences_form_rejects_missing_hidden_csrf():
     response = client.post('/settings_panel', data={'tile_size': '72'})
 
     assert response.status_code == 400
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is missing.</p>' in response.content
     assert data.updates == []
+
+
+def test_legacy_preferences_form_uses_first_repeated_field_value():
+    from urllib.parse import urlencode
+
+    data = FakePreferencesData()
+    client, _actor = make_client(data)
+    cookie, csrf = signed_session(csrf=True)
+    client.cookies.set('session', cookie)
+
+    response = client.post(
+        '/settings_panel',
+        content=urlencode([
+            ('csrf_token', csrf),
+            ('tile_size', '55'),
+            ('tile_size', '72'),
+        ]),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+
+    assert response.status_code == 200
+    assert data.updates == [(167, {'tile_size': '55'})]

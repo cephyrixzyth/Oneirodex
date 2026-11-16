@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 import os
 from typing import Any
+from urllib.parse import urlsplit
 
 from oneirodex.utils.http_safe import safe_request
 from oneirodex.utils.security import validate_user_outbound_http_url
@@ -117,6 +118,20 @@ def _post_ntfy(url: str, *, title: str, body: str, kind: str, link: str | None) 
     return 200 <= resp.status_code < 300
 
 
+def _safe_endpoint_origin(url: str) -> str:
+    """Return a diagnostic origin without URL userinfo, path, query or fragment."""
+    try:
+        parsed = urlsplit(url)
+        host = parsed.hostname
+        if not host:
+            return '<invalid endpoint>'
+        display_host = f'[{host}]' if ':' in host else host
+        port = f':{parsed.port}' if parsed.port is not None else ''
+        return f'{parsed.scheme}://{display_host}{port}'
+    except (TypeError, ValueError):
+        return '<invalid endpoint>'
+
+
 def emit(*, kind: str, title: str, body: str | None = None, link: str | None = None) -> dict[str, int]:
     """Fan one event out to every configured endpoint. Returns per-channel
     delivered counts; a failure is logged and counted as zero, never raised."""
@@ -129,7 +144,7 @@ def emit(*, kind: str, title: str, body: str | None = None, link: str | None = N
             if _post_apprise(url, title=title, body=text, kind=kind):
                 sent['apprise'] += 1
         except Exception as exc:  # noqa: BLE001 -- a dead endpoint must not break the app
-            logger.warning('[NOTIFY BUS] apprise %s failed: %s', url.split('/notify/')[0], type(exc).__name__)
+            logger.warning('[NOTIFY BUS] apprise %s failed: %s', _safe_endpoint_origin(url), type(exc).__name__)
     topic = ntfy_url()
     if topic:
         try:

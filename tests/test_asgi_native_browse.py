@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
+from email.utils import formatdate, parsedate_to_datetime
+from urllib.parse import urlencode
 
 import httpx
 import pytest
@@ -128,12 +131,17 @@ from oneirodex.runtime_native.session_compat import (
 
 
 class FakeBrowseData:
+    def __init__(self):
+        self.calls = []
+
     def query(self, args, user):
+        self.calls.append(('query', user.id, list(args.items(multi=True))))
         assert user.id == 7
         assert args.get('page', 1, type=int) == 3
         return object()
 
     def payload(self, _result):
+        self.calls.append(('payload',))
         return {'games': [], 'total': 0, 'pages': 0, 'current_page': 3}
 
 
@@ -435,8 +443,8 @@ class FakeSavedFilterData:
         self.rows[row.id] = row
         return row
 
-    def save(self):
-        self.calls.append(('save',))
+    def save(self, row=None):
+        self.calls.append(('save', getattr(row, 'id', None)))
 
     def delete(self, row):
         self.calls.append(('delete', row.id))
@@ -458,6 +466,7 @@ class FakeBatchFavoriteData:
         self.calls = []
         self.forbidden = {'blocked'}
         self.commit_fails = False
+        self.update_error = None
 
     def state(self, user, uuids):
         self.calls.append(('state', user.id, list(uuids)))
@@ -472,6 +481,8 @@ class FakeBatchFavoriteData:
 
     def set_favorite(self, user, game, favorite):
         self.calls.append(('set', user.id, game.uuid, favorite))
+        if self.update_error:
+            raise RuntimeError(self.update_error)
 
     def commit(self):
         self.calls.append(('commit',))
@@ -486,6 +497,7 @@ class FakeBatchStatusData:
     def __init__(self):
         self.calls = []
         self.forbidden = {'blocked'}
+        self.write_error = None
 
     def state(self, user, uuids):
         self.calls.append(('state', user.id, list(uuids)))
@@ -499,6 +511,8 @@ class FakeBatchStatusData:
 
     def write(self, user_id, uuid, *, current, status, now):
         self.calls.append(('write', user_id, uuid, current, status, now.tzinfo is not None))
+        if self.write_error:
+            raise RuntimeError(self.write_error)
 
     def status_info(self, status):
         return {'status': status}
@@ -516,6 +530,7 @@ class FakeBatchWishlistData:
         self.pending = [SimpleNamespace(
             id=11, title='Already pending', linked_game_uuid='pending', status='pending',
         )]
+        self.create_error = None
 
     def can_request_games(self, user):
         return user.role != 'child'
@@ -533,6 +548,8 @@ class FakeBatchWishlistData:
 
     def create(self, user_id, title, uuid):
         self.calls.append(('create', user_id, title, uuid))
+        if self.create_error:
+            raise RuntimeError(self.create_error)
         return SimpleNamespace(id=22, title=title[:255], status='pending')
 
     def delete(self, row):
@@ -544,13 +561,15 @@ class FakeBatchWishlistData:
     def rollback(self):
         self.calls.append(('rollback',))
 
-    def log_created(self, count):
-        self.calls.append(('log', count))
+    def log_created(self, count, *, audit_user=None):
+        self.calls.append(('log', count, audit_user))
 
 
 class FakeBatchRefreshData:
     def __init__(self):
         self.calls = []
+        self.freshness_error = None
+        self.enqueue_error = None
 
     def state(self, uuids):
         self.calls.append(('state', list(uuids)))
@@ -578,10 +597,14 @@ class FakeBatchRefreshData:
 
     def check_freshness(self, game):
         self.calls.append(('freshness', game.uuid))
+        if self.freshness_error:
+            raise RuntimeError(self.freshness_error)
         return {'status': 'current', 'confidence': 0.8}
 
     def enqueue_images(self, app, uuid):
         self.calls.append(('enqueue', uuid))
+        if self.enqueue_error:
+            raise RuntimeError(self.enqueue_error)
 
     def commit(self):
         self.calls.append(('commit',))
@@ -654,16 +677,21 @@ class FakeMemberMetaData:
 
 
 class FakeVrReadData:
+    def __init__(self):
+        self.calls = []
+
     def enabled(self, flask_app):
         return flask_app.config.get('ENABLE_VR_BROWSE') == '1'
 
     def catalog(self, user, *, page, per_page, compatibility):
+        self.calls.append(('catalog', user.id))
         return {
             'page': page, 'pages': 1, 'total': 1,
             'games': [{'uuid': 'vr-1', 'name': 'Headset title', 'vr_compat': compatibility or 'native_vr'}],
         }
 
     def detail(self, user, game_uuid):
+        self.calls.append(('detail', user.id, game_uuid))
         if game_uuid == 'blocked':
             return None, 'forbidden'
         if game_uuid == 'missing':
@@ -673,6 +701,7 @@ class FakeVrReadData:
         }, None
 
     def accessible_game(self, user, game_uuid):
+        self.calls.append(('accessible_game', user.id, game_uuid))
         if game_uuid == 'missing':
             return None, 'not_found'
         if game_uuid == 'blocked':
@@ -1004,7 +1033,11 @@ class FakeAccountSummaryData:
 
 
 class FakeAccountPreferencesData:
+    def __init__(self):
+        self.calls = []
+
     def choices(self, user):
+        self.calls.append(('choices', user.id))
         assert user.id == 7
         return {
             'preferences': {'theme': 'default', 'tile_size': '50'},
@@ -1148,6 +1181,7 @@ class FakeAnnouncementData:
 class FakeOwnershipProviderData:
     def __init__(self):
         self.decisions = []
+        self.reads = []
 
     def capabilities(self):
         return {
@@ -1159,18 +1193,22 @@ class FakeOwnershipProviderData:
         }
 
     def connections(self, user):
+        self.reads.append(('connections', user.id))
         assert user.id == 7
         return {'connections': [{'store': 'steam', 'status': 'connected'}]}
 
     def summary(self, user):
+        self.reads.append(('summary', user.id))
         assert user.id == 7
         return {'connected': ['steam'], 'titles': 1}
 
     def titles(self, user, after_id, status):
+        self.reads.append(('titles', user.id, after_id, status))
         assert (user.id, after_id, status) == (7, 4, 'needs_review')
         return {'titles': [{'id': 5, 'name': 'Fixture title'}], 'next_after_id': None}
 
     def candidates(self, user, title_id):
+        self.reads.append(('candidates', user.id, title_id))
         assert (user.id, title_id) == (7, 5)
         return {'title_id': 5, 'candidates': [{'game_uuid': 'visible-game'}]}
 
@@ -1297,7 +1335,11 @@ class FakeNewsFeedData:
 
 
 class FakeCollectionReadData:
+    def __init__(self):
+        self.calls = []
+
     def list(self, user, *, admin_access):
+        self.calls.append(('list', user.id, admin_access))
         assert user.id == 7
         assert admin_access is False
         return {'collections': [{
@@ -1306,6 +1348,7 @@ class FakeCollectionReadData:
         }]}
 
     def detail(self, user, collection_uuid, *, admin_access):
+        self.calls.append(('detail', user.id, collection_uuid, admin_access))
         assert user.id == 7
         assert admin_access is False
         if collection_uuid == 'missing':
@@ -1340,8 +1383,9 @@ class FakeCollectionReadData:
         return {'game_uuid': game_uuid}, None, 201
 
     def remove_item(self, user, collection_uuid, game_uuid, *, admin_access):
-        assert (user.id, collection_uuid, game_uuid, admin_access) == (
-            7, 'collection-1', 'game-1', False,
+        assert (user.id, collection_uuid, game_uuid, admin_access) in (
+            (7, 'collection-1', 'game-1', False),
+            (7, 'collection-1', 'order', False),
         )
         return {'game_uuid': game_uuid}, None
 
@@ -1353,7 +1397,11 @@ class FakeCollectionReadData:
 
 
 class FakeWishlistData:
+    def __init__(self):
+        self.calls = []
+
     def list(self, user, *, include_all):
+        self.calls.append(('list', user.id, include_all))
         assert user.id == 7
         return [{'id': 23, 'title': 'Fixture request', 'all': include_all}]
 
@@ -1368,6 +1416,19 @@ class FakeWishlistData:
     def resolve(self, user, request_id, body):
         assert (user.id, request_id, body.status) == (7, 23, 'fulfilled')
         return {'id': request_id, 'status': body.status}, None
+
+
+class FakeDownloadRequestReadData:
+    def __init__(self):
+        self.calls = []
+
+    def my_downloads(self, user):
+        self.calls.append(('list', user.id))
+        return []
+
+    def my_download_status(self, user, request_id):
+        self.calls.append(('status', user.id, request_id))
+        return SimpleNamespace(id=request_id, status='active')
 
 
 class FakeNotificationData:
@@ -1479,16 +1540,35 @@ class FakeLocaleData:
         self.value = locale
 
 
-def _run(app, path, *, cookie=None, method='GET', json_body=None, form_body=None, headers=None):
+def _run(app, path, *, cookie=None, session_cookie_name='session', extra_cookies=None, method='GET', json_body=None, form_body=None, content=None, headers=None, base_url='http://testserver'):
     async def perform():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url=base_url
+        ) as client:
+            if cookie:
+                client.cookies.set(session_cookie_name, cookie)
+            for name, value in (extra_cookies or {}).items():
+                client.cookies.set(name, value)
+            return await client.request(
+                method, path, json=json_body, data=form_body, content=content, headers=headers,
+                follow_redirects=False,
+            )
+
+    return asyncio.run(perform())
+
+
+def _run_chunked(app, path, *, cookie, method, body, headers=None):
+    async def perform():
+        async def chunks():
+            yield body[:7]
+            yield body[7:]
+
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url='http://testserver'
         ) as client:
-            if cookie:
-                client.cookies.set('session', cookie)
+            client.cookies.set('session', cookie)
             return await client.request(
-                method, path, json=json_body, data=form_body, headers=headers,
-                follow_redirects=False,
+                method, path, content=chunks(), headers=headers or {},
             )
 
     return asyncio.run(perform())
@@ -1509,6 +1589,7 @@ def _runtime(monkeypatch, *, admin=False):
     manager.login_message = 'Please log in to access this page.'
     user = SimpleNamespace(
         id=7,
+        user_id='account-uuid-7',
         role='admin' if admin else 'user',
         state=True,
         is_active=True,
@@ -1718,7 +1799,8 @@ def _runtime(monkeypatch, *, admin=False):
         lambda _prefix: None,
         lambda _token: None,
     ))
-    monkeypatch.setattr(browse, 'BrowseDataAccess', lambda: FakeBrowseData())
+    fake_browse = FakeBrowseData()
+    monkeypatch.setattr(browse, 'BrowseDataAccess', lambda: fake_browse)
     monkeypatch.setattr(
         acquire_status, 'AcquireStatusData', lambda: FakeAcquireStatusData()
     )
@@ -1810,8 +1892,9 @@ def _runtime(monkeypatch, *, admin=False):
     monkeypatch.setattr(
         account_summary, 'AccountInvitesData', lambda: FakeAccountSummaryData()
     )
+    fake_account_preferences = FakeAccountPreferencesData()
     monkeypatch.setattr(
-        account_preferences, 'AccountPreferencesData', lambda _app=None: FakeAccountPreferencesData()
+        account_preferences, 'AccountPreferencesData', lambda _app=None: fake_account_preferences
     )
     monkeypatch.setattr(
         account_stock_avatar, 'StockAvatarData', lambda: FakeAccountStockAvatarData()
@@ -1853,10 +1936,12 @@ def _runtime(monkeypatch, *, admin=False):
     )
     fake_news = FakeNewsFeedData()
     monkeypatch.setattr(news_feeds, 'NewsFeedData', lambda: fake_news)
+    fake_collections = FakeCollectionReadData()
     monkeypatch.setattr(
-        collection_reads, 'CollectionReadData', lambda: FakeCollectionReadData()
+        collection_reads, 'CollectionReadData', lambda: fake_collections,
     )
-    monkeypatch.setattr(wishlist, 'WishlistData', lambda: FakeWishlistData())
+    fake_wishlist = FakeWishlistData()
+    monkeypatch.setattr(wishlist, 'WishlistData', lambda: fake_wishlist)
     fake_notifications = FakeNotificationData()
     monkeypatch.setattr(notifications, 'NotificationData', lambda: fake_notifications)
     fake_wanted = FakeWantedUpdateData()
@@ -1885,6 +1970,7 @@ def _runtime(monkeypatch, *, admin=False):
     runtime._fake_favorites = fake_favorites
     runtime._fake_member_meta = fake_member_meta
     runtime._fake_vr_reads = fake_vr_reads
+    runtime._fake_account_preferences = fake_account_preferences
     runtime._fake_notifications = fake_notifications
     runtime._fake_social_writes = fake_social_writes
     runtime._fake_wanted = fake_wanted
@@ -1896,7 +1982,21 @@ def _runtime(monkeypatch, *, admin=False):
     runtime._fake_file_types = fake_file_types
     runtime._fake_locale = fake_locale
     runtime._fake_news = fake_news
+    runtime._fake_browse = fake_browse
+    runtime._fake_collections = fake_collections
+    runtime._fake_wishlist = fake_wishlist
     return flask_app, runtime
+
+
+def _dispose_runtime_test_engines(flask_app, runtime):
+    """Close the per-test SQLite pools opened by ASGI request fixtures."""
+    from oneirodex import db
+
+    native_engine = getattr(runtime, '_native_sqlalchemy_engine', None)
+    if native_engine is not None:
+        native_engine.dispose()
+    for engine in getattr(db, '_app_engines', {}).get(flask_app, {}).values():
+        engine.dispose()
 
 
 def _signed_session():
@@ -1972,12 +2072,90 @@ def test_native_locale_write_rejects_missing_csrf_without_mutation(monkeypatch):
     assert runtime._fake_locale.calls == []
 
 
-def _bearer_runtime(monkeypatch, scopes):
+@pytest.mark.parametrize('body,content_type', [
+    (b'{"locale":"es","padding":"' + b'x' * (64 * 1024) + b'"}', 'application/json'),
+    (b'&'.join([b'locale=es'] * 17), 'application/x-www-form-urlencoded'),
+], ids=['body-bytes', 'form-field-count'])
+def test_native_locale_write_bounds_body_and_form_field_count(monkeypatch, body, content_type):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def save():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/locale', content=body,
+                headers={'X-CSRFToken': csrf, 'Content-Type': content_type},
+            )
+
+    response = asyncio.run(save())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_locale.calls == []
+
+
+def test_native_locale_write_ignores_small_file_parts_like_flask(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def save():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/locale', data={'locale': 'es'},
+                files={'unused': ('ignored.txt', b'ignored')},
+                headers={'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(save())
+
+    assert response.status_code == 200
+    assert response.json()['locale'] == 'es'
+    assert runtime._fake_locale.calls == [(7, 'es')]
+
+
+@pytest.mark.parametrize('overflow', ['fields', 'files'])
+def test_native_locale_write_rejects_multipart_part_count_overflow(monkeypatch, overflow):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def save():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            if overflow == 'fields':
+                return await client.post(
+                    '/api/locale',
+                    data={f'locale-{index}': 'es' for index in range(17)},
+                    files={'unused': ('ignored.txt', b'ignored')},
+                    headers={'X-CSRFToken': csrf},
+                )
+            return await client.post(
+                '/api/locale',
+                data={'locale': 'es'},
+                files=[(f'upload-{index}', (f'{index}.txt', b'x')) for index in range(9)],
+                headers={'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(save())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_locale.calls == []
+
+
+def _bearer_runtime(monkeypatch, scopes, *, role='user'):
     import hashlib
 
     _flask_app, runtime = _runtime(monkeypatch)
     user = SimpleNamespace(
-        id=7, role='user', state=True, is_active=True, is_authenticated=True,
+        id=7, role=role, state=True, is_active=True, is_authenticated=True,
     )
     token = SimpleNamespace(
         user_id=7, token_hash=hashlib.sha256(b'social-test').hexdigest(),
@@ -2026,10 +2204,41 @@ def test_lazy_asgi_browse_preserves_login_redirect_and_flash(monkeypatch):
 
     assert response.status_code == 302, response.text
     assert response.headers['location'] == '/login?next=%2Fbrowse_games%3Fpage%3D3'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/login?next=%2Fbrowse_games%3Fpage%3D3">'
+        '/login?next=%2Fbrowse_games%3Fpage%3D3</a>. If not, click the link.\n'
+    )
     session_cookie = response.cookies.get('session')
     assert session_cookie
     decoded = flask_app.session_interface.get_signing_serializer(flask_app).loads(session_cookie)
     assert decoded['_flashes'] == [('message', 'Please log in to access this page.')]
+
+
+def test_lazy_asgi_restricted_matches_flask_login_redirect_body(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
+    response = _run(runtime, '/restricted')
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login?next=%2Frestricted'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/login?next=%2Frestricted">/login?next=%2Frestricted</a>. '
+        'If not, click the link.\n'
+    )
 
 
 def test_lazy_asgi_dispatches_authenticated_acquire_status_without_flask_request(monkeypatch):
@@ -2078,10 +2287,26 @@ def test_lazy_asgi_acquire_status_preserves_login_redirect_and_flash(monkeypatch
     assert response.headers['location'] == (
         '/login?next=%2Fapi%2Facquire%2Fstatus'
     )
+    assert response.text.endswith(
+        '<a href="/login?next=%2Fapi%2Facquire%2Fstatus">'
+        '/login?next=%2Fapi%2Facquire%2Fstatus</a>. If not, click the link.\n'
+    )
     session_cookie = response.cookies.get('session')
     assert session_cookie
     decoded = flask_app.session_interface.get_signing_serializer(flask_app).loads(session_cookie)
     assert decoded['_flashes'] == [('message', 'Please log in to access this page.')]
+
+
+def test_lazy_asgi_path_open_login_redirect_preserves_encoded_query(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    response = _run(
+        runtime, '/api/path/open?path=%2Fstorage%2Flibrary'
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == (
+        '/login?next=%2Fapi%2Fpath%2Fopen%3Fpath%3D%2Fstorage%2Flibrary'
+    )
 
 
 def test_lazy_asgi_dispatches_acquire_search_without_provider_network(monkeypatch):
@@ -2100,6 +2325,86 @@ def test_lazy_asgi_dispatches_acquire_search_without_provider_network(monkeypatc
     }
     assert runtime._fake_acquire_actions.calls == [('search', 'Fixture', '1.0')]
     assert response.headers['x-content-type-options'] == 'nosniff'
+
+
+@pytest.mark.parametrize('method', ['GET', 'HEAD'])
+def test_lazy_asgi_acquire_search_requires_read_library_scope(monkeypatch, method):
+    runtime, authorization = _bearer_runtime(monkeypatch, ['read:social'])
+    response = _run(
+        runtime, '/api/acquire/search?q=Fixture', method=method,
+        headers={'Authorization': authorization},
+    )
+
+    assert response.status_code == 403
+    if method == 'GET':
+        assert response.json()['detail'] == {'required_scope': 'read:library'}
+    else:
+        assert response.content == b''
+    assert runtime._fake_acquire_actions.calls == []
+
+
+@pytest.mark.parametrize('path', [
+    '/api/discover/sections',
+    '/api/discover/rows/recent',
+    '/api/discover/zones/era',
+    '/api/discover/hubs/genre/Puzzle',
+    '/api/discover/surprise',
+    '/api/discover/pins',
+    '/api/filters/bundle',
+    '/api/library_platforms',
+    '/api/export/esde',
+    '/api/export/pegasus',
+    '/api/health/games/game-1',
+    '/api/updates/store_search?q=Fixture',
+    '/api/updates/wanted',
+    '/api/mods/summary',
+    '/api/games/game-1/mods',
+    '/api/games/game-1/mods/catalog',
+    '/api/games/game-1/mods/profiles',
+    '/api/games/game-1/mods/profiles/default/export',
+    '/api/games/game-1/related_media',
+    '/api/games/game-1/achievements',
+    '/api/me/retroachievements',
+    '/api/trailers/filters',
+    '/api/trailers/random',
+    '/api/games/game-1/assists',
+    '/api/playtime/share/game-1.svg',
+])
+def test_lazy_asgi_personal_library_reads_require_read_library_scope(monkeypatch, path):
+    runtime, authorization = _bearer_runtime(monkeypatch, ['read:social'])
+
+    response = _run(
+        runtime, path, headers={'Authorization': authorization},
+    )
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == {'required_scope': 'read:library'}
+
+
+def test_lazy_asgi_acquire_search_accepts_read_library_token(monkeypatch):
+    runtime, authorization = _bearer_runtime(monkeypatch, ['read:library'])
+    response = _run(
+        runtime, '/api/acquire/search?q=Fixture',
+        headers={'Authorization': authorization},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['results'] == [{'title': 'Fixture result'}]
+    assert runtime._fake_acquire_actions.calls == [('search', 'Fixture', '')]
+
+
+def test_lazy_asgi_acquire_search_preserves_child_account_denial(monkeypatch):
+    runtime, authorization = _bearer_runtime(
+        monkeypatch, ['read:social'], role='child',
+    )
+    response = _run(
+        runtime, '/api/acquire/search?q=Fixture',
+        headers={'Authorization': authorization},
+    )
+
+    assert response.status_code == 403
+    assert 'child' in response.json()['error'].lower()
+    assert runtime._fake_acquire_actions.calls == []
 
 
 def test_lazy_asgi_dispatches_acquire_send_through_safe_adapter(monkeypatch):
@@ -2145,6 +2450,33 @@ def test_lazy_asgi_acquire_send_requires_librarian_without_provider_call(monkeyp
     assert response.status_code == 403
     assert response.json()['error'] == 'Librarian or admin required'
     assert runtime._fake_acquire_actions.calls == []
+
+
+def test_lazy_asgi_acquire_strips_magnet_network_targets_before_provider_call(monkeypatch):
+    flask_app, runtime = _runtime(monkeypatch, admin=True)
+    flask_app._fake_user.role = 'librarian'
+    cookie, csrf = _signed_session_with_csrf()
+    from oneirodex.utils.security import validate_download_client_url
+
+    runtime._fake_acquire_actions.validate_url = lambda url: validate_download_client_url(url)
+
+    async def send_download():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/acquire/download',
+                json={'magnet': 'magnet:?xt=urn:btih:abc&tr=http%3A%2F%2F127.0.0.1%2Fannounce'},
+                headers={'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(send_download())
+
+    assert response.status_code == 200
+    assert runtime._fake_acquire_actions.calls == [
+        ('send', 'magnet:?xt=urn%3Abtih%3Aabc', 'qbittorrent'),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -2349,6 +2681,28 @@ def test_native_next_custom_igdb_id_keeps_signed_in_bare_payload_and_head(monkey
     ]
 
 
+def test_native_next_custom_igdb_id_keeps_legacy_database_error(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    def fail_next_id():
+        raise RuntimeError('database failure')
+
+    monkeypatch.setattr(runtime._fake_game_reads, 'next_custom_igdb_id', fail_next_id)
+
+    response = _run(
+        runtime, '/api/get_next_custom_igdb_id', cookie=_signed_session(),
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        'ok': False,
+        'error': 'Could not work out the next custom IGDB id',
+        'error_code': 'internal',
+        'message': 'Could not work out the next custom IGDB id',
+        'success': False,
+    }
+
+
 def test_native_game_search_preserves_first_query_values_and_member_payload(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     response = _run(
@@ -2453,18 +2807,19 @@ def test_native_library_detail_and_watch_reads_keep_acl_and_not_found_order(monk
 
 def test_native_admin_library_detail_requires_admin_and_keeps_envelope(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch, admin=True)
+    library_uuid = '00000000-0000-0000-0000-000000000001'
     response = _run(
-        runtime, '/api/admin/libraries/lib-1', cookie=_signed_session(),
+        runtime, f'/api/admin/libraries/{library_uuid}', cookie=_signed_session(),
     )
 
     assert response.status_code == 200
-    assert response.json()['uuid'] == 'lib-1'
+    assert response.json()['uuid'] == library_uuid
     assert response.json()['success'] is True
-    assert runtime._fake_library_reads.calls == [('library', 'lib-1')]
+    assert runtime._fake_library_reads.calls == [('library', library_uuid)]
 
     flask_app._fake_user.role = 'user'
     denied = _run(
-        runtime, '/api/admin/libraries/lib-1', cookie=_signed_session(),
+        runtime, f'/api/admin/libraries/{library_uuid}', cookie=_signed_session(),
     )
     assert denied.status_code == 403
     assert denied.json()['error'] == 'Admin required'
@@ -2527,6 +2882,30 @@ def test_native_reorder_libraries_requires_admin_csrf_and_keeps_body_status(monk
     assert runtime._fake_library_reads.calls == [('reorder', ['lib-1', 'lib-2'])]
 
 
+def test_native_reorder_libraries_rejects_malformed_or_non_object_json(monkeypatch):
+    flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def send(body):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/reorder_libraries', content=body,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+
+    malformed = asyncio.run(send('{'))
+    non_object = asyncio.run(send('[]'))
+
+    assert malformed.status_code == 400
+    assert malformed.json()['error_code'] == 'bad_request'
+    assert non_object.status_code == 400
+    assert non_object.json()['error_code'] == 'bad_request'
+    assert runtime._fake_library_reads.calls == []
+
+
 def test_native_batch_edit_libraries_requires_admin_csrf_and_preserves_envelope(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch, admin=True)
     cookie, csrf = _signed_session_with_csrf()
@@ -2552,6 +2931,20 @@ def test_native_batch_edit_libraries_requires_admin_csrf_and_preserves_envelope(
     assert runtime._fake_library_reads.calls == [(
         'batch_edit', 7, {'library_uuids': ['lib-1'], 'scan_depth': 2},
     )]
+
+
+def test_native_batch_edit_empty_selection_uses_shared_error_envelope():
+    body, status = library_reads.LibraryReadData().batch_edit({}, user=None)
+
+    assert status == 400
+    assert body == {
+        'ok': False,
+        'error': 'library_uuids required (list) or library_uuid',
+        'error_code': 'bad_request',
+        'message': 'library_uuids required (list) or library_uuid',
+        'success': False,
+        'status': 'rejected',
+    }
 
 
 def test_native_playtime_me_and_per_game_reads_dispatch(monkeypatch):
@@ -2740,6 +3133,29 @@ def test_native_related_media_create_validates_and_requires_librarian_csrf(
     assert response.status_code == 400
     assert expected_message in response.json()['error']
     assert runtime._fake_related_media.calls == [('game', 'game-1')]
+
+
+def test_native_related_media_create_rejects_oversized_json_before_parsing(monkeypatch):
+    flask_app, runtime = _runtime(monkeypatch)
+    flask_app._fake_user.role = 'librarian'
+    cookie, csrf = _signed_session_with_csrf()
+    payload = json.dumps({'title': 'x' * related_media._MAX_CREATE_BODY_BYTES}).encode()
+
+    async def create():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/games/game-1/related_media',
+                content=payload,
+                headers={'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(create())
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_related_media.calls == []
 
 
 def test_native_related_media_create_and_delete_require_librarian_role(monkeypatch):
@@ -2938,6 +3354,7 @@ def test_native_game_input_family_patch_preserves_librarian_csrf_acl_and_schema(
         headers={'X-CSRFToken': blocked_csrf},
     )
     assert blocked.status_code == 403
+    assert blocked.json()['message'] == 'Librarian or admin required'
     assert blocked_runtime._fake_game_reads.calls == []
 
 
@@ -3121,6 +3538,27 @@ def test_native_saved_filter_preview_keeps_bounded_member_sample(monkeypatch):
     assert runtime._fake_saved_filters.calls[-1][0] == 'preview'
 
 
+def test_native_saved_filter_json_writes_reject_chunked_oversize_before_data_access(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    monkeypatch.setattr(saved_filters, '_SAVED_FILTER_BODY_MAX_BYTES', 24)
+    cookie, csrf = _signed_session_with_csrf()
+    headers = {'X-CSRFToken': csrf, 'Content-Type': 'application/json'}
+    body = b'{"name":"ok","tree":{},"padding":"' + (b'x' * 64) + b'"}'
+
+    responses = [
+        _run_chunked(runtime, '/api/filters/saved', cookie=cookie, method='POST',
+                     body=body, headers=headers),
+        _run_chunked(runtime, '/api/filters/saved/1', cookie=cookie, method='PUT',
+                     body=body, headers=headers),
+        _run_chunked(runtime, '/api/filters/preview', cookie=cookie, method='POST',
+                     body=body, headers=headers),
+    ]
+
+    assert [response.status_code for response in responses] == [413, 413, 413]
+    assert all(response.json()['error_code'] == 'payload_too_large' for response in responses)
+    assert runtime._fake_saved_filters.calls == []
+
+
 def test_native_batch_favorite_keeps_order_dedupe_acl_and_partial_payload(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     cookie, csrf = _signed_session_with_csrf()
@@ -3162,6 +3600,54 @@ def test_native_batch_favorite_keeps_order_dedupe_acl_and_partial_payload(monkey
     ]
 
 
+@pytest.mark.parametrize('path', [
+    '/api/games/batch/favorite',
+    '/api/games/batch/status',
+    '/api/games/batch/wishlist',
+])
+def test_native_batch_actions_reject_oversized_json_before_processing(monkeypatch, path):
+    from oneirodex.runtime_native.batch_favorite import BATCH_JSON_BODY_MAX_BYTES
+
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"uuids":[],"padding":"' + b'a' * BATCH_JSON_BODY_MAX_BYTES + b'"}'
+
+    async def send():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                path, content=body,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+
+    response = asyncio.run(send())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_batch_favorite.calls == []
+    assert runtime._fake_batch_status.calls == []
+    assert runtime._fake_batch_wishlist.calls == []
+
+
+def test_native_batch_freshness_rejects_chunked_oversize_before_data_access(monkeypatch):
+    from oneirodex.runtime_native.batch_refresh import BATCH_FRESHNESS_JSON_MAX_BYTES
+
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"uuids":[],"padding":"' + b'a' * BATCH_FRESHNESS_JSON_MAX_BYTES + b'"}'
+
+    response = _run_chunked(
+        runtime, '/api/games/batch/freshness/check', cookie=cookie, method='POST',
+        body=body, headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_batch_refresh.calls == []
+
+
 def test_native_batch_favorite_validation_caps_and_commit_error_are_safe(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     cookie, csrf = _signed_session_with_csrf()
@@ -3190,6 +3676,45 @@ def test_native_batch_favorite_validation_caps_and_commit_error_are_safe(monkeyp
     assert failed.json()['error'] == 'Could not save the change'
     assert 'private db info' not in failed.text
     assert runtime._fake_batch_favorite.calls[-1] == ('rollback',)
+
+
+def test_native_batch_item_errors_do_not_expose_database_details(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    runtime._fake_batch_favorite.update_error = 'private db info'
+    runtime._fake_batch_status.write_error = 'private db info'
+    runtime._fake_batch_wishlist.create_error = 'private db info'
+
+    async def send(path, payload):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                path, json=payload, headers={'X-CSRFToken': csrf},
+            )
+
+    favorite = asyncio.run(send(
+        '/api/games/batch/favorite', {'uuids': ['game-a'], 'favorite': True}
+    ))
+    status = asyncio.run(send(
+        '/api/games/batch/status', {'uuids': ['game-a'], 'status': 'completed'}
+    ))
+    wishlist = asyncio.run(send(
+        '/api/games/batch/wishlist', {'uuids': ['game-a']}
+    ))
+
+    assert favorite.status_code == status.status_code == wishlist.status_code == 200
+    assert favorite.json()['errors'] == [
+        {'uuid': 'game-a', 'error': 'Could not update favorite'},
+    ]
+    assert status.json()['errors'] == [
+        {'uuid': 'game-a', 'error': 'Could not update play status'},
+    ]
+    assert wishlist.json()['errors'] == [
+        {'uuid': 'game-a', 'error': 'Could not create request'},
+    ]
+    assert all('private db info' not in response.text for response in (favorite, status, wishlist))
 
 
 def test_native_batch_status_keeps_acl_partial_success_and_empty_clear(monkeypatch):
@@ -3263,7 +3788,7 @@ def test_native_batch_wishlist_add_and_remove_keep_partial_results(monkeypatch):
         'errors': [], 'limit': 50, 'requested': 4, 'count': 1,
     }
     assert runtime._fake_batch_wishlist.calls[-3:] == [
-        ('create', 7, 'Game A', 'game-a'), ('commit',), ('log', 1),
+        ('create', 7, 'Game A', 'game-a'), ('commit',), ('log', 1, 7),
     ]
 
     removed = asyncio.run(send({'uuids': ['pending', 'game-a'], 'action': 'remove'}))
@@ -3322,6 +3847,9 @@ def test_native_batch_favorite_and_status_empty_actions_are_flask_context_free(m
 
     assert favorite.status_code == status.status_code == 200
     assert favorite.json()['requested'] == status.json()['requested'] == 0
+    assert favorite.json()['success'] is True
+    assert favorite.json()['error'] is None
+    assert favorite.json()['error_code'] is None
 
 
 def test_native_batch_wishlist_rejects_child_and_invalid_action(monkeypatch):
@@ -3425,6 +3953,17 @@ def test_native_admin_freshness_refresh_requires_admin_csrf_and_keeps_result(mon
         ('admin_games', 'lib-a', 15), ('freshness', 'stale'), ('commit',),
     ]
 
+    runtime._fake_batch_refresh.freshness_error = (
+        'postgres://private-user:private-password@db/private-db'
+    )
+    failed = asyncio.run(send({'limit': 3, 'library_uuid': 'lib-a'}))
+    assert failed.status_code == 200
+    assert failed.json()['errors'] == [{
+        'uuid': 'stale', 'name': 'Stale', 'error': 'Could not check this title',
+    }]
+    assert 'private-password' not in failed.text
+    assert 'postgres://' not in failed.text
+
 
 def test_native_batch_image_refresh_requires_librarian_and_queues(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
@@ -3461,6 +4000,46 @@ def test_native_batch_image_refresh_requires_librarian_and_queues(monkeypatch):
         ],
         'errors': [], 'limit': 20, 'requested': 3, 'count': 1,
     }
+
+
+def test_native_batch_freshness_and_image_errors_redact_database_details(monkeypatch):
+    flask_app, runtime = _runtime(monkeypatch)
+    asyncio.run(runtime._ensure_flask())
+    cookie, csrf = _signed_session_with_csrf()
+    runtime._fake_batch_refresh.freshness_error = (
+        'postgres://private-user:private-password@db/private-db'
+    )
+    runtime._fake_batch_refresh.enqueue_error = (
+        'postgres://private-user:private-password@db/private-db'
+    )
+    flask_app._fake_user.role = 'librarian'
+
+    async def send(path, payload):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                path, json=payload, headers={'X-CSRFToken': csrf},
+            )
+
+    freshness = asyncio.run(send(
+        '/api/games/batch/freshness/check', {'uuids': ['stale']},
+    ))
+    images = asyncio.run(send(
+        '/api/games/batch/refresh_images', {'uuids': ['game-a']},
+    ))
+
+    assert freshness.status_code == 200
+    assert freshness.json()['errors'] == [
+        {'uuid': 'stale', 'name': 'Stale', 'error': 'Could not check this title'},
+    ]
+    assert images.status_code == 202
+    assert images.json()['errors'] == [
+        {'uuid': 'game-a', 'name': 'Game-A', 'error': 'Could not queue the image refresh'},
+    ]
+    assert 'private-password' not in freshness.text + images.text
+    assert 'postgres://' not in freshness.text + images.text
 
 
 def test_native_member_library_write_apis_require_write_scope(monkeypatch):
@@ -3531,6 +4110,280 @@ def test_native_single_game_favorite_and_status_actions_keep_contracts(monkeypat
     assert cleared.status_code == 200
     assert cleared.json()['status'] is None
     assert cleared.json()['message'] == 'Status cleared'
+
+    restored = asyncio.run(send('POST', '/api/set_game_status/game-a', {'status': 'completed'}))
+    assert restored.status_code == 200
+    calls_before_invalid = list(runtime._fake_member_game_state.calls)
+    invalid = asyncio.run(send('POST', '/api/set_game_status/game-a', {'status': 7}))
+    assert invalid.status_code == 400
+    assert invalid.json()['error'] == 'Invalid status value'
+    assert runtime._fake_member_game_state.statuses['game-a'] == 'completed'
+
+    async def send_json_null():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/set_game_status/game-a', content='null',
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+
+    invalid_null = asyncio.run(send_json_null())
+    assert invalid_null.status_code == 400
+    assert invalid_null.json()['error'] == 'Invalid status value'
+    assert runtime._fake_member_game_state.statuses['game-a'] == 'completed'
+
+    async def send_malformed_json():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/set_game_status/game-a', content='{',
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+
+    invalid_json = asyncio.run(send_malformed_json())
+    assert invalid_json.status_code == 400
+    assert invalid_json.json()['error'] == 'Invalid JSON payload'
+    assert runtime._fake_member_game_state.statuses['game-a'] == 'completed'
+    assert runtime._fake_member_game_state.calls == calls_before_invalid + [
+        ('game', 'game-a'), ('game', 'game-a'), ('game', 'game-a'),
+    ]
+
+    async def send_form_body():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/set_game_status/game-a', content='status=unplayed',
+                headers={
+                    'X-CSRFToken': csrf,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+            )
+
+    unsupported_media = asyncio.run(send_form_body())
+    assert unsupported_media.status_code == 415
+    assert unsupported_media.json()['error'] == (
+        "Did not attempt to load JSON data because the request Content-Type was not 'application/json'."
+    )
+    assert runtime._fake_member_game_state.statuses['game-a'] == 'completed'
+
+    missing_status = asyncio.run(send('POST', '/api/set_game_status/game-a', {}))
+    assert missing_status.status_code == 200
+    assert missing_status.json()['status'] is None
+    assert missing_status.json()['message'] == 'Status cleared'
+    assert 'game-a' not in runtime._fake_member_game_state.statuses
+
+
+def test_native_library_reads_require_read_library_for_bearer(monkeypatch):
+    paths = [
+        '/api/favorites',
+        '/api/check_favorite/game-a',
+        '/api/get_game_status/game-a',
+        '/api/collections',
+        '/api/collections/collection-1',
+        '/browse_games?page=3',
+    ]
+    runtime, social_only = _bearer_runtime(monkeypatch, ['read:social'])
+
+    for path in paths:
+        for method in ('GET', 'HEAD'):
+            response = _run(
+                runtime, path, method=method,
+                headers={'Authorization': social_only},
+            )
+            assert response.status_code == 403, (method, path, response.text)
+            if method == 'GET':
+                assert response.json()['detail'] == {
+                    'required_scope': 'read:library',
+                }
+            else:
+                assert response.content == b''
+
+    assert runtime._fake_favorites.calls == []
+    assert runtime._fake_member_game_state.calls == []
+    assert runtime._fake_collections.calls == []
+    assert runtime._fake_browse.calls == []
+
+
+def test_native_library_reads_keep_read_library_and_browser_session_access(monkeypatch):
+    paths = [
+        '/api/favorites',
+        '/api/check_favorite/game-a',
+        '/api/get_game_status/game-a',
+        '/api/collections',
+        '/api/collections/collection-1',
+        '/browse_games?page=3',
+    ]
+    runtime, read_library = _bearer_runtime(monkeypatch, ['read:library'])
+
+    for path in paths:
+        response = _run(
+            runtime, path, headers={'Authorization': read_library},
+        )
+        assert response.status_code == 200, (path, response.text)
+
+    browser_runtime = _runtime(monkeypatch)[1]
+    session_response = _run(
+        browser_runtime, '/browse_games?page=3', cookie=_signed_session(),
+    )
+    assert session_response.status_code == 200
+
+
+def test_native_personal_reads_require_read_library_for_bearer(monkeypatch):
+    paths = [
+        '/api/get_libraries',
+        '/api/library/lib-1',
+        '/api/library/lib-1/watch',
+        '/api/ownership/connections',
+        '/api/ownership',
+        '/api/ownership/titles?after_id=4&status=needs_review',
+        '/api/ownership/titles/5/candidates',
+        '/api/playtime/me',
+        '/api/playtime/games/game-1',
+        '/api/playtime/share/game-1.svg',
+        '/api/filters/saved',
+        '/api/requests',
+        '/api/my_downloads',
+        '/check_download_status/1',
+    ]
+    fake_downloads = FakeDownloadRequestReadData()
+    monkeypatch.setattr(
+        native_download_request_reads,
+        'DownloadRequestReadData',
+        lambda: fake_downloads,
+    )
+    runtime, social_only = _bearer_runtime(monkeypatch, ['read:social'])
+
+    for path in paths:
+        for method in ('GET', 'HEAD'):
+            response = _run(
+                runtime, path, method=method,
+                headers={'Authorization': social_only},
+            )
+            assert response.status_code == 403, (method, path, response.text)
+            if method == 'GET':
+                assert response.json()['detail'] == {
+                    'required_scope': 'read:library',
+                }
+            else:
+                assert response.content == b''
+
+    assert runtime._fake_library_reads.calls == []
+    assert runtime._fake_ownership.reads == []
+    assert runtime._fake_playtime.calls == []
+    assert runtime._fake_saved_filters.calls == []
+    assert runtime._fake_wishlist.calls == []
+    assert fake_downloads.calls == []
+
+
+def test_native_personal_reads_keep_read_library_access(monkeypatch):
+    paths = [
+        '/api/get_libraries',
+        '/api/library/lib-1',
+        '/api/library/lib-1/watch',
+        '/api/ownership/connections',
+        '/api/ownership',
+        '/api/ownership/titles?after_id=4&status=needs_review',
+        '/api/ownership/titles/5/candidates',
+        '/api/playtime/me',
+        '/api/playtime/games/game-1',
+        '/api/playtime/share/game-1.svg',
+        '/api/filters/saved',
+        '/api/requests',
+        '/api/my_downloads',
+        '/check_download_status/1',
+    ]
+    fake_downloads = FakeDownloadRequestReadData()
+    monkeypatch.setattr(
+        native_download_request_reads,
+        'DownloadRequestReadData',
+        lambda: fake_downloads,
+    )
+    runtime, read_library = _bearer_runtime(monkeypatch, ['read:library'])
+
+    for path in paths:
+        response = _run(
+            runtime, path, headers={'Authorization': read_library},
+        )
+        assert response.status_code == 200, (path, response.text)
+
+
+def test_native_game_update_preference_and_vr_reads_require_library_scope(monkeypatch):
+    runtime, social_only = _bearer_runtime(monkeypatch, ['read:social'])
+    runtime._fake_vr_reads.enabled = lambda _flask_app: True
+    paths = [
+        '/api/search?query=fixture',
+        '/api/games/game-1/details',
+        '/api/games/game-1/more_from',
+        '/api/games/game-1/editions',
+        '/api/games/game-1/freshness',
+        '/api/games/game-1/assists',
+        '/api/game_screenshots/game-1',
+        '/api/game_images/game-1',
+        '/game/game-1/local_image/cover',
+        '/api/updates/inbox',
+        '/api/account/preferences',
+        '/api/vr/catalog',
+        '/api/vr/games/vr-1',
+        '/api/games/vr-1/vr_profiles',
+    ]
+
+    for path in paths:
+        for method in ('GET', 'HEAD'):
+            response = _run(
+                runtime, path, method=method,
+                headers={'Authorization': social_only},
+            )
+            assert response.status_code == 403, (method, path, response.text)
+            if method == 'GET':
+                assert response.json()['detail'] == {
+                    'required_scope': 'read:library',
+                }
+            else:
+                assert response.content == b''
+
+    assert runtime._fake_game_reads.calls == []
+    assert runtime._fake_game_reads.searches == []
+    assert runtime._fake_update_reads.calls == []
+    assert runtime._fake_account_preferences.calls == []
+    assert runtime._fake_vr_reads.calls == []
+
+    read_runtime, read_library = _bearer_runtime(monkeypatch, ['read:library'])
+    read_runtime._fake_vr_reads.enabled = lambda _flask_app: True
+    for path in paths:
+        if path.startswith('/game/'):
+            continue
+        response = _run(
+            read_runtime, path, headers={'Authorization': read_library},
+        )
+        assert response.status_code == 200, (path, response.text)
+
+
+def test_native_single_game_status_body_is_bounded_before_json_parse(monkeypatch):
+    runtime, _read_only = _bearer_runtime(
+        monkeypatch, ['read:library', 'write:library'],
+    )
+    monkeypatch.setattr(member_game_state, '_MAX_JSON_BODY_BYTES', 16)
+
+    async def send_large_status():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            return await client.post(
+                '/api/set_game_status/game-a',
+                content=b'{"status":"' + b'x' * 64 + b'"}',
+                headers={'Authorization': _read_only, 'Content-Type': 'application/json'},
+            )
+
+    response = asyncio.run(send_large_status())
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert not any(call[0] in {'status', 'commit'} for call in runtime._fake_member_game_state.calls)
 
 
 def test_native_library_writes_require_write_scope_for_bearer_tokens(monkeypatch):
@@ -3688,9 +4541,12 @@ def test_native_member_meta_routes_keep_auth_and_validation(monkeypatch):
     assert packs.json()['packs'][0]['id'] == 'outline'
     assert packs.json()['packs'][0]['css_url'].startswith('/static/library/icon-themes/')
 
-    existing = asyncio.run(send('POST', '/api/check_username', {'username': 'Taken'}))
+    existing = asyncio.run(send('POST', '/api/check_username', {'username': 'tAkEn'}))
     assert existing.status_code == 200
     assert existing.json() == {'exists': True}
+    absent = asyncio.run(send('POST', '/api/check_username', {'username': 'NotTaken'}))
+    assert absent.status_code == 200
+    assert absent.json() == {'exists': False}
     missing = asyncio.run(send('POST', '/api/check_username', {}))
     assert missing.status_code == 422
     assert missing.json()['error'] == 'Invalid request.'
@@ -3698,6 +4554,74 @@ def test_native_member_meta_routes_keep_auth_and_validation(monkeypatch):
         'POST', '/api/check_username', {'username': 'free'}, with_csrf=False,
     ))
     assert no_csrf.status_code == 400
+    anonymous_no_csrf = _run(
+        runtime, '/api/check_username', method='POST', json_body={'username': 'free'},
+    )
+    assert anonymous_no_csrf.status_code == 400
+    assert anonymous_no_csrf.json()['message'] == 'The CSRF token is missing.'
+    assert 'set-cookie' not in anonymous_no_csrf.headers
+
+
+def test_native_check_username_bearer_requires_social_read_scope(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    from types import SimpleNamespace
+
+    scopes = {'write:presence'}
+    auth = SimpleNamespace(
+        user=_flask_app._fake_user,
+        token=object(),
+        session_data={},
+        should_set_session_cookie=False,
+        has_scope=lambda scope: scope in scopes,
+    )
+    monkeypatch.setattr(
+        member_meta, 'request_auth_context', lambda *_args, **_kwargs: auth,
+    )
+
+    denied = _run(
+        runtime, '/api/check_username', method='POST',
+        json_body={'username': 'Taken'},
+        headers={'Authorization': 'Bearer gt_deadbeef_social-test'},
+    )
+    assert denied.status_code == 403
+    assert denied.json()['error_code'] == 'forbidden'
+    assert denied.json()['detail'] == {'required_scope': 'read:social'}
+
+    scopes.add('read:social')
+    allowed = _run(
+        runtime, '/api/check_username', method='POST',
+        json_body={'username': 'Taken'},
+        headers={'Authorization': 'Bearer gt_deadbeef_social-test'},
+    )
+    assert allowed.status_code == 200
+    assert allowed.json() == {'exists': True}
+
+
+def test_native_check_username_options_matches_flask_allow_order(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    response = _run(runtime, '/api/check_username', method='OPTIONS')
+
+    assert response.status_code == 200
+    assert response.headers['allow'] == 'POST, OPTIONS'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.headers['content-length'] == '0'
+    assert response.content == b''
+
+
+def test_native_check_username_rejects_oversized_json_body(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"username":"free","padding":"' + (b'x' * (70_000 - 31)) + b'"}'
+
+    response = _run(
+        runtime, '/api/check_username', cookie=cookie, method='POST',
+        content=body,
+        headers={'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
 
 
 def test_native_current_user_role_does_not_push_flask_context(monkeypatch):
@@ -3731,6 +4655,45 @@ def test_native_filter_taxonomies_keep_authenticated_catalogue_shape(monkeypatch
     response = asyncio.run(send())
     assert response.status_code == 200
     assert response.json() == [{'id': 1, 'name': catalogue.title()}]
+
+
+@pytest.mark.parametrize(
+    ('exception', 'expected_message', 'expected_event'),
+    [
+        (
+            __import__('sqlalchemy').exc.SQLAlchemyError('Database connection failed'),
+            'Database error retrieving genres',
+            'Database error fetching genres: Database connection failed',
+        ),
+        (
+            RuntimeError('Unexpected failure'),
+            'Error retrieving genres',
+            'Unexpected error fetching genres: Unexpected failure',
+        ),
+    ],
+)
+def test_native_taxonomy_errors_preserve_legacy_error_classification(
+    monkeypatch, exception, expected_message, expected_event,
+):
+    _flask_app, runtime = _runtime(monkeypatch)
+    events = []
+    monkeypatch.setattr(
+        'oneirodex.utils.event_logging.log_system_event',
+        lambda message, **kwargs: events.append((message, kwargs)) or True,
+    )
+
+    def fail_taxonomy(_name):
+        raise exception
+
+    monkeypatch.setattr(runtime._fake_filter_reads, 'taxonomy', fail_taxonomy)
+    response = _run(runtime, '/api/genres', cookie=_signed_session())
+
+    assert response.status_code == 500
+    assert response.json()['message'] == expected_message
+    assert events == [(
+        expected_event,
+        {'event_type': 'filters_api', 'event_level': 'error'},
+    )]
 
 
 def test_native_member_profiles_keep_social_scope_and_acl_response_shapes(monkeypatch):
@@ -3863,7 +4826,8 @@ def test_native_vr_profile_routes_keep_librarian_csrf_and_validation(monkeypatch
 @pytest.mark.parametrize(
     ('path', 'method', 'expected'),
     [('/api/check_favorite/missing', 'GET', 'Game not found'),
-     ('/api/check_favorite/blocked', 'GET', 'Forbidden'),
+     ('/api/check_favorite/blocked', 'GET', 'Game not found'),
+     ('/api/toggle_favorite/blocked', 'POST', 'Game not found'),
      ('/api/get_game_status/blocked', 'GET', 'Game not found'),
      ('/api/set_game_status/game-a', 'POST', 'Invalid status value')],
 )
@@ -3962,6 +4926,65 @@ def test_native_social_mutations_dispatch_with_browser_csrf(
     )
     repeated = asyncio.run(mutate())
     assert repeated.status_code == 200
+
+
+@pytest.mark.parametrize('json_body', [1, [1], 'truthy'])
+def test_native_social_request_matches_legacy_internal_error_for_truthy_non_object_json(
+    monkeypatch, json_body,
+):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime,
+        '/api/social/friends',
+        cookie=cookie,
+        method='POST',
+        json_body=json_body,
+        headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
+    assert response.json()['error'] == 'Something went wrong on our end. The error has been logged.'
+    assert runtime._fake_social_writes.calls == []
+
+
+def test_native_social_persistence_failure_uses_safe_api_error(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    def fail_request(*_args, **_kwargs):
+        raise RuntimeError('synthetic persistence failure')
+
+    monkeypatch.setattr(runtime._fake_social_writes, 'request', fail_request)
+
+    async def post_request():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(
+                app=runtime, raise_app_exceptions=False,
+            ),
+            base_url='http://testserver',
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/social/friends',
+                json={'username': 'friend'},
+                headers={'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(post_request())
+
+    assert response.status_code == 500
+    assert response.headers['content-type'].startswith('application/json')
+    assert response.json() == {
+        'ok': False,
+        'error': 'Something went wrong on our end. The error has been logged.',
+        'error_code': 'internal',
+        'message': 'Something went wrong on our end. The error has been logged.',
+        'success': False,
+    }
+    assert 'synthetic persistence failure' not in response.text
 
 
 def test_native_social_mutations_require_write_scope_for_bearer(monkeypatch):
@@ -4408,6 +5431,12 @@ def test_lazy_asgi_dispatches_browser_account_summary_without_flask_or_extra_fie
         'error_code': None,
         'success': True,
     }
+    assert response.content.endswith(b'\n')
+    assert response.content.startswith(b'{"avatar_path":')
+    head = _run(runtime, '/api/account/summary', cookie=_signed_session(), method='HEAD')
+    assert head.status_code == 200
+    assert head.content == b''
+    assert head.headers['content-length'] == str(len(response.content))
 
 
 def test_lazy_asgi_dispatches_rom_translate_capabilities_to_native_admin_route(monkeypatch):
@@ -4495,6 +5524,12 @@ def test_lazy_asgi_dispatches_browser_account_invites_without_flask(monkeypatch)
         'success': True,
     }
     assert response.headers['x-content-type-options'] == 'nosniff'
+    assert response.content.endswith(b'\n')
+    assert response.content.startswith(b'{"error":')
+    head = _run(runtime, '/api/account/invites', cookie=_signed_session(), method='HEAD')
+    assert head.status_code == 200
+    assert head.content == b''
+    assert head.headers['content-length'] == str(len(response.content))
 
 
 def test_account_invite_post_rejects_missing_csrf_before_flask_compatibility(monkeypatch):
@@ -4524,14 +5559,14 @@ def test_lazy_asgi_dispatches_invite_creation_with_csrf_without_flask(monkeypatc
             client.cookies.set('session', cookie)
             return await client.post(
                 '/api/account/invites',
-                json={'email': 'friend@example.test'},
+                json={'email': 'friend@example.com'},
                 headers={'X-CSRFToken': csrf},
             )
 
     response = asyncio.run(perform_post())
     assert response.status_code == 201
     assert response.json()['invite'] == {
-        'token': 'created-invite', 'email': 'friend@example.test'
+        'token': 'created-invite', 'email': 'friend@example.com'
     }
     assert response.headers['x-content-type-options'] == 'nosniff'
 
@@ -4731,11 +5766,13 @@ def test_lazy_asgi_dispatches_password_change_without_flask(monkeypatch):
     [
         ('/api/client/capabilities?device_kind=browser', {'device_kind': 'browser'}),
         ('/api/client/lifecycle', {'records': [{'game_uuid': 'game-7', 'state': 'installed'}]}),
+        ('/api/client/identity', {'account_id': 'account-uuid-7'}),
     ],
 )
-def test_lazy_asgi_dispatches_client_reads_without_flask(monkeypatch, path, expected):
+def test_lazy_asgi_dispatches_client_reads_without_flask(monkeypatch, request, path, expected):
     flask_app, runtime = _runtime(monkeypatch)
     asyncio.run(runtime._ensure_flask())
+    request.addfinalizer(lambda: _dispose_runtime_test_engines(flask_app, runtime))
     flask_app.app_context = lambda: (_ for _ in ()).throw(
         AssertionError('Flask app context used')
     )
@@ -5169,6 +6206,23 @@ def test_native_ownership_match_decisions_keep_csrf_revision_and_undo(monkeypatc
     assert runtime._fake_ownership.decisions.count(('rollback',)) == 1
 
 
+def test_native_ownership_match_rejects_chunked_oversize_before_decision(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    monkeypatch.setattr(
+        ownership_providers, '_OWNERSHIP_DECISION_BODY_MAX_BYTES', 24,
+    )
+    cookie, csrf = _signed_session_with_csrf()
+    response = _run_chunked(
+        runtime, '/api/ownership/titles/5/match', cookie=cookie, method='POST',
+        body=b'{"expected_revision":2,"game_uuid":"game-1","padding":"' + b'x' * 64 + b'"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_ownership.decisions == []
+
+
 @pytest.mark.parametrize(
     ('path', 'body'),
     [
@@ -5340,6 +6394,78 @@ def test_native_file_type_crud_preserves_admin_csrf_and_validation(monkeypatch):
     ]
 
 
+def test_native_file_type_json_media_type_matches_flask_rules(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf_token = _signed_session_with_csrf()
+    vendor_json = _run(
+        runtime, '/api/file_types/allowed', method='POST', cookie=cookie,
+        headers={
+            'X-CSRFToken': csrf_token,
+            'Content-Type': 'application/vnd.api+json',
+        },
+        json_body={'value': 'fixturex'},
+    )
+    jsonp_lookalike = _run(
+        runtime, '/api/file_types/allowed', method='POST', cookie=cookie,
+        headers={
+            'X-CSRFToken': csrf_token,
+            'Content-Type': 'application/jsonp',
+        },
+        json_body={'value': 'fixturey'},
+    )
+
+    assert vendor_json.status_code == 201
+    assert vendor_json.json() == {'id': 2, 'value': 'fixturex'}
+    assert jsonp_lookalike.status_code == 400
+    assert jsonp_lookalike.json()['message'] == 'Request must be JSON'
+    assert runtime._fake_file_types.calls == [('create', 'allowed', 'fixturex')]
+
+
+def test_native_file_type_non_object_json_matches_legacy_validation(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf_token = _signed_session_with_csrf()
+    headers = {'X-CSRFToken': csrf_token}
+
+    post_missing = _run(
+        runtime, '/api/file_types/allowed', method='POST', cookie=cookie,
+        headers=headers, json_body=[],
+    )
+    post_indexing_error = _run(
+        runtime, '/api/file_types/allowed', method='POST', cookie=cookie,
+        headers=headers, json_body=['value'],
+    )
+    put_missing = _run(
+        runtime, '/api/file_types/allowed', method='PUT', cookie=cookie,
+        headers=headers, json_body=[],
+    )
+    put_indexing_error = _run(
+        runtime, '/api/file_types/allowed', method='PUT', cookie=cookie,
+        headers=headers, json_body=['id', 'value'],
+    )
+    delete_missing = _run(
+        runtime, '/api/file_types/allowed', method='DELETE', cookie=cookie,
+        headers=headers, json_body=[],
+    )
+    delete_indexing_error = _run(
+        runtime, '/api/file_types/allowed', method='DELETE', cookie=cookie,
+        headers=headers, json_body=['id'],
+    )
+
+    assert post_missing.status_code == 400
+    assert post_missing.json()['message'] == 'Missing required field: value'
+    assert post_indexing_error.status_code == 500
+    assert post_indexing_error.json()['message'] == 'An error occurred while processing your request'
+    assert put_missing.status_code == 400
+    assert put_missing.json()['message'] == 'Missing required field: id'
+    assert put_indexing_error.status_code == 400
+    assert put_indexing_error.json()['message'] == 'Invalid ID format'
+    assert delete_missing.status_code == 400
+    assert delete_missing.json()['message'] == 'Missing required field: id'
+    assert delete_indexing_error.status_code == 400
+    assert delete_indexing_error.json()['message'] == 'Invalid ID format'
+    assert runtime._fake_file_types.calls == []
+
+
 def test_native_emulator_profile_admin_read_and_save_require_admin_and_csrf(monkeypatch):
     _flask_app, member_runtime = _runtime(monkeypatch)
     denied = _run(
@@ -5399,6 +6525,50 @@ def test_native_browser_player_settings_preserve_admin_csrf_and_validation(monke
     assert settings_head.status_code == 200 and settings_head.content == b''
     assert invalid.status_code == 400 and invalid.json()['error'] == 'JSON object required'
     assert saved.status_code == 200 and saved.json()['engine'] == 'webretro'
+
+
+def test_native_browser_player_settings_matches_flask_silent_json(monkeypatch):
+    _flask_app, admin_runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf_token = _signed_session_with_csrf()
+    headers = {'Content-Type': 'application/json', 'X-CSRFToken': csrf_token}
+
+    async def send_raw(method, content, content_type='application/json'):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=admin_runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.request(
+                method,
+                '/api/browser-player-settings', content=content,
+                headers={**headers, 'Content-Type': content_type},
+                follow_redirects=False,
+            )
+
+    cases = [
+        (b'{', 'application/json'),
+        (b'null', 'application/json'),
+        (b'false', 'application/json'),
+        (b'0', 'application/json'),
+        (b'""', 'application/json'),
+        (b'[]', 'application/json'),
+        (b'{"engine":"ignored"}', 'text/plain'),
+    ]
+    responses = [
+        asyncio.run(send_raw(method, content, content_type))
+        for method in ('POST', 'PUT')
+        for content, content_type in cases
+    ]
+    truthy_lists = [
+        asyncio.run(send_raw(method, b'["not", "an", "object"]'))
+        for method in ('POST', 'PUT')
+    ]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.status_code == 400 for response in truthy_lists)
+    assert all(response.json()['error'] == 'JSON object required' for response in truthy_lists)
+    assert admin_runtime._fake_emulator.saved == [
+        ('browser', {}) for _ in range(2 * len(cases))
+    ]
 
 
 def test_lazy_asgi_dispatches_wishlist_list_without_flask(monkeypatch):
@@ -5466,6 +6636,7 @@ def test_native_notification_preferences_read_and_write(monkeypatch):
         lambda: (_ for _ in ()).throw(AssertionError('Flask app context used')),
     )
     read = _run(runtime, '/api/notifications/preferences', cookie=_signed_session())
+    head = _run(runtime, '/api/notifications/preferences', cookie=_signed_session(), method='HEAD')
     cookie, csrf = _signed_session_with_csrf()
 
     async def save():
@@ -5481,9 +6652,92 @@ def test_native_notification_preferences_read_and_write(monkeypatch):
     written = asyncio.run(save())
     assert read.status_code == 200
     assert read.json()['email_digest_daily'] is False
+    assert head.status_code == 200
+    assert head.content == b''
+    expected_head_body = flask_app.json.response({
+        'ok': True, 'error': None, 'error_code': None, 'success': True,
+    }).get_data()
+    assert head.headers['content-length'] == str(len(expected_head_body))
     assert written.status_code == 200
     assert written.json()['ok'] is True
     assert runtime._fake_notifications.calls == [('preferences', {'notify_chat': False})]
+
+
+def test_native_notification_preferences_reject_chunked_oversize_before_update(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    monkeypatch.setattr(notifications, 'NOTIFICATION_READ_BODY_MAX_BYTES', 24)
+    cookie, csrf = _signed_session_with_csrf()
+    response = _run_chunked(
+        runtime, '/api/notifications/preferences', cookie=cookie, method='POST',
+        body=b'{"notify_chat":false,"padding":"' + b'x' * 64 + b'"}',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_notifications.calls == []
+
+
+def test_native_notification_preferences_match_legacy_internal_error_for_truthy_scalar_json(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/notifications/preferences', cookie=cookie, method='POST',
+        json_body=1, headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
+    assert runtime._fake_notifications.calls == []
+
+
+@pytest.mark.parametrize('json_body', [['notify_chat'], 'notify_chat'])
+def test_native_notification_preferences_matches_legacy_membership_type_error(
+    monkeypatch, json_body,
+):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/notifications/preferences', cookie=cookie, method='POST',
+        json_body=json_body, headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
+    assert runtime._fake_notifications.calls == []
+
+
+@pytest.mark.parametrize('json_body', [[1], 'irrelevant'])
+def test_native_notification_preferences_ignores_truthy_nonmatching_list_or_string(
+    monkeypatch, json_body,
+):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/notifications/preferences', cookie=cookie, method='POST',
+        json_body=json_body, headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['ok'] is True
+    assert runtime._fake_notifications.calls == [('preferences', {})]
+
+
+def test_native_notification_read_matches_legacy_internal_error_for_truthy_non_object_json(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/notifications/read', cookie=cookie, method='POST',
+        json_body=1, headers={'X-CSRFToken': csrf},
+    )
+
+    assert response.status_code == 500
+    assert response.json()['error_code'] == 'internal'
+    assert runtime._fake_notifications.calls == []
 
 
 def test_native_admin_notification_bus_test_requires_csrf_and_uses_fake_adapter(monkeypatch):
@@ -5682,6 +6936,80 @@ def test_native_chat_dm_open_requires_csrf_and_keeps_not_found(monkeypatch):
     assert calls == [(7, {'username': 'Sam'}), (7, {'username': 'missing'})]
 
 
+@pytest.mark.parametrize(
+    ('path', 'payload', 'admin'),
+    [
+        ('/api/chat/channels', {'name': 'Family'}, False),
+        ('/api/chat/channels/15/mute', {'muted': True}, False),
+        ('/api/chat/dm', {'username': 'Sam'}, False),
+        ('/api/chat/messages/15/reactions', {'emoji': '🎮'}, False),
+        ('/api/chat/spaces/join', {'token': 'invite-token'}, False),
+        ('/api/chat/spaces', {'name': 'Family'}, True),
+        ('/api/chat/spaces/15/channels', {'name': 'General'}, True),
+        ('/api/chat/spaces/15/members', {'user_id': 8, 'role': 'member'}, True),
+        ('/api/chat/spaces/15/invites', {'max_uses': 2}, True),
+    ],
+)
+def test_native_chat_json_writes_cap_chunked_bodies(monkeypatch, path, payload, admin):
+    _flask_app, runtime = _runtime(monkeypatch, admin=admin)
+    calls = []
+    monkeypatch.setattr(chat_reads, '_CHAT_MESSAGE_JSON_MAX_BYTES', 8)
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'create_channel', lambda *_args: calls.append('create'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'mute_channel', lambda *_args: calls.append('mute'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'open_dm', lambda *_args: calls.append('dm'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'toggle_reaction', lambda *_args: calls.append('reaction'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'join_space', lambda *_args: calls.append('join'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'create_space', lambda *_args: calls.append('space'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'create_space_channel',
+        lambda *_args: calls.append('space_channel'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'add_space_member',
+        lambda *_args: calls.append('space_member'),
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'create_space_invite',
+        lambda *_args: calls.append('invite'),
+    )
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def send():
+        raw = json.dumps(payload).encode()
+
+        async def chunks():
+            yield raw[:5]
+            yield raw[5:]
+
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                path, content=chunks(), headers={
+                    'X-CSRFToken': csrf, 'Content-Type': 'application/json',
+                },
+            )
+
+    response = asyncio.run(send())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert calls == []
+
+
 def test_native_chat_message_post_requires_csrf_and_preserves_envelope(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
     calls = []
@@ -5690,26 +7018,73 @@ def test_native_chat_message_post_requires_csrf_and_preserves_envelope(monkeypat
         calls.append((user.id, channel_id, payload))
         return {'id': 48, 'body': payload.get('body'), 'user_id': user.id}
 
+    monkeypatch.setattr(chat_reads.ChatReadData, 'channel_visible', lambda _self, _user, _id: True)
     monkeypatch.setattr(chat_reads.ChatReadData, 'post_message', post_message)
     cookie, csrf = _signed_session_with_csrf()
 
-    async def send(*, with_csrf=True):
+    async def send(*, with_csrf=True, content=None, json_payload=None):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
         ) as client:
             client.cookies.set('session', cookie)
             headers = {'X-CSRFToken': csrf} if with_csrf else {}
+            if content is not None:
+                headers['Content-Type'] = 'application/json'
+                return await client.post('/api/chat/channels/29/messages', content=content, headers=headers)
             return await client.post(
-                '/api/chat/channels/29/messages', json={'body': 'hello'}, headers=headers,
+                '/api/chat/channels/29/messages', json=json_payload or {'body': 'hello'},
+                headers=headers,
             )
 
     rejected = asyncio.run(send(with_csrf=False))
     accepted = asyncio.run(send())
+    too_large_body = b'{"body":"' + b'x' * chat_reads._CHAT_MESSAGE_JSON_MAX_BYTES + b'"}'
+    too_large = asyncio.run(send(content=too_large_body))
+    too_many_attachments = asyncio.run(send(json_payload={
+        'body': 'hello', 'attachment_ids': [1, 2, 3, 4, 5, 6],
+    }))
+    invalid_attachment_id = asyncio.run(send(json_payload={
+        'body': 'hello', 'attachment_ids': [1.5],
+    }))
 
     assert rejected.status_code == 400
     assert accepted.status_code == 201
     assert accepted.json()['message'] == {'id': 48, 'body': 'hello', 'user_id': 7}
+    assert too_large.status_code == 413
+    assert too_large.json()['error_code'] == 'payload_too_large'
+    assert too_many_attachments.status_code == 400
+    assert invalid_attachment_id.status_code == 400
     assert calls == [(7, 29, {'body': 'hello'})]
+
+
+def test_native_chat_message_checks_channel_access_before_body_read(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    calls = []
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'channel_visible',
+        lambda _self, _user, _channel_id: calls.append('authorization') or False,
+    )
+    monkeypatch.setattr(
+        chat_reads.ChatReadData, 'post_message',
+        lambda *_args: calls.append('post') or {'id': 1},
+    )
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"body":"' + b'x' * chat_reads._CHAT_MESSAGE_JSON_MAX_BYTES + b'"}'
+
+    async def send():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/chat/channels/29/messages', content=body,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+
+    response = asyncio.run(send())
+
+    assert response.status_code == 404
+    assert calls == ['authorization']
 
 
 def test_native_chat_reaction_toggle_requires_csrf_and_maps_not_found(monkeypatch):
@@ -5745,7 +7120,7 @@ def test_native_chat_reaction_toggle_requires_csrf_and_maps_not_found(monkeypatc
     assert calls == [(7, 1, 'heart'), (7, 999, 'heart')]
 
 
-def test_native_chat_attachment_download_preserves_private_cache_and_inline_rules(monkeypatch, tmp_path):
+def test_native_chat_attachment_no_store_and_inline_rules(monkeypatch, tmp_path):
     _flask_app, runtime = _runtime(monkeypatch)
     image = tmp_path / 'cover.png'
     image.write_bytes(b'png-fixture')
@@ -5769,7 +7144,7 @@ def test_native_chat_attachment_download_preserves_private_cache_and_inline_rule
     assert image_response.status_code == file_response.status_code == 200
     assert image_response.content == b'png-fixture'
     assert file_response.content == b'text-fixture'
-    assert image_response.headers['cache-control'] == 'private, max-age=3600'
+    assert image_response.headers['cache-control'] == 'private, no-store'
     assert 'inline' in image_response.headers.get('content-disposition', '')
     assert 'attachment' in file_response.headers.get('content-disposition', '')
     assert missing.status_code == 404
@@ -5942,12 +7317,16 @@ def test_native_chat_voice_room_read_uses_member_acl_adapter(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
     calls = []
 
+    def voice_space_visible(_self, _user, space_id):
+        return space_id != 9
+
     def voice_room(_self, user, space_id, channel_id):
         calls.append((user.id, space_id, channel_id))
         return None if channel_id == 99 else {
             'room': 'od-voice-17', 'channel': {'id': channel_id, 'kind': 'voice'},
         }
 
+    monkeypatch.setattr(chat_reads.ChatReadData, 'voice_space_visible', voice_space_visible)
     monkeypatch.setattr(chat_reads.ChatReadData, 'voice_room', voice_room)
     asyncio.run(runtime._ensure_flask())
     flask_app.app_context = lambda: (_ for _ in ()).throw(
@@ -5960,10 +7339,15 @@ def test_native_chat_voice_room_read_uses_member_acl_adapter(monkeypatch):
     missing = _run(
         runtime, '/api/chat/spaces/8/voice/99/room', cookie=_signed_session(),
     )
+    denied_space = _run(
+        runtime, '/api/chat/spaces/9/voice/17/room', cookie=_signed_session(),
+    )
 
     assert response.status_code == 200
     assert response.json()['room'] == 'od-voice-17'
     assert missing.status_code == 404
+    assert denied_space.status_code == 404
+    assert denied_space.json()['error'] == 'Space not found'
     assert calls == [(7, 8, 17), (7, 8, 99)]
 
 
@@ -6120,6 +7504,41 @@ def test_native_admin_chat_emoji_upload_keeps_admin_payload_and_limits(monkeypat
     assert calls == [('party', 'Party', 'party.png', b'fixture', 7, None)]
 
 
+def test_native_admin_chat_emoji_streams_and_caps_multipart_body(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    calls = []
+
+    class Row:
+        def to_dict(self):
+            return {'slug': 'party', 'file_name': 'party.webp'}
+
+    def upload(_self, **kwargs):
+        calls.append(kwargs['file'].read())
+        return Row()
+
+    monkeypatch.setattr(chat_emoji_read.ChatEmojiData, 'upload', upload)
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def send(file_bytes):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/admin/chat-emoji', data={'slug': 'party', 'label': 'Party'},
+                files={'file': ('party.png', file_bytes, 'image/png')},
+                headers={'X-CSRFToken': csrf},
+            )
+
+    accepted = asyncio.run(send(b'a' * (256 * 1024)))
+    rejected = asyncio.run(send(b'a' * (400 * 1024)))
+
+    assert accepted.status_code == 201
+    assert rejected.status_code == 413
+    assert rejected.json()['error_code'] == 'payload_too_large'
+    assert calls == [b'a' * (256 * 1024)]
+
+
 def test_chat_storage_directories_accept_explicit_root_without_flask_context(tmp_path):
     from flask import has_app_context
 
@@ -6168,6 +7587,23 @@ def test_native_chat_attachment_upload_preserves_limits_and_csrf(monkeypatch):
     assert calls == [(7, 29, 'asset.webp', b'fixture bytes', None)]
 
 
+def test_native_chat_attachment_options_probe_matches_legacy_contract(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    async def options():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            return await client.options('/api/chat/channels/29/attachments')
+
+    response = asyncio.run(options())
+
+    assert response.status_code == 200
+    assert response.headers['allow'] == 'OPTIONS, POST'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.content == b''
+
+
 def test_native_layout_apis_preserve_member_and_admin_contracts(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch, admin=True)
     calls = []
@@ -6201,6 +7637,19 @@ def test_native_layout_apis_preserve_member_and_admin_contracts(monkeypatch):
             client.cookies.set('session', cookie)
             admin = await client.get('/api/layouts/detail')
             mine = await client.get('/api/layouts/detail/mine')
+            oversized = b'{"padding":"' + (b'x' * layouts._LAYOUT_JSON_MAX_BYTES) + b'"}'
+            admin_too_large = await client.put(
+                '/api/layouts/detail', content=oversized,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+            mine_too_large = await client.put(
+                '/api/layouts/detail/mine', content=oversized,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
+            preset_too_large = await client.post(
+                '/api/layouts/detail/presets', content=oversized,
+                headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+            )
             rejected = await client.put('/api/layouts/detail/mine', json={'sections': []})
             saved = await client.put(
                 '/api/layouts/detail/mine', json={'sections': ['videos']},
@@ -6211,12 +7660,20 @@ def test_native_layout_apis_preserve_member_and_admin_contracts(monkeypatch):
                 json={'name': 'Compact', 'layout': {'sections': ['hero']}},
                 headers={'X-CSRFToken': csrf},
             )
-            return admin, mine, rejected, saved, preset
+            return (
+                admin, mine, admin_too_large, mine_too_large, preset_too_large,
+                rejected, saved, preset,
+            )
 
-    admin, mine, rejected, saved, preset = asyncio.run(calls_api())
+    (
+        admin, mine, admin_too_large, mine_too_large, preset_too_large,
+        rejected, saved, preset,
+    ) = asyncio.run(calls_api())
     assert admin.status_code == mine.status_code == 200
     assert admin.json() == {'sections': ['hero']}
     assert mine.json() == {'layout': {'sections': ['summary']}, 'is_override': True}
+    assert admin_too_large.status_code == mine_too_large.status_code == preset_too_large.status_code == 413
+    assert admin_too_large.json()['error_code'] == 'payload_too_large'
     assert rejected.status_code == 400
     assert saved.status_code == 200 and saved.json()['is_override'] is True
     assert preset.status_code == 201 and preset.json()['id'] == 3
@@ -6277,6 +7734,11 @@ def test_native_member_chat_spaces_read_uses_native_adapter(monkeypatch):
 def test_native_member_chat_messages_read_preserves_query_and_opaque_not_found(monkeypatch):
     flask_app, runtime = _runtime(monkeypatch)
     calls = []
+    visibility_calls = []
+
+    def channel_visible(_self, user, channel_id):
+        visibility_calls.append((user.id, channel_id))
+        return channel_id == 44
 
     def messages(_self, user, channel_id, *, limit, before_id, since_id):
         calls.append((user.id, channel_id, limit, before_id, since_id))
@@ -6284,6 +7746,7 @@ def test_native_member_chat_messages_read_preserves_query_and_opaque_not_found(m
             return None
         return {'messages': [{'id': 12, 'text': 'hello'}], 'channel': {'id': 44}}
 
+    monkeypatch.setattr(chat_reads.ChatReadData, 'channel_visible', channel_visible)
     monkeypatch.setattr(chat_reads.ChatReadData, 'messages', messages)
     asyncio.run(runtime._ensure_flask())
     flask_app.app_context = lambda: (_ for _ in ()).throw(
@@ -6300,6 +7763,9 @@ def test_native_member_chat_messages_read_preserves_query_and_opaque_not_found(m
     invalid_limit = _run(
         runtime, '/api/chat/channels/44/messages?limit=many', cookie=_signed_session(),
     )
+    missing_with_invalid_limit = _run(
+        runtime, '/api/chat/channels/45/messages?limit=many', cookie=_signed_session(),
+    )
 
     assert response.status_code == 200
     assert response.json() == {
@@ -6309,7 +7775,10 @@ def test_native_member_chat_messages_read_preserves_query_and_opaque_not_found(m
     assert missing.json()['error'] == 'Not found'
     assert invalid_limit.status_code == 400
     assert invalid_limit.json()['error'] == 'limit must be an integer'
-    assert calls == [(7, 44, 100, 19, None), (7, 45, 50, None, None)]
+    assert missing_with_invalid_limit.status_code == 404
+    assert missing_with_invalid_limit.json()['error'] == 'Not found'
+    assert calls == [(7, 44, 100, 19, None)]
+    assert visibility_calls == [(7, 44), (7, 45), (7, 44), (7, 45)]
 
 
 def test_native_member_chat_search_read_keeps_query_and_limit_contract(monkeypatch):
@@ -6391,6 +7860,38 @@ def test_native_notifications_mark_read_normalizes_ids_and_uses_csrf(monkeypatch
     assert runtime._fake_notifications.calls == [('mark', 7, [2, 4], False)]
 
 
+@pytest.mark.parametrize('body_kind', ['ids', 'bytes'])
+def test_native_notifications_mark_read_bounds_ids_and_body(monkeypatch, body_kind):
+    runtime, authorization = _bearer_runtime(
+        monkeypatch, ['read:social', 'write:social']
+    )
+    from oneirodex.runtime_native.notifications import (
+        NOTIFICATION_READ_BODY_MAX_BYTES, NOTIFICATION_READ_IDS_MAX,
+    )
+
+    if body_kind == 'ids':
+        body = {'ids': list(range(NOTIFICATION_READ_IDS_MAX + 1))}
+        payload = None
+    else:
+        body = None
+        payload = b'{"all":true,"padding":"' + b'a' * NOTIFICATION_READ_BODY_MAX_BYTES + b'"}'
+
+    async def mark():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            return await client.post(
+                '/api/notifications/read', json=body, content=payload,
+                headers={'Authorization': authorization, 'Content-Type': 'application/json'},
+            )
+
+    response = asyncio.run(mark())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_notifications.calls == []
+
+
 def test_native_notifications_enforce_bearer_social_scope(monkeypatch):
     runtime, authorization = _bearer_runtime(monkeypatch, ['read:library'])
 
@@ -6426,6 +7927,27 @@ def test_native_notification_bearer_write_uses_scope_instead_of_csrf(monkeypatch
     assert response.status_code == 200
     assert response.json()['ok'] is True
     assert response.json()['marked'] == 4
+
+
+def test_native_notification_preferences_write_token_also_requires_read_scope(monkeypatch):
+    runtime, authorization = _bearer_runtime(monkeypatch, ['write:social'])
+
+    async def update_preferences():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            return await client.post(
+                '/api/notifications/preferences',
+                json={'share_activity': False},
+                headers={'Authorization': authorization},
+            )
+
+    response = asyncio.run(update_preferences())
+
+    assert response.status_code == 403
+    assert response.json()['error'] == 'Missing scope: read:social'
+    assert response.json()['detail'] == {'required_scope': 'read:social'}
+    assert runtime._fake_notifications.calls == []
 
 
 def test_native_wanted_update_list_without_flask(monkeypatch):
@@ -6470,6 +7992,51 @@ def test_native_wanted_update_mutations_use_csrf_and_asgi_dispatch(
         assert response.json()[expected_key] == expected_value
     assert response.headers['x-content-type-options'] == 'nosniff'
     assert runtime._fake_wanted.calls
+
+
+@pytest.mark.parametrize(
+    ('path', 'method'),
+    [('/api/updates/wanted', 'POST'), ('/api/updates/wanted/fulfill', 'POST')],
+)
+def test_native_wanted_update_rejects_chunked_oversize_before_write(
+    monkeypatch, path, method,
+):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"game_uuid":"game-1","kind":"dlc","padding":"' + b'x' * (64 * 1024) + b'"}'
+    response = _run_chunked(
+        runtime, path, cookie=cookie, method=method, body=body,
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert runtime._fake_wanted.calls == []
+
+
+def test_native_wanted_update_requires_json_content_type(monkeypatch):
+    runtime = _runtime(monkeypatch)[1]
+    cookie, csrf = _signed_session_with_csrf()
+
+    async def send(content_type):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/api/updates/wanted',
+                content=b'{"game_uuid":"game-1","kind":"dlc"}',
+                headers={'X-CSRFToken': csrf, 'Content-Type': content_type},
+            )
+
+    unsupported = asyncio.run(send('text/plain'))
+    assert unsupported.status_code == 422
+    assert unsupported.json()['detail'] == {'game_uuid': 'Field required'}
+    assert runtime._fake_wanted.calls == []
+
+    vendor_json = asyncio.run(send('application/vnd.api+json'))
+    assert vendor_json.status_code == 201
+    assert runtime._fake_wanted.calls == [('add', 7, 'game-1', 'dlc')]
 
 
 def test_native_updates_inbox_preserves_first_query_values(monkeypatch):
@@ -6612,6 +8179,9 @@ def test_lazy_asgi_dispatches_wishlist_mutations_with_csrf(
         ('DELETE', '/api/collections/collection-1', None, 200, 'ok'),
         ('POST', '/api/collections/collection-1/items', {'game_uuid': 'game-1'}, 201, 'game_uuid'),
         ('DELETE', '/api/collections/collection-1/items/game-1', None, 200, 'ok'),
+        # Legacy Flask also resolves this method through the dynamic item
+        # route; the static `/items/order` route only owns PUT.
+        ('DELETE', '/api/collections/collection-1/items/order', None, 200, 'ok'),
         ('PUT', '/api/collections/collection-1/items/order', {'game_uuids': ['game-1']}, 200, 'uuid'),
     ],
 )
@@ -6643,6 +8213,43 @@ def test_lazy_asgi_dispatches_collection_mutations_with_csrf(
         assert response.json()['ok'] is True
     else:
         assert expected_field in response.json()
+
+
+def test_lazy_asgi_rejects_oversized_collection_reorder_before_data_access(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    from oneirodex.runtime_native.collection_reads import COLLECTION_REORDER_BODY_MAX_BYTES
+
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"game_uuids":[],"padding":"' + (b'x' * COLLECTION_REORDER_BODY_MAX_BYTES) + b'"}'
+
+    async def perform():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.put(
+                '/api/collections/collection-1/items/order',
+                content=body,
+                headers={'X-CSRFToken': csrf},
+            )
+
+    response = asyncio.run(perform())
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+
+
+def test_lazy_asgi_rejects_chunked_oversize_collection_patch_before_update(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+    body = b'{"name":"Renamed","padding":"' + b'x' * (64 * 1024) + b'"}'
+    response = _run_chunked(
+        runtime, '/api/collections/collection-1', cookie=cookie, method='PATCH',
+        body=body, headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
 
 
 def test_lazy_asgi_dispatches_member_remote_play_status_without_flask_request(monkeypatch):
@@ -7099,7 +8706,7 @@ def test_lazy_asgi_dispatches_legacy_unmatched_status_form_natively(monkeypatch)
     )
 
     assert response.status_code == 303
-    assert response.headers['location'] == '/scan_management'
+    assert response.headers['location'] == '/scan_management?active_tab=unmatched'
     assert calls == ['folder-9']
 
 
@@ -7129,11 +8736,67 @@ def test_lazy_asgi_dispatches_game_image_delete_natively(monkeypatch):
     assert calls == [(5, True)]
 
 
+def test_legacy_game_image_delete_rejects_json_with_non_json_content_type(monkeypatch):
+    calls = []
+
+    class FakeGameImageDeleteData:
+        def scan_running(self):
+            return False
+
+        def delete_image_record_and_file(self, image_id, *, config):
+            calls.append(image_id)
+            return SimpleNamespace(id=image_id)
+
+    monkeypatch.setattr(
+        native_game_delete_mutations, 'GameDeleteMutationData', FakeGameImageDeleteData,
+    )
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf = _signed_session_with_csrf()
+    response = _run(
+        runtime, '/delete_image', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'text/plain'},
+        json_body={'image_id': 5},
+    )
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {'image_id': 'Field required'}
+    assert calls == []
+
+
+def test_legacy_game_image_delete_preserves_non_object_json_validation(monkeypatch):
+    calls = []
+
+    class FakeGameImageDeleteData:
+        def scan_running(self):
+            return False
+
+        def delete_image_record_and_file(self, image_id, *, config):
+            calls.append(image_id)
+            return SimpleNamespace(id=image_id)
+
+    monkeypatch.setattr(
+        native_game_delete_mutations, 'GameDeleteMutationData', FakeGameImageDeleteData,
+    )
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf = _signed_session_with_csrf()
+    response = _run(
+        runtime, '/delete_image', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body=[5],
+    )
+
+    assert response.status_code == 422
+    assert response.json()['detail'] == {
+        '__root__': 'Input should be a valid dictionary or instance of DeleteGameImageBody',
+    }
+    assert calls == []
+
+
 def test_lazy_asgi_dispatches_single_library_update_natively(monkeypatch):
     calls = []
-    library = SimpleNamespace(uuid='lib-1', name='Original')
+    library_uuid = '00000000-0000-0000-0000-000000000001'
+    library = SimpleNamespace(uuid=library_uuid, name='Original')
     data = SimpleNamespace(
-        library=lambda uuid: library if uuid == 'lib-1' else None,
+        library=lambda uuid: library if uuid == library_uuid else None,
         update=lambda row, **values: calls.append((row.uuid, values)) or {
             'uuid': row.uuid, 'name': values['name'], 'platform': values['platform'].name,
             'scan_depth': values['scan_depth'],
@@ -7144,7 +8807,7 @@ def test_lazy_asgi_dispatches_single_library_update_natively(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch, admin=True)
 
     response = _run(
-        runtime, '/api/admin/libraries/lib-1', cookie=cookie, method='PUT',
+        runtime, f'/api/admin/libraries/{library_uuid}', cookie=cookie, method='PUT',
         headers={'X-CSRFToken': csrf}, json_body={
             'name': 'Renamed', 'platform': 'PCWIN', 'scan_depth': 2,
             'watch_enabled': 'off',
@@ -7153,7 +8816,7 @@ def test_lazy_asgi_dispatches_single_library_update_natively(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()['name'] == 'Renamed'
-    assert calls[0][0] == 'lib-1'
+    assert calls[0][0] == library_uuid
     assert calls[0][1]['watch_enabled'] is False
 
 
@@ -7166,7 +8829,7 @@ def test_lazy_asgi_dispatches_single_library_scan_natively(monkeypatch):
         allowed_bases=lambda _app: ['/safe/root'],
         safe_path=lambda path, _bases: (path == '/safe/root/one', None),
         scan_mode_for_path=lambda _path, _mode: 'folders',
-        start_scan=lambda *, library, folder, options, app: calls.append((library.uuid, folder, options)) or {
+        start_scan=lambda *, library, folder, options, app, database_scope=None: calls.append((library.uuid, folder, options, database_scope)) or {
             'status': 'queued', 'job_id': 'scan-17', 'position': 1, 'message': 'queued',
         },
     )
@@ -7199,7 +8862,7 @@ def test_lazy_asgi_dispatches_library_refresh_all_natively(monkeypatch):
         enqueue_refresh=lambda queue: calls.append(('enqueue', queue)) or {
             'status': 'queued', 'jobs': [{'job_id': 'refresh-job', 'position': 1}],
         },
-        promote_refresh=lambda _app: SimpleNamespace(id='refresh-job'),
+        promote_refresh=lambda _app, *, database_scope=None: SimpleNamespace(id='refresh-job'),
     )
     monkeypatch.setattr(native_library_admin_mutations, 'LibraryAdminMutationData', lambda: data)
     cookie, csrf = _signed_session_with_csrf()
@@ -7230,7 +8893,9 @@ def test_lazy_asgi_dispatches_scan_job_status_with_filters_and_timing(monkeypatc
         last_progress_update=None, next_run=None,
     )
     data = SimpleNamespace(
-        drain_if_idle=lambda _app: calls.append(('drain',)),
+        drain_if_idle=lambda _app, *, database_scope=None: calls.append(
+            ('drain', database_scope is not None),
+        ),
         list_jobs=lambda filters: calls.append(('list', filters)) or [job],
         queue_position=lambda job_id: calls.append(('position', job_id)) or 3,
     )
@@ -7238,11 +8903,15 @@ def test_lazy_asgi_dispatches_scan_job_status_with_filters_and_timing(monkeypatc
     _flask_app, runtime = _runtime(monkeypatch, admin=True)
 
     response = _run(
-        runtime, '/api/scan_jobs_status?status=queued&library_uuid=lib-1&name=Shelf',
+        runtime,
+        '/api/scan_jobs_status?status=queued&status=Failed&library_uuid=lib-1'
+        '&library_uuid=lib-2&q=Shelf&q=Other&name=Fallback',
         cookie=_signed_session(),
     )
     head = _run(
-        runtime, '/api/scan_jobs_status?status=queued&library_uuid=lib-1&name=Shelf',
+        runtime,
+        '/api/scan_jobs_status?status=queued&status=Failed&library_uuid=lib-1'
+        '&library_uuid=lib-2&q=Shelf&q=Other&name=Fallback',
         cookie=_signed_session(), method='HEAD',
     )
 
@@ -7255,14 +8924,142 @@ def test_lazy_asgi_dispatches_scan_job_status_with_filters_and_timing(monkeypatc
     assert row['created_at'] is None
     assert head.status_code == 200 and head.content == b''
     assert calls == [
-        ('drain',),
+        ('drain', True),
         ('list', {'statuses': ['Queued'], 'library_uuid': 'lib-1', 'q': 'Shelf'}),
         ('position', 'scan-1'),
     ] * 2
 
 
+def test_native_scan_job_status_projects_scheduled_active_and_terminal_states(monkeypatch):
+    now = datetime.now(timezone.utc)
+    from oneirodex.utils import scan_job_timing
+    from oneirodex.routes_apis import scan as legacy_scan
+
+    compute_timing = scan_job_timing.compute_scan_job_timing
+
+    def fixed_timing(job):
+        return compute_timing(job, now=now)
+
+    monkeypatch.setattr(scan_job_timing, 'compute_scan_job_timing', fixed_timing)
+    monkeypatch.setattr(legacy_scan, 'compute_scan_job_timing', fixed_timing)
+    active_start = now - timedelta(seconds=30)
+    progress_time = now - timedelta(seconds=3)
+    terminal_start = now - timedelta(seconds=60)
+    terminal_end = now - timedelta(seconds=5)
+    statuses = (
+        'Scheduled', 'Running', 'Stopping', 'Completed', 'Failed', 'Cancelled',
+    )
+    jobs = [
+        SimpleNamespace(
+            id=f'scan-{status.lower()}', library=None, library_uuid=None,
+            folders=['A', 'B'], status=status, total_folders=10,
+            folders_success=2, folders_failed=1, removed_count=0,
+            scan_folder='/safe/root', setting_remove=False,
+            setting_filefolder=True, setting_download_missing_images=False,
+            current_processing=None, error_message=None,
+            last_run=(terminal_start if status in {'Completed', 'Failed', 'Cancelled'} else active_start),
+            last_progress_update=(terminal_end if status in {'Completed', 'Failed', 'Cancelled'} else progress_time),
+            next_run=None,
+        )
+        for status in statuses
+    ]
+    jobs.append(SimpleNamespace(
+        id='scan-running-stalled', library=None, library_uuid=None,
+        folders=['A', 'B'], status='Running', total_folders=10,
+        folders_success=2, folders_failed=1, removed_count=0,
+        scan_folder='/safe/root', setting_remove=False,
+        setting_filefolder=True, setting_download_missing_images=False,
+        current_processing=None, error_message=None,
+        last_run=now - timedelta(minutes=5),
+        last_progress_update=now - timedelta(seconds=121), next_run=None,
+    ))
+    calls = []
+    data = SimpleNamespace(
+        drain_if_idle=lambda *_args, **_kwargs: None,
+        list_jobs=lambda filters: calls.append(filters) or jobs,
+        queue_position=lambda job_id: (_ for _ in ()).throw(
+            AssertionError(f'queue position queried for non-queued {job_id}')
+        ),
+    )
+    monkeypatch.setattr(native_scan_job_reads, 'ScanJobReadData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+
+    response = _run(runtime, '/api/scan_jobs_status', cookie=_signed_session())
+
+    assert response.status_code == 200
+    rows = response.json()
+    _scan_job_status_row = legacy_scan._scan_job_status_row
+    native_by_id = {row['id']: row for row in rows}
+    for job in jobs:
+        legacy_row = _scan_job_status_row(job)
+        assert native_by_id[job.id] == legacy_row, {
+            key: (native_by_id[job.id].get(key), legacy_row.get(key))
+            for key in native_by_id[job.id].keys() | legacy_row.keys()
+            if native_by_id[job.id].get(key) != legacy_row.get(key)
+        }
+    state_rows = {row['status']: row for row in rows if row['id'] != 'scan-running-stalled'}
+    assert set(state_rows) == set(statuses)
+    assert len(rows) == len(statuses) + 1
+    assert calls == [{'statuses': [], 'library_uuid': '', 'q': ''}]
+    for status, row in state_rows.items():
+        assert row['folders_processed'] == 3
+        assert row['progress_percentage'] == 30.0
+        assert row['created_at'] is None
+        assert row['library_name'] == 'No Library Assigned'
+        assert 'queue_position' not in row
+        assert row['stalled'] is False
+    for status in ('Scheduled', 'Completed', 'Failed', 'Cancelled'):
+        assert state_rows[status]['eta_seconds'] is None
+    assert state_rows['Running']['eta_seconds'] is not None
+    assert state_rows['Stopping']['eta_seconds'] is not None
+    assert state_rows['Completed']['elapsed_seconds'] == 55
+    assert state_rows['Failed']['elapsed_seconds'] == 55
+    assert state_rows['Cancelled']['elapsed_seconds'] == 55
+    stalled = next(row for row in rows if row['id'] == 'scan-running-stalled')
+    assert stalled['stalled'] is True
+    assert stalled['eta_seconds'] is None
+
+
+def test_native_scan_job_status_denies_member_before_reading_jobs(monkeypatch):
+    calls = []
+    data = SimpleNamespace(
+        drain_if_idle=lambda *_args, **_kwargs: calls.append('drain'),
+        list_jobs=lambda _filters: calls.append('list') or [],
+        queue_position=lambda _job_id: calls.append('position'),
+    )
+    monkeypatch.setattr(native_scan_job_reads, 'ScanJobReadData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    response = _run(runtime, '/api/scan_jobs_status', cookie=_signed_session())
+
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
+    assert calls == []
+
+
+def test_native_scan_job_status_hides_database_errors(monkeypatch):
+    private_error = RuntimeError('postgres://private-user:private-password@db/private-db')
+    data = SimpleNamespace(
+        drain_if_idle=lambda *_args, **_kwargs: None,
+        list_jobs=lambda _filters: (_ for _ in ()).throw(private_error),
+        queue_position=lambda _job_id: None,
+    )
+    monkeypatch.setattr(native_scan_job_reads, 'ScanJobReadData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+
+    response = _run(runtime, '/api/scan_jobs_status', cookie=_signed_session())
+
+    assert response.status_code == 500
+    assert response.json()['error'] == 'Scan status is unavailable'
+    assert 'private-password' not in response.text
+    assert 'postgres://' not in response.text
+
+
 def test_lazy_asgi_dispatches_admin_path_info_without_opening_path(monkeypatch):
     calls = []
+    monkeypatch.setattr(
+        'oneirodex.utils.client_commands.validate_open_path_target', lambda value: value,
+    )
     data = SimpleNamespace(path_info=lambda value: calls.append(value) or {
         'path': value, 'exists': True, 'is_dir': True, 'basename': 'library',
         'open_via': 'desktop',
@@ -7271,10 +9068,17 @@ def test_lazy_asgi_dispatches_admin_path_info_without_opening_path(monkeypatch):
     monkeypatch.setattr(native_scan_job_reads, 'ScanJobReadData', lambda: data)
     _flask_app, runtime = _runtime(monkeypatch, admin=True)
 
-    response = _run(runtime, '/api/path/open?full_disk_path=%2Fstorage%2Flibrary',
+    response = _run(
+        runtime,
+        '/api/path/open?path=%2Fstorage%2Flibrary&path=%2Fstorage%2Fother'
+        '&full_disk_path=%2Fstorage%2Ffallback',
                     cookie=_signed_session())
-    head = _run(runtime, '/api/path/open?full_disk_path=%2Fstorage%2Flibrary',
-                cookie=_signed_session(), method='HEAD')
+    head = _run(
+        runtime,
+        '/api/path/open?path=%2Fstorage%2Flibrary&path=%2Fstorage%2Fother'
+        '&full_disk_path=%2Fstorage%2Ffallback',
+        cookie=_signed_session(), method='HEAD',
+    )
 
     assert response.status_code == 200
     assert response.json()['open_via'] == 'desktop'
@@ -7519,6 +9323,122 @@ def test_lazy_asgi_dispatches_malware_scan_with_admin_csrf_and_root_gate(monkeyp
     assert fake.scanned == [str(allowed_path)]
 
 
+def test_native_admin_path_json_routes_enforce_64k_streamed_body_limit(monkeypatch, tmp_path):
+    class FakeMalwareScanData:
+        def __init__(self):
+            self.scanned = []
+
+        def allowed_roots(self, _config):
+            return [str(tmp_path)]
+
+        def scan(self, path, *, config):
+            self.scanned.append(path)
+            return {'clean': True, 'engine': 'fake'}, True
+
+    class FakeHardlinksData:
+        def __init__(self):
+            self.previews = []
+
+        def paths_allowed(self, *_args, **_kwargs):
+            return True, None
+
+        def preview(self, source, dest):
+            self.previews.append((source, dest))
+            return {'ok': True, 'would_succeed': True}
+
+    class OversizedBody(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b'{"path":"/private/marker'
+            yield b'x' * (64 * 1024)
+            yield b'"}'
+
+        async def aclose(self):
+            return None
+
+    malware = FakeMalwareScanData()
+    hardlinks = FakeHardlinksData()
+    monkeypatch.setattr(native_malware_scan_mutation, 'MalwareScanData', lambda: malware)
+    monkeypatch.setattr(native_storage_hardlinks, 'StorageHardlinksData', lambda: hardlinks)
+    flask_app, runtime = _runtime(monkeypatch, admin=True)
+    flask_app.config.update(
+        DATA_FOLDER_GAMES=str(tmp_path),
+        ENABLE_HARDLINK_HELPERS=True,
+        ALLOW_HARDLINK_APPLY=False,
+    )
+    cookie, csrf = _signed_session_with_csrf()
+    csrf_headers = {'X-CSRFToken': csrf}
+
+    declared_too_large = _run(
+        runtime, '/api/admin/malware-scan', cookie=cookie,
+        method='POST', headers={**csrf_headers, 'Content-Type': 'application/json',
+                               'Content-Length': str(64 * 1024 + 1)},
+        content=b'{"path":"/private/marker"}',
+    )
+    declared_hardlink_too_large = _run(
+        runtime, '/api/storage/hardlink/preview', cookie=cookie,
+        method='POST', headers={**csrf_headers, 'Content-Type': 'application/json',
+                               'Content-Length': str(64 * 1024 + 1)},
+        content=b'{"source":"/private/marker"}',
+    )
+    streamed_malware = _run(
+        runtime, '/api/admin/malware-scan', cookie=cookie,
+        method='POST', headers={**csrf_headers, 'Content-Type': 'application/json',
+                               'Content-Length': '10'},
+        content=OversizedBody(),
+    )
+    streamed_hardlink = _run(
+        runtime, '/api/storage/hardlink/preview', cookie=cookie,
+        method='POST', headers={**csrf_headers, 'Content-Type': 'application/json',
+                               'Content-Length': '10'},
+        content=OversizedBody(),
+    )
+    valid_malware = _run(
+        runtime, '/api/admin/malware-scan', cookie=cookie,
+        method='POST', headers=csrf_headers,
+        json_body={'path': str(tmp_path / 'sample.bin')},
+    )
+    valid_hardlink = _run(
+        runtime, '/api/storage/hardlink/preview', cookie=cookie,
+        method='POST', headers=csrf_headers,
+        json_body={'source': str(tmp_path / 'source'), 'dest': str(tmp_path / 'dest')},
+    )
+    valid_malware_without_json_content_type = _run(
+        runtime, '/api/admin/malware-scan', cookie=cookie,
+        method='POST', headers=csrf_headers,
+        content=json.dumps({
+            'path': str(tmp_path / 'sample-no-content-type.bin'),
+        }).encode(),
+    )
+    valid_hardlink_without_json_content_type = _run(
+        runtime, '/api/storage/hardlink/preview', cookie=cookie,
+        method='POST', headers=csrf_headers,
+        content=json.dumps({
+            'source': str(tmp_path / 'source-no-content-type'),
+            'dest': str(tmp_path / 'dest-no-content-type'),
+        }).encode(),
+    )
+
+    for response in (
+        declared_too_large, declared_hardlink_too_large,
+        streamed_malware, streamed_hardlink,
+    ):
+        assert response.status_code == 413
+        assert response.json()['error_code'] == 'payload_too_large'
+        assert '/private/marker' not in response.text
+    assert valid_malware.status_code == 200
+    assert valid_hardlink.status_code == 200
+    assert valid_malware_without_json_content_type.status_code == 200
+    assert valid_hardlink_without_json_content_type.status_code == 200
+    assert malware.scanned == [
+        str(tmp_path / 'sample.bin'),
+        str(tmp_path / 'sample-no-content-type.bin'),
+    ]
+    assert hardlinks.previews == [
+        (str(tmp_path / 'source'), str(tmp_path / 'dest')),
+        (str(tmp_path / 'source-no-content-type'), str(tmp_path / 'dest-no-content-type')),
+    ]
+
+
 def test_lazy_asgi_dispatches_cropped_library_image_preview_with_admin_csrf(monkeypatch):
     class FakeLibraryImageData:
         def __init__(self):
@@ -7544,15 +9464,29 @@ def test_lazy_asgi_dispatches_cropped_library_image_preview_with_admin_csrf(monk
         runtime, '/api/library/preview-cropped-image', cookie=cookie,
         method='POST', headers=headers, json_body={},
     )
+    wrong_content_type = _run(
+        runtime, '/api/library/preview-cropped-image', cookie=cookie,
+        method='POST', headers={**headers, 'Content-Type': 'text/plain'},
+        json_body={'image_data': 'data:image/png;base64,original'},
+    )
     no_csrf = _run(
         runtime, '/api/library/preview-cropped-image', cookie=cookie,
         method='POST', json_body={'image_data': 'x'},
+    )
+    options = _run(
+        runtime, '/api/library/preview-cropped-image', method='OPTIONS',
     )
 
     assert preview.status_code == 200
     assert preview.json()['preview_url'] == 'data:image/png;base64,processed'
     assert invalid.status_code == 422
+    assert wrong_content_type.status_code == 422
+    assert wrong_content_type.json()['error_code'] == 'unprocessable'
     assert no_csrf.status_code == 400
+    assert options.status_code == 200
+    assert options.headers['allow'] == 'HEAD, OPTIONS, POST, GET'
+    assert options.headers['content-type'] == 'text/html; charset=utf-8'
+    assert options.content == b''
     assert fake.images == ['data:image/jpeg;base64,original']
 
 
@@ -7579,6 +9513,13 @@ def test_lazy_asgi_dispatches_rtc_token_with_acl_child_rules_and_csrf(monkeypatc
     fake = FakeRtcData()
     _flask_app, runtime = _runtime(monkeypatch)
     monkeypatch.setattr(status_reads, 'RtcStatusData', lambda: fake)
+    anonymous = _run(
+        runtime, '/api/rtc/token', method='POST', json_body={'room': 'household:lobby'},
+    )
+    assert anonymous.status_code == 400
+    assert 'CSRF token is missing' in anonymous.json()['error']
+    assert fake.calls == []
+
     cookie, csrf = _signed_session_with_csrf()
     headers = {'X-CSRFToken': csrf}
     minted = _run(
@@ -7593,6 +9534,10 @@ def test_lazy_asgi_dispatches_rtc_token_with_acl_child_rules_and_csrf(monkeypatc
         runtime, '/api/rtc/token', cookie=cookie, method='POST',
         json_body={},
     )
+    malformed_body = _run(
+        runtime, '/api/rtc/token', cookie=cookie, method='POST',
+        headers=headers, json_body=['household:lobby'],
+    )
 
     assert minted.status_code == 200
     assert minted.json() == {
@@ -7602,6 +9547,8 @@ def test_lazy_asgi_dispatches_rtc_token_with_acl_child_rules_and_csrf(monkeypatc
     }
     assert denied.status_code == 403
     assert no_csrf.status_code == 400
+    assert malformed_body.status_code == 400
+    assert malformed_body.json()['error_code'] == 'bad_request'
     assert len([call for call in fake.calls if call[0] == 'mint']) == 1
 
     _flask_app._fake_user.role = 'child'
@@ -7613,22 +9560,142 @@ def test_lazy_asgi_dispatches_rtc_token_with_acl_child_rules_and_csrf(monkeypatc
     assert len([call for call in fake.calls if call[0] == 'mint']) == 1
 
 
+def test_native_rtc_token_enforces_social_scopes_and_publish_scope(monkeypatch):
+    class FakeRtcData:
+        def __init__(self):
+            self.calls = []
+
+        def token_config(self):
+            return {'url': 'wss://rtc.example.test', 'api_key': 'key', 'api_secret': 'secret'}
+
+        def normalize_room(self, room):
+            return room
+
+        def may_join(self, _user, room):
+            self.calls.append(('authorize', room))
+            return room == 'household:lobby'
+
+        def mint(self, **kwargs):
+            self.calls.append(('mint', kwargs))
+            return 'fake-token'
+
+    fake = FakeRtcData()
+
+    def bearer_runtime(scopes):
+        runtime, authorization = _bearer_runtime(monkeypatch, scopes)
+        monkeypatch.setattr(status_reads, 'RtcStatusData', lambda: fake)
+        return runtime, authorization
+
+    runtime, read_library = bearer_runtime(['read:library'])
+    no_social_scope = _run(
+        runtime, '/api/rtc/token', method='POST', json_body={},
+        headers={'Authorization': read_library},
+    )
+    assert no_social_scope.status_code == 403
+    assert no_social_scope.json()['detail'] == {'required_scope': 'read:social'}
+    assert fake.calls == []
+
+    runtime, read_social = bearer_runtime(['read:social'])
+    spectator = _run(
+        runtime, '/api/rtc/token', method='POST', json_body={'spectator': True},
+        headers={'Authorization': read_social},
+    )
+    publish_denied = _run(
+        runtime, '/api/rtc/token', method='POST', json_body={},
+        headers={'Authorization': read_social},
+    )
+    assert spectator.status_code == 200
+    assert spectator.json()['can_publish'] is False
+    assert publish_denied.status_code == 403
+    assert publish_denied.json()['detail'] == {'required_scope': 'write:social'}
+    assert len([call for call in fake.calls if call[0] == 'mint']) == 1
+
+    runtime, write_social = bearer_runtime(['read:social', 'write:social'])
+    publisher = _run(
+        runtime, '/api/rtc/token', method='POST', json_body={},
+        headers={'Authorization': write_social},
+    )
+    assert publisher.status_code == 200
+    assert publisher.json()['can_publish'] is True
+    assert len([call for call in fake.calls if call[0] == 'mint']) == 2
+
+
+def test_native_rtc_token_rejects_chunked_oversize_before_room_authorization(monkeypatch):
+    class FakeRtcData:
+        def __init__(self):
+            self.calls = []
+
+        def token_config(self):
+            return {'url': 'wss://rtc.example.test', 'api_key': 'key', 'api_secret': 'secret'}
+
+        def may_join(self, _user, room):
+            self.calls.append(('authorize', room))
+            return True
+
+    fake = FakeRtcData()
+    runtime, authorization = _bearer_runtime(
+        monkeypatch, ['read:social', 'write:social'],
+    )
+    monkeypatch.setattr(status_reads, 'RtcStatusData', lambda: fake)
+    response = _run_chunked(
+        runtime, '/api/rtc/token', cookie=_signed_session(), method='POST',
+        body=b'{"padding":"' + b'x' * (8 * 1024) + b'"}',
+        headers={'Authorization': authorization, 'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert fake.calls == []
+
+
 def test_lazy_asgi_dispatches_email_confirmation_without_flask_api_route(monkeypatch):
     calls = []
-    data = SimpleNamespace(confirm=lambda token, secret: calls.append(
-        (token, bool(secret))
-    ) or 'confirmed')
+    data = SimpleNamespace(
+        confirm=lambda token, secret, password: calls.append(
+            ('confirm', token, bool(secret), password)
+        ) or 'confirmed',
+        inspect=lambda token, secret: calls.append(
+            ('inspect', token, bool(secret))
+        ) or 'confirmed',
+    )
     monkeypatch.setattr(native_auth_confirmation, 'AuthConfirmationData', lambda: data)
     _flask_app, runtime = _runtime(monkeypatch)
 
     response = _run(runtime, '/api/auth/confirm/signed-token')
     head = _run(runtime, '/api/auth/confirm/signed-token', method='HEAD')
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+    missing_csrf = _run(
+        runtime, '/api/auth/confirm/signed-token', method='POST', cookie=cookie,
+        json_body={'password': 'mailbox-owner-password', 'confirm_password': 'mailbox-owner-password'},
+    )
+    activated = _run(
+        runtime, '/api/auth/confirm/signed-token', method='POST', cookie=cookie,
+        headers={'X-CSRFToken': csrf},
+        json_body={'password': 'mailbox-owner-password', 'confirm_password': 'mailbox-owner-password'},
+    )
 
     assert response.status_code == 200
-    assert response.json()['confirmed'] is True
+    assert response.json()['confirmed'] is False
     assert response.json()['already_confirmed'] is False
     assert head.status_code == 200 and head.content == b''
-    assert calls == [('signed-token', True), ('signed-token', True)]
+    assert missing_csrf.status_code == 400
+    assert activated.status_code == 200 and activated.json()['confirmed'] is True
+    assert calls == [
+        ('inspect', 'signed-token', True),
+        ('inspect', 'signed-token', True),
+        ('confirm', 'signed-token', True, 'mailbox-owner-password'),
+    ]
+
+
+def test_email_confirmation_inspect_does_not_verify_user(monkeypatch):
+    user = SimpleNamespace(is_email_verified=False)
+    data = native_auth_confirmation.AuthConfirmationData()
+    monkeypatch.setattr(data, '_resolve_user', lambda _token, _secret: (user, 'confirmed'))
+
+    assert data.inspect('signed-token', 'test-secret') == 'confirmed'
+    assert user.is_email_verified is False
 
 
 def test_lazy_asgi_dispatches_login_with_csrf_safe_next_and_remember_compat(monkeypatch):
@@ -7691,34 +9758,202 @@ def test_lazy_asgi_dispatches_login_with_csrf_safe_next_and_remember_compat(monk
 
 
 def test_lazy_asgi_logout_clears_flask_login_and_remember_cookies(monkeypatch):
-    _flask_app, runtime = _runtime(monkeypatch)
-    cookie = dump_session_cookie({
-        '_user_id': '7:fp', '_fresh': True, '_id': 'session-id', '_remember': 'set',
-    }, 'native-asgi-browse-secret')
+    from oneirodex.utils import setup as setup_utils
 
-    response = _run(runtime, '/logout', cookie=cookie)
-    head = _run(runtime, '/logout', cookie=cookie, method='HEAD')
-    guest = _run(runtime, '/logout')
+    monkeypatch.setattr(setup_utils, 'should_redirect_to_setup', lambda: False)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {
+        '_user_id': '7:fp', '_fresh': True, '_id': 'session-id', '_remember_seconds': 3600,
+    }
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    remember = {'remember_token': 'remember-cookie'}
+    response = _run(
+        runtime, '/logout', cookie=cookie, extra_cookies=remember, method='POST',
+        headers={'X-CSRFToken': csrf},
+    )
+    get = _run(runtime, '/logout', cookie=cookie, extra_cookies=remember)
+    head = _run(runtime, '/logout', cookie=cookie, extra_cookies=remember, method='HEAD')
+    missing_csrf = _run(
+        runtime, '/logout', cookie=cookie, extra_cookies=remember, method='POST',
+    )
+    guest = _run(runtime, '/logout', method='POST')
 
     assert response.status_code == 302 and response.headers['location'] == '/login'
-    assert head.status_code == 302 and head.content == b''
+    assert get.status_code == head.status_code == 405
+    assert get.headers.get_list('set-cookie') == head.headers.get_list('set-cookie') == []
+    assert missing_csrf.status_code == 400
+    assert missing_csrf.headers.get_list('set-cookie') == []
+    assert guest.status_code == 400
+    assert guest.headers.get_list('set-cookie') == []
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/login">/login</a>. If not, click the link.\n'
+    )
+    assert head.status_code == 405 and head.content == b''
     cookies = response.headers.get_list('set-cookie')
     assert any(
         value.startswith('remember_token=') and 'max-age=0' in value.lower()
         for value in cookies
     )
     from http.cookies import SimpleCookie
-    from oneirodex.runtime_native.session_compat import load_session_cookie
-
     jar = SimpleCookie()
     for value in cookies:
         jar.load(value)
-    new_session = load_session_cookie(
-        jar['session'].value, 'native-asgi-browse-secret', max_age=31_536_000,
-    )
-    assert '_user_id' not in new_session and '_fresh' not in new_session and '_id' not in new_session
-    assert guest.status_code == 302 and guest.headers['location'] == '/login'
+    assert jar['session'].value == ''
+    assert jar['session']['max-age'] == '0'
+    assert guest.status_code == 400
     assert guest.headers.get_list('set-cookie') == []
+
+
+def test_lazy_asgi_logout_safe_methods_redirect_only_during_setup(monkeypatch):
+    from oneirodex.utils import setup as setup_utils
+
+    _flask_app, runtime = _runtime(monkeypatch)
+    monkeypatch.setattr(setup_utils, 'should_redirect_to_setup', lambda: True)
+    monkeypatch.setattr(setup_utils, 'get_setup_redirect_url', lambda: '/setup')
+
+    get = _run(runtime, '/logout')
+    head = _run(runtime, '/logout', method='HEAD')
+
+    assert get.status_code == head.status_code == 302
+    assert get.headers['location'] == head.headers['location'] == '/setup'
+    assert get.headers.get_list('set-cookie') == head.headers.get_list('set-cookie') == []
+    assert head.content == b''
+
+    monkeypatch.setattr(setup_utils, 'should_redirect_to_setup', lambda: False)
+    installed = _run(runtime, '/logout')
+    assert installed.status_code == 405
+    assert installed.headers['allow'] == 'POST'
+    assert installed.headers.get_list('set-cookie') == []
+
+
+@pytest.mark.parametrize('has_remember_cookie', [True, False])
+@pytest.mark.parametrize('cookie_overrides', [
+    {},
+    {
+        'SESSION_COOKIE_NAME': 'oneirodex_session',
+        'SESSION_COOKIE_PATH': '/',
+        'SESSION_COOKIE_DOMAIN': 'example.test',
+        'SESSION_COOKIE_SECURE': True,
+        'SESSION_COOKIE_HTTPONLY': False,
+        'SESSION_COOKIE_SAMESITE': 'Lax',
+        'REMEMBER_COOKIE_NAME': 'oneirodex_remember',
+        'REMEMBER_COOKIE_PATH': '/admin',
+        'REMEMBER_COOKIE_DOMAIN': 'example.test',
+        'REMEMBER_COOKIE_SECURE': True,
+        'REMEMBER_COOKIE_HTTPONLY': True,
+        'REMEMBER_COOKIE_SAMESITE': 'Strict',
+    },
+    {
+        'SESSION_COOKIE_SECURE': True,
+        'SESSION_COOKIE_PARTITIONED': True,
+    },
+])
+def test_lazy_asgi_logout_matches_flask_login_remember_session_cleanup(
+    monkeypatch, has_remember_cookie, cookie_overrides,
+):
+    from flask import redirect
+    from flask_login import logout_user
+    from oneirodex.runtime_native.session_compat import load_session_cookie
+
+    _flask_app, runtime = _runtime(monkeypatch)
+    _flask_app.config.update(cookie_overrides)
+    session_cookie_name = _flask_app.config['SESSION_COOKIE_NAME']
+    remember_cookie_name = _flask_app.config.get('REMEMBER_COOKIE_NAME', 'remember_token')
+    base_url = (
+        'https://example.test'
+        if _flask_app.config.get('SESSION_COOKIE_DOMAIN') == 'example.test'
+        else 'http://localhost'
+    )
+    legacy_app = Flask(__name__)
+    legacy_config = {
+        'SECRET_KEY': 'native-asgi-browse-secret',
+        'SESSION_COOKIE_NAME': 'session',
+        'REMEMBER_COOKIE_NAME': 'remember_token',
+        **cookie_overrides,
+    }
+    legacy_app.config.update(legacy_config)
+    manager = LoginManager(legacy_app)
+    manager.login_view = 'login'
+    manager.user_loader(lambda _user_id: None)
+    legacy_app.add_url_rule('/login', endpoint='login', view_func=lambda: 'login')
+
+    @legacy_app.post('/logout')
+    def legacy_logout():
+        from flask import session as flask_session
+
+        logout_user()
+        flask_session.pop('csrf_token', None)
+        return redirect('/login')
+
+    with legacy_app.test_client() as client:
+        with client.session_transaction() as session:
+            session.update({'_user_id': '7:fp', '_fresh': True, '_id': 'session-id'})
+            csrf = generate_csrf_token(session, legacy_app.config['SECRET_KEY'])
+            if has_remember_cookie:
+                session['_remember_seconds'] = 3600
+            else:
+                session['_remember'] = 'set'
+        if has_remember_cookie:
+            client.set_cookie(
+                remember_cookie_name, 'remember-cookie',
+                domain=legacy_app.config.get('REMEMBER_COOKIE_DOMAIN') or 'localhost',
+            )
+        incoming_session = client.get_cookie(
+            session_cookie_name,
+            domain=legacy_app.config.get('SESSION_COOKIE_DOMAIN') or 'localhost',
+            path='/',
+        ).value
+        legacy = client.post(
+            '/logout', headers={'X-CSRFToken': csrf},
+            follow_redirects=False, base_url=base_url,
+        )
+
+    current = _run(
+        runtime, '/logout', cookie=incoming_session,
+        session_cookie_name=session_cookie_name,
+        extra_cookies={remember_cookie_name: 'remember-cookie'} if has_remember_cookie else None,
+        method='POST', headers={'X-CSRFToken': csrf},
+        base_url=base_url,
+    )
+    assert (current.status_code, current.headers['location'], current.content) == (
+        legacy.status_code, legacy.headers['Location'], legacy.get_data(),
+    )
+
+    def cookies(response):
+        from tests.cookie_helpers import parse_set_cookies
+
+        values = (
+            response.headers.get_list('set-cookie')
+            if hasattr(response.headers, 'get_list')
+            else response.headers.getlist('set-cookie')
+        )
+        result = {}
+        for name, (morsel, partitioned) in parse_set_cookies(values).items():
+            payload = morsel.value
+            if name == session_cookie_name:
+                payload = load_session_cookie(
+                    payload, 'native-asgi-browse-secret', max_age=31_536_000,
+                )
+            result[name] = (
+                payload, morsel['path'], morsel['domain'], morsel['secure'],
+                morsel['httponly'], morsel['samesite'], morsel['max-age'],
+                partitioned,
+            )
+        return result
+
+    current_cookies = cookies(current)
+    legacy_cookies = cookies(legacy)
+    assert current_cookies == legacy_cookies, (
+        f'current={current_cookies!r} legacy={legacy_cookies!r}'
+    )
 
 
 def test_lazy_asgi_auth_pages_serve_react_shell_and_preserve_flash_and_redirects(monkeypatch, tmp_path):
@@ -7749,9 +9984,15 @@ def test_lazy_asgi_auth_pages_serve_react_shell_and_preserve_flash_and_redirects
     assert login_page.headers['cache-control'] == 'no-store'
     assert head.status_code == 200 and head.content == b''
     assert signed_in.status_code == 302 and signed_in.headers['location'] == '/discover'
+    assert signed_in.headers['content-type'] == 'text/html; charset=utf-8'
+    assert signed_in.text.endswith('<a href="/discover">/discover</a>. If not, click the link.\n')
     assert bad_invite.status_code == 302 and bad_invite.headers['location'] == '/register'
+    assert bad_invite.headers['content-type'] == 'text/html; charset=utf-8'
+    assert bad_invite.text.endswith('<a href="/register">/register</a>. If not, click the link.\n')
     assert confirmation.status_code == 200
     assert bad_reset.status_code == 302 and bad_reset.headers['location'] == '/login'
+    assert bad_reset.headers['content-type'] == 'text/html; charset=utf-8'
+    assert bad_reset.text.endswith('<a href="/login">/login</a>. If not, click the link.\n')
     assert calls == [('invite', 'expired'), ('reset', 'expired')]
 
 
@@ -7763,7 +10004,9 @@ def test_lazy_asgi_setup_pages_keep_step_redirects_and_admin_gate(monkeypatch, t
         in_progress=lambda: False,
         current_step=lambda: data.step,
         start=lambda: calls.append('start') or setattr(data, 'step', 1),
-        redirect_url=lambda: '/setup/smtp',
+        redirect_url=lambda: {
+            1: '/setup', 2: '/setup/smtp', 5: '/setup/integrations',
+        }[data.step],
     )
     monkeypatch.setattr(native_setup_pages, 'SetupPagesData', lambda: data)
     flask_app, runtime = _runtime(monkeypatch)
@@ -7776,24 +10019,86 @@ def test_lazy_asgi_setup_pages_keep_step_redirects_and_admin_gate(monkeypatch, t
     data.step = 2
     unauthorized = _run(runtime, '/setup/smtp', cookie=_signed_session())
     wrong_step = _run(runtime, '/setup/igdb', cookie=_signed_session())
+    data.step = 5
+    stale_library = _run(runtime, '/setup/library')
 
     assert setup.status_code == 200 and calls == ['start']
     assert unauthorized.status_code == 302
-    assert unauthorized.headers['location'] == '/login?next=%2Fsetup%2Fsmtp'
-    assert wrong_step.status_code == 302 and wrong_step.headers['location'] == '/setup'
+    assert unauthorized.headers['location'] == '/login?next=/setup/smtp'
+    assert unauthorized.headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<a href="/login?next=/setup/smtp">/login?next=/setup/smtp</a>' in unauthorized.text
+    assert wrong_step.status_code == 302 and wrong_step.headers['location'] == '/setup/smtp'
+    assert stale_library.status_code == 302
+    assert stale_library.headers['location'] == '/setup/integrations'
+
+
+def test_native_setup_gate_signs_out_nonadmin_before_redirecting_to_login(monkeypatch):
+    data = SimpleNamespace(current_step=lambda: 5)
+    session_data = {
+        '_user_id': '14:member-fingerprint', '_fresh': True,
+        '_id': 'member-session-id', '_remember_seconds': 3600,
+    }
+    auth = SimpleNamespace(user=SimpleNamespace(role='member'), session_data=session_data)
+    monkeypatch.setattr(native_setup_pages, 'SetupPagesData', lambda: data)
+    monkeypatch.setattr(native_setup_pages, 'request_auth_context', lambda *_a, **_k: auth)
+    monkeypatch.setattr(native_setup_pages, '_finish_response', lambda *_a, **_k: None)
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    response = _run(runtime, '/setup/integrations', cookie=_signed_session())
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login?next=/setup/integrations'
+    assert session_data == {
+        '_remember': 'clear',
+        '_flashes': [(
+            'warning',
+            'Sign in with the admin account you just created to finish setup.',
+        )],
+    }
+
+
+def test_native_setup_completed_step_routes_go_directly_to_login(monkeypatch):
+    data = SimpleNamespace(
+        required=lambda: False,
+        in_progress=lambda: False,
+        current_step=lambda: None,
+        start=lambda: pytest.fail('completed setup must not restart'),
+        redirect_url=lambda: pytest.fail('completed setup has no active step'),
+    )
+    monkeypatch.setattr(native_setup_pages, 'SetupPagesData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+
+    igdb = _run(runtime, '/setup/igdb', cookie=_signed_session())
+    integrations = _run(runtime, '/setup/integrations', cookie=_signed_session())
+
+    assert igdb.status_code == integrations.status_code == 302
+    assert igdb.headers['location'] == integrations.headers['location'] == '/login'
+    for response in (igdb, integrations):
+        session = load_session_cookie(
+            response.cookies.get('session'), 'native-asgi-browse-secret', max_age=3600,
+        )
+        assert session['_flashes'] == [('warning', 'Setup has already been completed.')]
 
 
 def test_lazy_asgi_setup_transition_enforces_csrf_step_order_and_admin_session(monkeypatch):
     calls = []
-    admin = SimpleNamespace(get_id=lambda: '81:setup-fingerprint')
+    setup_fingerprint = 'f' * 16
+    legacy_identity = f'81:{setup_fingerprint}'
+    admin = SimpleNamespace(get_id=lambda: legacy_identity)
     data = SimpleNamespace(
         current_step=lambda: 1,
-        transition=lambda body, app: calls.append((body['step'], app)) or (
+        transition=lambda body, app, *, database_scope=None: calls.append((body['step'], app)) or (
             {'step': 2, 'next_url': '/setup/smtp'}, None, admin,
         ),
     )
     monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
     _flask_app, runtime = _runtime(monkeypatch)
+    persistent_identity = legacy_identity + ':' + ('a' * 32) + ':setup-secret'
+    _flask_app.config.update(TESTING=False, PERSISTENT_SESSIONS_ENABLED=True)
+    monkeypatch.setattr(
+        'oneirodex.utils.persistent_sessions.ensure_login_identity',
+        lambda identity, **_kwargs: persistent_identity if identity == legacy_identity else None,
+    )
 
     session = {}
     csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
@@ -7816,7 +10121,96 @@ def test_lazy_asgi_setup_transition_enforces_csrf_step_order_and_admin_session(m
     assert created.status_code == 200
     assert created.json()['step'] == 2
     assert any('session=' in value and 'Path=/' in value for value in created.headers.get_list('set-cookie'))
+    saved_session = load_session_cookie(
+        created.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert saved_session['_user_id'] == persistent_identity
+    assert saved_session['_flashes'][-1] == (
+        'success', 'Admin account created successfully! Please configure your SMTP settings.',
+    )
     assert len(calls) == 1 and calls[0][0] == 1
+
+
+def test_lazy_asgi_setup_step_flashes_scan_queue_fallback(monkeypatch):
+    from pathlib import Path
+
+    message = 'Your first library is ready. Start its first scan from Libraries & scans.'
+    data = SimpleNamespace(
+        current_step=lambda: 6,
+        transition=lambda *args, **kwargs: (
+            {'complete': True, 'next_url': '/libraries', 'message': message}, None, None,
+        ),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    monkeypatch.setattr(
+        native_setup_pages, 'SetupPagesData',
+        lambda: SimpleNamespace(current_step=lambda: 6),
+    )
+    flask_app, runtime = _runtime(monkeypatch, admin=True)
+    flask_app.static_folder = str(Path('oneirodex/static').resolve())
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/setup/step', method='POST', cookie=cookie,
+        headers={'X-CSRFToken': csrf},
+        json_body={'step': 6, 'skip': False, 'library_name': 'First NES library'},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['message'] == message
+    assert response.json()['message_category'] == 'warning'
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert saved_session['_flashes'][-1] == ('warning', message)
+
+    page = _run(runtime, '/setup/library', cookie=response.cookies['session'])
+    assert page.status_code == 200
+    assert message.replace('&', '&amp;').encode() in page.content
+    assert 'session=' in page.headers.get('set-cookie', '')
+    consumed_session = load_session_cookie(
+        page.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert not consumed_session.get('_flashes')
+
+
+@pytest.mark.parametrize(
+    ('step', 'skip', 'next_step', 'next_url', 'category', 'message'),
+    [
+        (2, True, 3, '/setup/features', 'info',
+         'SMTP setup skipped. Choose which features to keep enabled.'),
+        (3, False, 4, '/setup/igdb', 'success',
+         'Feature preferences saved. Configure IGDB next.'),
+        (4, True, 5, '/setup/integrations', 'info',
+         'IGDB skipped. Choose any additional API connections, or continue without them.'),
+        (5, True, 6, '/setup/library', 'info',
+         'Optional API setup skipped. You can continue without API credentials.'),
+    ],
+)
+def test_native_setup_api_carries_each_middle_step_flash(
+    monkeypatch, step, skip, next_step, next_url, category, message,
+):
+    result = {'step': next_step, 'next_url': next_url}
+    data = SimpleNamespace(
+        current_step=lambda: step,
+        transition=lambda *_args, **_kwargs: (result, None, None),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch, admin=True)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/api/setup/step', method='POST', cookie=cookie,
+        headers={'X-CSRFToken': csrf}, json_body={'step': step, 'skip': skip},
+    )
+
+    assert response.status_code == 200
+    assert response.json()['message'] == message
+    assert response.json()['message_category'] == category
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert saved_session['_flashes'][-1] == (category, message)
 
 
 def test_lazy_asgi_setup_transition_requires_admin_after_account_creation(monkeypatch):
@@ -7840,13 +10234,15 @@ def test_lazy_asgi_setup_transition_requires_admin_after_account_creation(monkey
 
 def test_lazy_asgi_setup_form_posts_translate_fields_and_keep_csrf_session(monkeypatch):
     calls = []
-    admin = SimpleNamespace(get_id=lambda: '81:setup-fingerprint')
+    setup_fingerprint = 'f' * 16
+    legacy_identity = f'81:{setup_fingerprint}'
+    admin = SimpleNamespace(get_id=lambda: legacy_identity)
 
     class FakeSetupTransitionData:
         def current_step(self):
             return 1
 
-        def transition(self, body, _app):
+        def transition(self, body, _app, *, database_scope=None):
             calls.append(body)
             return {'step': 2, 'next_url': '/setup/smtp'}, None, admin
 
@@ -7854,6 +10250,12 @@ def test_lazy_asgi_setup_form_posts_translate_fields_and_keep_csrf_session(monke
         native_setup_transition, 'SetupTransitionData', FakeSetupTransitionData,
     )
     _flask_app, runtime = _runtime(monkeypatch)
+    persistent_identity = legacy_identity + ':' + ('a' * 32) + ':setup-secret'
+    _flask_app.config.update(TESTING=False, PERSISTENT_SESSIONS_ENABLED=True)
+    monkeypatch.setattr(
+        'oneirodex.utils.persistent_sessions.ensure_login_identity',
+        lambda identity, **_kwargs: persistent_identity if identity == legacy_identity else None,
+    )
     session = {}
     csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
     cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
@@ -7869,22 +10271,179 @@ def test_lazy_asgi_setup_form_posts_translate_fields_and_keep_csrf_session(monke
 
     assert response.status_code == 302
     assert response.headers['location'] == '/setup/smtp'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>Redirecting...</title>\n'
+        '<h1>Redirecting...</h1>\n'
+        '<p>You should be redirected automatically to the target URL: '
+        '<a href="/setup/smtp">/setup/smtp</a>. If not, click the link.\n'
+    )
     assert calls[0]['step'] == 1 and calls[0]['username'] == 'first.admin'
     assert any('session=' in value for value in response.headers.get_list('set-cookie'))
     saved_session = load_session_cookie(
         response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
     )
-    assert saved_session['_user_id'] == '81:setup-fingerprint'
+    assert saved_session['_user_id'] == persistent_identity
     assert saved_session['_flashes'][-1] == (
         'success', 'Admin account created successfully! Please configure your SMTP settings.',
     )
+
+
+def test_lazy_asgi_setup_first_admin_storage_failure_matches_legacy_form_notice(monkeypatch):
+    failure_message = 'The administrator account could not be created.'
+    data = SimpleNamespace(
+        current_step=lambda: 1,
+        transition=lambda *_args, **_kwargs: (
+            None, ('internal', failure_message, 500, None), None,
+        ),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/setup/submit', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'username': 'first.admin',
+            'email': 'admin@example.test', 'password': 'safe-password',
+            'confirm_password': 'safe-password',
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/setup'
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=3600,
+    )
+    assert saved_session['_flashes'] == [(
+        'error',
+        'The admin account could not be saved. Check the server log for details.',
+    )]
+
+
+def test_lazy_asgi_setup_form_admin_gate_matches_flask_redirect_shape(monkeypatch):
+    data = SimpleNamespace(
+        current_step=lambda: 2,
+        transition=lambda *args, **kwargs: pytest.fail('unauthorized setup transition ran'),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/setup/smtp', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'smtp_server': 'mail.invalid', 'smtp_port': '2525'},
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login?next=/setup/smtp'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert '<a href="/login?next=/setup/smtp">/login?next=/setup/smtp</a>' in response.text
+
+
+def test_lazy_asgi_setup_first_admin_stale_form_redirects_to_login(monkeypatch):
+    data = SimpleNamespace(
+        current_step=lambda: 2,
+        transition=lambda *args, **kwargs: pytest.fail('stale first-admin form must not transition'),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/setup/submit', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'username': 'late.admin',
+            'email': 'late@example.test', 'password': 'safe-password',
+            'confirm_password': 'safe-password',
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+    session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert session['_flashes'] == [('warning', 'Setup has already been completed.')]
+    assert '_user_id' not in session
+
+
+def test_lazy_asgi_setup_first_admin_lock_conflict_redirects_to_login(monkeypatch):
+    data = SimpleNamespace(
+        current_step=lambda: 1,
+        transition=lambda *args, **kwargs: (
+            None, ('conflict', 'Setup has already been completed.', 409, None), None,
+        ),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/setup/submit', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'username': 'late.admin',
+            'email': 'late@example.test', 'password': 'safe-password',
+            'confirm_password': 'safe-password',
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/login'
+    session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert session['_flashes'] == [('warning', 'Setup has already been completed.')]
+    assert '_user_id' not in session
+
+
+@pytest.mark.parametrize(
+    ('current_step', 'location', 'message'),
+    [
+        (3, '/setup', 'Please complete the admin account setup first.'),
+        (None, '/login', 'Setup already completed.'),
+    ],
+)
+def test_lazy_asgi_setup_stale_smtp_form_matches_legacy_warning(
+    monkeypatch, current_step, location, message,
+):
+    data = SimpleNamespace(
+        current_step=lambda: current_step,
+        transition=lambda *args, **kwargs: pytest.fail('stale SMTP form must not transition'),
+    )
+    monkeypatch.setattr(native_setup_transition, 'SetupTransitionData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/setup/smtp', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'smtp_port': '587', 'skip_smtp': '1'},
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == location
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert saved_session['_flashes'] == [('warning', message)]
+    assert '_user_id' not in saved_session
 
 
 def test_lazy_asgi_setup_feature_form_requires_valid_csrf_and_maps_checkboxes(monkeypatch):
     calls = []
     data = SimpleNamespace(
         current_step=lambda: 3,
-        transition=lambda body, _app: calls.append(body) or (
+        transition=lambda body, _app, *, database_scope=None: calls.append(body) or (
             {'step': 4, 'next_url': '/setup/igdb'}, None, None,
         ),
     )
@@ -7896,6 +10455,9 @@ def test_lazy_asgi_setup_feature_form_requires_valid_csrf_and_maps_checkboxes(mo
         runtime, '/setup/features', method='POST', cookie=cookie,
         form_body={'csrf_token': 'wrong', 'enable_game_updates': 'on'},
     )
+    missing = _run(
+        runtime, '/setup/features', method='POST', cookie=cookie, form_body={},
+    )
     accepted = _run(
         runtime, '/setup/features', method='POST', cookie=cookie,
         form_body={
@@ -7905,6 +10467,11 @@ def test_lazy_asgi_setup_feature_form_requires_valid_csrf_and_maps_checkboxes(mo
     )
 
     assert rejected.status_code == 400
+    assert rejected.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is invalid.</p>' in rejected.content
+    assert missing.status_code == 400
+    assert missing.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is missing.</p>' in missing.content
     assert {
         key: calls[0][key]
         for key in (
@@ -7984,6 +10551,7 @@ def test_lazy_asgi_login_form_uses_native_auth_and_remember_cookie(monkeypatch):
     )
 
     assert response.status_code == 302 and response.headers['location'] == '/library'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
     assert calls and calls[0][:2] == ('player', 'secret')
     saved_session = load_session_cookie(
         response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
@@ -7992,13 +10560,142 @@ def test_lazy_asgi_login_form_uses_native_auth_and_remember_cookie(monkeypatch):
     assert any('remember_token=' in value for value in response.headers.get_list('set-cookie'))
 
 
+def test_lazy_asgi_login_form_renders_visible_validation_with_legacy_status(monkeypatch):
+    flask_app, runtime = _runtime(monkeypatch)
+    flask_app.static_folder = str(asgi.Path(__file__).resolve().parents[1] / 'oneirodex' / 'static')
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/login', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'username': '', 'password': ''},
+    )
+
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'Please enter your username and password.' in response.text
+    assert 'data-auth-notices=' in response.text
+    assert '&quot;role&quot;: &quot;alert&quot;' in response.text
+
+
+def test_lazy_asgi_login_form_missing_csrf_matches_flask_bad_request(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie, _csrf = _signed_session_with_csrf()
+
+    response = _run(
+        runtime, '/login', method='POST', cookie=cookie,
+        form_body={'username': 'player', 'password': 'secret'},
+    )
+
+    assert response.status_code == 400
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert response.text == (
+        '<!doctype html>\n'
+        '<html lang=en>\n'
+        '<title>400 Bad Request</title>\n'
+        '<h1>Bad Request</h1>\n'
+        '<p>The CSRF token is missing.</p>\n'
+    )
+
+
+@pytest.mark.parametrize(
+    ('message', 'category'),
+    [
+        ('Your account has been banned.', 'error'),
+        ('Your account is not activated, check your email.', 'warning'),
+    ],
+)
+def test_lazy_asgi_login_form_preserves_legacy_forbidden_flash_categories(
+    monkeypatch, message, category,
+):
+    failure = ('forbidden', message)
+    monkeypatch.setattr(
+        native_auth_login, 'AuthLoginData',
+        lambda: SimpleNamespace(authenticate=lambda *_args: (None, failure)),
+    )
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/login', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'username': 'player', 'password': 'secret'},
+    )
+
+    assert response.status_code == 302 and response.headers['location'] == '/login'
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert saved_session['_flashes'][-1] == (category, message)
+
+
+def test_native_login_partitioned_session_cookie_matches_flask(monkeypatch):
+    from flask import Flask, session as flask_session
+
+    user = SimpleNamespace(get_id=lambda: '7:fp')
+    monkeypatch.setattr(
+        native_auth_login, 'AuthLoginData',
+        lambda: SimpleNamespace(authenticate=lambda *_args: (user, None)),
+    )
+    flask_app, runtime = _runtime(monkeypatch)
+    cookie_config = {
+        'SESSION_COOKIE_NAME': 'session',
+        'SESSION_COOKIE_DOMAIN': 'example.test',
+        'SESSION_COOKIE_PATH': '/',
+        'SESSION_COOKIE_SECURE': True,
+        'SESSION_COOKIE_HTTPONLY': True,
+        'SESSION_COOKIE_SAMESITE': 'Lax',
+        'SESSION_COOKIE_PARTITIONED': True,
+    }
+    flask_app.config.update(cookie_config)
+    session_data = {}
+    csrf = generate_csrf_token(session_data, flask_app.config['SECRET_KEY'])
+    current = _run(
+        runtime, '/login', method='POST',
+        cookie=dump_session_cookie(session_data, flask_app.config['SECRET_KEY']),
+        form_body={'csrf_token': csrf, 'username': 'player', 'password': 'secret'},
+        base_url='https://example.test',
+    )
+
+    legacy_app = Flask(__name__)
+    legacy_app.config.update(SECRET_KEY=flask_app.config['SECRET_KEY'], **cookie_config)
+
+    @legacy_app.get('/set-session')
+    def legacy_set_session():
+        flask_session['_user_id'] = '7:fp'
+        flask_session['_fresh'] = True
+        return 'ok'
+
+    legacy = legacy_app.test_client().get('/set-session')
+
+    def cookie_attributes(values):
+        from tests.cookie_helpers import parse_set_cookies
+
+        cookie, partitioned = parse_set_cookies(values)['session']
+        return (
+            cookie['path'], cookie['domain'], cookie['secure'],
+            cookie['httponly'], cookie['samesite'].lower(), partitioned,
+        )
+
+    assert current.status_code == 302
+    assert cookie_attributes(current.headers.get_list('set-cookie')) == cookie_attributes(
+        [legacy.headers['Set-Cookie']],
+    )
+    assert cookie_attributes(current.headers.get_list('set-cookie'))[-1] is True
+
+
 def test_lazy_asgi_invite_registration_form_clears_inviter_session(monkeypatch):
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
     calls = []
 
     class FakeRegistrationData:
         def register(self, payload, invite, request, config):
             calls.append((payload, invite))
-            return {'registered': True, 'confirmation_sent': True}, None
+            return {'registered': True, '_account_created': True, '_confirmation_sent': True}, None
 
     monkeypatch.setattr(native_auth_registration, 'AuthRegistrationData', FakeRegistrationData)
     _flask_app, runtime = _runtime(monkeypatch)
@@ -8014,7 +10711,9 @@ def test_lazy_asgi_invite_registration_form_clears_inviter_session(monkeypatch):
         },
     )
 
-    assert response.status_code == 302 and response.headers['location'] == '/'
+    assert response.status_code == 302 and response.headers['location'] == '/index'
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'href=\"/index\"' in response.content
     assert calls[0][1] == 'invite-123'
     saved_session = load_session_cookie(
         response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
@@ -8023,7 +10722,79 @@ def test_lazy_asgi_invite_registration_form_clears_inviter_session(monkeypatch):
     assert any('remember_token=' in value for value in response.headers.get_list('set-cookie'))
 
 
+def test_lazy_asgi_registration_form_renders_visible_validation_with_legacy_status(monkeypatch):
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
+    calls = []
+    monkeypatch.setattr(
+        native_auth_registration, 'AuthRegistrationData',
+        lambda: SimpleNamespace(register=lambda *args: calls.append(args)),
+    )
+    flask_app, runtime = _runtime(monkeypatch)
+    flask_app.static_folder = str(asgi.Path(__file__).resolve().parents[1] / 'oneirodex' / 'static')
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/register', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'username': 'parity-invalid',
+            'email': 'not-an-email', 'password': 'secure-password',
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'Invalid registration details.' in response.text
+    assert 'data-auth-notices=' in response.text
+    assert '&quot;role&quot;: &quot;alert&quot;' in response.text
+    assert calls == []
+
+
+def test_lazy_asgi_registration_form_does_not_claim_account_created_for_generic_ack(monkeypatch):
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
+    data = SimpleNamespace(register=lambda *_args: ({
+        'requested': True,
+        'message': 'If the details can be used to create an account, check your email for next steps.',
+        'next_url': '/login',
+        '_account_created': False,
+        '_confirmation_sent': False,
+    }, None))
+    monkeypatch.setattr(native_auth_registration, 'AuthRegistrationData', lambda: data)
+    flask_app, runtime = _runtime(monkeypatch)
+    flask_app.static_folder = str(asgi.Path(__file__).resolve().parents[1] / 'oneirodex' / 'static')
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+
+    response = _run(
+        runtime, '/register?token=invite-123', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'username': 'existing.player',
+            'email': 'new@example.com', 'password': 'secure-password',
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers['location'] == '/register?token=invite-123'
+    saved_session = load_session_cookie(
+        response.cookies['session'], 'native-asgi-browse-secret', max_age=31_536_000,
+    )
+    assert any(
+        'If the details can be used to create an account' in message
+        for _category, message in saved_session['_flashes']
+    )
+    assert not any('Your account was created' in message for _category, message in saved_session['_flashes'])
+
+
 def test_lazy_asgi_password_reset_forms_use_native_adapters(monkeypatch):
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
     calls = []
 
     class FakeResetData:
@@ -8040,7 +10811,8 @@ def test_lazy_asgi_password_reset_forms_use_native_adapters(monkeypatch):
             return True
 
     monkeypatch.setattr(native_password_reset_confirm, 'PasswordResetConfirmData', FakeResetData)
-    _flask_app, runtime = _runtime(monkeypatch)
+    flask_app, runtime = _runtime(monkeypatch)
+    flask_app.static_folder = str(asgi.Path(__file__).resolve().parents[1] / 'oneirodex' / 'static')
     session = {}
     csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
     cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
@@ -8048,6 +10820,17 @@ def test_lazy_asgi_password_reset_forms_use_native_adapters(monkeypatch):
     requested = _run(
         runtime, '/reset_password_request', method='POST', cookie=cookie,
         form_body={'csrf_token': csrf, 'email': 'player@example.com'},
+    )
+    invalid_email = _run(
+        runtime, '/reset_password_request', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'email': 'not-an-email'},
+    )
+    mismatch = _run(
+        runtime, '/reset_password/token-123', method='POST', cookie=cookie,
+        form_body={
+            'csrf_token': csrf, 'password': 'new-password',
+            'confirm_password': 'different-password',
+        },
     )
     reset = _run(
         runtime, '/reset_password/token-123', method='POST', cookie=cookie,
@@ -8058,6 +10841,16 @@ def test_lazy_asgi_password_reset_forms_use_native_adapters(monkeypatch):
     )
 
     assert requested.status_code == 302 and requested.headers['location'] == '/login'
+    assert invalid_email.status_code == 200
+    assert invalid_email.headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'Invalid email address.' in invalid_email.text
+    assert 'data-auth-notices=' in invalid_email.text
+    assert '&quot;role&quot;: &quot;alert&quot;' in invalid_email.text
+    assert mismatch.status_code == 200
+    assert mismatch.headers['content-type'] == 'text/html; charset=utf-8'
+    assert 'Invalid password details.' in mismatch.text
+    assert 'data-auth-notices=' in mismatch.text
+    assert '&quot;role&quot;: &quot;alert&quot;' in mismatch.text
     assert reset.status_code == 302 and reset.headers['location'] == '/login'
     assert ('request', 'player@example.com', '127.0.0.1') in calls
     assert ('valid', 'token-123') in calls
@@ -8079,10 +10872,11 @@ def test_lazy_asgi_invite_management_forms_use_browser_session_and_native_data(m
             return {'error': 'Invite not found.', 'code': 'not_found'}
 
     _flask_app, runtime = _runtime(monkeypatch)
+    from oneirodex.utils import setup
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
     monkeypatch.setattr(account_summary, 'AccountInvitesData', lambda: FakeInviteData())
     cookie, csrf = _signed_session_with_csrf()
 
-    page = _run(runtime, '/user/invites', cookie=cookie)
     created = _run(
         runtime, '/user/invites', method='POST', cookie=cookie,
         form_body={'csrf_token': csrf, 'email': 'friend@example.com'},
@@ -8092,7 +10886,6 @@ def test_lazy_asgi_invite_management_forms_use_browser_session_and_native_data(m
         form_body={'csrf_token': csrf},
     )
 
-    assert page.status_code == 302 and page.headers['location'] == '/library?account=invites'
     assert created.status_code == 302 and created.headers['location'] == '/library?account=invites'
     assert deleted.status_code == 200 and deleted.json()['error_code'] == 'not_found'
     assert calls == [
@@ -8101,10 +10894,59 @@ def test_lazy_asgi_invite_management_forms_use_browser_session_and_native_data(m
     assert origins == ['http://testserver']
 
 
+def test_lazy_asgi_invite_page_405_allow_keeps_legacy_post(monkeypatch):
+    _flask_app, runtime = _runtime(monkeypatch)
+    from oneirodex.utils import setup
+
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: False)
+    response = _run(runtime, '/user/invites', method='PUT')
+
+    assert response.status_code == 405
+    assert set(response.headers['allow'].upper().replace(' ', '').split(',')) == {
+        'GET', 'HEAD', 'OPTIONS', 'POST',
+    }
+
+
+def test_invite_management_forms_keep_first_run_setup_redirect(monkeypatch):
+    from oneirodex.utils import setup
+
+    _flask_app, runtime = _runtime(monkeypatch)
+    monkeypatch.setattr(setup, 'should_redirect_to_setup', lambda: True)
+    monkeypatch.setattr(setup, 'get_setup_redirect_url', lambda: '/setup')
+    cookie, csrf = _signed_session_with_csrf()
+
+    anonymous = _run(runtime, '/user/invites')
+    invite_post = _run(
+        runtime, '/user/invites', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf, 'email': 'friend@example.com'},
+    )
+    delete_post = _run(
+        runtime, '/delete_invite/token', method='POST', cookie=cookie,
+        form_body={'csrf_token': csrf},
+    )
+    missing_csrf = _run(
+        runtime, '/delete_invite/token', method='POST', cookie=cookie,
+        form_body={},
+    )
+
+    for response in (anonymous, invite_post, delete_post):
+        assert response.status_code == 302
+        assert response.headers['location'] == '/setup'
+    assert missing_csrf.status_code == 400
+
+
 def test_lazy_asgi_public_demo_uses_native_lookup_and_compatible_session(monkeypatch):
     monkeypatch.setenv('ONEIRODEX_PUBLIC_DEMO', 'true')
     _flask_app, runtime = _runtime(monkeypatch)
-    user = SimpleNamespace(id=7, get_id=lambda: '7:fp')
+    demo_fingerprint = 'b' * 16
+    legacy_identity = f'7:{demo_fingerprint}'
+    persistent_identity = legacy_identity + ':' + ('b' * 32) + ':demo-secret'
+    _flask_app.config.update(TESTING=False, PERSISTENT_SESSIONS_ENABLED=True)
+    monkeypatch.setattr(
+        'oneirodex.utils.persistent_sessions.ensure_login_identity',
+        lambda identity, **_kwargs: persistent_identity if identity == legacy_identity else None,
+    )
+    user = SimpleNamespace(id=7, get_id=lambda: legacy_identity)
     calls = []
     monkeypatch.setattr(
         auth_demo, 'PublicDemoData',
@@ -8119,7 +10961,7 @@ def test_lazy_asgi_public_demo_uses_native_lookup_and_compatible_session(monkeyp
     session = load_session_cookie(
         cookie, 'native-asgi-browse-secret', max_age=31_536_000,
     )
-    assert session['_user_id'] == '7:fp' and session['_fresh'] is True
+    assert session['_user_id'] == persistent_identity and session['_fresh'] is True
     assert session['_id'] and '_remember' not in session
     assert calls == ['lookup']
 
@@ -8131,7 +10973,13 @@ def test_lazy_asgi_public_demo_keeps_disabled_and_missing_user_responses(monkeyp
     _flask_app, disabled_runtime = _runtime(monkeypatch)
     disabled = _run(disabled_runtime, '/demo')
     assert disabled.status_code == 404
+    assert disabled.headers['content-type'] == 'text/html; charset=utf-8'
+    assert disabled.text.startswith('<!doctype html>')
     assert disabled.headers['cache-control'] == 'no-store'
+    disabled_head = _run(disabled_runtime, '/demo', method='HEAD')
+    assert disabled_head.status_code == 404 and disabled_head.content == b''
+    assert disabled_head.headers['content-type'] == disabled.headers['content-type']
+    assert disabled_head.headers['content-length'] == str(len(disabled.content))
 
     monkeypatch.setenv('ONEIRODEX_PUBLIC_DEMO', 'yes')
     _flask_app, missing_runtime = _runtime(monkeypatch)
@@ -8140,6 +10988,8 @@ def test_lazy_asgi_public_demo_keeps_disabled_and_missing_user_responses(monkeyp
     )
     missing = _run(missing_runtime, '/demo')
     assert missing.status_code == 503
+    assert missing.headers['content-type'] == 'text/html; charset=utf-8'
+    assert missing.text.startswith('<!doctype html>')
     assert missing.headers['cache-control'] == 'no-store'
 
 
@@ -8187,6 +11037,7 @@ def test_lazy_asgi_dispatches_registration_with_validation_invite_logout_and_csr
     assert invalid.status_code == 422
     assert registered.status_code == invited_signed_in.status_code == 202
     assert registered.json()['requested'] is True
+    assert not any(key.startswith('_') for key in registered.json())
     assert conflict.status_code == 409
     assert any(
         value.startswith('remember_token=') and 'max-age=0' in value.lower()
@@ -8298,6 +11149,45 @@ def test_lazy_asgi_dispatches_password_reset_request_without_disclosing_account_
     ]
 
 
+def test_lazy_asgi_password_reset_endpoints_reject_oversized_bodies(monkeypatch):
+    calls = []
+    data = SimpleNamespace(
+        request_reset=lambda *args: calls.append(('request', args)) or 'requested',
+        reset=lambda *args: calls.append(('confirm', args)) or True,
+    )
+    monkeypatch.setattr(native_password_reset_confirm, 'PasswordResetConfirmData', lambda: data)
+    _flask_app, runtime = _runtime(monkeypatch)
+    session = {}
+    csrf = generate_csrf_token(session, 'native-asgi-browse-secret')
+    cookie = dump_session_cookie(session, 'native-asgi-browse-secret')
+    headers = {'X-CSRFToken': csrf}
+    async def oversized_chunks():
+        yield b' ' * (64 * 1024)
+        yield b' '
+
+    async def send_chunked_requests():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver',
+        ) as client:
+            client.cookies.set('session', cookie)
+            request_response = await client.post(
+                '/api/auth/password-reset/request', headers=headers,
+                content=oversized_chunks(),
+            )
+            confirm_response = await client.post(
+                '/api/auth/password-reset/signed-token', headers=headers,
+                content=oversized_chunks(),
+            )
+            return request_response, confirm_response
+
+    request_response, confirm_response = asyncio.run(send_chunked_requests())
+
+    assert request_response.status_code == confirm_response.status_code == 413
+    assert request_response.json()['error_code'] == 'payload_too_large'
+    assert confirm_response.json()['error_code'] == 'payload_too_large'
+    assert calls == []
+
+
 def test_lazy_asgi_dispatches_server_settings_with_admin_csrf_and_safe_projection(monkeypatch):
     calls = []
     state = {
@@ -8323,8 +11213,14 @@ def test_lazy_asgi_dispatches_server_settings_with_admin_csrf_and_safe_projectio
         runtime, '/api/admin/server-settings', method='PUT', cookie=cookie,
         headers={'X-CSRFToken': csrf}, json_body={'showHelpButton': False},
     )
+    oversized = _run(
+        runtime, '/api/admin/server-settings', method='PUT', cookie=cookie,
+        headers={'X-CSRFToken': csrf}, content=b' ' * (64 * 1024 + 1),
+    )
 
     assert response.status_code == saved.status_code == 200
+    assert oversized.status_code == 413
+    assert oversized.json()['error_code'] == 'payload_too_large'
     assert response.json()['settings'] == state['settings']
     assert 'text_limits' in response.json() and 'bounds' in response.json()
     assert head.status_code == 200 and head.content == b''
@@ -8332,7 +11228,7 @@ def test_lazy_asgi_dispatches_server_settings_with_admin_csrf_and_safe_projectio
     assert calls == [{'showHelpButton': False}]
 
 
-def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch):
+def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch, request):
     calls = []
     data = SimpleNamespace(
         logs=lambda limit: calls.append(('logs', limit)) or {'events': []},
@@ -8340,7 +11236,7 @@ def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch):
             'system': {}, 'database': {}, 'active_users': 0, 'logs': {'count': 0, 'latest': None},
             'config': {}, 'theme_assets': {},
         },
-        summary=lambda app: calls.append(('summary', app.name)) or {'health': 'ok'},
+        summary=lambda app, database_scope=None: calls.append(('summary', app.name)) or {'health': 'ok'},
         devices=lambda limit, app: calls.append(('devices', limit, app.name)) or {'devices': []},
         library_health=lambda app: calls.append(('library_health', app.name)) or {'score': 100},
         image_refresh_progress=lambda game_uuid: {'status': 'error', 'game_uuid': game_uuid},
@@ -8371,6 +11267,7 @@ def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch):
         native_scan_job_mutations, 'ScanJobMutationData', FakeScanJobMutations,
     )
     flask_app, runtime = _runtime(monkeypatch, admin=True)
+    request.addfinalizer(lambda: _dispose_runtime_test_engines(flask_app, runtime))
     flask_app.app_context = lambda: (_ for _ in ()).throw(
         AssertionError('Native Ops route pushed a Flask app context')
     )
@@ -8398,7 +11295,10 @@ def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch):
     assert system.status_code == 200 and 'theme_assets' in system.json()
     assert logs.json() == {'events': []}
     assert summary.json() == {'health': 'ok'}
-    assert devices.json() == {'devices': []}
+    assert devices.json() == {
+        'devices': [], 'ok': True, 'success': True,
+        'error': None, 'error_code': None,
+    }
     assert health.content == b''
     assert image_progress.json() == {'status': 'error', 'game_uuid': 'game-1'}
     assert deletion_progress.json() == {'status': 'error', 'job_id': 'job-1'}
@@ -8406,8 +11306,9 @@ def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch):
     assert deletion_stream.headers['content-type'].startswith('text/event-stream')
     assert '"status": "completed"' in deletion_stream.text
     assert cancel_scan.status_code == 302
-    assert cancel_scan.headers['location'] == '/admin/scan_management?active_tab=jobs'
+    assert cancel_scan.headers['location'] == '/scan_management?active_tab=jobs'
     assert restart_scan.status_code == 302
+    assert restart_scan.headers['location'] == '/scan_management?active_tab=jobs'
     assert scan_calls == [('cancel', 'job-1'), ('restart', 'job-2', 'force')]
     assert calls == [
         ('logs', 200), ('system', flask_app.name), ('summary', flask_app.name),
@@ -8447,7 +11348,7 @@ def test_lazy_asgi_dispatches_support_ticket_reads_natively(monkeypatch):
         ticket=lambda ticket_id: calls.append(('ticket', ticket_id)) or ticket,
     )
     monkeypatch.setattr(native_support_reads, 'SupportReadsData', lambda: data)
-    _flask_app, runtime = _runtime(monkeypatch)
+    flask_app, runtime = _runtime(monkeypatch)
 
     response = _run(runtime, '/api/support/tickets', cookie=_signed_session())
 
@@ -8458,15 +11359,16 @@ def test_lazy_asgi_dispatches_support_ticket_reads_natively(monkeypatch):
 
 def test_lazy_asgi_dispatches_theme_font_catalogue_natively(monkeypatch):
     data = SimpleNamespace(catalogue=lambda: {
-        'fonts': [{'id': 'fixture'}], 'platform_hints': {}, 'fonts_dir': '/fonts', 'note': 'fixture',
+        'fonts': [{'id': 'fixture'}], 'platform_hints': {}, 'note': 'fixture',
     })
     monkeypatch.setattr(native_theme_fonts_read, 'ThemeFontsData', lambda *_args: data)
-    _flask_app, runtime = _runtime(monkeypatch)
+    flask_app, runtime = _runtime(monkeypatch)
 
     response = _run(runtime, '/api/theme/fonts', cookie=_signed_session())
 
     assert response.status_code == 200
     assert response.json()['fonts'][0]['id'] == 'fixture'
+    assert 'fonts_dir' not in response.json()
 
 
 def test_lazy_asgi_dispatches_admin_provider_catalogs_natively(monkeypatch):
@@ -8488,7 +11390,20 @@ def test_lazy_asgi_dispatches_admin_provider_catalogs_natively(monkeypatch):
     assert calls == [('artwork',), ('patch', True)]
 
 
-def test_lazy_asgi_dispatches_integrations_inventory_natively(monkeypatch):
+@pytest.mark.parametrize('keyring_available', [False, True])
+def test_lazy_asgi_dispatches_integrations_inventory_natively(monkeypatch, tmp_path, keyring_available):
+    from cryptography.fernet import Fernet
+
+    keyring = tmp_path / 'synthetic-operator-keyring.json'
+    if keyring_available:
+        keyring.write_text(json.dumps({
+            'active_key_id': 'fixture',
+            'keys': {'fixture': Fernet.generate_key().decode('ascii')},
+        }), encoding='utf-8')
+        import os
+        if os.name != 'nt':
+            keyring.chmod(0o600)
+    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(keyring))
     calls = []
     data = SimpleNamespace(inventory=lambda: calls.append(('inventory',)) or [
         {'id': 'igdb', 'configured': True},
@@ -8503,6 +11418,13 @@ def test_lazy_asgi_dispatches_integrations_inventory_natively(monkeypatch):
         'integrations': [{'id': 'igdb', 'configured': True}],
         'count': 1,
         'hub_href': '/admin/integrations',
+        'credential_storage': {
+            'available': keyring_available,
+            'message': None if keyring_available else (
+                'Encrypted integration credentials are unavailable. Restore the operator-managed '
+                'key-ring backup; if no matching backup exists, reconnect affected integrations.'
+            ),
+        },
     }
     assert calls == [('inventory',)]
 
@@ -8609,11 +11531,84 @@ def test_lazy_asgi_dispatches_patch_catalog_search_and_attach_natively(monkeypat
             'notes': 'fixture notes',
         },
     )
+    vendor_json_attach = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/vnd.api+json'},
+        content='{"game_uuid":"game-1","source_url":"https://patch.test/vendor-guide"}',
+    )
+    empty_attach = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={},
+    )
+    missing_game_uuid = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={
+            'source_url': 'https://patch.test/guide',
+        },
+    )
+    missing_source_url = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={'game_uuid': 'game-1'},
+    )
+    blank_source = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={
+            'game_uuid': 'game-1', 'source_url': '   ',
+        },
+    )
+    unknown_field = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={
+            'game_uuid': 'game-1', 'source_url': 'https://patch.test/guide',
+            'unexpected': 'value',
+        },
+    )
+    wrong_content_type = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/octet-stream'},
+        content='{}',
+    )
+    json_with_wrong_content_type = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/octet-stream'},
+        content='{"game_uuid":"game-1","source_url":"https://patch.test/ignored"}',
+    )
+    missing_content_type = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, content='{}',
+    )
+    malformed_json = _run(
+        runtime, '/api/patch-catalog/attach', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf, 'Content-Type': 'application/json'},
+        content='{',
+    )
 
     assert search.status_code == 200 and search.json()['hits'][0]['provider'] == 'fixture'
     assert attach.status_code == 201 and attach.json()['game_uuid'] == 'game-1'
+    assert vendor_json_attach.status_code == 201
+    assert vendor_json_attach.json()['source_url'] == 'https://patch.test/vendor-guide'
+    assert empty_attach.status_code == 400
+    assert empty_attach.json()['error'] == 'Provide a game UUID and source URL.'
+    assert empty_attach.json()['error_code'] == 'bad_request'
+    assert missing_game_uuid.status_code == missing_source_url.status_code == 400
+    assert missing_game_uuid.json()['error_code'] == 'bad_request'
+    assert missing_source_url.json()['error_code'] == 'bad_request'
+    assert blank_source.status_code == 422
+    assert blank_source.json()['error_code'] == 'unprocessable'
+    assert 'source_url' in blank_source.json()['detail']
+    assert unknown_field.status_code == 422
+    assert unknown_field.json()['error_code'] == 'unprocessable'
+    assert 'unexpected' in unknown_field.json()['detail']
+    for response in (wrong_content_type, json_with_wrong_content_type, missing_content_type):
+        assert response.status_code == 422
+        assert response.json()['error_code'] == 'unprocessable'
+        assert set(response.json()['detail']) == {'game_uuid', 'source_url'}
+    assert malformed_json.status_code == 422
+    assert malformed_json.json()['detail']['__root__']
     assert calls[0][0:2] == ('search', 'Fixture')
     assert calls[1][0:2] == ('attach', 'game-1')
+    assert calls[2][0:2] == ('attach', 'game-1')
+    assert len(calls) == 3
 
 
 def test_lazy_asgi_dispatches_member_download_queue_natively(monkeypatch):
@@ -8622,7 +11617,7 @@ def test_lazy_asgi_dispatches_member_download_queue_natively(monkeypatch):
         delete=lambda request_id: request_id == 5,
     )
     monkeypatch.setattr(native_download_request_reads, 'DownloadRequestReadData', lambda: data)
-    _flask_app, runtime = _runtime(monkeypatch)
+    flask_app, runtime = _runtime(monkeypatch)
 
     response = _run(runtime, '/api/my_downloads', cookie=_signed_session())
 
@@ -8817,6 +11812,7 @@ def test_lazy_asgi_dispatches_download_request_and_cleanup_natively(monkeypatch)
         create_request=lambda _game, user, **_kwargs: (
             calls.append(('create', user.id)) or SimpleNamespace(id=87, status='available')
         ),
+        log_download_started=lambda *_args, **_kwargs: None,
         cleanup_orphans=lambda _game: calls.append(('cleanup',)) or {'removed': [], 'kept': []},
         log_cleanup=lambda *_args, **_kwargs: None,
     )
@@ -8843,6 +11839,8 @@ def test_lazy_asgi_dispatches_download_request_and_cleanup_natively(monkeypatch)
 def test_lazy_asgi_dispatches_support_create_and_resolve_natively(monkeypatch):
     calls = []
     data = SimpleNamespace(
+        request_receipt=lambda *_args: None,
+        reconciliation_candidate=lambda user_id, ticket_id, **_kwargs: calls.append(('check', user_id, ticket_id)) or {'ticket': {'id': ticket_id, 'github_sync': 'reconciled'}},
         recent_count=lambda *_args: 0,
         create=lambda user, body, _now: calls.append(('create', user.id, body['title'])) or {
             'id': 17, 'title': body['title'], 'status': 'open',
@@ -8861,6 +11859,12 @@ def test_lazy_asgi_dispatches_support_create_and_resolve_natively(monkeypatch):
     )
     assert created.status_code == 201 and created.json()['ticket']['id'] == 17
 
+    checked = _run(
+        runtime, '/api/support/tickets/17/reconcile', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={'issue_number': 701},
+    )
+    assert checked.status_code == 200 and checked.json()['ticket']['github_sync'] == 'reconciled'
+
     cookie, csrf = _signed_session_with_csrf()
     _flask_app, runtime = _runtime(monkeypatch, admin=True)
     resolved = _run(
@@ -8868,7 +11872,7 @@ def test_lazy_asgi_dispatches_support_create_and_resolve_natively(monkeypatch):
         headers={'X-CSRFToken': csrf}, json_body={},
     )
     assert resolved.status_code == 200 and resolved.json()['ticket']['status'] == 'resolved'
-    assert calls == [('create', 7, 'Fixture report'), ('resolve', 17, 7)]
+    assert calls == [('create', 7, 'Fixture report'), ('check', 7, 17), ('resolve', 17, 7)]
 
 
 def test_lazy_asgi_dispatches_launcher_import_natively(monkeypatch):
@@ -9060,6 +12064,9 @@ def test_lazy_asgi_dispatches_legacy_integration_post_aliases_natively(monkeypat
         read=lambda: {},
         save=lambda payload: calls.append(('igdb-save', payload)) or {'settings': {}},
         test_connection=lambda: calls.append(('igdb-test',)) or {'settings': {}},
+        test_connection_legacy=lambda: calls.append(('igdb-test-legacy',)) or {
+            'message': 'IGDB API test successful',
+        },
     )
     monkeypatch.setattr(native_integration_settings, 'IntegrationSettingsData', lambda: integration_data)
     monkeypatch.setattr(native_igdb_settings, 'IgdbSettingsData', lambda: igdb_data)
@@ -9072,18 +12079,44 @@ def test_lazy_asgi_dispatches_legacy_integration_post_aliases_natively(monkeypat
         headers=headers,
         json_body={'community_chat_url': 'https://community.example', 'community_chat_label': 'Chat'},
     )
+    async def post_repeated_community_form():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=runtime), base_url='http://testserver'
+        ) as client:
+            client.cookies.set('session', cookie)
+            return await client.post(
+                '/admin/integrations/community',
+                content=urlencode([
+                    ('csrf_token', csrf),
+                    ('community_chat_url', 'https://first.example'),
+                    ('community_chat_url', 'https://second.example'),
+                    ('community_chat_label', 'First'),
+                    ('community_chat_label', 'Second'),
+                ]),
+                headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                follow_redirects=False,
+            )
+
+    community_form = asyncio.run(post_repeated_community_form())
     igdb_save = _run(
         runtime, '/admin/integrations/igdb/save', cookie=cookie, method='POST', headers=headers,
-        json_body={'igdb_client_id': 'client-id', 'igdb_client_secret': 'secret'},
+        json_body={
+            'igdb_client_id': 'igdb-client-id-123456789012',
+            'igdb_client_secret': 'igdb-client-secret-123456789',
+        },
     )
     igdb_test = _run(
         runtime, '/admin/integrations/igdb/test', cookie=cookie, method='POST', headers=headers,
     )
 
     assert community.status_code == 200
+    assert community_form.status_code == 302
+    assert calls[1] == ('community', 'https://first.example', 'First')
     assert igdb_save.status_code == 200
     assert igdb_test.status_code == 200
-    assert [call[0] for call in calls] == ['community', 'igdb-save', 'igdb-test']
+    assert [call[0] for call in calls] == [
+        'community', 'community', 'igdb-save', 'igdb-test-legacy',
+    ]
 
 
 def test_lazy_asgi_dispatches_legacy_server_settings_post_aliases(monkeypatch):
@@ -9104,6 +12137,21 @@ def test_lazy_asgi_dispatches_legacy_server_settings_post_aliases(monkeypatch):
     )
 
     assert response.status_code == 200
+    assert saved == [{'showVersion': False}]
+
+    empty = _run(
+        runtime, '/admin/settings', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={},
+    )
+    assert empty.status_code == 400
+    assert empty.json()['message'] == 'No settings data provided'
+    assert saved == [{'showVersion': False}]
+    second_alias = _run(
+        runtime, '/admin/new_server_settings', cookie=cookie, method='POST',
+        headers={'X-CSRFToken': csrf}, json_body={},
+    )
+    assert second_alias.status_code == 400
+    assert second_alias.json()['message'] == 'No settings data provided'
     assert saved == [{'showVersion': False}]
 
 
@@ -9189,6 +12237,43 @@ def test_lazy_asgi_dispatches_legacy_reference_set_delete_form(monkeypatch):
     assert 'session=' in response.headers.get('set-cookie', '')
 
 
+def test_native_reference_sets_head_matches_get_representation(monkeypatch):
+    from oneirodex.runtime_native import reference_sets_read as native_reference_sets
+
+    monkeypatch.setattr(
+        native_reference_sets, 'ReferenceSetsData',
+        lambda: SimpleNamespace(read_sets=lambda: {'sets': []}),
+    )
+    _flask_app, runtime = _runtime(monkeypatch)
+    cookie = _signed_session()
+
+    get = _run(runtime, '/api/reference-sets', cookie=cookie)
+    head = _run(runtime, '/api/reference-sets', cookie=cookie, method='HEAD')
+
+    assert get.status_code == 200
+    assert get.content == b'{"sets":[]}\n'
+    assert head.status_code == get.status_code
+    assert head.content == b''
+    assert head.headers['content-length'] == str(len(get.content))
+
+
+def test_native_response_vary_keeps_existing_dimensions_and_adds_cookie():
+    from asgi import _ensure_cookie_vary, _vary_cookie_required
+
+    start = {
+        'type': 'http.response.start', 'status': 200,
+        'headers': [(b'content-type', b'application/json'), (b'vary', b'Accept-Encoding')],
+    }
+    result = _ensure_cookie_vary(start)
+    vary = [value.decode() for key, value in result['headers'] if key == b'vary']
+
+    assert vary == ['Accept-Encoding', 'Cookie']
+    assert _ensure_cookie_vary(result) is result
+    assert not _vary_cookie_required('/static/app.js')
+    assert not _vary_cookie_required('/pulse')
+    assert _vary_cookie_required('/api/account/summary')
+
+
 def test_lazy_asgi_dispatches_legacy_chat_emoji_delete_form(monkeypatch):
     from oneirodex.runtime_native import chat_emoji_read as native_chat_emoji
 
@@ -9250,7 +12335,7 @@ def test_lazy_asgi_dispatches_legacy_link_existing_game_form(monkeypatch):
     fake = SimpleNamespace(
         allowed_bases=lambda _app: ['/safe'],
         safe_path=lambda _app, path: (path.startswith('/safe'), 'outside allowed roots'),
-        directory_readable=lambda path: path == '/safe/Game',
+        game_path_readable=lambda path: path == '/safe/Game',
         link_existing_game=lambda _app, game_uuid, path, actor, actor_id: (
             calls.append((game_uuid, path, actor, actor_id)) or {
                 'game_uuid': game_uuid, 'game_name': 'Game', 'full_disk_path': path,
@@ -9270,7 +12355,7 @@ def test_lazy_asgi_dispatches_legacy_link_existing_game_form(monkeypatch):
     )
 
     assert response.status_code == 302
-    assert response.headers['location'] == '/admin/scan_management?active_tab=unmatched'
+    assert response.headers['location'] == '/scan_management?active_tab=unmatched'
     assert calls == [('game-1', '/safe/Game', 'administrator', 7)]
 
 
@@ -9295,6 +12380,23 @@ def test_lazy_asgi_local_game_image_uses_vetted_descriptor_and_ranges(monkeypatc
         headers={'If-None-Match': complete.headers['etag']},
     )
     invalid_range = _run(runtime, path, cookie=cookie, headers={'Range': 'bytes=99-'})
+    oversized_range = _run(
+        runtime, path, cookie=cookie, headers={'Range': f"bytes={'9' * 5000}-"},
+    )
+    oversized_suffix_range = _run(
+        runtime, path, cookie=cookie, headers={'Range': f"bytes=-{'9' * 5000}"},
+    )
+    modified_at = parsedate_to_datetime(complete.headers['last-modified']).timestamp()
+    future_if_range = formatdate(modified_at + 60, usegmt=True)
+    stale_if_range = formatdate(modified_at - 60, usegmt=True)
+    future_date_range = _run(
+        runtime, path, cookie=cookie,
+        headers={'Range': 'bytes=2-5', 'If-Range': future_if_range},
+    )
+    stale_date_range = _run(
+        runtime, path, cookie=cookie,
+        headers={'Range': 'bytes=2-5', 'If-Range': stale_if_range},
+    )
     safe_state['value'] = False
     unsafe = _run(runtime, path, cookie=cookie)
     safe_state['value'] = True
@@ -9310,6 +12412,25 @@ def test_lazy_asgi_local_game_image_uses_vetted_descriptor_and_ranges(monkeypatc
     assert unchanged.status_code == 304
     assert invalid_range.status_code == 416
     assert invalid_range.headers['content-range'] == 'bytes */10'
+    expected_range_error = (
+        b'<!doctype html>\n<html lang=en>\n<title>416 Requested Range Not Satisfiable</title>\n'
+        b'<h1>Requested Range Not Satisfiable</h1>\n'
+        b'<p>The server cannot provide the requested range.</p>\n'
+    )
+    assert invalid_range.content == expected_range_error
+    assert invalid_range.headers['content-type'] == 'text/html; charset=utf-8'
+    assert invalid_range.headers['content-length'] == '177'
+    assert oversized_range.status_code == 416
+    assert oversized_range.headers['content-range'] == 'bytes */10'
+    assert oversized_range.content == expected_range_error
+    assert oversized_suffix_range.status_code == 416
+    assert oversized_suffix_range.headers['content-range'] == 'bytes */10'
+    assert oversized_suffix_range.content == expected_range_error
+    assert future_date_range.status_code == 206
+    assert future_date_range.content == b'2345'
+    assert future_date_range.headers['content-range'] == 'bytes 2-5/10'
+    assert stale_date_range.status_code == 200
+    assert stale_date_range.content == b'0123456789'
     assert unsafe.status_code == 403
     assert denied.status_code == 403
 
@@ -9325,8 +12446,47 @@ def test_lazy_asgi_dispatches_legacy_image_refresh_for_admin(monkeypatch):
         runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
     )
     assert denied.status_code == 400
+    assert denied.headers['content-type'] == 'text/html; charset=utf-8'
+    assert b'<p>The CSRF token is missing.</p>' in denied.content
     assert not any(call[0] == 'enqueue' for call in data.calls)
 
+    ajax_denied = _run(
+        runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
+        headers={'X-Requested-With': 'XMLHttpRequest'},
+    )
+    assert ajax_denied.status_code == 400
+    assert ajax_denied.headers['content-type'] == 'application/json'
+    assert ajax_denied.json() == {
+        'ok': False,
+        'success': False,
+        'error': 'The CSRF token is missing.',
+        'message': 'The CSRF token is missing.',
+        'error_code': 'bad_request',
+    }
+    assert not any(call[0] == 'enqueue' for call in data.calls)
+
+    invalid_form = _run(
+        runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
+        form_body={'csrf_token': 'invalid-token'},
+    )
+    assert invalid_form.status_code == 400
+    assert b'CSRF token is invalid' in invalid_form.content
+    assert not any(call[0] == 'enqueue' for call in data.calls)
+
+    from urllib.parse import urlencode
+    excessive_form = _run(
+        runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
+        content=urlencode([('csrf_token', csrf)] + [(f'extra-{index}', 'x') for index in range(1000)]),
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+    assert excessive_form.status_code == 400
+    assert b'CSRF token is missing' in excessive_form.content
+    assert not any(call[0] == 'enqueue' for call in data.calls)
+
+    form_response = _run(
+        runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
+        form_body={'csrf_token': csrf},
+    )
     response = _run(
         runtime, '/refresh_game_images/game-1', cookie=cookie, method='POST',
         headers={'X-CSRFToken': csrf},
@@ -9336,11 +12496,13 @@ def test_lazy_asgi_dispatches_legacy_image_refresh_for_admin(monkeypatch):
         headers={'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest'},
     )
 
+    assert form_response.status_code == 302, form_response.text
+    assert form_response.headers['location'] == '/library'
     assert response.status_code == 302, response.text
-    assert response.headers['location'] == '/libraries'
+    assert response.headers['location'] == '/library'
     assert ajax.status_code == 200
     assert ajax.json()['message'] == 'Game images refresh process started for Fixture game.'
-    assert data.calls.count(('enqueue', 'game-1')) == 2
+    assert data.calls.count(('enqueue', 'game-1')) == 3
 
 
 def test_lazy_asgi_dispatches_legacy_single_game_image_upload(monkeypatch):
@@ -9391,6 +12553,10 @@ def test_lazy_asgi_dispatches_legacy_manual_scan_folder_form(monkeypatch):
 
     calls = []
     fake = SimpleNamespace(
+        library_exists=lambda library_uuid: (
+            calls.append(('library_exists', library_uuid)) or
+            library_uuid == 'library-1'
+        ),
         resolve_path=lambda _app, folder_path, library_root: ('/safe/ROMs', None),
         allowed_bases=lambda _app: ['/safe'],
         safe_path=lambda path, _bases: (calls.append(('safe', path)) or True, None),
@@ -9412,8 +12578,9 @@ def test_lazy_asgi_dispatches_legacy_manual_scan_folder_form(monkeypatch):
     )
 
     assert response.status_code == 302
-    assert response.headers['location'] == '/admin/scan_management?active_tab=manualScan'
+    assert response.headers['location'] == '/scan_management?active_tab=manual'
     assert calls == [
+        ('library_exists', 'library-1'),
         ('safe', '/safe/ROMs'),
         ('list', '/safe/ROMs', ['ignored'], ['CaseSensitive']),
     ]
@@ -9530,7 +12697,15 @@ def test_lazy_asgi_dispatches_native_oidc_start_and_callback(monkeypatch):
 
 def test_lazy_asgi_uses_native_404_without_wsgi_fallback(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch)
-    response = _run(runtime, '/route-that-does-not-exist')
-    assert response.status_code == 404
-    assert response.json()['error_code'] == 'not_found'
-    assert response.json()['message'] == 'Not found'
+    page_response = _run(runtime, '/route-that-does-not-exist')
+    assert page_response.status_code == 404
+    assert page_response.headers['content-type'].startswith('text/html')
+    assert '<title>404 Not Found</title>' in page_response.text
+
+    api_response = _run(runtime, '/api/route-that-does-not-exist')
+    assert api_response.status_code == 404
+    assert api_response.json()['error_code'] == 'not_found'
+    assert api_response.json()['message'] == (
+        'The requested URL was not found on the server. If you entered the URL '
+        'manually please check your spelling and try again.'
+    )

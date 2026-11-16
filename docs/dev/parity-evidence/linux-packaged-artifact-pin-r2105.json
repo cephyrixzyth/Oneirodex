@@ -1,0 +1,59 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2105",
+  "observed_utc": "2026-11-15T05:36:17.808193+00:00",
+  "classification": "Authenticated Linux release artifact and Debian executable statically pinned; no runtime acceptance.",
+  "inspection": {
+    "doc_status": "Reference",
+    "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+    "source_run": 43553756754,
+    "artifact_id": 14097566864,
+    "artifact_name": "oneirodex-full-linux",
+    "archive_bytes": 85649119,
+    "archive_sha256": "933c7bdae0ba086fa3bdbf6facad07c512402133fe8cdf2791d515ccb3289994",
+    "entries": [
+      {
+        "path": "deb/Oneirodex_1.1.9_amd64.deb",
+        "bytes": 3870414,
+        "sha256": "66859e1d50e083bbe83c6a16e1b1ad65d5a75dd85d5d9d4af34948a071965f75"
+      },
+      {
+        "path": "appimage/Oneirodex_1.1.9_amd64.AppImage",
+        "bytes": 82430456,
+        "sha256": "fe52a2b2fddc9891d9481284cb8fc12c1999354702b3d243725de761ce167b90"
+      }
+    ],
+    "extracted": false,
+    "installed": false,
+    "executed": false,
+    "installed_runtime_acceptance": false,
+    "limits": "Static authenticated source/archive metadata and bounded member hashes only; no package architecture/runtime/installation/UI/IPC/account/game behavior qualified.",
+    "debian_control": {
+      "Package": "oneirodex",
+      "Version": "1.1.9",
+      "Architecture": "amd64",
+      "Depends": "libwebkit2gtk-4.1-0, libgtk-3-0"
+    },
+    "debian_binary": {
+      "member": "usr/bin/oneirodex-desktop",
+      "bytes": 13912992,
+      "sha256": "220c19ec6b4714844bdc4609f27c42946ff9435f02eb568bde2df39e5d4d409b",
+      "elf_class": 64,
+      "elf_machine": 62,
+      "machine_meaning": "x86_64"
+    },
+    "static_member_streams_read": true
+  },
+  "method": "Verify the successful exact-source push run and unexpired artifact metadata, authenticated archive size/SHA256, bounded ZIP member paths/types/sizes and streamed hashes. Read Debian ar/tar control and ELF header/executable hash in memory without filesystem extraction, installer or payload execution.",
+  "primary_sources": [
+    "https://manpages.debian.org/bookworm/dpkg-dev/deb.5.en.html",
+    "https://v2.tauri.app/develop/tests/webdriver/",
+    "https://v2.tauri.app/develop/tests/webdriver/ci/"
+  ],
+  "next": "Prepare genuine installed Linux companion cold/reopen/native IPC/uninstall-retention verification on ephemeral CI, preserving exact artifacts and the existing shipping binary. Keep Windows namespace prerequisite and every original platform/account/game/AT/parity/operator/release gate open.",
+  "ruling": "Tauri documents direct tauri-driver support on Windows/Linux; embedded macOS automation needs an optional plugin. Do not add an automation plugin or mock native IPC to make the pinned release appear qualified.",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: static archive/member inspection only; nothing extracted to the filesystem, installed or executed.",
+  "followup_native_evidence": "linux-packaged-probe-r2108.json"
+}

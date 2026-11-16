@@ -6,9 +6,13 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
+import pytest
+from starlette.requests import Request
 
 from oneirodex.runtime_native.launcher_import_mutations import create_launcher_import_mutation_router
+from oneirodex.runtime_native import launcher_import_mutations
 from oneirodex.runtime_native.session_compat import dump_session_cookie
+from oneirodex.utils.store_sync_errors import StoreSyncError
 
 
 class Result:
@@ -113,3 +117,100 @@ def test_launcher_csv_upload_is_bounded_and_keeps_selected_format():
 
     assert response.status_code == 200
     assert data.calls == [('launcher', 7, b'Name,Id\nFixture,123\n', 'library.csv', 'heroic')]
+
+
+def test_launcher_import_keeps_safe_parse_errors_and_hides_untrusted_details():
+    for parser_error, expected in (
+        ('No games found in that export', 'No games found in that export'),
+        ('Unknown launcher: untrusted-user-input', 'The launcher export could not be read'),
+    ):
+        data = FakeImports()
+
+        def fail_import(*_args, _error=parser_error, **_kwargs):
+            raise ValueError(_error)
+
+        data.launcher = fail_import
+        response = make_client(data=data).post(
+            '/api/imports/launcher', json={},
+        )
+
+        assert response.status_code == 400
+        assert response.json()['error'] == expected
+        if parser_error.startswith('Unknown launcher:'):
+            assert 'untrusted-user-input' not in response.text
+
+
+def test_launcher_import_limit_returns_safe_conflict():
+    data = FakeImports()
+
+    def fail_import(*_args, **_kwargs):
+        raise StoreSyncError('Ownership cap internal detail', 'ownership_limit')
+
+    data.launcher = fail_import
+    response = make_client(data=data).post(
+        '/api/imports/launcher', json={'games': [{'Name': 'Fixture'}]},
+    )
+
+    assert response.status_code == 409
+    assert response.json()['error_code'] == 'conflict'
+    assert 'safety limit' in response.json()['error'].lower()
+    assert 'internal detail' not in response.text
+
+
+def test_import_request_total_cap_rejects_multipart_before_parser(monkeypatch):
+    monkeypatch.setattr(launcher_import_mutations, '_MAX_UPLOAD', 128)
+    data = FakeImports()
+    response = make_client(data=data).post(
+        '/api/imports/launcher',
+        files={'file': ('library.json', b'x' * (64 * 1024 + 256), 'application/json')},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []
+
+
+@pytest.mark.anyio
+async def test_import_payload_stream_cap_rejects_large_body_without_content_length(monkeypatch):
+    monkeypatch.setattr(launcher_import_mutations, '_MAX_UPLOAD', 8)
+    parts = iter((
+        {'type': 'http.request', 'body': b'12345', 'more_body': True},
+        {'type': 'http.request', 'body': b'67890', 'more_body': False},
+    ))
+
+    async def receive():
+        return next(parts)
+
+    request = Request({
+        'type': 'http', 'method': 'POST', 'path': '/api/imports/playnite',
+        'headers': [(b'content-type', b'application/json')], 'query_string': b'',
+    }, receive=receive)
+
+    with pytest.raises(launcher_import_mutations._RequestPayloadTooLarge):
+        await launcher_import_mutations._request_payload(request)
+
+
+def test_multipart_limit_allows_file_cap_plus_bounded_form_overhead(monkeypatch):
+    monkeypatch.setattr(launcher_import_mutations, '_MAX_UPLOAD', 128)
+    data = FakeImports()
+    response = make_client(data=data).post(
+        '/api/imports/launcher',
+        files={'file': ('library.json', b'x' * 128, 'application/json')},
+    )
+
+    assert response.status_code == 200
+    assert data.calls[0][2] == b'x' * 128
+
+
+def test_import_request_total_cap_rejects_json_before_body_parse(monkeypatch):
+    monkeypatch.setattr(launcher_import_mutations, '_MAX_UPLOAD', 32)
+    data = FakeImports()
+    response = make_client(data=data).post(
+        '/api/imports/playnite',
+        content=b'{"games":["' + b'x' * 64 + b'"]}',
+        headers={'content-type': 'application/json'},
+    )
+
+    assert response.status_code == 413
+    assert response.json()['error_code'] == 'payload_too_large'
+    assert data.calls == []

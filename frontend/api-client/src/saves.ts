@@ -9,6 +9,7 @@ export interface GameSave {
   filename: string
   size_bytes: number
   encrypted: boolean
+  revision: number
   updated_at: string | null
   /** True for a resumable state; false for SRAM. */
   is_state: boolean
@@ -17,6 +18,8 @@ export interface GameSave {
 export interface GameSavesResponse {
   enabled: boolean
   game_uuid: string
+  can_write_own_save: boolean
+  can_delete_own_save: boolean
   /** Newest first. */
   saves: GameSave[]
 }

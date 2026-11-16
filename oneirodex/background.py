@@ -140,6 +140,11 @@ def start_background_workers(app):
                 _record_handle(start_save_paths_scheduler(app))
             except Exception as exc:
                 logger.warning(f"[SAVE PATHS] Could not start: {exc}")
+            try:
+                from oneirodex.utils.user_deletion import start_file_cleanup_worker
+                _record_handle(start_file_cleanup_worker(app))
+            except Exception as exc:
+                logger.warning(f"[ACCOUNT DELETION] Could not start cleanup worker: {exc}")
 
 
 def _record_handle(handle) -> None:

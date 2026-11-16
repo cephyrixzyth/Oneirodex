@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from io import BytesIO
+import struct
 from uuid import uuid4
+import zlib
 
 import pytest
 from PIL import Image
 from werkzeug.datastructures import FileStorage
 
-from oneirodex.models import User
+from oneirodex.models import User, UserDeletionFileJob
+from oneirodex.utils import custom_emoji as custom_emoji_utils
 from oneirodex.utils.chat import ALLOWED_REACTIONS, is_allowed_reaction
 from oneirodex.utils.custom_emoji import (
     MAX_CUSTOM_EMOJI,
+    discard_custom_emoji_upload,
     delete_custom_emoji,
     list_custom_emoji,
     normalize_slug,
@@ -44,6 +48,21 @@ def _png_file(name='party.png', size=(64, 64)):
     Image.new('RGBA', size, (255, 0, 0, 255)).save(buf, format='PNG')
     buf.seek(0)
     return FileStorage(stream=buf, filename=name, content_type='image/png')
+
+
+def _png_header(width, height):
+    header = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
+
+    def chunk(kind, data):
+        body = kind + data
+        return struct.pack('>I', len(data)) + body + struct.pack('>I', zlib.crc32(body))
+
+    return (
+        b'\x89PNG\r\n\x1a\n'
+        + chunk(b'IHDR', header)
+        + chunk(b'IDAT', zlib.compress(b''))
+        + chunk(b'IEND', b'')
+    )
 
 
 def test_normalize_slug():
@@ -93,6 +112,132 @@ def test_upload_rejects_duplicate_and_cap(app, db_session, admin, tmp_path, monk
             )
         with pytest.raises(ValueError, match='limit'):
             upload_custom_emoji(slug='overflow', label='X', file=_png_file(), uploader=admin)
+
+
+def test_upload_rejects_oversized_dimensions_before_decode_or_file_creation(
+    app, db_session, admin, tmp_path, monkeypatch,
+):
+    def fail_if_decoded(*_args, **_kwargs):
+        raise AssertionError('oversized emoji image must be rejected before decode')
+
+    monkeypatch.setattr(Image.Image, 'load', fail_if_decoded)
+    monkeypatch.setattr(Image.Image, 'convert', fail_if_decoded)
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    upload = FileStorage(
+        stream=BytesIO(_png_header(3000, 3000)),
+        filename='large.png', content_type='image/png',
+    )
+
+    with app.app_context(), pytest.raises(ValueError, match='dimensions are too large'):
+        upload_custom_emoji(slug='large', label='Large', file=upload, uploader=admin)
+
+    assert not (tmp_path / 'chat-emoji').exists()
+
+
+def test_upload_uses_decoded_format_independent_of_filename_suffix(
+    app, db_session, admin, tmp_path, monkeypatch,
+):
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    with app.app_context():
+        row = upload_custom_emoji(
+            slug='party', label='Party', file=_png_file(name='party.jpg'),
+            uploader=admin,
+        )
+        file_name = row.file_name
+
+    assert file_name.endswith('.webp')
+    assert (tmp_path / 'chat-emoji' / file_name).is_file()
+
+
+def test_discard_cancelled_upload_removes_only_matching_row_and_file(
+    app, db_session, admin, tmp_path, monkeypatch,
+):
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    with app.app_context():
+        row = upload_custom_emoji(
+            slug='cancelled', label='Cancelled', file=_png_file(), uploader=admin,
+        )
+        row_id, file_name = row.id, row.file_name
+        path = tmp_path / 'chat-emoji' / file_name
+
+        assert discard_custom_emoji_upload(
+            row_id, 'different.webp', upload_folder=str(tmp_path),
+        ) is False
+        assert db_session.get(type(row), row_id) is not None
+        assert path.is_file()
+        assert discard_custom_emoji_upload(
+            row_id, file_name, upload_folder=str(tmp_path),
+        ) is True
+
+    assert db_session.get(type(row), row_id) is None
+    assert not path.exists()
+
+
+def test_cancelled_upload_unlink_failure_queues_retryable_cleanup(
+    app, db_session, admin, tmp_path, monkeypatch,
+):
+    from oneirodex.utils.user_deletion import process_pending_file_jobs
+
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    with app.app_context():
+        row = upload_custom_emoji(
+            slug='retry-cleanup', label='Retry', file=_png_file(), uploader=admin,
+        )
+        row_id, file_name = row.id, row.file_name
+        path = tmp_path / 'chat-emoji' / file_name
+
+        def fail_remove(_path):
+            raise PermissionError('synthetic unlink failure')
+
+        monkeypatch.setattr(custom_emoji_utils.os, 'remove', fail_remove)
+        assert discard_custom_emoji_upload(
+            row_id, file_name, upload_folder=str(tmp_path),
+        ) is True
+        assert db_session.get(type(row), row_id) is None
+        job = db_session.query(UserDeletionFileJob).filter_by(
+            relative_path=f'chat-emoji/{file_name}', state='pending',
+        ).one()
+
+        # The generic post-commit worker retries the same managed path.
+        remaining = process_pending_file_jobs(db_session)
+
+    assert remaining == 0
+    assert db_session.get(UserDeletionFileJob, job.id) is None
+    assert not path.exists()
+
+
+def test_upload_rejects_unsupported_content_under_allowed_suffix(
+    app, db_session, admin, tmp_path, monkeypatch,
+):
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    content = BytesIO()
+    Image.new('RGB', (12, 12), 'purple').save(content, format='TIFF')
+    content.seek(0)
+    upload = FileStorage(stream=content, filename='not-really.png')
+
+    with app.app_context(), pytest.raises(ValueError, match='image content'):
+        upload_custom_emoji(
+            slug='tiff', label='TIFF', file=upload, uploader=admin,
+        )
+
+    assert not (tmp_path / 'chat-emoji').exists()
+
+
+def test_upload_rejects_animated_content(tmp_path, app, db_session, admin, monkeypatch):
+    monkeypatch.setitem(app.config, 'UPLOAD_FOLDER', str(tmp_path))
+    first = Image.new('RGBA', (16, 16), 'red')
+    second = Image.new('RGBA', (16, 16), 'blue')
+    content = BytesIO()
+    first.save(content, format='PNG', save_all=True, append_images=[second], duration=50)
+    content.seek(0)
+    upload = FileStorage(stream=content, filename='animated.png')
+
+    with app.app_context(), pytest.raises(ValueError, match='Animated images'):
+        upload_custom_emoji(
+            slug='motion', label='Motion', file=upload, uploader=admin,
+        )
+
+    assert not (tmp_path / 'chat-emoji').exists()
 
 
 def test_fixed_set_unchanged():

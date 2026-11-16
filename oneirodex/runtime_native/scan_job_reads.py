@@ -6,6 +6,7 @@ from contextlib import nullcontext
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
+from .query_compat import first_query_value
 from .request_auth import request_auth_context
 
 
@@ -26,10 +27,10 @@ class ScanJobReadData:
             'note': 'Server returns path string only; Desktop companion opens host explorer.',
         }
 
-    def drain_if_idle(self, app):
+    def drain_if_idle(self, app, *, database_scope=None):
         from oneirodex.utils.scan_queue import maybe_drain_scan_queue
 
-        maybe_drain_scan_queue(app)
+        maybe_drain_scan_queue(app, database_scope=database_scope)
 
     def list_jobs(self, filters):
         from sqlalchemy import or_, select
@@ -94,7 +95,7 @@ def create_scan_job_reads_router(
             if response is None:
                 try:
                     try:
-                        data.drain_if_idle(flask_app)
+                        data.drain_if_idle(flask_app, database_scope=database_scope)
                     except Exception:  # best-effort safety drain, matching legacy poll
                         pass
                     from oneirodex.utils.scan_job_timing import (
@@ -103,9 +104,15 @@ def create_scan_job_reads_router(
 
                     query = request.query_params
                     filters = {
-                        'statuses': parse_scan_job_status_filter(query.get('status')),
-                        'library_uuid': (query.get('library_uuid') or '').strip(),
-                        'q': (query.get('q') or query.get('name') or '').strip(),
+                        'statuses': parse_scan_job_status_filter(
+                            first_query_value(query, 'status'),
+                        ),
+                        'library_uuid': (first_query_value(query, 'library_uuid') or '').strip(),
+                        'q': (
+                            first_query_value(query, 'q')
+                            or first_query_value(query, 'name')
+                            or ''
+                        ).strip(),
                     }
                     rows = []
                     for job in data.list_jobs(filters):
@@ -185,8 +192,11 @@ def create_scan_job_reads_router(
                     body, status = api_error_payload('Admin required', code='forbidden')
                     response = JSONResponse(body, status_code=status)
             if response is None:
-                raw = (request.query_params.get('path')
-                       or request.query_params.get('full_disk_path') or '').strip()
+                raw = (
+                    first_query_value(request.query_params, 'path')
+                    or first_query_value(request.query_params, 'full_disk_path')
+                    or ''
+                ).strip()
                 if not raw:
                     from oneirodex.utils.api_contract import api_error_payload
 
@@ -198,7 +208,19 @@ def create_scan_job_reads_router(
                     body, status = api_error_payload('path too long', code='bad_request')
                     response = JSONResponse(body, status_code=status)
                 else:
-                    response = JSONResponse(data.path_info(raw))
+                    from oneirodex.utils.client_commands import validate_open_path_target
+
+                    try:
+                        raw = validate_open_path_target(raw)
+                    except ValueError:
+                        from oneirodex.utils.api_contract import api_error_payload
+
+                        body, status = api_error_payload(
+                            'path is outside configured library roots', code='forbidden'
+                        )
+                        response = JSONResponse(body, status_code=status)
+                    else:
+                        response = JSONResponse(data.path_info(raw))
             if auth.should_set_session_cookie:
                 from .oidc_status import _set_session_cookie
 

@@ -1,0 +1,180 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2086",
+  "observed_utc": "2026-11-14T20:08:40.384851+00:00",
+  "base_commit": "997c39217733236907cf4d7fbee189ea47051a9b",
+  "classification": "Observer readiness prerequisite failed; app remains non-elevated but embedded-browser cause unknown.",
+  "preceding_observation": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43634273204",
+    "job_id": 132567524123,
+    "harness_source": "997c39217733236907cf4d7fbee189ea47051a9b",
+    "raw_log_sha256": "ef9d45ab5720df0a36d7bb16abec3babe7bac535f5a7580d080f68b62650bdce",
+    "ci_guard_methods_passed": 24,
+    "receipt": {
+      "observed_utc": "2026-11-14T19:51:07.733075+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_webview_startup",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "suspended_creation_api": "CreateProcessAsUserW",
+      "app_launch_security": [
+        {
+          "round": 1,
+          "elevated": false,
+          "integrity_rid": 8192
+        }
+      ],
+      "startup_diagnostics": {
+        "product_window_title": false,
+        "visible_text_keywords": [],
+        "listeners": [],
+        "processes": [
+          {
+            "pid": 9808,
+            "parent": 9716,
+            "name": "oneirodex-desktop.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": false
+          }
+        ],
+        "devtools_policy_values": [],
+        "session_id": 2,
+        "root_alive": true,
+        "runtime_versions": [
+          "156.0.4314.58"
+        ],
+        "native_initialization": {
+          "window_count": 1,
+          "window_observation": "complete",
+          "keywords": [],
+          "hresult_codes": [],
+          "query_hresult_codes": [],
+          "event_observation": "empty_or_unavailable",
+          "events": []
+        },
+        "has_main_window": true,
+        "probe_webview_profile_created": true,
+        "parent_has_browser_folder_override": false
+      },
+      "last_owned_root_and_listener_cleanup_verified": true,
+      "owned_application_uninstalled": true,
+      "code": "webview_endpoint_not_ready"
+    }
+  },
+  "change": "Register transient local CIM process-start and process-stop subscriptions before creating the app. Record only exact app/runtime basenames, PID/parent, string-encoded FILETIME and exit status. Nonce-bound owned control files, capped events/result size, bounded lifetime, credential-free hidden observer process and retained-handle cleanup. Preserve the app handle until collection ends. Correlate start/stop lifetimes chronologically; a new start invalidates earlier PID attribution. Mark controller cleanup stops separately.",
+  "safety": "Optional trace setup failure does not weaken or replace existing app/token/listener/timeout/native-IPC assertions. No SID, path, command, event message or credential fields are emitted. Unrelated name/time events remain unattributed. Subscription completion is not exhaustive provider-delivery proof. Not product launch-identity or game tracking acceptance.",
+  "local_verification": {
+    "red": "24 controls pass;4 new lifecycle/fence/setup-cleanup contracts fail before implementation",
+    "final_guard_methods_passed": 29,
+    "additional_control": "Foreign nonce and oversized result are rejected; observer is reaped.",
+    "python_compile": "passed",
+    "pyflakes": "passed",
+    "powershell_ast": "parsed as data; no local subscriptions or native process launch"
+  },
+  "source_sha256_git_normalized": {
+    "scripts/ci/probe_windows_packaged.py": "7742319a53991e7cd812fe5677b737a44665c72171ed9f15ff6c7d9d340f049c",
+    "scripts/ci/test_windows_packaged_probe.py": "5f425427c5b348a629f25561fa1dd32f31503f842cf9a3627089b3fa3de9c6d5"
+  },
+  "primary_sources": [
+    "https://learn.microsoft.com/en-us/previous-versions/windows/desktop/krnlprov/win32-processstarttrace",
+    "https://learn.microsoft.com/en-us/previous-versions/windows/desktop/krnlprov/win32-processstoptrace",
+    "https://learn.microsoft.com/en-us/powershell/module/cimcmdlets/register-cimindicationevent?view=powershell-5.1"
+  ],
+  "runtime_retry": "terminal failure; event observer readiness timed out, so no lifecycle evidence was produced",
+  "installed_runtime_acceptance": false,
+  "overall_goal": "active and incomplete",
+  "limits": "Same pinned6a03c6fb package, original security/timeout/assertions and all original acceptance gates remain. No local GUI/installer execution, production change, policy/ACL edit or new build.",
+  "capture": "Skipped: CI metadata observer only.",
+  "runtime_result": {
+    "run_url": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/43636120791",
+    "job_id": 132573188150,
+    "harness_source": "6fa9f449a98bcbf1b64b306a4fa50b547d6933d6",
+    "raw_log_sha256": "aadf3fbd87d45729fff58b29f327a95d2804cb3a8877c7113726f7573252282b",
+    "ci_guard_methods_passed": 29,
+    "ci_guard_elapsed_seconds": 15.475,
+    "receipt": {
+      "observed_utc": "2026-11-14T20:11:50.023300+00:00",
+      "status": "failed",
+      "installed_runtime_acceptance": false,
+      "source_commit": "6a03c6fbdadcdc8f585d0012b3a36879e408fa0b",
+      "source_run": 43553756754,
+      "artifact_id": 14097212804,
+      "artifact_name": "oneirodex-full-windows",
+      "archive_sha256": "afa4c6322aa29a2511f2d30a9654094a192ffbf6ed73945d16f31cfe7a616b3c",
+      "archive_bytes": 2354380,
+      "installer_name": "Oneirodex_1.1.9_x64-setup.exe",
+      "installer_sha256": "99e66d11cb80f211a33b4090b2c18fc685db0c51911c87897fa10286fbb2997f",
+      "source_and_digest_verified": true,
+      "installer_executed": true,
+      "mode": "remote-companion",
+      "phase": "cold_1_webview_startup",
+      "ci_account_elevated": true,
+      "windows_build": 26100,
+      "installed_binary_sha256": "0f9d7cf3e796c9c847ee0c3408fe93fe358d7ebd77cec4a01c8e96e1e8f86be9",
+      "suspended_creation_api": "CreateProcessAsUserW",
+      "startup_trace_setup": [
+        {
+          "round": 1,
+          "observation": "unavailable",
+          "error_class": "ProbeFailure",
+          "code": "startup_trace_observer_not_ready"
+        }
+      ],
+      "app_launch_security": [
+        {
+          "round": 1,
+          "elevated": false,
+          "integrity_rid": 8192
+        }
+      ],
+      "startup_diagnostics": {
+        "product_window_title": false,
+        "visible_text_keywords": [],
+        "listeners": [],
+        "processes": [
+          {
+            "pid": 7736,
+            "parent": 7572,
+            "name": "oneirodex-desktop.exe",
+            "expected_debug_port_flag": false,
+            "probe_profile_flag": false
+          }
+        ],
+        "devtools_policy_values": [],
+        "session_id": 2,
+        "root_alive": true,
+        "runtime_versions": [
+          "156.0.4314.58"
+        ],
+        "native_initialization": {
+          "window_count": 1,
+          "window_observation": "complete",
+          "keywords": [],
+          "hresult_codes": [],
+          "query_hresult_codes": [],
+          "event_observation": "empty_or_unavailable",
+          "events": []
+        },
+        "has_main_window": true,
+        "probe_webview_profile_created": true,
+        "parent_has_browser_folder_override": false
+      },
+      "last_owned_root_and_listener_cleanup_verified": true,
+      "owned_application_uninstalled": true,
+      "code": "webview_endpoint_not_ready"
+    }
+  }
+}

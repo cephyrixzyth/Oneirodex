@@ -26,13 +26,14 @@ from oneirodex.utils.discover_pins import (
     set_member_pins,
 )
 from oneirodex.utils.discover_providers import resolve_feed
-from oneirodex.utils.api_tokens import user_has_scope
+from oneirodex.utils.api_tokens import require_api_token_scope, user_has_scope
 
 from . import apis_bp
 
 
 @apis_bp.route('/discover/sections', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def discover_sections():
     # `feed_token` rides along so row pagination can apply the same cross-row
     # dedupe this feed just did.
@@ -41,6 +42,7 @@ def discover_sections():
 
 @apis_bp.route('/discover/rows/<identifier>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def discover_row(identifier: str):
     """One row, windowed — the rest of a shelf the feed only sent the head of.
 
@@ -79,6 +81,7 @@ def discover_row(identifier: str):
 # route then 404'd.
 @apis_bp.route('/discover/zones/<slug>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def discover_zone(slug: str):
     """One zone: the feed narrowed to the rows that belong to it."""
     payload = build_discover_zone(current_user, slug)
@@ -93,6 +96,7 @@ def discover_zone(slug: str):
 
 @apis_bp.route('/discover/hubs/genre/<path:genre>', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def discover_genre_hub(genre: str):
     """Virtual Discover shelves for one genre — not an admin-authored row."""
     payload = build_genre_hub(current_user, genre)
@@ -106,6 +110,7 @@ def discover_genre_hub(genre: str):
 
 @apis_bp.route('/discover/surprise', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def discover_surprise():
     """One title from the top of this member's ranking, and the genres to steer it.
 
@@ -177,6 +182,15 @@ def discover_pins():
         return api_error(
             'Missing scope: write:library', code='forbidden',
             detail={'required_scope': 'write:library'},
+        )
+    if (
+        request.method == 'GET'
+        and getattr(g, 'api_token', None) is not None
+        and not user_has_scope('read:library')
+    ):
+        return api_error(
+            'Missing scope: read:library', code='forbidden',
+            detail={'required_scope': 'read:library'},
         )
 
     available = [row.identifier for row in resolve_feed(current_user)]

@@ -5,6 +5,8 @@ can use in-memory fakes and never touch the user's library.
 """
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value
+from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
 from contextlib import nullcontext
 from typing import Any, Callable
 
@@ -12,6 +14,9 @@ from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
+
+LIBRARY_TOOLS_JSON_MAX_BYTES = 64 * 1024
 
 
 class LibraryToolsData:
@@ -133,6 +138,13 @@ def create_library_tools_router(
     async def propose_leaf_libraries(request: Request):
         return await _run(request, **opts, handler=_propose_leaf)
 
+    @router.options('/api/library_tools/propose_leaf_libraries')
+    async def propose_leaf_libraries_options():
+        # Match Flask's generated, unauthenticated OPTIONS response and method order.
+        from starlette.responses import HTMLResponse
+
+        return HTMLResponse('', status_code=200, headers={'Allow': 'HEAD, GET, OPTIONS, POST'})
+
     @router.api_route('/api/library_tools/import_leaf_libraries/preview', methods=['POST'])
     async def import_leaf_libraries_preview(request: Request):
         return await _run(request, **opts, handler=_import_preview)
@@ -144,6 +156,13 @@ def create_library_tools_router(
     @router.api_route('/api/library_tools/proposals/scan_roots', methods=['POST'])
     async def scan_proposals(request: Request):
         return await _run(request, **opts, handler=_scan_proposals)
+
+    @router.options('/api/library_tools/proposals/scan_roots')
+    async def scan_proposals_options():
+        # Match Flask's automatically generated, unauthenticated OPTIONS route.
+        from starlette.responses import HTMLResponse
+
+        return HTMLResponse('', status_code=200, headers={'Allow': 'OPTIONS, POST'})
 
     @router.api_route('/api/library_tools/doctor/dry_run', methods=['POST'])
     async def doctor_dry_run(request: Request):
@@ -193,12 +212,12 @@ async def _run(request, *, flask_app, data, find_user, find_token,
 
 async def _manual_preview(request, app, data):
     import os
-    library_uuid = (request.query_params.get('library_uuid') or '').strip()
+    library_uuid = (first_query_value(request.query_params, 'library_uuid') or '').strip()
     library = data.library(app, library_uuid) if library_uuid else None
     if not library:
         return _error(400, 'bad_request', 'Choose a valid library')
     folder, error = data.resolve_scan_path(
-        app, request.query_params.get('folder') or '', request.query_params.get('root') or '',
+        app, first_query_value(request.query_params, 'folder') or '', first_query_value(request.query_params, 'root') or '',
     )
     if error:
         return _error(400, 'bad_request', 'The selected scan location is unavailable')
@@ -207,7 +226,7 @@ async def _manual_preview(request, app, data):
         return _error(403, 'forbidden', path_error or 'Unsafe path')
     if not data.readable_directory(folder):
         return _error(400, 'bad_request', 'The selected folder does not exist or cannot be read')
-    mode = data.scan_mode(app, folder, request.query_params.get('scan_mode') or 'auto')
+    mode = data.scan_mode(app, folder, first_query_value(request.query_params, 'scan_mode') or 'auto')
     if mode == 'folders':
         games = data.games_in_folder(app, folder, library)
     else:
@@ -226,12 +245,16 @@ async def _propose_leaf(request, app, data):
     import os
     body = {}
     if request.method == 'POST':
+        raw_body = await read_bounded_body(request, LIBRARY_TOOLS_JSON_MAX_BYTES)
+        if raw_body is BODY_TOO_LARGE:
+            return _error(413, 'payload_too_large', 'Request body is too large')
         try:
-            body = await request.json()
+            import json
+            body = json.loads(raw_body or b'{}')
         except Exception:
             body = {}
-    root = str(body.get('root') or body.get('path') or request.query_params.get('root')
-               or request.query_params.get('path') or '').strip() if isinstance(body, dict) else ''
+    root = str(body.get('root') or body.get('path') or first_query_value(request.query_params, 'root')
+               or first_query_value(request.query_params, 'path') or '').strip() if isinstance(body, dict) else ''
     if not root:
         return _error(400, 'bad_request', 'root path required')
     safe, error = data.safe_path(app, root)
@@ -249,14 +272,28 @@ async def _import_preview(request, app, data):
     bases = data.allowed_bases(app)
     content_type = request.headers.get('content-type', '')
     if 'multipart/form-data' in content_type:
-        form = await request.form()
-        upload = form.get('file')
+        from .bounded_multipart import (
+            InvalidContentLength, RequestBodyTooLarge, bounded_multipart_form,
+        )
+
+        max_upload = int(app.config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024)
+        try:
+            form = await bounded_multipart_form(
+                request,
+                max_body_bytes=max_upload + 64 * 1024,
+                max_files=1,
+                max_fields=8,
+                max_part_size=max_upload,
+            )
+        except (InvalidContentLength, RequestBodyTooLarge):
+            return _error(413, 'payload_too_large', 'Upload is too large', auto_create=False)
+        upload = first_form_upload(form, 'file')
         if isinstance(upload, UploadFile) and upload.filename:
             filename = upload.filename.lower()
-            raw = await upload.read()
-            if len(raw) > int(app.config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024):
+            raw = await upload.read(max_upload + 1)
+            if len(raw) > max_upload:
                 await form.close()
-                return _error(413, 'bad_request', 'Upload is too large', auto_create=False)
+                return _error(413, 'payload_too_large', 'Upload is too large', auto_create=False)
             try:
                 text = raw.decode('utf-8-sig')
             except UnicodeDecodeError:
@@ -264,13 +301,13 @@ async def _import_preview(request, app, data):
                 return _error(400, 'bad_request', 'File must be UTF-8 text', auto_create=False)
             try:
                 result = data.import_preview(
-                    text, csv_format=filename.endswith('.csv') or str(form.get('format') or '').lower() == 'csv',
+                    text, csv_format=filename.endswith('.csv') or str(first_form_value(form, 'format') or '').lower() == 'csv',
                     allowed_bases=bases,
                 )
             finally:
                 await form.close()
             return JSONResponse(result)
-        csv_text = form.get('csv') or form.get('text')
+        csv_text = first_form_value(form, 'csv') or first_form_value(form, 'text')
         if csv_text:
             try:
                 result = data.import_preview(csv_text, csv_format=True, allowed_bases=bases)
@@ -279,8 +316,13 @@ async def _import_preview(request, app, data):
             return JSONResponse(result)
         await form.close()
         return _error(400, 'bad_request', 'JSON body or file upload required', auto_create=False)
+    max_json = int(app.config.get('MAX_CONTENT_LENGTH') or 32 * 1024 * 1024)
+    raw_body = await read_bounded_body(request, max_json)
+    if raw_body is BODY_TOO_LARGE:
+        return _error(413, 'payload_too_large', 'Request body is too large', auto_create=False)
     try:
-        payload = await request.json()
+        import json
+        payload = json.loads(raw_body or b'{}')
     except Exception:
         return _error(400, 'bad_request', 'JSON body or file upload required', auto_create=False)
     return JSONResponse(data.import_preview(payload, csv_format=False, allowed_bases=bases))
@@ -305,13 +347,24 @@ async def _proposals(_request, app, data):
 
 
 async def _scan_proposals(request, app, data):
+    raw_body = await read_bounded_body(request, LIBRARY_TOOLS_JSON_MAX_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return _error(413, 'payload_too_large', 'Request body is too large')
     try:
-        body = await request.json()
+        import json
+        payload = json.loads(raw_body or b'{}')
     except Exception:
-        body = {}
-    roots = body.get('roots', []) if isinstance(body, dict) else None
-    if not isinstance(roots, list):
-        return _error(400, 'bad_request', 'roots must be a list')
+        payload = None
+    from pydantic import ValidationError
+    from oneirodex.schemas.library_tools import ScanRootsBody
+    from oneirodex.utils.validation import format_validation_errors
+
+    try:
+        body = ScanRootsBody.model_validate(payload)
+    except ValidationError as exc:
+        return _error(422, 'unprocessable', 'Invalid request.',
+                      detail=format_validation_errors(exc))
+    roots = body.roots
     found = []
     for root in roots:
         if not isinstance(root, str) or not data.safe_path(app, root)[0]:
@@ -327,18 +380,29 @@ async def _scan_proposals(request, app, data):
 
 
 async def _doctor_dry_run(request, app, data):
+    raw_body = await read_bounded_body(request, LIBRARY_TOOLS_JSON_MAX_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return _error(413, 'payload_too_large', 'Request body is too large')
     try:
-        body = await request.json()
+        import json
+        payload = json.loads(raw_body or b'{}')
     except Exception:
-        body = {}
-    if not isinstance(body, dict) or not isinstance(body.get('roots'), list) or not body['roots']:
-        return _error(400, 'bad_request', 'roots must be a non-empty list')
-    roots = [root for root in body['roots']
+        payload = None
+    from pydantic import ValidationError
+    from oneirodex.schemas.library_tools import DoctorDryRunBody
+    from oneirodex.utils.validation import format_validation_errors
+
+    try:
+        body = DoctorDryRunBody.model_validate(payload if payload is not None else {})
+    except ValidationError as exc:
+        return _error(422, 'unprocessable', 'Invalid request.',
+                      detail=format_validation_errors(exc))
+    roots = [root for root in body.roots
              if isinstance(root, str) and data.safe_path(app, root)[0]]
     if not roots:
         return _error(403, 'forbidden', 'No safe roots')
-    rows = data.doctor_dry_run(roots, template=body.get('template') or '{title}',
-                               limit=body.get('limit'))
+    rows = data.doctor_dry_run(roots, template=body.template or '{title}',
+                               limit=body.limit)
     return _ok({'rows': rows, 'count': len(rows)})
 
 

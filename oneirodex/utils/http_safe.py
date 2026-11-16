@@ -364,6 +364,44 @@ def safe_request(
     )
 
 
+def safe_request_limited(
+    method: str,
+    url: str,
+    *,
+    validator: Validator,
+    max_response_bytes: int,
+    session: requests.Session,
+    **kwargs,
+) -> requests.Response:
+    """Return a response only after bounding its decoded body size.
+
+    The caller owns *session* so streamed content remains readable. The body is
+    cached on the returned ``Response`` after the limit is enforced, preserving
+    the normal ``.content`` / ``.json()`` interface for existing consumers.
+    """
+    if not isinstance(session, requests.Session):
+        raise ValueError('A bounded response requires a caller-owned requests.Session')
+    if max_response_bytes <= 0:
+        raise ValueError('max_response_bytes must be positive')
+    kwargs['stream'] = True
+    response = safe_request(
+        method,
+        url,
+        validator=validator,
+        session=session,
+        **kwargs,
+    )
+    try:
+        content = read_response_limited(response, max_response_bytes)
+    except Exception:
+        response.close()
+        raise
+    response._content = content  # type: ignore[attr-defined]
+    response._content_consumed = True  # type: ignore[attr-defined]
+    response.close()
+    return response
+
+
 def _send(caller, method: str, url: str, tls_name: str | None, req_kwargs: dict):
     """Dispatch one hop, wrapping a throwaway Session only for HTTPS SNI pin."""
     needs_tls_pin = bool(tls_name) and urlparse(url).scheme == 'https'

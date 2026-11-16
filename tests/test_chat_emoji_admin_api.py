@@ -19,6 +19,14 @@ def harness(monkeypatch):
     manager = LoginManager(app); manager.login_view = 'login.login'
     manager.user_loader(lambda identity: ReviewUser(identity))
     app.add_url_rule('/login', 'login.login', lambda: 'login'); app.add_url_rule('/csrf', 'csrf', generate_csrf)
+    from oneirodex.utils.custom_emoji import limit_custom_emoji_request_body
+
+    @app.before_request
+    def limit_emoji_body_before_csrf():
+        from flask import request
+
+        limit_custom_emoji_request_body(request)
+
     CSRFProtect(app); app.register_blueprint(routes.admin2_bp)
     emoji = {'id': 1, 'slug': 'review', 'label': 'Review', 'emoji': ':review:', 'url': '/static/library/chat-emoji/review.webp'}
     upload = Mock(return_value=SimpleNamespace(to_dict=lambda: emoji))
@@ -61,6 +69,17 @@ def test_multipart_upload_delegates_to_existing_helper(harness):
     assert args['slug'] == 'review' and args['label'] == 'Review'
     assert args['file'].filename == 'review.png'
     assert 'uploader' in args
+
+
+def test_multipart_upload_rejects_over_limit_body_before_helper(harness):
+    client, upload, *_rest, headers = harness
+    response = client.post(
+        '/api/admin/chat-emoji',
+        data={'slug': 'review', 'file': (BytesIO(b'x' * (400 * 1024)), 'review.png')},
+        headers=headers,
+    )
+    assert response.status_code == 413
+    upload.assert_not_called()
 
 
 @pytest.mark.parametrize('message', ['Custom emoji limit reached (20)', 'Slug already exists', 'Image file required',

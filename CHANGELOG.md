@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-16
+
+### Added
+- Child accounts can keep their own emulator saves for games they can currently access; other library writes stay denied.
+- Desktop companion: an Installed shelf that stays available offline for the previously verified account and device, with local Play and Reveal and a notice that local files remain reachable through the operating system.
+- Desktop companion: **Open full library** opens the server's own library in a separate site-only window; the API token is never placed in its address.
+- API tokens page lists browser sessions with sign-out for one device or all devices.
+- Support reports show a preview and the destination before anything is forwarded, and keep a local receipt.
+
+### Changed
+Read these before updating an existing install.
+- Back up the database and appdata first. The first start applies ten database migrations. To go back to 1.1.9, restore that backup: 1.1.9 does start on the migrated database, but running it there is untested.
+- Everyone signs in again once. Sign-ins made on 1.1.9 are not carried over to the new server-side sessions.
+- The app now runs as a non-root user in every install type (`PUID`:`PGID`, default `99:100`). On the first start the container takes ownership of the library folder for that user. Game folders must be readable by it, and any other folder it writes to (for example a WebRetro cores mount) must be writable by it. `PUID=0` is refused when the database runs in a separate container.
+- Installs with a separate database (the Compose stack): the old default database password `postgres` is now refused at startup. Set `ONEIRODEX_ALLOW_LEGACY_POSTGRES_PASSWORD=true` to start an existing stack, rotate the password, then turn the flag off. See [Upgrading an existing stack](docs/runbooks/docker-compose-deploy.md#upgrading-an-existing-stack). Single-container installs, including Unraid Community Apps, are not affected.
+- Linked store accounts pause until stored credentials are converted. Member store sign-in tokens saved by 1.1.9 are not used until you create a credential key ring and run the conversion, and new or changed tokens and admin integration secrets cannot be saved without the key ring. Admin integration secrets already saved keep working in the meantime. See [Convert existing credentials after upgrading](docs/runbooks/docker-compose-deploy.md#convert-existing-credentials-after-upgrading).
+- If save encryption is turned on, new saves need a save key ring. Saves already encrypted by 1.1.9 stay readable with the existing `SECRET_KEY`. See [Save keyring](docs/runbooks/docker-compose-deploy.md#save-keyring).
+- Each member's saved states are now capped at 1024 MB in total by default (`EMULATOR_SAVES_USER_QUOTA_MB`).
+
+### Fixed
+- Cloud save slots no longer overwrite each other, and a failed write keeps the previous save. Earlier generations are retained and count toward quota.
+- Deleting an account with downloads, messages, saves or other history now completes; security audit records and anonymized household messages are kept.
+- Desktop companion: concurrent operations no longer lose install records; settings and lifecycle files are written atomically and write failures are shown.
+- Desktop companion: game archives are checked against size and entry limits and extracted to a staging folder, so a failed install leaves the previous one intact.
+- Desktop companion: launched games are tracked until they exit, including after the launcher wrapper closes and across a companion restart.
+- Desktop companion: a cold start from the cached Installed shelf now reads "Offline" instead of "Not connected".
+- Native installers build all five web interfaces with Node 22 and validate the current runtime. The Windows installer no longer stops at its Python check in Windows PowerShell 5.1.
+
+### Security
+- Browser sessions end after 30 days, or after 7 days without use; signing out, changing a password or disabling an account revokes them on the server.
+- Stored store, indexer and operator credentials are encrypted at rest. Existing values are converted with the documented command; keep the key ring in your operator backup.
+- Encrypted saves use a dedicated versioned key ring bound to owner, game, slot and generation, with a restartable rotation command.
+- The VR page no longer installs a service worker, and previously cached private pages are removed.
+- The command palette no longer stores recently opened titles in the browser.
+- Uploaded and downloaded images are held to byte, format and dimension limits before decoding.
+- Support reports are redacted before forwarding and are sent only to the configured destination after an explicit choice.
+- The container image is built from digest-pinned bases with hash-locked Python and integrity-locked npm dependencies, and the publish workflow is set up to attach an SBOM and provenance. Pillow, Authlib, Vite and the Rust `zip` crate are at patched versions.
+- Validate Stage E metadata links against provider-specific HTTPS hosts before rendering them as clickable admin links.
+- Validate game-detail YouTube demo links by scheme and hostname before rendering provider-supplied URLs.
+
 ## [1.1.9] — 2026-10-15
 
 ### Improved

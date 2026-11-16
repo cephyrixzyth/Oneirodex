@@ -1,0 +1,27 @@
+{
+  "review_id": "R1990",
+  "title": "Align account ORM relationships with declared database delete cascades",
+  "classification": "Confirmed BE-009 lifecycle defects found by a populated fixture: deleting a user caused SQLAlchemy to issue NULL updates against non-nullable CASCADE foreign keys.",
+  "reproduced_relations": [
+    "play_sessions.user_id",
+    "user_friendships.user_id",
+    "user_friendships.friend_user_id",
+    "detail_layout_presets.user_id",
+    "saved_filters.user_id"
+  ],
+  "change": {
+    "behavior": "The User backrefs for these private account-owned rows now set passive_deletes='all', leaving deletion to the already declared PostgreSQL ON DELETE CASCADE constraints.",
+    "schema": "No migration was needed; ORM relationship behavior was inconsistent with the existing schema constraints."
+  },
+  "verification": {
+    "command": "python -m pytest tests/test_admin_user_delete_retention.py tests/test_user_deletion_inventory.py tests/test_admin_user_mutation_concurrency.py -q",
+    "result": "passed: 12 tests on Python 3.14.10 and PostgreSQL 17.6.",
+    "database": "Fresh uniquely named PostgreSQL test database upgraded through d6e7f8a9b0c1.",
+    "cleanup": "The disposable test database was dropped after the passing run.",
+    "coverage": "The populated deletion fixture inserts a synthetic row for every one of the 50 current user-FK columns, calls the real deletion service, and checks each row against its declared disposition. Existing cases also verify file cleanup, shared chat/emoji/save preservation, credential isolation, transaction rollback, retry, and concurrent last-admin deletion."
+  },
+  "limits": [
+    "The fixtures use current ORM and Alembic schemas; deployed operator schema comparison remains open.",
+    "The child/adult/admin/shared-channel-owner/departed-download-history/external-store-disconnect tabletop and production restart/restore qualification remain open."
+  ]
+}

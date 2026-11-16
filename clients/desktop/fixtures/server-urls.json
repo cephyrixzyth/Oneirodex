@@ -32,8 +32,8 @@
     { "url": "http://nas.local", "ok": true },
     { "url": "http://NAS.LOCAL:8080/app", "ok": true },
     { "url": "http://nas.local./", "ok": true },
-    { "url": "http://nas", "ok": true },
-    { "url": "http://nas:5000", "ok": true },
+    { "url": "http://nas", "ok": false, "why": "single-label names can escape through resolver search domains" },
+    { "url": "http://nas:5000", "ok": false, "why": "single-label names can escape through resolver search domains" },
     {
       "url": "http://tower.lan:5006",
       "ok": true,

@@ -1,0 +1,33 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2031",
+  "base_commit": "3d770780d09ec4f31553eb566cff3bb83533eb94",
+  "scope": "Shared outbound support title/body filtering; actual Flask/native HTTP and direct-sender tests, controlled external transport, owned PostgreSQL. No real GitHub send.",
+  "source_sha256": {
+    "oneirodex/utils/github_issues.py": "ad875bf5760a2cd14427146ea4d940383955c2ab8dc4d04b4879d6bd4ce47226",
+    "oneirodex/utils/support_privacy.py": "4a79ab29aebc5cae14ed3b916e20d04f9b9a113d53a015cd028337137cb58560",
+    "tests/test_support_forwarding_privacy.py": "42a0128a5ca4224c2e75f36fb9c7925b426e38a0657fe5e751717883d2672c6c"
+  },
+  "before": {
+    "http_privacy_failures": 2,
+    "local_only_passes": 2,
+    "extended_sender_failures": 17,
+    "extended_controls_passed": 3
+  },
+  "final": {
+    "privacy_tests": 27,
+    "support_and_privacy_tests_passed": 48,
+    "adjacent_security_github_rtc_tests_passed": 280,
+    "api_envelope": "passed without baseline increase",
+    "r1972_bundle": "passed:7 reports,1545 rows,secret/path scan",
+    "owned_databases_removed": true
+  },
+  "policy": "Mandatory redaction, no override. Full URL queries/fragments removed. Original local fields preserved.",
+  "review": "Separate author prepatch and bypass/regression reviews; no independent reviewer for this slice.",
+  "limits": [
+    "Arbitrary private prose is not guaranteed anonymous.",
+    "Destination visibility and actual operator configuration unknown.",
+    "Mandatory preview, delivery/retry, configured UI and original UC-004/P3-07 acceptance remain open.",
+    "No full-suite claim for this patch."
+  ]
+}

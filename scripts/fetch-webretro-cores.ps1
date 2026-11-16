@@ -32,12 +32,25 @@ $CoresDir = if ($env:WEBRETR_CORES_DIR) { $env:WEBRETR_CORES_DIR } else {
     Join-Path $Root "oneirodex\static\vendor\webretro\cores"
 }
 $Cdn = "https://cdn.jsdelivr.net/gh/BinBashBanana/webretro@6.5/cores"
+$HashesFile = Join-Path $Root "scripts\webretro-cores.sha256"
 $DefaultCores = @(
     "a5200", "freechaf", "freeintv", "gearcoleco", "genesis_plus_gx", "handy",
     "mednafen_ngp", "mednafen_psx_hw", "mednafen_vb", "mednafen_wswan", "melonds",
     "mgba", "mupen64plus_next", "neocd", "nestopia", "o2em", "opera", "parallel_n64",
     "prosystem", "snes9x", "stella2014", "vecx", "virtualjaguar", "yabause"
 )
+
+function Get-ExpectedHash([string]$Name) {
+    foreach ($line in Get-Content -LiteralPath $HashesFile) {
+        if (
+            $line -match '^([0-9a-f]{64})  ([a-z0-9_]+_libretro\.(?:js|wasm))$' -and
+            $Matches[2] -ceq $Name
+        ) {
+            return $Matches[1]
+        }
+    }
+    return ""
+}
 
 if (-not $Defaults -and -not $FromDir) {
     Write-Error "Specify -Defaults and/or -FromDir <path>"
@@ -48,8 +61,30 @@ New-Item -ItemType Directory -Force -Path $CoresDir | Out-Null
 if ($Defaults) {
     foreach ($id in $DefaultCores) {
         Write-Host "Fetching $id ..."
-        Invoke-WebRequest -Uri "$Cdn/${id}_libretro.js" -OutFile (Join-Path $CoresDir "${id}_libretro.js")
-        Invoke-WebRequest -Uri "$Cdn/${id}_libretro.wasm" -OutFile (Join-Path $CoresDir "${id}_libretro.wasm")
+        $jsName = "${id}_libretro.js"
+        $wasmName = "${id}_libretro.wasm"
+        $jsExpected = Get-ExpectedHash $jsName
+        $wasmExpected = Get-ExpectedHash $wasmName
+        if ($jsExpected -notmatch '^[0-9a-f]{64}$' -or $wasmExpected -notmatch '^[0-9a-f]{64}$') {
+            throw "No valid SHA-256 lock found for $id"
+        }
+
+        $jsTemp = Join-Path $CoresDir ".${jsName}.$([guid]::NewGuid().ToString('N')).part"
+        $wasmTemp = Join-Path $CoresDir ".${wasmName}.$([guid]::NewGuid().ToString('N')).part"
+        try {
+            Invoke-WebRequest -Uri "$Cdn/$jsName" -OutFile $jsTemp
+            Invoke-WebRequest -Uri "$Cdn/$wasmName" -OutFile $wasmTemp
+            $jsActual = (Get-FileHash -LiteralPath $jsTemp -Algorithm SHA256).Hash.ToLowerInvariant()
+            $wasmActual = (Get-FileHash -LiteralPath $wasmTemp -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($jsActual -ne $jsExpected -or $wasmActual -ne $wasmExpected) {
+                throw "SHA-256 integrity check failed for $id; existing files were preserved"
+            }
+            Move-Item -LiteralPath $jsTemp -Destination (Join-Path $CoresDir $jsName) -Force
+            Move-Item -LiteralPath $wasmTemp -Destination (Join-Path $CoresDir $wasmName) -Force
+        }
+        finally {
+            Remove-Item -LiteralPath $jsTemp,$wasmTemp -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 

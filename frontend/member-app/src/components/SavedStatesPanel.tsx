@@ -29,6 +29,7 @@ export function SavedStatesPanel({
 }) {
   const [states, setStates] = useState<GameSave[]>([])
   const [enabled, setEnabled] = useState(true)
+  const [canDelete, setCanDelete] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
   const [busySlot, setBusySlot] = useState<string | null>(null)
@@ -45,6 +46,7 @@ export function SavedStatesPanel({
         if (!active) return
         setStates(data.states)
         setEnabled(data.enabled)
+        setCanDelete(data.canDelete)
         setLoading(false)
       })
       .catch((err: { name?: string }) => {
@@ -122,16 +124,18 @@ export function SavedStatesPanel({
                       Resume
                     </a>
                   ) : null}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={busySlot === row.slot_name}
-                    onClick={() => handleDelete(row.slot_name)}
-                    aria-label={`Delete ${label}`}
-                  >
-                    Delete
-                  </Button>
+                  {canDelete ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={busySlot === row.slot_name}
+                      onClick={() => handleDelete(row.slot_name)}
+                      aria-label={`Delete ${label}`}
+                    >
+                      Delete
+                    </Button>
+                  ) : null}
                 </span>
               </li>
             )

@@ -25,11 +25,15 @@ class UserFriendship(db.Model):
         nullable=False,
     )
 
-    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('friendships_sent', lazy='dynamic'))
+    user = db.relationship(
+        'User',
+        foreign_keys=[user_id],
+        backref=db.backref('friendships_sent', lazy='dynamic', passive_deletes='all'),
+    )
     friend = db.relationship(
         'User',
         foreign_keys=[friend_user_id],
-        backref=db.backref('friendships_received', lazy='dynamic'),
+        backref=db.backref('friendships_received', lazy='dynamic', passive_deletes='all'),
     )
 
     def to_dict(self):
@@ -207,7 +211,12 @@ class ChatMessage(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     channel_id = db.Column(db.Integer, db.ForeignKey('chat_channels.id', ondelete='CASCADE'), nullable=False, index=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
     body = db.Column(db.Text, nullable=False)
     parent_message_id = db.Column(
         db.Integer,

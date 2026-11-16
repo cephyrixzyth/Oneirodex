@@ -116,7 +116,7 @@ function paintToast(
 export function showToast(
   message: string,
   tone: ToastTone | string = 'info',
-  options: { count?: number } = {},
+  options: { count?: number; maxIndividual?: number } = {},
 ): DismissFn | undefined {
   if (typeof document === 'undefined' || !message) {
     return undefined
@@ -138,6 +138,7 @@ export function showToast(
       stackedCount,
       hasSummary: Boolean(summary),
       incomingCount,
+      maxIndividual: options.maxIndividual,
     })
     if (plan.action === 'increment-summary' && summary) {
       const next = stackCountOf(summary) + incomingCount

@@ -9,6 +9,9 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
+
+_AUTH_JSON_MAX_BYTES = 64 * 1024
 
 
 class AuthLoginData:
@@ -115,7 +118,7 @@ def create_auth_login_router(
                     allow_bearer=False,
                 )
                 if auth.user is not None:
-                    response = _ok({'next_url': _safe_next(request.query_params.get('next'))})
+                    response = _ok({'next_url': _safe_next(first_query_value(request.query_params, 'next'))})
             if response is None:
                 body, validation_error = await _validated_body(request)
                 if validation_error:
@@ -143,7 +146,7 @@ def create_auth_login_router(
                             trusted_forwarded_for(request, flask_app.config),
                         )
                         auth.session_data['_remember'] = 'set'
-                        response = _ok({'next_url': _safe_next(request.query_params.get('next'))})
+                        response = _ok({'next_url': _safe_next(first_query_value(request.query_params, 'next'))})
 
             if auth is not None and auth.remember_action:
                 _write_remember_cookie(response, auth.session_data, flask_app.config)
@@ -164,9 +167,16 @@ def mount_auth_login_routes(app: FastAPI, flask_app, **kwargs):
 
 async def _validated_body(request):
     from oneirodex.schemas.auth import LoginBody
+    from oneirodex.runtime_native.bounded_request_body import (
+        BODY_TOO_LARGE, read_bounded_body,
+    )
+
+    raw_body = await read_bounded_body(request, _AUTH_JSON_MAX_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return None, _error('Request body is too large.', 'payload_too_large', 413)
 
     try:
-        body = LoginBody.model_validate_json(await request.body())
+        body = LoginBody.model_validate_json(raw_body)
         return body.model_dump(), None
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors
@@ -218,12 +228,20 @@ def _write_remember_cookie(response, session_data, config):
         response.delete_cookie(name, path=path, domain=domain)
     elif action == 'set' and session_data.get('_user_id'):
         from oneirodex.runtime_native.auth_resolver import encode_remember_cookie
+        from oneirodex.utils.persistent_sessions import MAX_SESSION_AGE, ensure_login_identity
 
-        duration = config.get('REMEMBER_COOKIE_DURATION') or timedelta(days=365)
-        seconds = session_data.pop('_remember_seconds', None)
-        expires = datetime.now(timezone.utc) + (
-            timedelta(seconds=seconds) if seconds is not None else duration
+        session_data['_user_id'] = ensure_login_identity(
+            str(session_data['_user_id']),
+            testing=bool(config.get('TESTING')),
+            enabled=config.get('PERSISTENT_SESSIONS_ENABLED', not config.get('TESTING')),
         )
+
+        duration = config.get('REMEMBER_COOKIE_DURATION') or MAX_SESSION_AGE
+        seconds = session_data.pop('_remember_seconds', None)
+        if seconds is not None:
+            duration = timedelta(seconds=seconds)
+        duration = min(duration, MAX_SESSION_AGE)
+        expires = datetime.now(timezone.utc) + duration
         response.set_cookie(
             name, encode_remember_cookie(str(session_data['_user_id']), config['SECRET_KEY']),
             expires=expires, path=path, domain=domain,

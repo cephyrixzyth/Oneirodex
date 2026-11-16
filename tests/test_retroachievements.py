@@ -15,6 +15,11 @@ from uuid import uuid4
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _keyring(reusable_secret_keyring):
+    return reusable_secret_keyring
+
 from oneirodex.models import Game, Library, RetroAchievementsIndexEntry, User
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils import retroachievements as ra
@@ -75,6 +80,56 @@ def test_plain_systems_and_unsupported_ones():
 def test_every_supported_platform_is_a_library_platform():
     names = {p.name for p in LibraryPlatform}
     assert set(ra.RA_CONSOLE_IDS) <= names
+
+
+@pytest.mark.parametrize('extension,extractor_name', [('.7z', 'extract_rom_from_7z'), ('.rar', 'extract_rom_from_rar')])
+def test_archive_hash_extraction_uses_rom_memory_limit(tmp_path, monkeypatch, extension, extractor_name):
+    """7z/RAR hash reads must share the same cap as raw and ZIP ROMs."""
+    from oneirodex.utils import rom_archive
+
+    archive = tmp_path / f'game{extension}'
+    archive.write_bytes(b'fixture')
+    output = tmp_path / 'game.nes'
+    output.write_bytes(b'NESDATA')
+    captured = {}
+
+    monkeypatch.setattr(rom_archive, 'path_is_supported_archive', lambda _path: True)
+    monkeypatch.setattr(rom_archive, 'list_roms_in_archive', lambda _path: [('game.nes', 0)])
+    monkeypatch.setattr(rom_archive, 'choose_rom_member', lambda members, **_kwargs: members[0][0])
+
+    def extract(_archive, _tmp, *, budget, **_kwargs):
+        captured['limit'] = budget.limit
+        return str(output)
+
+    monkeypatch.setattr(rom_archive, extractor_name, extract)
+    assert ra._read_rom_bytes(archive, 'NES') == b'NESDATA'
+    assert captured['limit'] == ra.MAX_ROM_BYTES
+
+
+def test_archive_hash_refuses_oversized_extractor_output(tmp_path, monkeypatch):
+    """Do not read a tool's output into memory if it exceeded the declared cap."""
+    from pathlib import Path
+    from types import SimpleNamespace
+    from oneirodex.utils import rom_archive
+
+    archive = tmp_path / 'game.7z'
+    archive.write_bytes(b'fixture')
+    output = tmp_path / 'game.nes'
+
+    monkeypatch.setattr(rom_archive, 'path_is_supported_archive', lambda _path: True)
+    monkeypatch.setattr(rom_archive, 'list_roms_in_archive', lambda _path: [('game.nes', 0)])
+    monkeypatch.setattr(rom_archive, 'choose_rom_member', lambda members, **_kwargs: members[0][0])
+    monkeypatch.setattr(rom_archive, 'extract_rom_from_7z', lambda *_args, **_kwargs: str(output))
+
+    original_stat = Path.stat
+
+    def stat_with_oversized_output(path, *args, **kwargs):
+        if path == output:
+            return SimpleNamespace(st_size=ra.MAX_ROM_BYTES + 1)
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'stat', stat_with_oversized_output)
+    assert ra._read_rom_bytes(archive, 'NES') is None
 
 
 # --- fixtures -------------------------------------------------------------------

@@ -95,7 +95,9 @@ def _tokens_for(account: StoreAccount) -> dict:
     """Token JSON a sync would use; household (tagged) only when the member
     saved none, and a stored household copy only while it matches the
     operator's current XBOX_TOKENS_JSON."""
-    data = _parse_credential_json(account.credential)
+    from oneirodex.utils.store_credentials import read_store_credential
+
+    data = _parse_credential_json(read_store_credential(account))
     env_raw = get_xbox_api_token()
     if stale_household_copy(data, env_raw):
         data = {}
@@ -209,7 +211,9 @@ def sync_xbox_owned_games(user_id: int) -> dict[str, Any]:
             raise StoreSyncError('Xbox rejected the saved token (unofficial xbox-webapi client). Paste a fresh token JSON; CSV import still works.', rejected_reason(tokens.get('origin'))) from exc
         raise StoreSyncError(f'Xbox sync failed: {type(exc).__name__}', 'upstream_unavailable') from exc
     if refreshed:
-        account.credential = json.dumps(refreshed)
+        from oneirodex.utils.store_credentials import write_store_credential
+
+        write_store_credential(account, json.dumps(refreshed))
         xuid = str(refreshed.get('xuid') or '').strip()
         # Never label a member's link with the household account's XUID.
         if xuid and not account.external_account_id and tokens.get('origin') != 'household':

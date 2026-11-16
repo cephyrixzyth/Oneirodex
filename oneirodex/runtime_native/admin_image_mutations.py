@@ -1,18 +1,24 @@
 """Native FastAPI admin image queue mutation routes."""
 from __future__ import annotations
 
+from .form_compat import first_form_upload, first_form_value, form_uploads
+import logging
 import os
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Callable
+from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
 from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
+
+_DOWNLOAD_IMAGES_BODY_MAX_BYTES = 64 * 1024
+_DOWNLOAD_IMAGES_MAX_IDS = 500
 
 
 class ImageMutationsData:
@@ -27,17 +33,45 @@ class ImageMutationsData:
         image = db.session.get(Image, image_id)
         if image is None:
             return False
+        staged_path = None
+        image_path = None
         if image.is_downloaded and image.url:
             root = config.get('IMAGE_SAVE_PATH')
             if root:
-                base = Path(root).resolve()
-                path = (base / image.url).resolve()
-                if path == base or base not in path.parents:
+                from oneirodex.utils.image_paths import image_path_under_save_dir
+
+                image_path = image_path_under_save_dir(image.url, root)
+                if image_path is None:
                     raise ValueError('Stored image path is invalid')
-                if path.exists():
-                    path.unlink()
-        db.session.delete(image)
-        db.session.commit()
+                if image_path.exists():
+                    if not image_path.is_file():
+                        image_path.unlink()
+                    staged_path = image_path.with_name(
+                        f'.{image_path.name}.delete-{uuid4().hex}'
+                    )
+                    os.replace(image_path, staged_path)
+        try:
+            db.session.delete(image)
+            db.session.commit()
+        except Exception:
+            if staged_path is not None and staged_path.exists():
+                try:
+                    os.replace(staged_path, image_path)
+                except OSError:
+                    logging.getLogger(__name__).error(
+                        'Could not restore image after a failed database delete'
+                    )
+            raise
+        if staged_path is not None:
+            try:
+                staged_path.unlink()
+            except OSError:
+                # The database delete committed; report success and leave the
+                # unreferenced file for operator cleanup rather than imply the
+                # row is still present.
+                logging.getLogger(__name__).warning(
+                    'Image delete committed but staged file cleanup failed'
+                )
         return True
 
     def rollback(self):
@@ -47,72 +81,83 @@ class ImageMutationsData:
     def upload_single(self, app, game_uuid, filename, image_type, content):
         from datetime import datetime
         import uuid
-        from io import BytesIO
         from pathlib import Path
 
-        from PIL import Image as PILImage
         from sqlalchemy import select
-        from werkzeug.utils import secure_filename
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game, Image
         from oneirodex.utils.image_kinds import SINGULAR_IMAGE_KINDS
+        from oneirodex.utils.image_upload_limits import (
+            GAME_IMAGE_MAX_BYTES,
+            prepare_game_image,
+        )
 
         game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
         if game is None:
             return None
-        safe_name = secure_filename(filename)
-        extension = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
-        if extension not in {'jpg', 'jpeg', 'png', 'gif'}:
-            raise ValueError('Upload a JPG, PNG, or GIF.')
-        if len(content) > 3 * 1024 * 1024:
+        if len(content) > GAME_IMAGE_MAX_BYTES:
             raise ValueError('File size exceeds the 3MB limit')
-        try:
-            with PILImage.open(BytesIO(content)) as opened:
-                opened.verify()
-            with PILImage.open(BytesIO(content)) as opened:
-                if opened.width * opened.height > 60_000_000:
-                    raise OverflowError('Image pixel limit exceeded')
-                source_format = opened.format
-                image = opened.copy()
-        except OverflowError:
-            raise ValueError('That image is too big. The limit is 60 megapixels.') from None
-        except Exception as exc:
-            from PIL import Image as PIL
-            if isinstance(exc, PIL.DecompressionBombError):
-                raise ValueError('Invalid image data') from None
-            raise ValueError('Invalid image data') from None
-
-        if image_type == 'cover' and (image.width > 1200 or image.height > 1600):
-            image.thumbnail((1200, 1600), PILImage.LANCZOS)
+        image_content, extension = prepare_game_image(content, image_type)
         root = Path(app.config['IMAGE_SAVE_PATH']).resolve()
         root.mkdir(parents=True, exist_ok=True)
-        if image_type in SINGULAR_IMAGE_KINDS:
-            rows = db.session.execute(select(Image).filter_by(
-                game_uuid=game_uuid, image_type=image_type,
-            )).scalars().all()
-            for row in rows:
-                old_path = (root / row.url).resolve()
-                if root not in old_path.parents:
-                    raise ValueError('Stored image path is invalid')
-                if old_path.is_file():
-                    old_path.unlink()
-                db.session.delete(row)
-        if image_type in SINGULAR_IMAGE_KINDS:
-            name = f'{game_uuid}_{image_type}_{uuid.uuid4().hex[:8]}.{extension}'
-        else:
-            name = f'{game_uuid}_{datetime.now().strftime("%Y%m%d%H%M%S")}_{uuid.uuid4().hex[:8]}.{extension}'
-        target = (root / name).resolve()
-        if root not in target.parents:
-            raise ValueError('Image target is invalid')
-        if image.width > 1200 or image.height > 1600:
-            with target.open('wb') as output:
-                image.save(output, format=source_format or None)
-        else:
-            target.write_bytes(content)
-        row = Image(game_uuid=game_uuid, image_type=image_type, url=name)
-        db.session.add(row)
-        db.session.commit()
+        staged_old_files = []
+        target = None
+        try:
+            if image_type in SINGULAR_IMAGE_KINDS:
+                rows = db.session.execute(select(Image).filter_by(
+                    game_uuid=game_uuid, image_type=image_type,
+                )).scalars().all()
+                for row in rows:
+                    old_path = (root / row.url).resolve()
+                    if root not in old_path.parents:
+                        raise ValueError('Stored image path is invalid')
+                    if old_path.is_file():
+                        staged_path = old_path.with_name(
+                            f'.{old_path.name}.replace-{uuid.uuid4().hex}'
+                        )
+                        os.replace(old_path, staged_path)
+                        staged_old_files.append((staged_path, old_path))
+                    db.session.delete(row)
+                # Partial unique indexes require old singular rows to be
+                # deleted in the database before inserting their replacement.
+                db.session.flush()
+            if image_type in SINGULAR_IMAGE_KINDS:
+                name = f'{game_uuid}_{image_type}_{uuid.uuid4().hex[:8]}.{extension}'
+            else:
+                name = f'{game_uuid}_{datetime.now().strftime("%Y%m%d%H%M%S")}_{uuid.uuid4().hex[:8]}.{extension}'
+            target = (root / name).resolve()
+            if root not in target.parents:
+                raise ValueError('Image target is invalid')
+            target.write_bytes(image_content)
+            row = Image(game_uuid=game_uuid, image_type=image_type, url=name)
+            db.session.add(row)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            if target is not None and target.exists():
+                try:
+                    target.unlink()
+                except OSError:
+                    logging.getLogger(__name__).error(
+                        'Could not remove a new image after a failed upload'
+                    )
+            for staged_path, old_path in reversed(staged_old_files):
+                if staged_path.exists():
+                    try:
+                        os.replace(staged_path, old_path)
+                    except OSError:
+                        logging.getLogger(__name__).error(
+                            'Could not restore an image after a failed replacement'
+                        )
+            raise
+        for staged_path, _old_path in staged_old_files:
+            try:
+                staged_path.unlink()
+            except OSError:
+                logging.getLogger(__name__).warning(
+                    'Image replacement committed but staged file cleanup failed'
+                )
         return {
             'message': 'File uploaded successfully',
             'url': f'/static/library/images/{name}',
@@ -264,6 +309,7 @@ def create_admin_image_mutation_router(
     async def upload_single_image(game_uuid: str, request: Request):
         from .acquire_status import _login_redirect
         from oneirodex.utils.image_kinds import image_kinds_error_message, parse_image_kind
+        from oneirodex.utils.image_upload_limits import ImageWorkBusy
         from oneirodex.utils.scanning import is_scan_job_running
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
@@ -274,23 +320,46 @@ def create_admin_image_mutation_router(
                 login_manager=login_manager,
             )
             form = None
-            response = None
+            response = _admin_denial(flask_app, request, auth, login_manager)
             content_type = request.headers.get('content-type', '').lower()
-            if content_type.startswith('multipart/form-data'):
-                form = await request.form(max_files=1, max_fields=12, max_part_size=64 * 1024)
+            if response is None and content_type.startswith('multipart/form-data'):
+                from .bounded_multipart import (
+                    InvalidContentLength, RequestBodyTooLarge, bounded_multipart_form,
+                )
+
+                try:
+                    form = await bounded_multipart_form(
+                        request, max_body_bytes=3 * 1024 * 1024 + 64 * 1024,
+                        max_files=1, max_fields=12, max_part_size=64 * 1024,
+                    )
+                except RequestBodyTooLarge:
+                    payload, status = _error('Upload exceeds the 3MB limit.', 'payload_too_large')
+                    response = JSONResponse(payload, status_code=status)
+                except InvalidContentLength:
+                    payload, status = _error('Invalid request size.', 'bad_request')
+                    response = JSONResponse(payload, status_code=status)
+            if response is None:
                 csrf = csrf_error_response(
                     request, auth.session_data, flask_app.config,
-                    token=form.get('csrf_token'),
+                    token=first_form_value(form, 'csrf_token') if form is not None else None,
                 ) if auth.token is None else None
-            else:
-                csrf = csrf_error_response(request, auth.session_data, flask_app.config) \
-                    if auth.token is None else None
-            if csrf is not None:
-                response = csrf
-            else:
-                denied = _admin_denial(flask_app, request, auth, login_manager)
-                if denied is not None:
-                    response = denied
+                if csrf is not None:
+                    import json
+
+                    from werkzeug.exceptions import BadRequest
+
+                    try:
+                        error_payload = json.loads(csrf.body or b'{}')
+                    except (TypeError, ValueError, UnicodeDecodeError):
+                        error_payload = {}
+                    bad_request = BadRequest(
+                        description=error_payload.get('message') or 'The CSRF token is invalid.',
+                    ).get_response()
+                    response = Response(
+                        content=bad_request.get_data(),
+                        status_code=bad_request.status_code,
+                        media_type='text/html',
+                    )
             try:
                 if response is None and is_scan_job_running():
                     payload, status = _error(
@@ -302,14 +371,14 @@ def create_admin_image_mutation_router(
                     payload, status = _error('No file was included.', 'bad_request')
                     response = JSONResponse(payload, status_code=status)
                 if response is None:
-                    upload = form.get('file')
+                    upload = first_form_upload(form, 'file')
                     if upload is None or not getattr(upload, 'filename', ''):
                         payload, status = _error('No file was included.', 'bad_request')
                         response = JSONResponse(payload, status_code=status)
                     else:
                         try:
                             image_type = parse_image_kind(
-                                form.get('image_type') or form.get('kind'),
+                                first_form_value(form, 'image_type') or first_form_value(form, 'kind'),
                                 default='screenshot',
                             )
                         except ValueError:
@@ -322,7 +391,12 @@ def create_admin_image_mutation_router(
                                 response = JSONResponse(payload, status_code=status)
                             else:
                                 try:
-                                    result = data.upload_single(
+                                    from oneirodex.utils.image_upload_limits import (
+                                        run_image_work_in_threadpool,
+                                    )
+
+                                    result = await run_image_work_in_threadpool(
+                                        data.upload_single,
                                         flask_app, game_uuid, upload.filename or '', image_type, raw,
                                     )
                                     if result is None:
@@ -331,6 +405,9 @@ def create_admin_image_mutation_router(
                                     else:
                                         from oneirodex.utils.api_contract import api_ok_payload
                                         response = JSONResponse(api_ok_payload(result))
+                                except ImageWorkBusy as exc:
+                                    payload, status = _error(str(exc), 'unavailable')
+                                    response = JSONResponse(payload, status_code=status)
                                 except ValueError as exc:
                                     payload, status = _error(str(exc), 'bad_request')
                                     response = JSONResponse(payload, status_code=status)
@@ -411,35 +488,58 @@ def create_admin_image_mutation_router(
                 if csrf is not None:
                     response = csrf
                 else:
-                    try:
-                        body = await request.json()
-                    except Exception:
-                        body = {}
-                    body = body if isinstance(body, dict) else {}
-                    path_status = data.path_status(flask_app.config)
-                    if not path_status.get('writable') and (
-                        'image_ids' in body or body.get('retry_failed') or 'batch_size' in body
-                    ):
-                        message = path_status.get('error') or 'IMAGE_SAVE_PATH is not writable'
+                    import json
+                    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+                    raw_body = await read_bounded_body(request, _DOWNLOAD_IMAGES_BODY_MAX_BYTES)
+                    if raw_body is BODY_TOO_LARGE:
                         payload, status = api_error_payload(
-                            message, code='unavailable', image_save_path=path_status,
-                            downloaded=0, failed=0, errors=[{'error': message}],
+                            'Request body is too large.', code='payload_too_large',
                         )
                         response = JSONResponse(payload, status_code=status)
                     else:
                         try:
-                            result = data.download_images(flask_app, body, path_status)
-                            response = JSONResponse(api_ok_payload(result))
-                        except ValueError as exc:
-                            payload, status = api_error_payload(str(exc), code='bad_request')
-                            response = JSONResponse(payload, status_code=status)
+                            body = json.loads(raw_body or b'{}')
                         except Exception:
-                            data.rollback()
+                            body = {}
+                        body = body if isinstance(body, dict) else {}
+                        image_ids = body.get('image_ids')
+                        if isinstance(image_ids, list) and len(image_ids) > _DOWNLOAD_IMAGES_MAX_IDS:
                             payload, status = api_error_payload(
-                                'Could not download the images', code='internal',
-                                image_save_path=path_status,
+                                'Too many image IDs were supplied.', code='payload_too_large',
+                                limit=_DOWNLOAD_IMAGES_MAX_IDS,
                             )
                             response = JSONResponse(payload, status_code=status)
+                        elif 'image_ids' in body and not isinstance(image_ids, list):
+                            payload, status = api_error_payload(
+                                'image_ids must be a list.', code='bad_request',
+                            )
+                            response = JSONResponse(payload, status_code=status)
+                        else:
+                            path_status = data.path_status(flask_app.config)
+                            if not path_status.get('writable') and (
+                                'image_ids' in body or body.get('retry_failed') or 'batch_size' in body
+                            ):
+                                message = path_status.get('error') or 'IMAGE_SAVE_PATH is not writable'
+                                payload, status = api_error_payload(
+                                    message, code='unavailable', image_save_path=path_status,
+                                    downloaded=0, failed=0, errors=[{'error': message}],
+                                )
+                                response = JSONResponse(payload, status_code=status)
+                            else:
+                                try:
+                                    result = data.download_images(flask_app, body, path_status)
+                                    response = JSONResponse(api_ok_payload(result))
+                                except ValueError as exc:
+                                    payload, status = api_error_payload(str(exc), code='bad_request')
+                                    response = JSONResponse(payload, status_code=status)
+                                except Exception:
+                                    data.rollback()
+                                    payload, status = api_error_payload(
+                                        'Could not download the images', code='internal',
+                                        image_save_path=path_status,
+                                    )
+                                    response = JSONResponse(payload, status_code=status)
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
             from oneirodex.utils.security_headers import security_header_values
@@ -472,7 +572,7 @@ def create_admin_image_mutation_router(
                         form = await request.form(max_files=100, max_fields=12, max_part_size=16 * 1024 * 1024)
                         csrf = csrf_error_response(
                             request, auth.session_data, flask_app.config,
-                            token=form.get('csrf_token'),
+                            token=first_form_value(form, 'csrf_token'),
                         ) if auth.token is None else None
                     if csrf is not None:
                         response = csrf
@@ -480,13 +580,13 @@ def create_admin_image_mutation_router(
                         payload, status = _error('Choose one or more image files.', 'bad_request')
                         response = JSONResponse(payload, status_code=status)
                     else:
-                        files = form.getlist('files') or form.getlist('file')
+                        files = form_uploads(form, 'files') or form_uploads(form, 'file')
                         if not files:
                             payload, status = _error('Choose one or more image files.', 'bad_request')
                             response = JSONResponse(payload, status_code=status)
                         else:
-                            default_kind = form.get('image_type') or form.get('kind') or 'cover'
-                            explicit_uuid = (form.get('game_uuid') or '').strip()
+                            default_kind = first_form_value(form, 'image_type') or first_form_value(form, 'kind') or 'cover'
+                            explicit_uuid = (first_form_value(form, 'game_uuid') or '').strip()
                             result = data.upload_files(
                                 flask_app, files, default_kind, explicit_uuid,
                             )

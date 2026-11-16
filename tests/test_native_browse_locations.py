@@ -8,6 +8,8 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from flask import Flask
+
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
 from flask_login import LoginManager
 
 from oneirodex.runtime_native.browse_locations import create_browse_locations_router
@@ -78,11 +80,11 @@ def runtime():
     )
     user = SimpleNamespace(
         id=7, role='admin', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fp',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = LoginManager(flask_app)
     manager.login_view = 'login.login'
-    manager.user_loader(lambda identity: user if identity == '7:fp' else None)
+    manager.user_loader(lambda identity: user if identity.split(':', 1)[0] == str(7) else None)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     data = FakeBrowseLocationsData()
     app = FastAPI()
@@ -91,12 +93,12 @@ def runtime():
         find_user=lambda user_id: user if user_id == 7 else None,
         find_token=lambda _prefix: None,
         commit_token_touch=lambda _token: None,
-        load_user_id=lambda identity: user if identity == '7:fp' else None,
+        load_user_id=lambda identity: user if identity.split(':', 1)[0] == str(7) else None,
         login_manager=manager,
         data_access=data,
     ))
     cookie = dump_session_cookie(
-        {'_user_id': '7:fp', '_fresh': True}, 'browse-locations-secret',
+        {'_user_id': login_identity_for(7), '_fresh': True}, 'browse-locations-secret',
     )
     return app, flask_app, data, cookie
 

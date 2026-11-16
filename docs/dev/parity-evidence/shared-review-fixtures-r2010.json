@@ -1,0 +1,103 @@
+{
+  "review_id": "R2010",
+  "doc_status": "Reference",
+  "title": "Shared review identity, ACL, scope and safe-transport fixtures",
+  "classification": "P0-02 partial fixture implementation; no newly claimed production vulnerability",
+  "source_head_before_change": "c079aebf62a3511c02a8042859085159243ded98",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "tests/fixtures/household_safety.py": "27ca2aa9c5877f9573d178b754487b52db55145db08dfd94f57aebdeebc9062b",
+    "tests/test_safety_fixture_guards.py": "10ad5fcf446694aa8b9f46fe8cccf3aa20969282e9e8087abec40c5926f12b37",
+    "tests/test_household_safety_fixture.py": "7b8c4915ee9b078eb4914bca306ee2a29731b81a66d875bdba13ce533e47f953"
+  },
+  "checks": {
+    "fixture-guards-red": {
+      "exit_code": 1,
+      "status": "failed",
+      "seconds": 3.02,
+      "source_head_at_start": "c079aebf62a3511c02a8042859085159243ded98",
+      "disposable_database_removed": null,
+      "log_sha256": "045f31a7f632dc242b0ad9b7afcc60736a1283c4edca0867021c1eba90e82792"
+    },
+    "fixture-guards-green": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 3.72,
+      "source_head_at_start": "c079aebf62a3511c02a8042859085159243ded98",
+      "disposable_database_removed": null,
+      "log_sha256": "195bb565cae34b7f1add48c07fcea4c153b56562e686705764950e1343c6fce4"
+    },
+    "fixture-household-red": {
+      "exit_code": 1,
+      "status": "failed",
+      "seconds": 16.49,
+      "source_head_at_start": "c079aebf62a3511c02a8042859085159243ded98",
+      "disposable_database_removed": true,
+      "log_sha256": "32ce4210bc77ad7313c1f98e5104aadd1feb371b9428d94a5056f2313bc52c7c"
+    },
+    "fixture-household-green": {
+      "exit_code": 1,
+      "status": "failed",
+      "seconds": 18.56,
+      "source_head_at_start": "c079aebf62a3511c02a8042859085159243ded98",
+      "disposable_database_removed": true,
+      "log_sha256": "6260ac35a0eda0ba3a400c4c75166984453d64a65df4d9ea4b55b967048e4549"
+    },
+    "fixture-household-final": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 17.13,
+      "source_head_at_start": "c079aebf62a3511c02a8042859085159243ded98",
+      "disposable_database_removed": true,
+      "log_sha256": "0bbd06d804fe7173f1d00bc13ff423e9451330017bb31681d222b773ebf44f3d"
+    },
+    "fixture-combined-final": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 17.69,
+      "source_head_at_start": "c079aebf62a3511c02a8042859085159243ded98",
+      "disposable_database_removed": true,
+      "log_sha256": "e08cb9a4aba95ec0f4f48cb1e48ea168198b0c345e4ca6294949bb7ce96433fb"
+    },
+    "fixture-port-red": {
+      "exit_code": 1,
+      "status": "failed",
+      "seconds": 4.32,
+      "source_head_at_start": "c079aebf62a3511c02a8042859085159243ded98",
+      "disposable_database_removed": null,
+      "log_sha256": "e1f1ff448efa1c3cdb451af49342444ce85053bc5b2bbf6a98c932628302086b"
+    },
+    "fixture-combined-verified": {
+      "exit_code": 0,
+      "status": "passed",
+      "seconds": 17.85,
+      "source_head_at_start": "c079aebf62a3511c02a8042859085159243ded98",
+      "disposable_database_removed": true,
+      "log_sha256": "3c0364196a81d032d48681d55dd1b75653f5793d4c9f774c7ad2bd3bf5f86902"
+    }
+  },
+  "verification": {
+    "combined_cases_passed": 46,
+    "new_guard_cases": 17,
+    "new_real_database_filesystem_cases": 2,
+    "existing_database_guard_cases": 27,
+    "database": "Disposable PostgreSQL 17.6 upgraded to current Alembic head; removed after each run",
+    "settings": "Synthetic; root dotenv disabled; Python non-loopback network blocked by runner; opt-in fixture permits only loopback database TCP port and corresponding DNS",
+    "identities": "Real User/ApiToken/PersistentLoginSession rows; production issue/hash/validation and disable revocation",
+    "authority": "Real UserLibraryAccess plus native EmulatorMutationData, request authentication, save storage and generation persistence",
+    "filesystem": "Synthetic legacy collision bytes retained; child replacement keeps prior bytes; denial leaves row/file snapshot and unrelated sentinel unchanged"
+  },
+  "red_and_rework": [
+    "New guard/seed cases initially fail on missing helper; these are missing-fixture errors, not production exploit reproductions.",
+    "First seeded run correctly rejected disabled identity after ORM revocation; corrected the fixture assertion.",
+    "Windows asyncio creates a trusted internal socket pair; create its event loop before installing the database-only network boundary rather than permitting arbitrary loopback connections.",
+    "Two explicit invalid-port cases reproduced the helper accepting ports 0 and 65536; reject ports outside 1..65535. Both now pass in the combined selection."
+  ],
+  "limitations": [
+    "Only selected native emulator save operations are exercised; no route promoted to fully verified parity.",
+    "Root rolled-back test session proves these single-session paths, not concurrent PostgreSQL locking or process restart.",
+    "Temporary files remain pytest-managed; no broad deletion. Owned disposable test database cleanup is verified.",
+    "Filesystem write/rename/fsync/commit fault seams, delayed/stale provider fixtures and a browser controlled by a real old service worker remain open.",
+    "P0-01/P0-02 remain partial; no release/deployment readiness claim."
+  ]
+}

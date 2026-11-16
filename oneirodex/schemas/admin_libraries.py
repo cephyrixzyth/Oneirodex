@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from oneirodex.utils.image_upload_limits import LIBRARY_PREVIEW_MAX_BODY_BYTES
 
 
 class PreviewCroppedImageBody(BaseModel):
@@ -15,4 +17,4 @@ class PreviewCroppedImageBody(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
 
-    image_data: str
+    image_data: str = Field(max_length=LIBRARY_PREVIEW_MAX_BODY_BYTES)

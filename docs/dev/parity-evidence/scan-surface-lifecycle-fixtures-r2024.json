@@ -1,0 +1,80 @@
+{
+  "review_id": "R2024",
+  "doc_status": "Reference",
+  "title": "Scan API, SPA expectations and worker lifecycle fixture qualification",
+  "source_head_before_change": "47acdf72d63182a2efb0e9dfc80ac8a3b0b52536",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "tests/test_scan_jobs_failure_reason.py": "028d27e1f9a60efe8ea0550d64d4029d7446dd0eb20f7486474d8fb30c8b6187",
+    "tests/test_scan_queue.py": "14561aa9f85ad272f525bbf699b2ccaef91d27d1e0b3b5e3f0eec834f558297e",
+    "tests/test_scan_runtime_lifecycle.py": "54c0b81571e2dadd3c57d07ffd5c77101c46f40a4461dad97c7389b863c80290"
+  },
+  "checks": {
+    "remaining-after-r2023": {
+      "exit_code": 1,
+      "counts": {
+        "tests": 83,
+        "failures": 8,
+        "errors": 2,
+        "skipped": 0,
+        "passed": 73
+      },
+      "seconds": 147.55,
+      "database_removed": true,
+      "log_sha256": "9809dc8d8becfa44ba65bb079af2885910ff58cfd416cac978d002a664b41363"
+    },
+    "scan-surface-fixtures-green": {
+      "exit_code": 1,
+      "counts": {
+        "tests": 48,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 46
+      },
+      "seconds": 36.99,
+      "database_removed": true,
+      "log_sha256": "fb268147c51d4e9d2cdb64d8f009b2c3fee8faa21c8069cedf83b98c80f503ab"
+    },
+    "scan-surface-fixtures-final": {
+      "exit_code": 0,
+      "counts": {
+        "tests": 48,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 48
+      },
+      "seconds": 40.84,
+      "database_removed": true,
+      "log_sha256": "2e42e7bf72d55951f1c414339b19b69f4155a7148ff3f56a0c6455979ddf3f42"
+    },
+    "scan-surfaces-ui": {
+      "exit_code": 0,
+      "passed": 22,
+      "seconds": 15.12,
+      "log_sha256": "e1367a6b1b1211a685d2fb782d8292be3e36ab42a1a470b3b3187cd59bb577ac"
+    }
+  },
+  "classifications": {
+    "reason_progress": "Obsolete server-rendered-table assertions replaced by actual authenticated API field checks; existing React component tests verify visible reason/caption/progress. Legacy libraries tab intentionally resolves to SPA LibrariesPanel.",
+    "queue": "Synthetic paths lay outside configured roots and correctly received403. Tests now use real temporary allowed roots; original queue/force/options/mode assertions retained.",
+    "lifecycle": "Mocked helpers moved to function-local imports. Patch their actual module boundaries and configure temporary roots; real database scheduling/worker-count assertions retained."
+  },
+  "rework": "First focused run ended46 passed/2 failures, exposing adjacent force-refresh mocks; corrected and final48 passed. Test module docstring updated after verification; no behavior change.",
+  "environment": {
+    "platform": "Windows",
+    "python": "3.12.16",
+    "node": "22",
+    "database": "Owned loopback PostgreSQL17.6; removed after every terminal run",
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "limits": [
+    "Remaining diagnostic stopped at10 failures after83 cases, not a full-suite result.",
+    "Focused selections overlap; do not sum as unique suite totals.",
+    "Production code, CSS and authorization/root policy unchanged.",
+    "Fresh whole-suite/current CI and original platform/restore/accessibility/browser acceptance still open."
+  ],
+  "capture": "N/A: test-only changes; real VR captures fromR2022 remain private."
+}

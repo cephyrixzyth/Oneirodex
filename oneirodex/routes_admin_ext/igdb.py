@@ -41,10 +41,12 @@ def igdb_settings_api(body: JsonObjectBody | None = None):
         except ValueError as exc:
             return api_error(str(exc), code='bad_request')
         try:
+            from oneirodex.utils.secret_store import write_global_secret
+
             settings = settings or global_settings_row_or_create()
             settings.igdb_client_id = data['igdb_client_id']
             if data['igdb_client_secret']:
-                settings.igdb_client_secret = data['igdb_client_secret']
+                write_global_secret(settings, 'igdb_client_secret', data['igdb_client_secret'])
             db.session.commit()
         except Exception:
             db.session.rollback()
@@ -61,7 +63,8 @@ def igdb_settings_api(body: JsonObjectBody | None = None):
 @admin_required
 def igdb_test_api():
     settings = global_settings_row()
-    if not settings or not settings.igdb_client_id or not settings.igdb_client_secret:
+    from oneirodex.utils.secret_store import has_global_secret
+    if not settings or not settings.igdb_client_id or not has_global_secret(settings, 'igdb_client_secret'):
         return api_error('Save a client ID and secret before testing the connection', code='bad_request')
     try:
         result = make_igdb_api_request('https://api.igdb.com/v4/games', 'fields name; limit 1;')
@@ -88,11 +91,12 @@ def igdb_settings():
     if request.method == 'POST':
         data = request.json
         settings = global_settings_row_or_create()
+        from oneirodex.utils.secret_store import write_global_secret
         
         settings.igdb_client_id = data.get('igdb_client_id')
         # The page never shows the saved secret; blank keeps it.
         if data.get('igdb_client_secret'):
-            settings.igdb_client_secret = data.get('igdb_client_secret')
+            write_global_secret(settings, 'igdb_client_secret', data.get('igdb_client_secret'))
         
         try:
             db.session.commit()
@@ -115,7 +119,8 @@ def igdb_settings():
 def test_igdb():
     print("Testing IGDB connection...")
     settings = global_settings_row()
-    if not settings or not settings.igdb_client_id or not settings.igdb_client_secret:
+    from oneirodex.utils.secret_store import has_global_secret
+    if not settings or not settings.igdb_client_id or not has_global_secret(settings, 'igdb_client_secret'):
         return api_error('IGDB settings not configured', code='bad_request')
 
     try:

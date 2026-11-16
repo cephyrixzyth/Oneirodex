@@ -70,6 +70,8 @@
 
     "allow-is-process-running",
 
+    "allow-launch-reporting",
+
     "allow-get-flips-path",
 
     "allow-run-flips-apply",

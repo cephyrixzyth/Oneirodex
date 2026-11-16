@@ -32,7 +32,11 @@ def _document_response(path: Path, media_type: str, config):
         payload, status = api_error_payload('OpenAPI document not found', code='not_found')
         response = JSONResponse(payload, status_code=status)
     else:
-        response = FileResponse(path, media_type=media_type)
+        response = FileResponse(
+            path,
+            media_type=media_type,
+            headers={'Content-Disposition': f'inline; filename={path.name}'},
+        )
     from oneirodex.utils.security_headers import security_header_values
     for key, value in security_header_values(config).items():
         response.headers.setdefault(key, value)

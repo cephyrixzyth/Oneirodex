@@ -13,6 +13,8 @@ from .csrf_compat import csrf_error_response
 from .oidc_status import _from_flask_response, _set_session_cookie
 from .request_auth import request_auth_context
 
+_MAX_JSON_BODY_BYTES = 64 * 1024
+
 
 class SocialWriteData:
     def request(self, user, payload: dict):
@@ -41,7 +43,7 @@ class SocialWriteData:
         if not target:
             return opaque, 200, None
         if target.id == user.id:
-            return None, 400, ('bad_request', 'Cannot friend yourself')
+            return None, 400, (400, 'bad_request', 'Cannot friend yourself')
         existing = db.session.execute(select(UserFriendship).where(or_(
             (UserFriendship.user_id == user.id) & (UserFriendship.friend_user_id == target.id),
             (UserFriendship.user_id == target.id) & (UserFriendship.friend_user_id == user.id),
@@ -57,6 +59,7 @@ class SocialWriteData:
         )
         db.session.add(row)
         db.session.commit()
+        db.session.refresh(row)
         try:
             notify_friend_request(target, user)
         except Exception:
@@ -149,28 +152,40 @@ def create_social_writes_router(
             elif response is None:
                 response = _scope_error(auth, 'write:social')
                 if response is None:
-                    payload = _json_object(await request.body())
-                    result, status, refusal = data.request(auth.user, payload)
-                    response = _error(*refusal) if refusal else _success(result, status=status)
+                    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+                    raw_body = await read_bounded_body(request, _MAX_JSON_BODY_BYTES)
+                    if raw_body is BODY_TOO_LARGE:
+                        response = _error(413, 'payload_too_large', 'Request body is too large.')
+                    else:
+                        payload = _json_object(raw_body)
+                        if payload is None:
+                            response = _error(
+                                500, 'internal',
+                                'Something went wrong on our end. The error has been logged.',
+                            )
+                        else:
+                            result, status, refusal = data.request(auth.user, payload)
+                            response = _error(*refusal) if refusal else _success(result, status=status)
             _finish(response, flask_app, request, auth)
             return response
 
-    @router.post('/api/social/friends/{friendship_id}/reject')
+    @router.post('/api/social/friends/{friendship_id:int}/reject')
     def reject_friend(friendship_id: int, request: Request):
         return _mutate(request, friendship_id, 'reject', flask_app, find_user, find_token,
                        commit_token_touch, load_user_id, login_manager, data, database_scope)
 
-    @router.post('/api/social/friends/{friendship_id}/block')
+    @router.post('/api/social/friends/{friendship_id:int}/block')
     def block_friend(friendship_id: int, request: Request):
         return _mutate(request, friendship_id, 'block', flask_app, find_user, find_token,
                        commit_token_touch, load_user_id, login_manager, data, database_scope)
 
-    @router.post('/api/social/friends/{friendship_id}/accept')
+    @router.post('/api/social/friends/{friendship_id:int}/accept')
     def accept_friend(friendship_id: int, request: Request):
         return _mutate(request, friendship_id, 'accept', flask_app, find_user, find_token,
                        commit_token_touch, load_user_id, login_manager, data, database_scope)
 
-    @router.delete('/api/social/friends/{friendship_id}')
+    @router.delete('/api/social/friends/{friendship_id:int}')
     def remove_friend(friendship_id: int, request: Request):
         return _mutate(request, friendship_id, 'delete', flask_app, find_user, find_token,
                        commit_token_touch, load_user_id, login_manager, data, database_scope)
@@ -230,14 +245,19 @@ def _auth(request, flask_app, find_user, find_token, commit_token_touch, load_us
     )
 
 
-def _json_object(raw_body: bytes) -> dict:
+def _json_object(raw_body: bytes) -> dict | None:
     import json
 
     try:
         payload = json.loads(raw_body or b'{}')
     except (TypeError, ValueError):
         return {}
-    return payload if isinstance(payload, dict) else {}
+    if isinstance(payload, dict):
+        return payload
+    # Preserve the legacy endpoint's empty-input success and generic internal
+    # error for truthy non-object bodies without allowing its attribute error
+    # to escape the native route.
+    return None if payload else {}
 
 
 def _error(status, code, message):
@@ -260,4 +280,3 @@ def _finish(response, flask_app, request, auth):
 
     for key, value in security_header_values(flask_app.config).items():
         response.headers.setdefault(key, value)
-

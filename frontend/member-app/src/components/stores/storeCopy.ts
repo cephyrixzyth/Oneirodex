@@ -21,6 +21,8 @@ export type ConnectField = {
   required?: boolean
   /** A sign-in token: never echoed back, never prefilled. */
   secret?: boolean
+  /** A value stored alongside credentials and therefore unavailable without the key ring. */
+  requiresKeyring?: boolean
 }
 
 export const CONNECT_FIELDS: Record<string, ConnectField[]> = {
@@ -60,7 +62,12 @@ export const CONNECT_FIELDS: Record<string, ConnectField[]> = {
       kind: 'secret-multiline',
       secret: true,
     },
-    { name: 'device_serial', label: 'Device serial (if not inside the JSON)', kind: 'text' },
+    {
+      name: 'device_serial',
+      label: 'Device serial (if not inside the JSON)',
+      kind: 'text',
+      requiresKeyring: true,
+    },
   ],
   xbox: [
     { name: 'xuid', label: 'Gamertag, XUID or label (optional)', kind: 'text' },
@@ -124,6 +131,10 @@ const SETUP_TEXT: Record<string, string> = {
     'Live sync is an opt-in, unofficial integration that is off on this server. You can import a list instead.',
   client_package:
     'Live sync needs an optional server package your administrator has not installed. You can import a list instead.',
+  credential_keyring:
+    'The server cannot securely store member sign-ins yet. Ask your administrator to configure the credential key ring. You can import a list or save an account identifier without a token.',
+  credential_migration:
+    'The server needs to encrypt saved store sign-ins before syncing. Ask your administrator to run the credential migration; you can import a list in the meantime.',
 }
 
 /** One plain sentence describing where this provider stands. */

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+
 import { useLocation } from 'react-router-dom'
 import { Button, PageStatus } from '@oneirodex/ui'
 import { getJson } from '../api/adminApi'
 import { Page } from '../components/Page'
+import { AdminLink, isAdminAppPath } from '../components/AdminLink'
 import { INTEGRATION_SECTIONS } from '../components/navConfig'
 import { RailIcon } from '../components/railIcons'
 import { RetroAchievementsSettingsPanel } from '../components/RetroAchievementsSettingsPanel'
@@ -136,12 +138,12 @@ export function IntegrationsPage() {
                       : item.to.split('#')[1]
                   }
                 >
-                  <a className="od-settings-row" href={item.to}>
+                  <AdminLink className="od-settings-row" to={item.to}>
                     <span className="od-settings-row__title">
                       <RailIcon name={item.icon} size={16} /> {item.title}
                     </span>
                     <span className="od-settings-row__blurb">{item.blurb}</span>
-                  </a>
+                  </AdminLink>
                 </li>
               ))}
             </ul>
@@ -173,18 +175,25 @@ export function IntegrationsPage() {
             <div key={group.id} className="od-admin-inventory__group">
               <h3 className="od-admin-inventory__category">{group.label}</h3>
               <ul className="od-admin-inventory__list" aria-label={`${group.label} integrations`}>
-                {group.rows.map((row) => (
-                  <li key={row.id || row.name}>
-                    <a href={inventoryHref(row)}>{row.name}</a>
-                    {' — '}
-                    <span className="od-admin-inventory__status">
-                      {row.status || (row.configured ? 'configured' : 'available')}
-                    </span>
-                    {row.notes ? (
-                      <span className="od-admin-inventory__notes"> · {row.notes}</span>
-                    ) : null}
-                  </li>
-                ))}
+                {group.rows.map((row) => {
+                  const href = inventoryHref(row)
+                  return (
+                    <li key={row.id || row.name}>
+                      {isAdminAppPath(href) ? (
+                        <AdminLink to={href}>{row.name}</AdminLink>
+                      ) : (
+                        <a href={href}>{row.name}</a>
+                      )}
+                      {' — '}
+                      <span className="od-admin-inventory__status">
+                        {row.status || (row.configured ? 'configured' : 'available')}
+                      </span>
+                      {row.notes ? (
+                        <span className="od-admin-inventory__notes"> · {row.notes}</span>
+                      ) : null}
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           ))}

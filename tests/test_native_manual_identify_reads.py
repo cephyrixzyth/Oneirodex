@@ -6,13 +6,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
-from oneirodex.runtime_native.manual_identify_reads import create_manual_identify_read_router
+from oneirodex.platform import LibraryPlatform
+from oneirodex.runtime_native.manual_identify_reads import _platform_label, create_manual_identify_read_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 
 
 class FakeManualIdentify:
     def options(self):
-        return {'libraries': [{'uuid': 'lib-1'}], 'taxonomies': {'genres': []}, 'categories': [], 'statuses': []}
+        return {
+            'libraries': [{'uuid': 'lib-1', 'platform_name': 'PC Windows'}], 'taxonomies': {'genres': []},
+            'categories': [], 'statuses': [], 'file_extensions': ['.rom', '.nes'],
+        }
 
     def game_state(self, game_uuid):
         return {'game': {'uuid': game_uuid}, 'scan_running': False} if game_uuid == 'game-1' else None
@@ -45,8 +49,16 @@ def test_options_returns_shared_api_envelope_and_no_store():
 
     assert response.status_code == 200
     assert response.headers['cache-control'] == 'no-store'
-    assert response.json()['libraries'] == [{'uuid': 'lib-1'}]
+    assert response.json()['libraries'] == [
+        {'uuid': 'lib-1', 'platform_name': 'PC Windows'},
+    ]
+    assert response.json()['file_extensions'] == ['.rom', '.nes']
     assert response.json()['ok'] is True
+
+
+def test_platform_label_uses_the_human_readable_enum_value():
+    assert _platform_label(LibraryPlatform.PCWIN) == 'PC Windows'
+    assert _platform_label(None) == ''
 
 
 def test_game_state_returns_not_found_without_leaking_database_details():

@@ -1,6 +1,7 @@
 """Native mutation API for unmatched-folder triage and update placement."""
 from __future__ import annotations
 
+from .form_compat import first_form_value
 import os
 from contextlib import nullcontext
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 
 from .request_auth import request_auth_context
 
@@ -431,6 +432,12 @@ def create_scan_unmatched_mutations_router(
     async def amend_name(folder_id: str, request: Request):
         return await _run(request, **options, handler=_amend_name, folder_id=folder_id, privilege='librarian')
 
+    @router.options('/api/unmatched_folders/{folder_id:str}/name')
+    async def amend_name_options(folder_id: str):
+        # Flask generated this unauthenticated OPTIONS response automatically.
+        # Keep its empty HTML response and Allow header for compatibility.
+        return HTMLResponse('', status_code=200, headers={'Allow': 'OPTIONS, PATCH, POST'})
+
     @router.api_route('/api/unmatched_folders/batch/clear', methods=['POST'])
     async def batch_clear(request: Request):
         return await _run(request, **options, handler=_batch_clear, privilege='librarian')
@@ -466,30 +473,37 @@ def create_scan_unmatched_mutations_router(
             privilege='librarian', schema='PlaceUnmatchedUpdateBody',
         )
 
+    @router.options('/api/unmatched_folders/{folder_id:str}/place_update')
+    async def place_update_options(folder_id: str):
+        # Preserve Flask's generated unauthenticated OPTIONS header order.
+        return HTMLResponse('', status_code=200, headers={'Allow': 'POST, OPTIONS'})
+
     @router.post('/delete_all_unmatched_folders')
     async def clear_all_legacy(request: Request):
         return await _run(
             request, **options, handler=_compat_clear_all, privilege='admin',
+            csrf_html_for_form=True,
         )
 
     @router.post('/clear_unmatched_entry/{folder_id:str}')
     async def clear_one_legacy(folder_id: str, request: Request):
         return await _run(
             request, **options, handler=_compat_clear_one,
-            folder_id=folder_id, privilege='admin',
+            folder_id=folder_id, privilege='admin', csrf_html_for_form=True,
         )
 
     @router.post('/toggle_ignore_status/{folder_id:str}')
     async def toggle_ignore_legacy(folder_id: str, request: Request):
         return await _run(
             request, **options, handler=_compat_toggle_ignore,
-            folder_id=folder_id, privilege='admin',
+            folder_id=folder_id, privilege='admin', csrf_html_for_form=True,
         )
 
     @router.post('/update_unmatched_folder_status')
     async def update_status_legacy(request: Request):
         return await _run(
             request, **options, handler=_compat_update_status, privilege='admin',
+            csrf_html_for_form=True,
         )
 
     return router
@@ -503,7 +517,7 @@ def mount_scan_unmatched_mutation_routes(app: FastAPI, flask_app, **kwargs):
 async def _run(
     request, *, flask_app, data, find_user, find_token, commit_token_touch,
     load_user_id, login_manager, database_scope, handler, privilege,
-    folder_id=None, schema=None,
+    folder_id=None, schema=None, csrf_html_for_form=False,
 ):
     scope = database_scope(flask_app) if database_scope else nullcontext()
     with scope:
@@ -518,12 +532,20 @@ async def _run(
         if auth.token is None and request.headers.get('X-CSRFToken') is None:
             try:
                 form = await request.form(max_files=0, max_fields=20, max_part_size=16 * 1024)
-                csrf_token = form.get(str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
+                csrf_token = first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
             except Exception:
                 pass
         response = csrf_error_response(
             request, auth.session_data, flask_app.config, token=csrf_token,
         )
+        if response is not None and csrf_html_for_form:
+            content_type = (request.headers.get('content-type') or '').split(';', 1)[0].strip().lower()
+            if content_type != 'application/json' and not (
+                content_type.startswith('application/') and content_type.endswith('+json')
+            ):
+                from .csrf_compat import csrf_html_error_response
+
+                response = csrf_html_error_response(response)
         if response is None and auth.user is None:
             response = _login_redirect(flask_app, request, login_manager, auth)
         if response is None and privilege == 'admin':
@@ -578,7 +600,7 @@ def _compat_flash_redirect(auth, message, category):
     auth.session_data['_flashes'] = flashes
     from starlette.responses import RedirectResponse
 
-    return RedirectResponse('/scan_management', status_code=303)
+    return RedirectResponse('/scan_management?active_tab=unmatched', status_code=303)
 
 
 def _compat_is_ajax(request):
@@ -640,7 +662,7 @@ async def _compat_toggle_ignore(request, _app, data, auth, *, folder_id, **_):
 
 async def _compat_update_status(request, _app, data, auth, **_):
     form = await request.form(max_files=0, max_fields=20, max_part_size=16 * 1024)
-    folder_id = form.get('folder_id')
+    folder_id = first_form_value(form, 'folder_id')
     auth.session_data['active_tab'] = 'unmatched'
     try:
         status = data.toggle_status_compat(folder_id) if folder_id else None
@@ -878,7 +900,10 @@ async def _validated_body(request, schema_name):
 
 
 async def _json_dict(request):
-    if not request.headers.get('content-type', '').lower().startswith('application/json'):
+    content_type = request.headers.get('content-type', '').split(';', 1)[0].strip().lower()
+    if content_type != 'application/json' and not (
+        content_type.startswith('application/') and content_type.endswith('+json')
+    ):
         return {}
     try:
         payload = await request.json()

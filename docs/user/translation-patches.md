@@ -14,6 +14,7 @@ On Library, the **LANG** badge chip (in the left filter column) filters to title
 - Prefer patches from a source you trust (operator-curated URLs or your own files).
 - Oneirodex does **not** scrape third-party patch databases.
 - Operators may enable a **local YAML/JSON catalog** (`ENABLE_PATCH_CATALOG` + `PATCH_CATALOG_PATH`) to attach guide URLs — see [`data/patch_catalog.example.json`](../../data/patch_catalog.example.json).
+- Guide links must use an absolute HTTP or HTTPS URL to appear or be attached; other URL schemes are ignored.
 
 ## Live translate (no fan patch)
 
@@ -38,6 +39,8 @@ UPS patches: use Flips if supported for your build, or another UPS-capable tool.
 When the operator sets `ENABLE_ROM_PATCH_APPLY=true` and configures `FLIPS_PATH`, the desktop companion can queue **Apply with companion** for a cataloged patch. Until that flag is on, the UI shows this how-to instead.
 
 Companion stages files under `app_data/patches/{gameUuid}/` (ACL-safe like cheats) and invokes Flips CLI. Output is written beside the staged ROM — never overwrite the only copy of a base ROM without a backup.
+
+Companion patch downloads are limited to 256 MiB. Larger patches are rejected before staging; download them through the browser and apply them manually with Flips.
 
 ## Operator: catalog patches
 

@@ -101,24 +101,25 @@ def test_reset_clears_the_version_memo():
 # --------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
-    'path,expect_revalidate',
+    'path,expected_cache_control',
     [
-        ('/static/library/themes/default/css/base.css', True),
-        ('/static/library/themes/ember/js/od_sortable_table.js', True),
-        ('/static/dist/member-app/member-app.js', False),
-        ('/static/newstyle/oneirodex_mark.svg', False),
+        ('/static/library/themes/default/css/base.css', b'no-cache'),
+        ('/static/library/themes/ember/js/od_sortable_table.js', b'no-cache'),
+        ('/static/dist/member-app/member-app.js', b'no-cache'),
+        ('/static/dist/member-app/chunks/route-123.js', b'public, max-age=3600'),
+        ('/static/newstyle/oneirodex_mark.svg', b'public, max-age=3600'),
     ],
 )
-def test_only_mutable_theme_paths_skip_the_hour(path, expect_revalidate):
-    """Hashed SPA bundles and images are content-addressed or genuinely static
-    and keep the hour. Theme files are neither — they change under a fixed URL."""
-    source = (ROOT / 'asgi.py').read_text(encoding='utf-8')
-    assert "is_mutable_theme_asset = '/static/library/themes/' in" in source, (
-        'the theme-path branch is gone'
-    )
+def test_static_delivery_keeps_theme_and_entry_revalidation(tmp_path, path, expected_cache_control):
+    """Exercise actual headers: mutable themes/entries revalidate, chunks cache."""
+    from tests.test_asgi_static_guard import _serve_response
 
-    is_theme = '/static/library/themes/' in path
-    assert is_theme is expect_revalidate
+    payload = b'/* synthetic public asset */'
+    status, headers, body = _serve_response(
+        tmp_path, path, files={path.removeprefix('/static/'): payload},
+    )
+    assert status == 200 and body == payload
+    assert headers[b'cache-control'] == expected_cache_control
 
 
 # --------------------------------------------------------------------------
@@ -141,7 +142,7 @@ def test_only_preferences_writes_a_theme_preference():
     assert 'data-apply-url' not in page
     # …and still points somewhere, rather than silently dropping the affordance.
     assert 'Choose your theme in Preferences' in page
-    assert '/preferences#themes' in page
+    assert 'onClick={() => void openPreferencesModal()}' in page
 
 
 def test_the_orphaned_settings_panel_template_is_gone():
@@ -156,11 +157,3 @@ def test_preferences_still_offers_uploaded_themes():
     choices from installed themes, not from a preset list."""
     forms = (ROOT / 'oneirodex' / 'forms.py').read_text(encoding='utf-8')
     assert 'get_installed_themes()' in forms
-
-
-def test_the_static_handler_still_sets_cache_control():
-    """Guard against the branch being simplified away to no header at all."""
-    source = (ROOT / 'asgi.py').read_text(encoding='utf-8')
-    assert 'no-cache' in source
-    assert 'public, max-age=3600' in source
-    assert '(b"cache-control", cache_control)' in source

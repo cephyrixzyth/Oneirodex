@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
 
+from tests.fixtures.native_auth import login_identity_for, persistent_login_store
+
 from oneirodex.runtime_native.emulator_health import create_emulator_health_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
 
@@ -31,7 +33,7 @@ def _client(*, authenticated=True):
     flask_app.app_context = lambda: (_ for _ in ()).throw(AssertionError('unexpected Flask app context'))
     user = SimpleNamespace(
         id=4, user_id='member', role='user', state=True, is_active=True,
-        is_authenticated=True, session_fingerprint=lambda: 'fingerprint',
+        is_authenticated=True, session_fingerprint=lambda: '0123456789abcdef',
     )
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
@@ -52,7 +54,7 @@ def _client(*, authenticated=True):
     if authenticated:
         client.cookies.set(
             'session', dump_session_cookie(
-                {'_user_id': '4:fingerprint', '_fresh': True}, flask_app.config['SECRET_KEY'],
+                {'_user_id': login_identity_for(4), '_fresh': True}, flask_app.config['SECRET_KEY'],
             ),
         )
     return client

@@ -1,0 +1,105 @@
+{
+  "review_id": "R2025",
+  "doc_status": "Reference",
+  "title": "Scan, enrichment logging and SMTP boundary fixture qualification",
+  "source_head_before_change": "2c3579de787ae133b8dfc2ce42b620b0631e0ef0",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "tests/test_utils_scanning.py": "2d40e1a5ce80eceecb2e50a25ac4522a1f1d1a92b1d280181cc76ac3b90e603b",
+    "tests/test_utils_secondary_scrapers.py": "32da107c9faed800be1fb2a1dc0a203d7f32a042b21da318247c1d8933e5fcd1",
+    "tests/test_utils_smtp.py": "77f1224e7dd54d48c8c587b22643ae83d26598667e3a5c841a667ec1591bfbd4"
+  },
+  "checks": {
+    "remaining-after-r2024": {
+      "exit_code": 1,
+      "seconds": 433.87,
+      "database_removed": true,
+      "counts": {
+        "tests": 1966,
+        "failures": 10,
+        "errors": 0,
+        "skipped": 37,
+        "passed": 1919
+      },
+      "failed_cases": [
+        "tests.test_utils_scanning.TestTryAddGame::test_try_add_game_success",
+        "tests.test_utils_secondary_scrapers::test_enrich_game_with_steam_logs_vr_yes",
+        "tests.test_utils_secondary_scrapers::test_enrich_game_with_steam_logs_vr_no_when_skipped",
+        "tests.test_utils_secondary_scrapers::test_enrich_game_with_steam_still_enriches_an_already_vr_game",
+        "tests.test_utils_secondary_scrapers::test_enrich_game_with_steam_reports_rollback",
+        "tests.test_utils_smtp.TestSendEmail::test_send_email_no_settings",
+        "tests.test_utils_smtp.TestSendEmail::test_send_email_smtp_disabled",
+        "tests.test_utils_smtp.TestSendEmail::test_send_email_invalid_config",
+        "tests.test_utils_smtp.TestSendEmail::test_send_email_server_unreachable",
+        "tests.test_utils_smtp.TestSendEmail::test_send_email_success"
+      ],
+      "log_sha256": "94f05ffba2538e5d1c56b82b6e5f787c8bac1ceb8eed989c1f326740f631d053"
+    },
+    "utility-boundaries-final": {
+      "exit_code": 4,
+      "seconds": 8.55,
+      "database_removed": true,
+      "counts": {
+        "tests": 0,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 0
+      },
+      "failed_cases": [],
+      "log_sha256": "45f32ddcfeda853006a32ce5f546bab69db287587ddfcc5c44f2065fc52e2f32"
+    },
+    "utility-boundaries-qualified": {
+      "exit_code": 0,
+      "seconds": 50.04,
+      "database_removed": true,
+      "counts": {
+        "tests": 177,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 177
+      },
+      "failed_cases": [],
+      "log_sha256": "dcb0ac34d28fe92e2bbd9cb5d66662901b7137f4fb68f551cab88c3226fb3eaf"
+    }
+  },
+  "classifications": {
+    "scan_context": "Confirmed stale exact-call expectation: include app, allowed_bases and database_scope defaults forwarded to the real retrieval boundary. Existing result assertions retained.",
+    "enrichment_logging": "Confirmed stale capture target: production emits logger records, not stdout. Four checks now capture the named logger at INFO and retain VR, skip and rollback assertions.",
+    "smtp": "Confirmed stale function-local Flask flash import target. Patch flask.flash and SMTP transport constructors; preserve real message composition, STARTTLS, login/send, sanitized notices and error-return checks."
+  },
+  "rework": "First focused command named nonexistent adjacent test modules and collected no tests (exit4); owned database removed. Corrected selection passed177. No production change was needed.",
+  "environment": {
+    "platform": "Windows",
+    "python": "3.12.16",
+    "database": "Owned loopback PostgreSQL17.6; removed after each terminal run",
+    "dotenv_disabled": true,
+    "external_python_connections_blocked": true
+  },
+  "limits": [
+    "Remainder diagnostic selected2428 cases and stopped after1966 at10 failures:1919 passed/37 skipped. It is not a fresh full-suite result.",
+    "Focused177 overlaps prior diagnostics; counts must not be summed as unique coverage.",
+    "No production code, security policy, UI, dependency or CI exclusion changed.",
+    "Current-source core CI, final fresh unrestricted suite and original runtime/platform/restore/accessibility acceptance remain open."
+  ],
+  "capture": "N/A: test-only changes.",
+  "gates": {
+    "r1972": {
+      "exit_code": 0,
+      "log_sha256": "d206149190f73b00074cad13af0ca3024dbc0e18b3865f68f59a6c7dbd469c25"
+    },
+    "coordination": {
+      "exit_code": 0,
+      "log_sha256": "9dd4633df30b8b59f93bcfdca5c8a741c492045dc11d103c3919e53494072463"
+    },
+    "undefined": {
+      "exit_code": 0,
+      "log_sha256": "2b77b24211cb9f496f4b52983d22d82424ea6abf6c1385515336a65ebf433db1"
+    },
+    "envelope": {
+      "exit_code": 0,
+      "log_sha256": "5f994b4e8bcf592347f04fb31c5a66c333466492674005d87ad6bb0cd9241549"
+    }
+  }
+}

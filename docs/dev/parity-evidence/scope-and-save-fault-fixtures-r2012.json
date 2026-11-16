@@ -1,0 +1,103 @@
+{
+  "review_id": "R2012",
+  "doc_status": "Reference",
+  "title": "Real scope contexts and native save failure fixtures",
+  "classification": {
+    "scope_fixture": "Confirmed obsolete module-global patches repaired; production scope rules unchanged",
+    "save_failure_paths": "Already implemented behavior verified for five selected fault seams",
+    "phase": "P0-01/P0-02 remain partial"
+  },
+  "source_head_before_change": "020735b09f180b5ccc2b8af3957e884637c14e89",
+  "uncommitted_changes_at_capture": true,
+  "source_sha256": {
+    "tests/test_auth_hardening.py": "fc621ef512e6e1516100f5e8bed28e0c71d2a414f1144cf0a87d1a9295f25222",
+    "tests/fixtures/household_safety.py": "678755bd3b96d266280d48ad4f62f8b1914b257531ecc34d5bcbfaf067baac25",
+    "tests/test_household_safety_fixture.py": "3b05310d425d2d48847cc7db45f10ddd231bfe0e04e9bc84b239e9f09e3de75f",
+    "tests/fixtures/faults.py": "43e2da151eeda9540e06a58d6b3d7469593808cb9fe43178fd6c28bb3e6f7b35",
+    "tests/test_native_save_fault_fixtures.py": "8d46e798978a3b2a0b8d520a14b1c7eb00e410c51f43454423ae617c4a3bec7c"
+  },
+  "checks": {
+    "remaining-after-dispatch-repair": {
+      "status": "failed",
+      "exit_code": 1,
+      "seconds": 93.39,
+      "source_head_at_start": "020735b09f180b5ccc2b8af3957e884637c14e89",
+      "disposable_database_removed": true,
+      "log_sha256": "31ea48f0d0ca40169abcadb8eec07c949f08969d961ecfc747d0a4ed1a061174"
+    },
+    "auth-hardening-green": {
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 38.12,
+      "source_head_at_start": "020735b09f180b5ccc2b8af3957e884637c14e89",
+      "disposable_database_removed": true,
+      "log_sha256": "a6836b58761c18387ae081d8c60391067a4cadf0f45d142cbc499e586284ae03"
+    },
+    "auth-hardening-verified": {
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 37.12,
+      "source_head_at_start": "020735b09f180b5ccc2b8af3957e884637c14e89",
+      "disposable_database_removed": true,
+      "log_sha256": "26644edc0a354e175bc1abc144d90d6165336944c25d3be04e0b6376e26ebaf4"
+    },
+    "save-fault-fixtures-red": {
+      "status": "failed",
+      "exit_code": 1,
+      "seconds": 18.99,
+      "source_head_at_start": "020735b09f180b5ccc2b8af3957e884637c14e89",
+      "disposable_database_removed": true,
+      "log_sha256": "4478db65795b5e79cf39be0a5631054cab4bba9902b151de96b851833ea8f409"
+    },
+    "save-fault-fixtures-green": {
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 22.04,
+      "source_head_at_start": "020735b09f180b5ccc2b8af3957e884637c14e89",
+      "disposable_database_removed": true,
+      "log_sha256": "dd4c9ce4d3df7ffe12aabc238887b24f0a5e65132ea15baeb3b0d5675bc092bb"
+    },
+    "safety-fixtures-qualified": {
+      "status": "passed",
+      "exit_code": 0,
+      "seconds": 43.39,
+      "source_head_at_start": "020735b09f180b5ccc2b8af3957e884637c14e89",
+      "disposable_database_removed": true,
+      "log_sha256": "fda79c44aeef95c3a32b3de38276b33e4a69039f3bc7be20f086e55f3fa1c08b"
+    }
+  },
+  "verification": {
+    "combined_cases_passed": 121,
+    "prior_scope_module_passed": 51,
+    "prior_scope_and_native_adjacent_passed": 72,
+    "native_fault_cases_passed": 5,
+    "database": "Disposable PostgreSQL 17.6; schema upgraded; owned databases removed",
+    "scope_policy": "Real Flask request-local g and Flask-Login proxies with transient User/ApiToken models for scope units; database-backed token/household checks are separate in the same run",
+    "faults": [
+      "write ENOSPC",
+      "file fsync ENOSPC",
+      "atomic rename ENOSPC",
+      "directory sync ENOSPC",
+      "SQLAlchemy commit OperationalError before save commit"
+    ],
+    "native_paths": "Real authentication and ACL/storage/generation adapters; real bearer last-used commit is preserved while the save commit alone fails",
+    "outcomes": [
+      "Each selected failure returns sanitized internal 500 without the canary or a storage path.",
+      "Committed pointer/revision/bytes and prior-generation count survive; retry commits a new revision while retaining prior bytes.",
+      "Only published directory-sync/commit failure blobs remain unreferenced; the report-only auditor detects them.",
+      "Synthetic legacy-collision bytes and unrelated sentinel remain unchanged."
+    ],
+    "fixture_refactor": "Import household and household_loop from the helper module; no cross-test-module fixture dependency"
+  },
+  "red_notes": [
+    "Remaining-module diagnostic stopped with 371 passed, 1 skipped, 1 warning and 5 setup errors from patching removed api_tokens.g.",
+    "New fault-seam cases first failed on the missing helper; this establishes missing fixture implementation, not a production exploit."
+  ],
+  "limitations": [
+    "Faults are injected; actual full disk, host crash, process restart and native filesystem/platform behavior remain unqualified.",
+    "Commit fault occurs before the commit; ambiguous loss after a real server commit remains a separate acceptance path.",
+    "No concurrent PostgreSQL locking proof or final unrestricted suite/coverage pass.",
+    "Delayed/stale provider and controlling old-worker browser fixtures remain open.",
+    "No route is promoted to fully behavior-verified parity."
+  ]
+}

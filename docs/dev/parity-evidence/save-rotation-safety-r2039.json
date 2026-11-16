@@ -1,0 +1,209 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2039",
+  "findings": [
+    "UC-003",
+    "BE-001"
+  ],
+  "classification": "Confirmed migration reference loss and stale snapshots; bounded correction verified. Original finding/program acceptance remains partial.",
+  "source_base": "01d3f463d69823c63c965ed0f5b657ba01d967f3",
+  "source_identity": "Fingerprint-qualified candidate committed with this report; Git may normalize line endings. Synthetic Windows PostgreSQL process checks and separately bounded Linux publication proof.",
+  "candidate_sha256": {
+    "scripts/migrate_emulator_save_keys.py": "9b5493157e7c992e8cedbfc7062e46a405e12a1196d05f810e3493fb3d1588ab",
+    "tests/test_save_rotation_safety.py": "4603189c98c09e9ddbbc01974ec7e1d98f5d897efd8708830a00ad088ccfc58c",
+    "oneirodex/utils/emulator_saves.py": "73780adc14f7c9650a31f87b0c3f72af39e5a7131a67d87b0f50fb3fbf5dbc1f",
+    "oneirodex/utils/save_crypto.py": "f71df5a7894319b0d30f7d27cdbac72c60c8e8d40454406efc4dce052d91013f"
+  },
+  "red": {
+    "focused_failed": 8,
+    "focused_controls_passed": 6,
+    "runner_seconds": 29.72,
+    "shared_legacy_path": {
+      "seconds": 17.26,
+      "visited": 2,
+      "rotated": 1,
+      "failures": 1
+    },
+    "production_writer_overlap": {
+      "seconds": 29.44,
+      "migration_reported_success": true,
+      "new_history_file_missing": true,
+      "latest_head_remained_readable": true
+    },
+    "limits": "Application readability was lost for live metadata references. This does not prove irretrievable plaintext destruction. The original shared-path reproduction stopped all writers.",
+    "initial_proof_archives_sha256": [
+      "33da827e4319e851713cc2ca8d91ea5b1e0dcf793258da8d310666769df1f696",
+      "ae020bbf7491adde7b211a90e78979993497a7a00d23e0e7a8eb83b5435b98b1"
+    ]
+  },
+  "correction": [
+    "Applied migration joins the existing per-owner User row lock and refreshes row/parent metadata before reading or publishing.",
+    "Initial normalized alias inventory plus fresh post-commit current/history SQL references protect shared physical files; uncertain references retain ciphertext.",
+    "Apply-only transaction cleanup releases locks on every exit. Report-only remains read-only. Existing immutable stage/commit ordering, contexts, revisions and retained history remain."
+  ],
+  "focused": {
+    "passed": 14,
+    "pytest_seconds": 22.78,
+    "runner_seconds": 31.86,
+    "db_absence_verified": true,
+    "cases": [
+      "GTENC1/2 shared slots and dot-dot aliases",
+      "GTENC3 current/history shared files and aliases",
+      "stale Session after actual committed writer",
+      "real PostgreSQL owner-lock wait",
+      "read-only report",
+      "active/unencrypted/missing/stage-failure lock release",
+      "actual commit followed by acknowledgement loss"
+    ]
+  },
+  "adjacent": {
+    "passed": 118,
+    "skipped": 2,
+    "warnings": 1,
+    "warning": "Existing SQLAlchemy DISTINCT ON deprecation",
+    "pytest_seconds": 45.65,
+    "runner_seconds": 54.83,
+    "db_absence_verified": true,
+    "scope": "Save keyring, paths, state, concurrency, quota, native fault fixtures, standalone backup and move."
+  },
+  "actual_process_probes": {
+    "shared": {
+      "passed": true,
+      "seconds": 19.24,
+      "source_fixed": true,
+      "database_removed": true,
+      "database_absence_verified": true,
+      "all_original_metadata_entries_readable_with_same_plaintext": true,
+      "all_entries_active_key": true,
+      "initial_migration_exit_code": 0
+    },
+    "concurrent": {
+      "passed": true,
+      "seconds": 25.57,
+      "source_fixed": true,
+      "database_removed": true,
+      "database_absence_verified": true,
+      "all_original_metadata_entries_readable_with_same_plaintext": true,
+      "all_entries_active_key": true,
+      "initial_migration_exit_code": 0,
+      "latest_and_retained_history_intact": true,
+      "settled_rerun": {
+        "migration": {
+          "visited": 3,
+          "already_active": 2,
+          "rotated": 1,
+          "skipped": 0,
+          "failures": 0
+        }
+      }
+    },
+    "before_commit": {
+      "passed": true,
+      "seconds": 21.86,
+      "source_fixed": true,
+      "database_removed": true,
+      "database_absence_verified": true,
+      "all_original_metadata_entries_readable_with_same_plaintext": true,
+      "all_entries_active_key": true,
+      "initial_migration_exit_code": 83
+    },
+    "after_commit": {
+      "passed": true,
+      "seconds": 21.85,
+      "source_fixed": true,
+      "database_removed": true,
+      "database_absence_verified": true,
+      "all_original_metadata_entries_readable_with_same_plaintext": true,
+      "all_entries_active_key": true,
+      "initial_migration_exit_code": 84
+    }
+  },
+  "linux_posix": {
+    "passed": true,
+    "runner_seconds": 1.88,
+    "uid": 10001,
+    "network": "none",
+    "keyring_and_staged_file_mode": "0600",
+    "unsafe_parent_and_symlink_rejections": true,
+    "reference_alias_normalization": true,
+    "old_and_new_plaintext_preserved": true,
+    "container_absence_verified": true,
+    "image": "sha256:f63116797656d9cb79218410bf22dcabb497e37384b932eb8b16617aa47e7709",
+    "current_modules_readonly_overlaid": true,
+    "fresh_release_image": false,
+    "scope": "POSIX key/file publication only, no Linux database/restart or operator-media acceptance."
+  },
+  "harness_rework": [
+    "First GREEN wrapper lacked its nested output directory; neither attempted probe reached database creation. Corrected wrapper retains RED output separately.",
+    "First POSIX harness used an invalid synthetic generation ID and was rejected; corrected input passes. Failed receipt/source retained."
+  ],
+  "ratchets": {
+    "results": [
+      {
+        "check": "eslint",
+        "exit_code": 0
+      },
+      {
+        "check": "format",
+        "exit_code": 0
+      },
+      {
+        "check": "css-token-lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "any_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "component_size_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "od_btn_lint.mjs",
+        "exit_code": 0
+      },
+      {
+        "check": "api_envelope_lint.py",
+        "exit_code": 0
+      },
+      {
+        "check": "check_undefined_names.py",
+        "exit_code": 0
+      },
+      {
+        "check": "print_lint.py",
+        "exit_code": 0
+      },
+      {
+        "check": "get_json_lint.py",
+        "exit_code": 0
+      },
+      {
+        "check": "R1972-validator",
+        "exit_code": 0
+      },
+      {
+        "check": "diff-check",
+        "exit_code": 0
+      }
+    ],
+    "seconds": 52.65,
+    "passed": true,
+    "dotenv_disabled": true
+  },
+  "private_archive": {
+    "filename": "save-rotation-safety-r2039.zip",
+    "files": 83,
+    "bytes": 76992,
+    "sha256": "0a16c431da41284d21861d81dc42009578fad390c6892953c83b092a87be3646"
+  },
+  "review": "Separate author boundary/regression pass retained; weaker than the still-required fresh whole-original-program review.",
+  "limits": [
+    "Stop save writers for operator migration. Defensive overlap with the known writer is not fully online migration; arbitrary imports, manual metadata edits and filesystem substitution are unqualified.",
+    "New rows created during unexpected overlap may require the checked settled rerun. No history/orphan GC introduced.",
+    "Synthetic keys/files only; actual protected operator backups, credential conversion, NAS budgets, disk exhaustion and installed platform journeys remain open.",
+    "Current-only safety evidence does not promote legacy route parity or the pinned R1972 matrix. No new full Python candidate-suite, merge, release or deployment claim.",
+    "Selections and durations overlap; no additive coverage, inference-time or model-winner claim."
+  ]
+}

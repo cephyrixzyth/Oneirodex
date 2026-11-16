@@ -11,6 +11,11 @@ from starlette.responses import JSONResponse, Response
 from .oidc_status import _login_redirect, _set_session_cookie
 from .request_auth import request_auth_context
 
+# Manual shelves persist at most 60 distinct game UUIDs. Allow some duplicate
+# cleanup for older/client payloads, but bound both parsing and normalization.
+_SHELF_JSON_BODY_MAX_BYTES = 64 * 1024
+_SHELF_GAME_UUIDS_MAX_ITEMS = 512
+
 
 class AdminDiscoverySectionsData:
     """Database adapter for shelf CRUD, schedule, pin, and visibility actions."""
@@ -328,19 +333,25 @@ async def _dispatch_action(request, data, user, section_id):
     if path == '/admin/api/discovery_sections' and method in ('GET', 'HEAD'):
         return _ok(data.state())
     if path == '/admin/api/discovery_sections' and method == 'POST':
-        body = await _model_body(request, DiscoveryShelfBody)
+        body = await _shelf_model_body(request, DiscoveryShelfBody)
         if isinstance(body, Response):
             return body
         payload, error = data.create(body, user.id)
         return _result(payload, error, create=True)
     if section_id is not None and method == 'PUT' and path.endswith('/schedule'):
-        payload, error = data.schedule(section_id, await _json_body(request), user.id)
+        body = await _json_body(request)
+        if isinstance(body, Response):
+            return body
+        payload, error = data.schedule(section_id, body, user.id)
         return _result(payload, error)
     if section_id is not None and method == 'PUT' and path.endswith('/pin'):
-        payload, error = data.pin(section_id, await _json_body(request), user.id)
+        body = await _json_body(request)
+        if isinstance(body, Response):
+            return body
+        payload, error = data.pin(section_id, body, user.id)
         return _result(payload, error)
     if section_id is not None and method == 'PUT':
-        body = await _model_body(request, DiscoveryShelfBody)
+        body = await _shelf_model_body(request, DiscoveryShelfBody)
         if isinstance(body, Response):
             return body
         payload, error = data.update(section_id, body, user.id)
@@ -363,24 +374,90 @@ async def _dispatch_action(request, data, user, section_id):
     return Response(status_code=405)
 
 
-async def _model_body(request, model_type):
-    from pydantic import ValidationError
+async def _shelf_model_body(request, model_type):
+    """Validate a shelf mutation body after bounding its raw JSON input."""
+    import json
 
-    payload = await _json_body(request)
+    from pydantic import ValidationError
+    from oneirodex.utils.validation import format_validation_errors
+
+    raw_body = await _bounded_shelf_body(request)
+    if isinstance(raw_body, Response):
+        return raw_body
+
+    try:
+        payload = json.loads(raw_body or b'{}')
+    except (TypeError, ValueError, UnicodeDecodeError, RecursionError):
+        payload = {}
     if payload is None:
-        return _error('Invalid request body', 'bad_request')
+        payload = {}
+
+    # game_uuids is Any to retain the existing textarea-string and JSON-array
+    # contracts. Reject oversized arrays before Pydantic or the normalizer can
+    # traverse a duplicate-heavy list.
+    if isinstance(payload, dict):
+        raw_uuids = payload.get('game_uuids')
+        if isinstance(raw_uuids, list) and len(raw_uuids) > _SHELF_GAME_UUIDS_MAX_ITEMS:
+            return _error(
+                'Too many game UUID entries.', 'payload_too_large', 413,
+                limit=_SHELF_GAME_UUIDS_MAX_ITEMS,
+            )
+
     try:
         return model_type.model_validate(payload)
-    except ValidationError:
-        return _error('Invalid request body', 'bad_request')
+    except ValidationError as exc:
+        return _error(
+            'Invalid request.', 'unprocessable', 422,
+            detail=format_validation_errors(exc),
+        )
+
+
+async def _bounded_shelf_body(request):
+    """Read at most the shelf JSON byte limit, including chunked requests."""
+    from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+
+    body = await read_bounded_body(request, _SHELF_JSON_BODY_MAX_BYTES)
+    if body is BODY_TOO_LARGE:
+        return _error('Request body is too large.', 'payload_too_large', 413)
+    return body
+
+
+async def _model_body(request, model_type):
+    import json
+
+    from pydantic import ValidationError
+    from oneirodex.utils.validation import format_validation_errors
+
+    # Match the legacy @validate_body contract: missing, malformed, or JSON
+    # null bodies validate as an empty object, while non-object JSON values
+    # retain their root-level model error.
+    raw_body = await _bounded_shelf_body(request)
+    if isinstance(raw_body, Response):
+        return raw_body
+    try:
+        payload = json.loads(raw_body or b'{}')
+    except (TypeError, ValueError, UnicodeDecodeError, RecursionError):
+        payload = {}
+    if payload is None:
+        payload = {}
+    try:
+        return model_type.model_validate(payload)
+    except ValidationError as exc:
+        return _error(
+            'Invalid request.', 'unprocessable', 422,
+            detail=format_validation_errors(exc),
+        )
 
 
 async def _json_body(request):
     import json
 
+    raw_body = await _bounded_shelf_body(request)
+    if isinstance(raw_body, Response):
+        return raw_body
     try:
-        payload = json.loads(await request.body() or b'{}')
-    except (TypeError, ValueError, UnicodeDecodeError):
+        payload = json.loads(raw_body or b'{}')
+    except (TypeError, ValueError, UnicodeDecodeError, RecursionError):
         return None
     return payload if isinstance(payload, dict) else None
 
@@ -396,9 +473,9 @@ def _ok(payload, *, status=200):
     return JSONResponse(api_ok_payload(payload), status_code=status)
 
 
-def _error(message, code, status=None):
+def _error(message, code, status=None, **fields):
     from oneirodex.utils.api_contract import api_error_payload
-    payload, status = api_error_payload(message, code=code, status=status)
+    payload, status = api_error_payload(message, code=code, status=status, **fields)
     return JSONResponse(payload, status_code=status)
 
 

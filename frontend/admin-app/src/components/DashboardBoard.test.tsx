@@ -1,11 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { DashboardBoard } from './DashboardBoard'
 import { defaultDashboardLayout } from './dashboardLayout'
 
 const widgets = {
-  status: <p>health</p>,
+  status: (
+    <section className="od-ops-status">
+      <p>health</p>
+    </section>
+  ),
   'm-games': <p>games tile</p>,
   'm-cpu': <p>cpu tile</p>,
 }
@@ -103,5 +107,28 @@ describe('DashboardBoard controls', () => {
     const before = item.style.gridColumn
     fireEvent.keyDown(item, { key: 'ArrowRight', shiftKey: true })
     expect(item.style.gridColumn).not.toBe(before)
+  })
+
+  test('auto-fit observes intrinsic content as well as the fixed grid host', () => {
+    const observed: Element[] = []
+    class TestResizeObserver implements ResizeObserver {
+      constructor(_callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        observed.push(target)
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', TestResizeObserver)
+
+    try {
+      board()
+      const host = document.querySelector('[data-widget="status"] > .od-dash__body')
+      expect(host).not.toBeNull()
+      expect(observed).toContain(host)
+      expect(observed).toContain(host?.firstElementChild)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

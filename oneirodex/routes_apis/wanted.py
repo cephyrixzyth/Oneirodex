@@ -35,6 +35,7 @@ def _csrf_for_browser(fn):
 
 @apis_bp.route('/updates/wanted', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def updates_wanted_list():
     return jsonify({'items': list_wanted(current_user.id)})
 

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Button, Modal, PageStatus } from '@oneirodex/ui'
 import { getJson, postForm } from '../api/adminApi'
 import { queueLeafScan } from '../api/proposeLeafLibrariesApi'
 import { errorText } from '../utils/errorText'
+import { showToast } from '../utils/toast'
+import { LibraryImageCropper } from './LibraryImageCropper'
 import './CreateLibraryForm.css'
 
 interface PlatformOption {
@@ -23,16 +25,24 @@ interface BrowseItem {
 }
 
 /** A direct, single-library path through the same create + first-scan contract as bulk import. */
-export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
+export function CreateLibraryForm({
+  onCreated,
+  onComplete,
+}: {
+  onCreated?: () => void
+  onComplete?: () => void
+}) {
   const [platforms, setPlatforms] = useState<PlatformOption[]>([])
   const [platformError, setPlatformError] = useState<unknown>(null)
   const [name, setName] = useState('')
   const [path, setPath] = useState('')
   const [platform, setPlatform] = useState('')
   const [scanMode, setScanMode] = useState<'folders' | 'files'>('folders')
+  const scanPath = path.trim()
   const [depth, setDepth] = useState<1 | 2>(1)
   const [watch, setWatch] = useState('default')
   const [image, setImage] = useState<File | null>(null)
+  const [pendingImage, setPendingImage] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<{ note?: string } | null>(null)
@@ -45,7 +55,16 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
   const [browseError, setBrowseError] = useState('')
   const browseTitleId = useId()
   const closeBrowseRef = useRef<HTMLButtonElement | null>(null)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
   const closeBrowser = useCallback(() => setBrowseOpen(false), [])
+  const imagePreviewUrl = useMemo(() => (image ? URL.createObjectURL(image) : ''), [image])
+
+  useEffect(
+    () => () => {
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl)
+    },
+    [imagePreviewUrl],
+  )
 
   useEffect(() => {
     const controller = new AbortController()
@@ -64,7 +83,7 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (busy || !name.trim() || !path.trim() || !platform) return
+    if (busy || !name.trim() || !platform) return
     setBusy(true)
     setError('')
     setResult(null)
@@ -89,12 +108,27 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
     setPath('')
     setImage(null)
     onCreated?.()
+    if (!scanPath) {
+      const note = 'Library created. Add a folder path when you are ready to scan.'
+      setResult({ note })
+      setBusy(false)
+      if (onComplete) {
+        showToast(note, 'success')
+        onComplete()
+      }
+      return
+    }
+
+    let scanQueued = false
     try {
-      const scan = await queueLeafScan({ uuid, path: path.trim(), scan_mode: scanMode })
+      const scan = await queueLeafScan({ uuid, path: scanPath, scan_mode: scanMode })
       if (!scan.ok) {
         setError(`Library created, but the first scan could not be queued: ${scan.error}`)
       } else {
-        setResult({ note: scan.data?.message || 'Library created and first scan queued.' })
+        const note = scan.data?.message || 'Library created and first scan queued.'
+        setResult({ note })
+        if (onComplete) showToast(note, 'success')
+        scanQueued = true
       }
     } catch (err) {
       setError(
@@ -102,6 +136,7 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
       )
     } finally {
       setBusy(false)
+      if (scanQueued) onComplete?.()
     }
   }
 
@@ -155,8 +190,8 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
           Add one library
         </h2>
         <p className="od-admin-lede">
-          Name a game folder, choose its platform, then Oneirodex creates the library and queues its
-          first scan.
+          Choose a name and platform. Add a folder path to queue the first scan now, or leave it
+          blank and scan later.
         </p>
       </div>
       <PageStatus
@@ -192,11 +227,10 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
           </select>
         </label>
         <label className="od-admin-field od-create-library__path">
-          Folder path inside the server
+          Folder path inside the server (optional)
           <span className="od-create-library__path-row">
             <input
               className="od-admin-input"
-              required
               value={path}
               onChange={(event) => setPath(event.target.value)}
               placeholder="/storage/games/nes"
@@ -244,26 +278,61 @@ export function CreateLibraryForm({ onCreated }: { onCreated?: () => void }) {
         <label className="od-admin-field">
           Library image
           <input
+            ref={imageInputRef}
             className="od-admin-input"
             type="file"
             accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp"
-            onChange={(event) => setImage(event.currentTarget.files?.[0] || null)}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0]
+              event.currentTarget.value = ''
+              if (!file) return
+              if (file.size > 10 * 1024 * 1024) {
+                setError('File is too large! Maximum size is 10MB.')
+                return
+              }
+              setError('')
+              setPendingImage(file)
+            }}
           />
           <span className="od-admin-hint">Optional; JPG, PNG, GIF, or WebP up to 10 MB.</span>
         </label>
+        {imagePreviewUrl ? (
+          <figure className="od-create-library__image-preview">
+            <img src={imagePreviewUrl} alt="Selected library image preview" />
+          </figure>
+        ) : null}
         <div className="od-create-library__actions">
           <Button
             type="submit"
             className="od-btn--accent"
-            disabled={busy || !platforms.length || !name.trim() || !path.trim()}
+            disabled={busy || !platforms.length || !name.trim()}
           >
-            {busy ? 'Creating and queueing…' : 'Create library and start scan'}
+            {busy
+              ? scanPath
+                ? 'Creating and queueing…'
+                : 'Creating…'
+              : scanPath
+                ? 'Create library and start scan'
+                : 'Create library'}
           </Button>
           <span className="od-admin-lede od-admin-lede--tight">
-            The scan uses the server-visible path; game files stay read-only.
+            {scanPath
+              ? 'The scan uses the server-visible path; game files stay read-only.'
+              : 'You can add a server-visible folder path and scan this library later.'}
           </span>
         </div>
       </form>
+      {pendingImage ? (
+        <LibraryImageCropper
+          file={pendingImage}
+          onCancel={() => setPendingImage(null)}
+          onSave={(cropped) => {
+            setImage(cropped)
+            setPendingImage(null)
+            if (imageInputRef.current) imageInputRef.current.value = ''
+          }}
+        />
+      ) : null}
       {result?.note ? (
         <PageStatus emptyMessage={result.note} className="od-create-library__message" />
       ) : null}

@@ -1,11 +1,14 @@
 """In-process login / auth endpoint rate limiting (Wave polish).
 
 No Redis required — suitable for single-container Unraid/Compose installs.
-Keys are IP (+ optional username). Failed attempts lock the key; success clears it.
+Keys are IP (+ optional username); password-reset requests also use an HMAC-keyed
+recipient bucket. Failed attempts lock the key; success clears it.
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 import threading
 import time
@@ -168,3 +171,11 @@ def login_rate_key(ip: str, username: str | None = None) -> str:
 
 def auth_endpoint_key(endpoint: str, ip: str) -> str:
     return f'{endpoint}:{ip}'
+
+
+def password_reset_email_key(email: str, secret_key: str) -> str:
+    """Build a non-reversible, cross-IP bucket for password-reset recipients."""
+    normalized = (email or '').strip().lower().encode('utf-8')
+    secret = str(secret_key or '').encode('utf-8')
+    digest = hmac.new(secret, normalized, hashlib.sha256).hexdigest()
+    return f'pwd_reset_email:{digest}'

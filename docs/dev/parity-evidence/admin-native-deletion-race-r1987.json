@@ -1,0 +1,20 @@
+{
+  "review_id": "R1987",
+  "title": "Verify native account deletion cannot race away the last active admin",
+  "classification": "No new implementation defect reproduced. The native deletion adapter serializes account mutations with the shared transaction-scoped PostgreSQL advisory lock and revalidates the actor after lock acquisition.",
+  "scenario": {
+    "actors": "Two active admin accounts, each requesting deletion of the other at the same barrier.",
+    "expected": "One transaction deletes its target; the other sees its actor is no longer active and is denied. Exactly one active admin remains."
+  },
+  "verification": {
+    "command": "python -m pytest tests/test_admin_user_mutation_concurrency.py -q",
+    "result": "passed: 3 tests on Python 3.14.10 and PostgreSQL 17.6",
+    "database": "Fresh uniquely named PostgreSQL test database upgraded from the Alembic baseline through d6e7f8a9b0c1.",
+    "cleanup": "The disposable database was dropped after the passing run.",
+    "coverage": "The new test invokes AdminUserMutationData.delete concurrently from separate thread-scoped SQLAlchemy sessions; it verifies one successful deletion, one forbidden inactive-actor result, and one remaining active admin. Existing legacy deactivation race and NULL-state admin regressions also pass."
+  },
+  "limits": [
+    "This tests the native mutation data adapter and PostgreSQL transaction lock, not a full ASGI authentication/CSRF request journey.",
+    "P2-10 failure injection at every transaction stage, restart/repeat convergence, and the broader P2-09 tabletop remain open."
+  ]
+}

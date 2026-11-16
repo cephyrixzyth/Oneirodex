@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+from typing import Iterable
 
 from flask import Response, current_app, jsonify, request
 from flask_login import current_user, login_required
 from sqlalchemy import select
 
 from oneirodex import db
-from oneirodex.models import Game
+from oneirodex.models import Game, Library
+from oneirodex.platform import LibraryPlatform
 from oneirodex.utils.activity_feed import list_now_playing, list_recent_activity
 from oneirodex.utils.api_response import api_error
 from oneirodex.utils.auth import admin_required
@@ -22,48 +24,48 @@ from oneirodex.utils.library_acl import apply_game_access_filters
 from oneirodex.utils.plugins import get_plugin, list_plugins
 from oneirodex.utils.rbac import normalize_role
 from oneirodex.utils.security import get_allowed_base_directories
-from oneirodex.utils.api_tokens import require_api_scope
+from oneirodex.utils.api_tokens import require_api_scope, require_api_token_scope
+from sqlalchemy.orm import joinedload
 
 from . import apis_bp
 
 
-def _games_for_platform(platform: str | None, *, limit: int = 500) -> list[Game]:
+def _games_for_platform(platform: str | None) -> Iterable[Game]:
     query = Game.query
     query = apply_game_access_filters(query, current_user)
-    games = list(query.limit(limit).all())
-    if not platform:
-        return games
-    key = platform.upper()
-    out = []
-    for game in games:
-        lib = getattr(game, 'library', None)
-        plat = getattr(lib, 'platform', None) if lib else None
-        name = getattr(plat, 'name', None) if plat is not None else None
-        if name and str(name).upper() == key:
-            out.append(game)
-    return out
+    query = query.join(Library).options(joinedload(Game.library))
+    if platform:
+        requested = str(platform).strip().lower()
+        member = next((item for item in LibraryPlatform if (
+            item.name.lower() == requested or item.value.lower() == requested
+        )), None)
+        if member is None:
+            return []
+        query = query.filter(Library.platform == member)
+    return query.order_by(Game.name.asc(), Game.uuid.asc()).yield_per(250)
 
 
-def _game_rows(games: list[Game]) -> list[dict]:
+def _game_rows(games: Iterable[Game]) -> Iterable[dict]:
     roots = get_allowed_base_directories(current_app)
-    rows = []
-    for game in games:
-        disk = getattr(game, 'full_disk_path', None) or ''
-        rows.append({
-            'uuid': game.uuid,
-            'name': game.name,
-            'summary': getattr(game, 'summary', None) or '',
-            'path': portable_export_path(disk, library_roots=roots) or game.name,
-            'cover_url': getattr(game, 'cover', None) or '',
-            'developer': '',
-            'publisher': '',
-            'genre': '',
-        })
-    return rows
+    def iter_rows():
+        for game in games:
+            disk = getattr(game, 'full_disk_path', None) or ''
+            yield {
+                'uuid': game.uuid,
+                'name': game.name,
+                'summary': getattr(game, 'summary', None) or '',
+                'path': portable_export_path(disk, library_roots=roots) or game.name,
+                'cover_url': getattr(game, 'cover', None) or '',
+                'developer': '',
+                'publisher': '',
+                'genre': '',
+            }
+    return iter_rows()
 
 
 @apis_bp.route('/export/esde', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def export_esde():
     platform = (request.args.get('platform') or '').strip()
     games = _games_for_platform(platform or None)
@@ -82,6 +84,7 @@ def export_esde():
 
 @apis_bp.route('/export/pegasus', methods=['GET'])
 @login_required
+@require_api_token_scope('read:library')
 def export_pegasus():
     platform = (request.args.get('platform') or '').strip() or 'Library'
     games = _games_for_platform(platform if platform != 'Library' else None)

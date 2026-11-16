@@ -1,39 +1,40 @@
-"""Live checkout path is Oneirodex, not the retired Oneirodex folder name.
-
-Filesystem-only. Package path `oneirodex/` and container names stay.
-"""
+"""Published deployment examples use the canonical Oneirodex checkout."""
 
 from pathlib import Path
+import re
+import subprocess
 
 REPO = Path(__file__).resolve().parents[1]
-STALE = ('_projects/Oneirodex', '_projects\\Oneirodex')
+CHECKOUT = re.compile(r'_projects[\\/]+([^\\/\s`"<>]+)')
+TEXT_SUFFIXES = {'.md', '.yml', '.yaml', '.json', '.txt', '.html', '.example'}
 
 
 def _live_files():
-    files = [
-        REPO / 'NAS-DEPLOY.md',
-        REPO / '.env.unraid.example',
-        REPO / '.env.nas.example',
-        REPO / '.env.docker.example',
-        REPO / '.cursor' / 'rules' / 'compose-unraid.mdc',
-        REPO / '.cursor' / 'agents' / 'agent-qa.md',
-    ]
-    for path in REPO.glob('docker-compose*.yml'):
-        files.append(path)
-    docs = REPO / 'docs'
-    for path in docs.rglob('*'):
-        if not path.is_file():
+    # Machine-local editor instructions and private research stay ignored and
+    # cannot be prerequisites of a reproducible repository/CI check.
+    paths = subprocess.check_output([
+        'git', 'ls-files', '-z', '--', 'docs', 'NAS-DEPLOY.md',
+        '.env.unraid.example', '.env.nas.example', '.env.docker.example',
+        'docker-compose*.yml',
+    ], cwd=REPO).decode('utf-8').split('\0')
+    for relative in paths:
+        path = REPO / relative
+        if not relative or 'archive' in path.parts or '_private' in path.parts:
             continue
-        if 'archive' in path.parts:
-            continue
-        files.append(path)
-    return files
+        if path.suffix in TEXT_SUFFIXES and path.is_file():
+            yield path
 
 
 def test_operator_docs_checkout_is_oneirodex():
     hits = []
+    checked = 0
     for path in _live_files():
         text = path.read_text(encoding='utf-8', errors='replace')
-        if any(needle in text for needle in STALE):
-            hits.append(path.relative_to(REPO).as_posix())
-    assert hits == [], f'stale Oneirodex checkout path in: {hits}'
+        if '> **Doc status:** Archive' in text:
+            continue
+        for folder in CHECKOUT.findall(text):
+            checked += 1
+            if folder.rstrip('.,);:') != 'Oneirodex':
+                hits.append(path.relative_to(REPO).as_posix())
+    assert checked > 0, 'No published deployment checkout examples were checked'
+    assert hits == [], f'Noncanonical Oneirodex checkout examples in: {sorted(set(hits))}'

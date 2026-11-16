@@ -266,7 +266,6 @@ def theme_fonts_list():
     from oneirodex.utils.theme_fonts import (
         PLATFORM_FONT_HINTS,
         available_fonts,
-        fonts_dir,
     )
 
     catalogue = available_fonts()
@@ -276,11 +275,10 @@ def theme_fonts_list():
             for key, entry in sorted(catalogue.items())
         ],
         'platform_hints': PLATFORM_FONT_HINTS,
-        'fonts_dir': fonts_dir(),
         'note': (
             'Console manufacturers\' typefaces are not bundled — these are '
-            'OFL/public-domain faces chosen to evoke each era. Drop your own '
-            'licensed fonts in fonts_dir to have them offered here.'
+            'OFL/public-domain faces chosen to evoke each era. Custom licensed '
+            'fonts are managed by your server administrator.'
         ),
     })
 
@@ -322,5 +320,7 @@ def theme_fonts_css():
     response = make_response(css)
     response.headers['Content-Type'] = 'text/css; charset=utf-8'
     # Short cache: a font upload or preference change should show up promptly.
-    response.headers['Cache-Control'] = 'public, max-age=60'
+    # The default stylesheet varies by the signed-in user's preference.
+    response.headers['Cache-Control'] = 'private, max-age=60'
+    response.headers['Vary'] = 'Cookie'
     return response

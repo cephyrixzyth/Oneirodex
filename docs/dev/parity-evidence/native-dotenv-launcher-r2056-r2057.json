@@ -1,0 +1,200 @@
+{
+  "doc_status": "Reference",
+  "evidence_ids": [
+    "R2056",
+    "R2057"
+  ],
+  "finding": "OP-001 / D-P1-01 native configuration/restart follow-up",
+  "classification": "Confirmed POSIX dotenv-consumption defects fixed with bounded checks; hidden-backup enumeration defect in the new test fixture corrected.",
+  "source_base": "6ccb5f7c861260c9e41b34d679621827bda37024",
+  "candidate_source_sha256": {
+    "startweb.sh": "2134e3322edee62288751fbd93ee29795e7ffc50ee939cd9cdd1f2c1fce07458",
+    "scripts/run_with_dotenv.py": "6bc7c8b5278f6314edab4fad72909b123bab15a99b90d78e6de7a0e57cb2b8b4",
+    "install-linux.sh": "9d66d658bb8df871ef4a1251972bc520868c48ddcda84565bdf32232dde4f47e",
+    "install-macos.sh": "d439aa809fc12a4ee72926c2bbd56d72e5eb14af0285e5c07f5af8a57ab6e804",
+    "install-windows.ps1": "8782ac30ed7323d0511d7c7949639c5790005a0be88416757ed7652d0365a7d6",
+    "startweb_windows.cmd": "699b9f41f7e09648e2c5947fc835d06ef5530ef4053e402694b7b8918173b084",
+    "tests/test_native_launch_env.py": "36bbe192662114d465b811d2d410769e2310f6d92302544db77cfc0cd28e69ef",
+    "tests/test_native_install_config.py": "ad70f7d1c9419f5364b77ca9406142d5c0bb2bd23222101b3c55590d6d41b13d",
+    "tests/fixtures/native_installer_config.ps1": "29e7f65a745ad9338a4b314ca16f23d515a99050f1aa063acbe4d9f4323627e7",
+    "tests/test_native_install_contract.py": "1505b0e0dcffffb81e95084a4ed614d21ce4cbff7cedd196af9b69e0d391223a",
+    "scripts/build-native-spas.mjs": "588b65a32d67f25ad864a01b8715de91ebfda8c0f0e0177a3f6ba9b7a47b34a2",
+    "scripts/validate-native-install.py": "df22323bf84d57b67d2bbb124a1ef4e7e9c6a7bef4b8aaf39a50cc4c945634ee"
+  },
+  "source_identity": "Checked worktree bytes; Git may normalize line endings. Earlier full-run and tooling-image identities remain separate.",
+  "root_cause": [
+    "Valid generated dotenv values were evaluated as shell code: spaces/pipes lost paths; substitutions executed; Linux Windows-base backslash joined its POSIX-base assignment.",
+    "Backup inspection omitted hidden files, causing a false count even when backup bytes existed."
+  ],
+  "correction": [
+    "Load explicit .env data with already pinned python-dotenv1.2.3, then exec the existing Bash launcher once; never source/evaluate the file.",
+    "Keep file-over-parent precedence, dotenv quotes/interpolation, empty values, original arguments and unchanged file bytes.",
+    "Reject syntax/encoding/NUL/name errors and BASH_ENV/SHELLOPTS/BASHOPTS before initialization, with generic value/path-free diagnostics.",
+    "Stop on virtualenv activation failure; preserve relative callers, initial launcher PID and one splash.",
+    "Count hidden fixture backups with Force; actual Windows Hidden-attribute regression verifies count and prior bytes. No Windows installer backup behavior changed.",
+    "Use actual activation once and a PID-bound one-entry marker cleared before initialization; avoid modifying PATH twice or accepting a stale inherited marker."
+  ],
+  "red": {
+    "exact_git_launcher_with_final_unchanged_tests": {
+      "failed": 12,
+      "controls_passed": 7,
+      "deselected": 4,
+      "pytest_seconds": 2.68,
+      "runner_seconds": 4.59,
+      "scope": "Only exact Git6ccb startweb.sh injected into isolated subject with final tests/seams. Live source never reverted."
+    },
+    "candidate_author_review": {
+      "shell_hook_failed": 3,
+      "shell_hook_runner_seconds": 2.53,
+      "relative_reentry_failed": 1,
+      "relative_reentry_runner_seconds": 2.14,
+      "actual_activation_and_stale_marker": {
+        "failed": 2,
+        "pytest_seconds": 0.45,
+        "runner_seconds": 2.79
+      }
+    },
+    "hidden_backup": {
+      "failed": 1,
+      "pytest_seconds": 4.83,
+      "runner_seconds": 10.79,
+      "scope": "Actual Windows PowerShell writer/main; owned backup given Hidden attribute."
+    }
+  },
+  "verification": {
+    "linux": {
+      "passed": 35,
+      "skipped": 6,
+      "pytest_seconds": 4.21,
+      "runner_seconds": 6.64,
+      "source_fixed": true,
+      "scope": "Actual POSIX writers/loader/launcher, parent PID, relative caller, arguments, one splash and denial/failure paths. App/reset/DB startup commands intercepted. Actual stdlib virtualenv activation occurs once; stale markers cannot skip loading and the PID-bound re-entry marker is removed before app commands.",
+      "skips": "Five PowerShell cases and actual Windows batch parser."
+    },
+    "windows": {
+      "passed": 31,
+      "skipped": 19,
+      "pytest_seconds": 31.91,
+      "runner_seconds": 34.27,
+      "source_fixed": true,
+      "scope": "Actual Windows writer/main/hidden backup/batch parser; pure helper failure/exec and native build/asset contracts.",
+      "skips": "POSIX process-replacement cases require actual Unix."
+    },
+    "hidden_backup_native_selection": {
+      "passed": 27,
+      "pytest_seconds": 43.17,
+      "runner_seconds": 45.77,
+      "overlap": "Included in later Windows31; do not add as unique tests."
+    },
+    "ratchets": {
+      "passed": true,
+      "runner_seconds": 36.3,
+      "checks": [
+        "API envelope",
+        "Production F821",
+        "Print",
+        "JSON reader",
+        "Immutable R1972",
+        "Linux installer and POSIX launcher syntax",
+        "PowerShell parse",
+        "Diff"
+      ]
+    },
+    "source_worker_addendum": {
+      "passed": true,
+      "runner_seconds": 3.39,
+      "checks": [
+        "F821 on three new/changed Python paths",
+        "Existing worker-default test:1pass/0.46pytest seconds",
+        "Separate macOS installer syntax"
+      ]
+    }
+  },
+  "prior_exact_source_ci": {
+    "source": "6ccb5f7c861260c9e41b34d679621827bda37024",
+    "core": {
+      "run": 43275546562,
+      "conclusion": "failure",
+      "failed": 1,
+      "passed": 7924,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 2005.69,
+      "coverage_percent": 74.98,
+      "failure": "New force-mode fixture counts0backups; controlled Hidden regression reproduces omission.",
+      "other_jobs_passed": 8
+    },
+    "desktop": {
+      "run": 43275546411,
+      "conclusion": "success",
+      "active_jobs_passed": 7,
+      "installers_published": false
+    },
+    "raw_core_log_sha256": "f9a2258550cff77b5226f2b3298c3abfe655af0681a75ac479ef872913276929",
+    "reference": "https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/get-childitem?view=powershell-7.5#-force"
+  },
+  "environment": {
+    "tooling_image_only": "sha256:bccf4d6f6dea15707eb30222462a9e4bc4d00d26d7a301f2ff2b384324ca154c",
+    "python_linux": "3.12.16",
+    "python_dotenv": "1.2.3",
+    "pytest": "9.1.1",
+    "toolkit_sha256": "69e09a0dfa94e11eda16bb475fd0595d264b71794e128e24d8967e4d6234aab1",
+    "network": "none",
+    "rootfs": "read-only",
+    "uid": "65534:65534",
+    "host_mounts": false,
+    "owned_test_containers_absent": true,
+    "operator_data_used": false,
+    "real_app_database_or_os_setup_started": false
+  },
+  "retained_rework": [
+    "Initial Windows Git Bash capture rewrote slash paths; controlled exclusions corrected the prepatch check.",
+    "Windows Python/Git Bash exec returned2816: harness limitation, not a POSIX product result. True process/PID checks moved to Linux; native Windows remains separately checked.",
+    "First pure pytest toolkit omitted its legacy py shim and stopped before collection; corrected from existing offline cache, with no package install.",
+    "Author review reproduced/repaired shell hooks and caller-relative re-entry before publication.",
+    "An intermediate source reconstruction failed its recorded hash and was rejected; final unchanged tests were instead replayed against exact Git baseline.",
+    "Replacing empty activation with the real stdlib script exposed double activation and stale-marker configuration bypass in the candidate. RED2, then corrected before publication; initial candidate archive retained separately."
+  ],
+  "limits": [
+    "Synthetic operator-owned configuration only; no remotely writable dotenv or exploitation claim.",
+    "Controlled Linux tmpfs/adapters do not qualify complete online/native macOS/Steam Deck installs, packaged Tauri/standalone or deployed-operator lifecycle.",
+    "No new product image, full security audit, screen-reader or route-parity claim. Immutable R1972 unchanged.",
+    "Shell commands are unsupported in .env; convert to dotenv data or keep shell setup outside the file.",
+    "Exact0197 main/desktop CI passed. Later test-harness commits require their own checks; original parity/platform/restore, fresh whole-program review and release/deployment remain open."
+  ],
+  "private_archives": {
+    "initial_candidate": {
+      "files": 104,
+      "bytes": 1996527,
+      "sha256": "8aaa14085b83bbd11f23eeffd1f12f2447b4d9510cfbb3b6e8fec7489fdbbcd9"
+    },
+    "final_activation_addendum": {
+      "files": 32,
+      "bytes": 61420,
+      "sha256": "a50cec8eef638e5b7484ceda81ce8a85a90f39c108f33c3743c2d20453b3d9c2"
+    }
+  },
+  "post_publication_exact_source_ci": {
+    "source": "0197d3dd26e2f4022151d8726fb5135f4cfc6b79",
+    "main": {
+      "run": 43338529501,
+      "result": "success",
+      "jobs_passed": 9,
+      "core_passed": 7949,
+      "skipped": 15,
+      "deselected": 548,
+      "warnings": 156,
+      "pytest_seconds": 2355.71,
+      "coverage_percent": 74.98,
+      "raw_core_log_sha256": "c29195063e9a78b1963cd74feb7568a9c922757678ef5b7f2c9222aed1a38508"
+    },
+    "desktop": {
+      "run": 43338529485,
+      "result": "success",
+      "active_jobs_passed": 7,
+      "installers_published": false
+    },
+    "limits": "Existing CI selection, not unrestricted full suite or complete parity/platform/installed acceptance."
+  }
+}

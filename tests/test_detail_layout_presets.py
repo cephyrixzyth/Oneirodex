@@ -96,6 +96,13 @@ class TestPerMemberOverride:
             with pytest.raises(ValueError):
                 save_user_detail_layout(member.id, {'sections': [{'id': 'not-a-section'}]})
 
+    def test_repeated_section_ids_cannot_expand_the_input_list(self):
+        from oneirodex.utils.detail_layouts import validate_layout_payload
+
+        oversized = {'sections': [{'id': 'hero'}] * (len(DEFAULT_SECTIONS) + 1)}
+        with pytest.raises(ValueError, match='at most'):
+            validate_layout_payload(oversized)
+
     def test_every_section_survives_a_partial_save(self, app, member):
         """A layout naming two sections must still render all of them."""
         with app.app_context():

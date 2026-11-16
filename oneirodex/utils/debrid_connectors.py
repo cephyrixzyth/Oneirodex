@@ -12,8 +12,16 @@ from sqlalchemy import select
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import GlobalSettings
 from oneirodex.utils.challenge_solver import fetch_with_challenge_retry
+from oneirodex.utils.security import validate_outbound_http_url
 
 DEFAULT_TIMEOUT = 30
+
+
+def _validate_debrid_url(url: str) -> tuple[bool, str]:
+    """Debrid API requests and redirects must stay on public HTTPS hosts."""
+    return validate_outbound_http_url(
+        url, allow_http=False, allow_private_lan=False,
+    )
 
 
 def _settings() -> GlobalSettings | None:
@@ -30,11 +38,11 @@ def debrid_enabled(*, config=None) -> bool:
 
 
 def get_debrid_config(*, config=None) -> dict[str, Any]:
+    from oneirodex.utils.secret_store import read_arr_settings
+
     config = config if config is not None else get_runtime_config()
     row = _settings()
-    cfg = getattr(row, 'arr_settings', None) if row else None
-    if not isinstance(cfg, dict):
-        cfg = {}
+    cfg = read_arr_settings(row)
     return {
         'real_debrid_token': cfg.get('real_debrid_token') or config.get('REAL_DEBRID_TOKEN') or '',
         'alldebrid_api_key': cfg.get('alldebrid_api_key') or config.get('ALLDEBRID_API_KEY') or '',
@@ -44,15 +52,17 @@ def get_debrid_config(*, config=None) -> dict[str, Any]:
 
 
 def save_debrid_config(payload: dict[str, Any]) -> dict[str, Any]:
+    from oneirodex.utils.secret_store import read_arr_settings, write_arr_settings
+
     row = _settings()
     if not row:
         row = GlobalSettings()
         db.session.add(row)
-    current = dict(getattr(row, 'arr_settings', None) or {})
+    current = read_arr_settings(row)
     for key in ('real_debrid_token', 'alldebrid_api_key', 'premiumize_api_key', 'torbox_api_key'):
         if key in payload and payload[key] is not None:
             current[key] = str(payload[key]).strip()
-    row.arr_settings = current
+    write_arr_settings(row, current)
     db.session.commit()
     return {
         'real_debrid_token': '***' if current.get('real_debrid_token') else '',
@@ -98,6 +108,7 @@ def real_debrid_add_magnet(magnet: str) -> dict[str, Any]:
         headers={'Authorization': f'Bearer {token}'},
         data={'magnet': magnet},
         timeout=DEFAULT_TIMEOUT,
+        validator=_validate_debrid_url,
     )
     response.raise_for_status()
     return response.json()
@@ -113,6 +124,7 @@ def alldebrid_upload_magnet(magnet: str) -> dict[str, Any]:
         params={'agent': 'Oneirodex', 'apikey': key},
         data={'magnets[]': magnet},
         timeout=DEFAULT_TIMEOUT,
+        validator=_validate_debrid_url,
     )
     response.raise_for_status()
     return response.json()
@@ -127,6 +139,7 @@ def premiumize_add_magnet(magnet: str) -> dict[str, Any]:
         'https://www.premiumize.me/api/transfer/create',
         data={'apikey': key, 'src': magnet},
         timeout=DEFAULT_TIMEOUT,
+        validator=_validate_debrid_url,
     )
     response.raise_for_status()
     return response.json()
@@ -142,6 +155,7 @@ def torbox_add_magnet(magnet: str) -> dict[str, Any]:
         headers={'Authorization': f'Bearer {key}'},
         data={'magnet': magnet},
         timeout=DEFAULT_TIMEOUT,
+        validator=_validate_debrid_url,
     )
     response.raise_for_status()
     return response.json()

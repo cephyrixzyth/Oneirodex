@@ -13,12 +13,18 @@ from sqlalchemy.exc import IntegrityError
 from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
+from .query_compat import first_query_value
 
 _REGISTRATION_ACK = 'If the details can be used to create an account, check your email for next steps.'
+_AUTH_JSON_MAX_BYTES = 64 * 1024
 
 
-def _registration_ack():
-    return {'requested': True, 'message': _REGISTRATION_ACK, 'next_url': '/login'}
+def _registration_ack(*, account_created=None, confirmation_sent=False):
+    result = {'requested': True, 'message': _REGISTRATION_ACK, 'next_url': '/login'}
+    if account_created is not None:
+        result['_account_created'] = bool(account_created)
+        result['_confirmation_sent'] = bool(confirmation_sent)
+    return result
 
 
 class AuthRegistrationData:
@@ -31,6 +37,7 @@ class AuthRegistrationData:
         from oneirodex.utils.event_logging import log_system_event
         from oneirodex.utils.smtp import send_email_quiet
         from oneirodex.runtime_native.password_reset_confirm import _trusted_public_origin
+        from oneirodex.utils.tokens import email_verification_token_digest
 
         if invite_token:
             invite = db.session.execute(
@@ -45,18 +52,21 @@ class AuthRegistrationData:
             invite = None
 
         email = payload['email'].lower()
+        if invite is not None and invite.recipient_email:
+            if invite.recipient_email.strip().lower() != email:
+                return _registration_ack(account_created=False), None
         if db.session.execute(
             select(User).where(func.lower(User.email) == email)
         ).scalar_one_or_none():
-            return _registration_ack(), None
+            return _registration_ack(account_created=False), None
         if invite is None and db.session.execute(
             select(Whitelist).where(func.lower(Whitelist.email) == email)
         ).scalar_one_or_none() is None:
-            return _registration_ack(), None
+            return _registration_ack(account_created=False), None
         if db.session.execute(
             select(User).where(func.lower(User.name) == payload['username'].lower())
         ).scalars().first() is not None:
-            return _registration_ack(), None
+            return _registration_ack(account_created=False), None
 
         now = datetime.now(timezone.utc)
         user_uuid = str(uuid4())
@@ -69,7 +79,7 @@ class AuthRegistrationData:
             email=email,
             role='user',
             is_email_verified=False,
-            email_verification_token=verification_token,
+            email_verification_token=email_verification_token_digest(verification_token),
             token_creation_time=now,
             created=now,
         )
@@ -95,7 +105,7 @@ class AuthRegistrationData:
                 'Registration failed because a unique account value was claimed concurrently.',
                 event_type='registration', event_level='warning', audit_user='system',
             )
-            return _registration_ack(), None
+            return _registration_ack(account_created=False), None
 
         log_system_event(
             f'New user registered: {user.name}',
@@ -103,11 +113,11 @@ class AuthRegistrationData:
         )
         origin = _trusted_public_origin(request, config)
         confirm_url = f'{origin}/confirm/{verification_token}'
-        send_email_quiet(
+        confirmation_sent = send_email_quiet(
             user.email, 'Please confirm your email', _registration_confirmation_email(confirm_url),
             preflight=True, audit_user='system',
         )
-        return _registration_ack(), None
+        return _registration_ack(account_created=True, confirmation_sent=confirmation_sent), None
 
 
 def create_auth_registration_router(
@@ -140,7 +150,7 @@ def create_auth_registration_router(
                     load_user_id=load_user_id, login_manager=login_manager,
                     allow_bearer=False,
                 )
-            invite_token = request.query_params.get('token')
+            invite_token = first_query_value(request.query_params, 'token')
             if response is None and auth.user is not None:
                 if invite_token:
                     for key in ('_user_id', '_fresh', '_id', 'next', '_remember_seconds'):
@@ -171,7 +181,11 @@ def create_auth_registration_router(
                             code, message, status, detail = failure
                             response = _error(message, code, status, detail=detail)
                         else:
-                            response = _ok(result, status=202)
+                            public_result = {
+                                key: value for key, value in result.items()
+                                if not key.startswith('_')
+                            }
+                            response = _ok(public_result, status=202)
             if auth is not None and auth.remember_action:
                 from oneirodex.runtime_native.auth_login import _write_remember_cookie
 
@@ -196,9 +210,16 @@ def mount_auth_registration_routes(app: FastAPI, flask_app, **kwargs):
 
 async def _validated_body(request):
     from oneirodex.schemas.registration import RegistrationBody
+    from oneirodex.runtime_native.bounded_request_body import (
+        BODY_TOO_LARGE, read_bounded_body,
+    )
+
+    raw_body = await read_bounded_body(request, _AUTH_JSON_MAX_BYTES)
+    if raw_body is BODY_TOO_LARGE:
+        return None, _error('Request body is too large.', 'payload_too_large', 413)
 
     try:
-        body = RegistrationBody.model_validate_json(await request.body())
+        body = RegistrationBody.model_validate_json(raw_body)
         return body.model_dump(), None
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors
@@ -261,6 +282,6 @@ def _registration_confirmation_email(confirm_url):
 <style>body{{background:#f3f4f6;color:#333;font-family:'Courier New',Courier,monospace;padding:20px}}.container{{background:#fff;border:1px solid #ddd;padding:20px;border-radius:10px;max-width:600px;margin:20px auto;box-shadow:0 2px 4px rgba(0,0,0,.1)}}h1{{color:#007bff}}a{{background:#007bff;color:#fff;padding:10px 20px;text-decoration:none;border-radius:5px;font-weight:bold}}p{{margin-bottom:20px}}</style></head>
 <body><div class="container"><h2>Ready, Player One!</h2>
 <p>You're just one click away from joining the elite ranks at Oneirodex. Grab your controller and get ready to dive into an epic gaming adventure. But first, let's complete your character creation!</p>
-<p>Click the power-up below to confirm your email and activate your account. Quick, before the server resets!</p>
+<p>Open the link to confirm your email. You will choose the password that activates the account on the confirmation page.</p>
 <a href="{safe_url}">Confirm Your Email</a>
 <p>If you didn't try to create an account with us, just ignore this message and no action is needed. This email will despawn automatically.</p></div></body></html>'''
