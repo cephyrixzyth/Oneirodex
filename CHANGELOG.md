@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-16
+
 ### Added
 - Child accounts can keep their own emulator saves for games they can currently access; other library writes stay denied.
 - Desktop companion: an Installed shelf that stays available offline for the previously verified account and device, with local Play and Reveal and a notice that local files remain reachable through the operating system.
