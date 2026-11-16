@@ -145,7 +145,7 @@ jobs:
 
       - name: Preserve capability result, including unsupported/failure
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oneirodex-macos-coalition-probe
           path: ${{ runner.temp }}/oneirodex-macos-coalition-*.json
@@ -163,7 +163,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '22'
           cache: npm
@@ -290,7 +290,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '22'
           cache: npm
@@ -356,7 +356,7 @@ jobs:
         run: cargo test --lib --locked
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oneirodex-${{ matrix.flavor }}-${{ matrix.label }}
           path: ${{ matrix.artifacts }}
@@ -376,7 +376,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
 
@@ -450,7 +450,7 @@ jobs:
 
       - name: Retain sanitized package probe receipt
         if: always() && inputs.packaged_smoke_only == true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oneirodex-windows-packaged-probe
           path: ${{ runner.temp }}/oneirodex-packaged-probe-status.json
@@ -459,7 +459,7 @@ jobs:
 
       - name: Retain sanitized standard-user fixture receipt
         if: always() && inputs.windows_user_fixture_only == true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: oneirodex-windows-standard-user-fixture
           path: ${{ runner.temp }}/oneirodex-standard-user-fixture-status.json
@@ -501,7 +501,7 @@ jobs:
       PACKAGE_ARCHIVE_DIGEST: ${{ inputs.package_archive_digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.12'
       - name: Validate exclusive Linux package selection
@@ -525,7 +525,7 @@ jobs:
           venv/bin/python -m pip install --require-hashes -r requirements.lock
           venv/bin/python -m unittest discover -s tests -p test_native_companion_cors.py -v
           venv/bin/python -m unittest discover -s tests -p test_native_bearer_denial.py -v
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '22'
           cache: npm
@@ -563,7 +563,7 @@ jobs:
           probe_exit=$?
           cat "$RUNNER_TEMP/oneirodex-linux-packaged-status.json"
           exit "$probe_exit"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: oneirodex-linux-packaged-probe
@@ -641,13 +641,13 @@ jobs:
       # every push), so the installer artifacts are selected by flavor rather
       # than with one broad pattern.
       - name: Download full installers
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: installers
           pattern: oneirodex-full-*
 
       - name: Download thin installers
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: installers
           pattern: oneirodex-thin-*
@@ -666,7 +666,7 @@ jobs:
       # Installer names are unique per flavor (Oneirodex vs OneirodexThin) and
       # per platform extension, so they can sit side by side on one release.
       - name: Attach to the release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
           files: installers/**/*
