@@ -1,0 +1,189 @@
+{
+  "doc_status": "Reference",
+  "evidence_id": "R2133",
+  "observed_utc": "2026-11-16T23:40:17.731304+00:00",
+  "findings": [
+    "OP-004",
+    "OP-005",
+    "OP-006",
+    "OP-007"
+  ],
+  "classification": "Public release 1.2.0: merge, tag, image publication, desktop installers, Community Apps template and default-branch advisory recheck, each read back after the fact. No live deployment and no operator data step is part of this record.",
+  "merge": {
+    "pull_request": 281,
+    "merged_utc": "2026-11-16T22:25:45Z",
+    "merge_commit": "0b2cb68c49e71a75c4f16f9c362a927900e7cf78",
+    "parents": [
+      "fd2683e5aeeba97794895e4158d59c55ec147a2a",
+      "b4a9e9f3e678ae2f1461752aca62d55f7c42e257"
+    ],
+    "tree_equals_verified_head": true,
+    "method": "merge commit; review branch kept"
+  },
+  "ci": {
+    "final_candidate_b4a9e9f3": {
+      "core_run": 43963817257,
+      "core_jobs": 9,
+      "desktop_runs": [
+        43963812930,
+        43963817216
+      ],
+      "result": "success"
+    },
+    "merge_commit": {
+      "core_run": 43970020596,
+      "core_jobs": 9,
+      "desktop_run": 43970020708,
+      "result": "success"
+    },
+    "limit": "CI excludes integration tests and a named deselection list; it is not the full local suite."
+  },
+  "tag_and_release": {
+    "tag": "v1.2.0",
+    "tag_type": "annotated",
+    "tag_commit": "0b2cb68c49e71a75c4f16f9c362a927900e7cf78",
+    "release_published_utc": "2026-11-16T22:54:53Z",
+    "latest_release": "v1.2.0",
+    "notes": "CHANGELOG 1.2.0 section with documentation links pointed at the tag."
+  },
+  "desktop_installers": {
+    "run": 43974513841,
+    "result": "success",
+    "build_legs": 6,
+    "release_job": "Downloaded the six installer artifacts only; the eight-file guard passed before attaching.",
+    "assets": [
+      {
+        "name": "Oneirodex_1.2.0_x64-setup.exe",
+        "bytes": 2368553,
+        "sha256": "0d49b05b8aa72ce0bd96049db258a6accd11e3db7315aaff9bc382d31b658116"
+      },
+      {
+        "name": "Oneirodex_1.2.0_universal.dmg",
+        "bytes": 8282391,
+        "sha256": "eb50e0f693fd9c6ec34365aa7168eef83ca8fd0263a20d4cf83c8b170f96c423"
+      },
+      {
+        "name": "Oneirodex_1.2.0_amd64.deb",
+        "bytes": 3870412,
+        "sha256": "b79fee6824f982599055041107f510915f2ebaade2ba18bc4548ff88566035a4"
+      },
+      {
+        "name": "Oneirodex_1.2.0_amd64.AppImage",
+        "bytes": 82434552,
+        "sha256": "d997eb7f98b06d9894cfe6e05cb4a5746bf7cb57938e3f198df00261cc786169"
+      },
+      {
+        "name": "OneirodexThin_1.2.0_x64-setup.exe",
+        "bytes": 2352345,
+        "sha256": "8feb7550629c81de5b6e520de6083d1c0427fc53c791bd0c2d0062d9a4d344d5"
+      },
+      {
+        "name": "OneirodexThin_1.2.0_universal.dmg",
+        "bytes": 8242739,
+        "sha256": "5cacdf23c842afa41552e9fd0ddcee87f0d0a54c9123faa178313d5e96ee8454"
+      },
+      {
+        "name": "OneirodexThin_1.2.0_amd64.deb",
+        "bytes": 3852070,
+        "sha256": "db5f3a79598b17794f4114f30e27a119aec64760bb3a6e3026945b8243fddef7"
+      },
+      {
+        "name": "OneirodexThin_1.2.0_amd64.AppImage",
+        "bytes": 82414072,
+        "sha256": "b5b564cd9cca41df80bfba6c3e08238ca56d10ab7d9ed71ae47e1f0fa3ec7e5d"
+      }
+    ],
+    "limits": [
+      "Installers are unsigned by product decision. None was installed or launched from the release page; packaged journeys are recorded separately for the Linux package only."
+    ]
+  },
+  "image": {
+    "run": 43974513908,
+    "index_digest": "sha256:e7e36391961dcecc5fe569d2f85a4645b9b4604162c013d4974ceaf7a1d9ce38",
+    "source_commit": "0b2cb68c49e71a75c4f16f9c362a927900e7cf78",
+    "tags": [
+      "cephyrixzyth/oneirodex:1.2.0",
+      "cephyrixzyth/oneirodex:1.2",
+      "cephyrixzyth/oneirodex:latest",
+      "ghcr.io/cephyrixzyth/oneirodex:1.2.0"
+    ],
+    "read_back": [
+      "All four tags resolve to the index digest the workflow recorded.",
+      "The index carries linux/amd64 and linux/arm64; both image configs carry the merge commit as revision label and build identity.",
+      "Each platform has an SPDX 2.3 SBOM (277 and 279 packages) and a SLSA provenance statement naming this workflow run as builder.",
+      "The Docker Hub overview step succeeded."
+    ],
+    "published_image_checks": {
+      "method": "Image pulled by digest (amd64). Startup-guard scenarios, then an in-place upgrade of a fresh public 1.1.9 single-container volume.",
+      "observed": [
+        "URL-only strong password proceeded to the database wait; legacy, missing and explicit legacy passwords exited 1; the compatibility flag warned and proceeded.",
+        "Upgrade reported ready in about 9 seconds with version 1.2.0, ten migrations, zero error lines, a non-root app process, transferred library ownership and build identity 0b2cb68c."
+      ],
+      "raw_logs": [
+        {
+          "path": "findings/OP-004/guard-scenarios-published-1.2.0-r2133.log",
+          "bytes": 2580,
+          "sha256": "5eec3e9da5af3fcf102a9dafc76a8c13f753605d8b05fbe93338c0de02f72e60",
+          "private": true
+        },
+        {
+          "path": "findings/OP-004/embedded-upgrade-published-1.2.0-r2133.log",
+          "bytes": 41875,
+          "sha256": "75b94c2441dd8432d98c7431e76e7b830b6db4bcf28e6da2954e51e1b808b936",
+          "private": true
+        }
+      ]
+    },
+    "bundle_scrub": "The private banned-token list matched 0 of 78 web bundle files extracted from the candidate image built from ea40c499; a control pattern confirmed the scanner worked.",
+    "limits": [
+      "The arm64 image was not started from the registry; it was started only from the local rehearsal build (R2132).",
+      "Attestations were read through the registry client; no independent signature verification was run."
+    ]
+  },
+  "community_apps_template": {
+    "sync_job": "Stopped at its write step because no template write token is configured, as at 1.1.9.",
+    "manual_path": [
+      "Before the update the public feed file was byte-equal to the canonical 1.1.8 rendering, so it carried no foreign edits.",
+      "The template was rendered from tag v1.2.0 with the workflow's own substitution (9144 bytes, LF only, sha256 b4702f72e2c5b6fc2f08a407f7225e36a9176a3fe0fb398b248f7a0aa458fd02).",
+      "That one file was updated through the repository contents API against the blob it replaced (feed commit f22a656e).",
+      "The file was read back through the API and the raw URL and is byte-equal to the rendering.",
+      "Only the failed job was re-run; it found the feed already matching and the workflow now records success."
+    ],
+    "limit": "The write token is still not configured, so the next release needs the same manual step unless it is added."
+  },
+  "advisories": {
+    "before_merge_open": {
+      "total": 113,
+      "critical": 13,
+      "high": 56,
+      "medium": 43,
+      "low": 1
+    },
+    "after_merge_open": 0,
+    "closed_as_fixed_at_merge": {
+      "total": 114,
+      "critical": 13,
+      "high": 57,
+      "medium": 43,
+      "low": 1
+    },
+    "dismissed": [
+      {
+        "package": "glib",
+        "reason": "tolerable_risk",
+        "dismissed": "2026-09-21"
+      }
+    ],
+    "limits": [
+      "Dependabot records only; secret scanning is disabled and no code-scanning analysis exists for the repository.",
+      "Dependabot opened new update pull requests against the default branch after the merge; they are not part of this release."
+    ]
+  },
+  "not_done": [
+    "No live deployment: the running household instance was not touched.",
+    "Operator data steps (credential conversion, save-key migration, legacy save audit) were not run anywhere.",
+    "The Compose stack upgrade and a database with real data were not rehearsed."
+  ],
+  "overall_goal": "active and incomplete",
+  "capture": "Skipped: no markup or style changes."
+}
