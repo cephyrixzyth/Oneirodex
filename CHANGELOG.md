@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Replacing a game's cover (or another single image) no longer deletes the old file while another game still uses it. The new image is written durably before the database switches to it, and file names no longer include the raw game id from the address.
 - The desktop command queue, per-member install states and wanted updates, mod packs, assist packs and generated theme files are now replaced in one step under a lock shared between workers. An interrupted write no longer empties the file, and running more than one worker no longer loses updates.
 
 ## [1.2.0] — 2026-11-16

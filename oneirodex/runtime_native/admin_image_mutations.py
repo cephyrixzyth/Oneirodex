@@ -99,65 +99,51 @@ class ImageMutationsData:
         if len(content) > GAME_IMAGE_MAX_BYTES:
             raise ValueError('File size exceeds the 3MB limit')
         image_content, extension = prepare_game_image(content, image_type)
+        from datetime import datetime
+        from oneirodex.utils.image_files import (
+            game_filename_key, publish_image_bytes, remove_if_unreferenced,
+        )
+
         root = Path(app.config['IMAGE_SAVE_PATH']).resolve()
-        root.mkdir(parents=True, exist_ok=True)
-        staged_old_files = []
-        target = None
+        # Old singular images keep their bytes until the replacement is
+        # committed; only then is each removed, and only if no other row
+        # (another game, for example) still points at the same file.
+        replaced = []
+        if image_type in SINGULAR_IMAGE_KINDS:
+            rows = db.session.execute(select(Image).filter_by(
+                game_uuid=game_uuid, image_type=image_type,
+            )).scalars().all()
+            for row in rows:
+                old_path = (root / row.url).resolve()
+                if root not in old_path.parents:
+                    raise ValueError('Stored image path is invalid')
+                replaced.append((row, old_path, row.url))
+        key = game_filename_key(game_uuid)
+        if image_type in SINGULAR_IMAGE_KINDS:
+            name = f'{key}_{image_type}_{uuid.uuid4().hex[:8]}.{extension}'
+        else:
+            name = f'{key}_{datetime.now().strftime("%Y%m%d%H%M%S")}_{uuid.uuid4().hex[:8]}.{extension}'
+        target = (root / name).resolve()
+        if root not in target.parents:
+            raise ValueError('Image target is invalid')
+        publish_image_bytes(root, name, image_content)
         try:
-            if image_type in SINGULAR_IMAGE_KINDS:
-                rows = db.session.execute(select(Image).filter_by(
-                    game_uuid=game_uuid, image_type=image_type,
-                )).scalars().all()
-                for row in rows:
-                    old_path = (root / row.url).resolve()
-                    if root not in old_path.parents:
-                        raise ValueError('Stored image path is invalid')
-                    if old_path.is_file():
-                        staged_path = old_path.with_name(
-                            f'.{old_path.name}.replace-{uuid.uuid4().hex}'
-                        )
-                        os.replace(old_path, staged_path)
-                        staged_old_files.append((staged_path, old_path))
-                    db.session.delete(row)
-                # Partial unique indexes require old singular rows to be
-                # deleted in the database before inserting their replacement.
+            for old_row, _path, _url in replaced:
+                db.session.delete(old_row)
+            if replaced:
+                # Partial unique indexes require the old singular rows to be
+                # gone before the replacement row is inserted.
                 db.session.flush()
-            if image_type in SINGULAR_IMAGE_KINDS:
-                name = f'{game_uuid}_{image_type}_{uuid.uuid4().hex[:8]}.{extension}'
-            else:
-                name = f'{game_uuid}_{datetime.now().strftime("%Y%m%d%H%M%S")}_{uuid.uuid4().hex[:8]}.{extension}'
-            target = (root / name).resolve()
-            if root not in target.parents:
-                raise ValueError('Image target is invalid')
-            target.write_bytes(image_content)
             row = Image(game_uuid=game_uuid, image_type=image_type, url=name)
             db.session.add(row)
             db.session.commit()
         except Exception:
+            # A commit error can be ambiguous, so the new file stays as an
+            # unreferenced recovery candidate; the old bytes were never touched.
             db.session.rollback()
-            if target is not None and target.exists():
-                try:
-                    target.unlink()
-                except OSError:
-                    logging.getLogger(__name__).error(
-                        'Could not remove a new image after a failed upload'
-                    )
-            for staged_path, old_path in reversed(staged_old_files):
-                if staged_path.exists():
-                    try:
-                        os.replace(staged_path, old_path)
-                    except OSError:
-                        logging.getLogger(__name__).error(
-                            'Could not restore an image after a failed replacement'
-                        )
             raise
-        for staged_path, _old_path in staged_old_files:
-            try:
-                staged_path.unlink()
-            except OSError:
-                logging.getLogger(__name__).warning(
-                    'Image replacement committed but staged file cleanup failed'
-                )
+        for _old_row, old_path, old_url in replaced:
+            remove_if_unreferenced(db.session, old_path, old_url)
         return {
             'message': 'File uploaded successfully',
             'url': f'/static/library/images/{name}',
