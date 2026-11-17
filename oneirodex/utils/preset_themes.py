@@ -32,6 +32,7 @@ from datetime import date
 from oneirodex.product import LEGACY_NAME, PRODUCT_NAME
 from oneirodex.utils.preset_themes_catalog import PRESET_THEMES
 from oneirodex.utils.preset_themes_geometry import _system_geometry
+from oneirodex.utils.json_file_store import write_json_atomic
 
 # Bump when the generator's output format changes so existing presets rebuild.
 # 11 (GT-A1): od-tokens gained radius / spacing / type / shadow / motion scales
@@ -633,9 +634,7 @@ def _write_theme_json(
             'group': group,
         },
     }
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(payload, fh, indent=2)
-        fh.write('\n')
+    write_json_atomic(path, payload, trailing_newline=True)
 
 
 def _write_preset_base_css(target: str, preset: dict) -> None:

@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 import os
-import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.json_file_store import locked, write_json_atomic
 
-_LOCK = threading.Lock()
 _VALID_ACTIONS = frozenset({
     'download',
     'install',
@@ -229,8 +228,7 @@ def _read_queue(path: str) -> list[dict[str, Any]]:
 
 
 def _write_queue(path: str, commands: list[dict[str, Any]]) -> None:
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump({'commands': commands}, fh, indent=2)
+    write_json_atomic(path, {'commands': commands})
 
 
 def _parse_iso(value: Any) -> datetime | None:
@@ -350,7 +348,7 @@ def enqueue_client_command(
         command['select'] = cleaned_select
 
     store = _store_path(user_id)
-    with _LOCK:
+    with locked(store):
         queue = _read_queue(store)
         # Drop duplicate pending for same game+action+version (or same open_path target).
         def _is_duplicate(row: dict[str, Any]) -> bool:
@@ -376,7 +374,7 @@ def claim_pending_commands(user_id: int, *, limit: int = 10) -> list[dict[str, A
     path = _store_path(user_id)
     claimed: list[dict[str, Any]] = []
     now = datetime.now(timezone.utc)
-    with _LOCK:
+    with locked(path):
         queue = _reclaim_stale(_read_queue(path), now=now)
         updated: list[dict[str, Any]] = []
         for row in queue:
@@ -400,7 +398,7 @@ def ack_client_commands(user_id: int, command_ids: list[str]) -> int:
     if not wanted:
         return 0
     path = _store_path(user_id)
-    with _LOCK:
+    with locked(path):
         queue = _read_queue(path)
         remaining = [row for row in queue if str(row.get('id') or '') not in wanted]
         removed = len(queue) - len(remaining)
@@ -416,7 +414,7 @@ def nack_client_commands(user_id: int, command_ids: list[str]) -> int:
         return 0
     path = _store_path(user_id)
     released = 0
-    with _LOCK:
+    with locked(path):
         queue = _read_queue(path)
         updated: list[dict[str, Any]] = []
         for row in queue:

@@ -257,9 +257,8 @@ class GameReadData:
         return {'enabled': True, 'pack': pack, 'overlay_links': overlay_links_for(game, pack)}
 
     def save_assists(self, game, body, *, config=None, package_root=None):
-        import json
-
         from oneirodex.utils.assist_packs import load_assist_pack, overlay_links_for, pack_path
+        from oneirodex.utils.json_file_store import write_json_atomic
 
         pack = {
             'title': body.title or game.name,
@@ -267,8 +266,7 @@ class GameReadData:
             'toggles': [item.model_dump(exclude_none=True) for item in body.toggles],
             'overlay_links': [item.model_dump() for item in body.overlay_links],
         }
-        with open(pack_path(game.uuid, config=config, package_root=package_root), 'w', encoding='utf-8') as stream:
-            json.dump(pack, stream, indent=2)
+        write_json_atomic(pack_path(game.uuid, config=config, package_root=package_root), pack)
         saved = load_assist_pack(game.uuid, config=config, package_root=package_root)
         return {'pack': saved, 'overlay_links': overlay_links_for(game, saved)}
 

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-import threading
 from typing import Any
 from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.json_file_store import locked, write_json_atomic
 
-_LOCK = threading.Lock()
 _VALID_STATES = frozenset({'not_downloaded', 'downloaded', 'installed', 'update_available'})
 
 
@@ -81,12 +80,11 @@ def save_lifecycle_records(
         incoming[uuid] = state
 
     path = _store_path(user_id)
-    with _LOCK:
+    with locked(path):
         mapping = {} if replace else _read_lifecycle_map(path)
         mapping.update(incoming)
         cleaned = [{'game_uuid': uuid, 'state': state} for uuid, state in sorted(mapping.items())]
-        with open(path, 'w', encoding='utf-8') as fh:
-            json.dump({'records': cleaned}, fh, indent=2)
+        write_json_atomic(path, {'records': cleaned})
     return mapping
 
 

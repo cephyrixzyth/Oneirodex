@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.json_file_store import locked, write_json_atomic
 
 _SAFE_UUID = re.compile(
     r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
@@ -224,7 +225,6 @@ def save_mods(
     """Write the pack. A ``None`` keyword keeps what the pack had for that
     field (``default_loader``, ``profiles``, ``active_profile``)."""
     path = _pack_path(game_uuid)
-    current = _read_pack(path)
     normalized: list[dict[str, Any]] = []
     for index, row in enumerate(mods):
         item = _normalize_mod_row(row, default_order=index)
@@ -233,21 +233,22 @@ def save_mods(
     normalized.sort(key=lambda item: (item['load_order'], item['name'].lower()))
     _prune_requires(normalized)
     known = {row['id'] for row in normalized}
-    pack = {
-        'game_uuid': game_uuid,
-        'default_loader': normalize_loader(
-            current.get('default_loader') if default_loader is None else default_loader
-        ),
-        'mods': normalized,
-        'profiles': _normalize_profiles(
-            current.get('profiles') if profiles is None else profiles, known
-        ),
-        'active_profile': str(
-            (current.get('active_profile') if active_profile is None else active_profile) or ''
-        ).strip(),
-    }
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(pack, fh, indent=2)
+    with locked(path):
+        current = _read_pack(path)
+        pack = {
+            'game_uuid': game_uuid,
+            'default_loader': normalize_loader(
+                current.get('default_loader') if default_loader is None else default_loader
+            ),
+            'mods': normalized,
+            'profiles': _normalize_profiles(
+                current.get('profiles') if profiles is None else profiles, known
+            ),
+            'active_profile': str(
+                (current.get('active_profile') if active_profile is None else active_profile) or ''
+            ).strip(),
+        }
+        write_json_atomic(path, pack)
     return load_mods(game_uuid)
 
 

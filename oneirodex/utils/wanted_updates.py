@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-import threading
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 from oneirodex.utils.library_paths import library_dir
+from oneirodex.utils.json_file_store import locked, write_json_atomic
 
-_LOCK = threading.Lock()
 
 
 def _library_root(app=None) -> str:
@@ -49,8 +48,7 @@ def _read(path: str) -> list[dict[str, Any]]:
 
 
 def _write(path: str, items: list[dict[str, Any]]) -> None:
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump({'items': items}, fh, indent=2)
+    write_json_atomic(path, {'items': items})
 
 
 def list_wanted(user_id: int, *, app=None) -> list[dict[str, Any]]:
@@ -84,7 +82,7 @@ def add_wanted(
         'created_at': datetime.now(timezone.utc).isoformat(),
     }
     path = _store_path(user_id, app=app)
-    with _LOCK:
+    with locked(path):
         items = _read(path)
         items = [
             row
@@ -103,7 +101,7 @@ def add_wanted(
 def mark_fulfilled(user_id: int, game_uuid: str, *, kind: str | None = None, app=None) -> int:
     path = _store_path(user_id, app=app)
     updated = 0
-    with _LOCK:
+    with locked(path):
         items = _read(path)
         for row in items:
             if row.get('game_uuid') != game_uuid or row.get('status') != 'wanted':

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from oneirodex.utils.match_scoring import rank_candidates
 from oneirodex.utils.game_name_parse import parse_game_label
+from oneirodex.utils.json_file_store import write_json_atomic
 
 
 PROPOSAL_FILENAME = 'oneirodex.proposal.json'
@@ -455,8 +456,7 @@ def write_match_proposal(folder_path: str, proposal: dict, filename: str = PROPO
         return False
     target = os.path.join(folder_path, filename)
     try:
-        with open(target, 'w', encoding='utf-8') as handle:
-            json.dump(proposal, handle, indent=2, ensure_ascii=False)
+        write_json_atomic(target, proposal, ensure_ascii=False)
         return True
     except OSError:
         return False

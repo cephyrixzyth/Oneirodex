@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from flask import current_app, has_app_context, jsonify
@@ -27,6 +26,7 @@ from oneirodex.utils.assist_packs import (
 )
 
 from . import apis_bp
+from oneirodex.utils.json_file_store import write_json_atomic
 
 
 def _package_root(package_root):
@@ -92,7 +92,6 @@ def put_game_assists(game_uuid, body: AssistPackBody):
         'overlay_links': [row.model_dump() for row in body.overlay_links],
     }
     path = _pack_path(game_uuid)
-    with open(path, 'w', encoding='utf-8') as fh:
-        json.dump(pack, fh, indent=2)
+    write_json_atomic(path, pack)
     saved = load_assist_pack(game_uuid)
     return api_ok({'pack': saved, 'overlay_links': overlay_links_for(game, saved)})

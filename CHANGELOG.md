@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The desktop command queue, per-member install states and wanted updates, mod packs, assist packs and generated theme files are now replaced in one step under a lock shared between workers. An interrupted write no longer empties the file, and running more than one worker no longer loses updates.
+
 ## [1.2.0] — 2026-11-16
 
 ### Added
