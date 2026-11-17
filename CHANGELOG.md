@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Audit events record which member acted again. Since 1.1.9 most events written by the server were stored without a user. Refused attempts to delete someone else's download request are logged as security events again.
 - Replacing a game's cover (or another single image) no longer deletes the old file while another game still uses it. The new image is written durably before the database switches to it, and file names no longer include the raw game id from the address.
 - The desktop command queue, per-member install states and wanted updates, mod packs, assist packs and generated theme files are now replaced in one step under a lock shared between workers. An interrupted write no longer empties the file, and running more than one worker no longer loses updates.
 

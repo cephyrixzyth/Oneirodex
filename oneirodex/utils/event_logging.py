@@ -1,7 +1,19 @@
+from contextvars import ContextVar
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import SystemEvents
 from datetime import datetime, timezone
 from typing import Optional, Union
+
+# The signed-in user of the current request in the served (ASGI) runtime.
+# Flask's ``current_user`` does not exist there, so request authentication
+# records the user here and audit events fall back to it.
+_ACTING_USER: ContextVar[Optional[int]] = ContextVar('oneirodex_acting_user', default=None)
+
+
+def set_acting_user(user_id: Optional[int]) -> None:
+    """Record who is acting for the rest of this request's context."""
+    _ACTING_USER.set(user_id)
+
 
 def log_system_event(
     event_text: str,
@@ -30,13 +42,16 @@ def log_system_event(
         
         # Handle audit_user logic
         if audit_user is None:
-            # Try to get current user ID, fall back to 'system'
-            try:
-                from flask_login import current_user
+            # The served runtime records the request's user; the Flask
+            # current_user is only available in a Flask request context.
+            audit_user = _ACTING_USER.get()
+            if audit_user is None:
+                try:
+                    from flask_login import current_user
 
-                audit_user = getattr(current_user, 'id', None)
-            except (ImportError, RuntimeError):
-                audit_user = None
+                    audit_user = getattr(current_user, 'id', None)
+                except (ImportError, RuntimeError):
+                    audit_user = None
         
         # Create new system event
         new_event = SystemEvents(
