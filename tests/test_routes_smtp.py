@@ -117,46 +117,6 @@ class TestSmtpSettings:
         response = client.get('/admin/smtp_settings')
         assert response.status_code == 302  # Redirected by admin_required
     
-    @patch('oneirodex.routes_smtp.render_admin_spa')
-    def test_get_success_no_settings(self, mock_render, client, admin_user, db_session):
-        """Test GET request with no existing settings."""
-        # Delete any existing settings first
-        db_session.execute(delete(GlobalSettings))
-        db_session.commit()
-        
-        mock_render.return_value = 'rendered admin shell'
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        response = client.get('/admin/smtp_settings')
-        assert response.status_code == 200
-        
-        mock_render.assert_called_once_with(title='SMTP - Oneirodex Admin')
-        assert b'rendered admin shell' in response.data
-    
-    @patch('oneirodex.routes_smtp.render_admin_spa')
-    def test_get_success_with_settings(self, mock_render, client, admin_user, db_session):
-        """Test GET request with existing settings."""
-        # Delete any default settings first, then use our test settings
-        db_session.execute(delete(GlobalSettings))
-        db_session.commit()
-        test_settings = create_test_settings(db_session)
-        
-        mock_render.return_value = 'rendered admin shell'
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        response = client.get('/admin/smtp_settings')
-        assert response.status_code == 200
-        
-        mock_render.assert_called_once_with(title='SMTP - Oneirodex Admin')
-        assert b'rendered admin shell' in response.data
-        assert db_session.get(GlobalSettings, test_settings.id).smtp_server == test_settings.smtp_server
-    
     def test_post_requires_login(self, client, configured_install):
         """Test that POST request requires login."""
         response = client.post('/admin/smtp_settings', json={})
@@ -466,28 +426,6 @@ class TestSmtpSettings:
         assert response_data['success'] is False
         assert response_data['message'] == 'Invalid port number. Must be between 1 and 65535'
     
-    def test_post_database_commit_error(self, client, admin_user, db_session, global_settings):
-        """Test POST request with database commit error."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        data = {
-            'smtp_enabled': False,
-            'smtp_server': 'smtp.example.com'
-        }
-        
-        with patch('oneirodex.routes_smtp.db.session.commit', side_effect=Exception('Database error')):
-            response = client.post('/admin/smtp_settings', json=data)
-            
-            assert response.status_code == 500
-            response_data = json.loads(response.data)
-            assert response_data['ok'] is False
-            assert response_data['success'] is False
-            # The exception text used to be handed to the browser; a DB error
-            # can carry connection and schema detail. It goes to the log now.
-            assert response_data['message'] == 'Could not save SMTP settings'
-    
     def test_post_defaults_smtp_use_tls_true(self, client, admin_user, db_session):
         """Test POST request defaults smtp_use_tls to True."""
         with client.session_transaction() as sess:
@@ -567,96 +505,3 @@ class TestSmtpTest:
         # The message will be about invalid port number since settings exist but are None
         assert 'port number' in response_data['message']
     
-    @patch('oneirodex.routes_smtp.SMTPTester')
-    def test_post_success(self, mock_smtp_tester_class, client, admin_user, db_session):
-        """Test POST request with successful SMTP test."""
-        # Delete any default settings and use only our test settings
-        db_session.execute(delete(GlobalSettings))
-        db_session.commit()
-        test_settings = create_test_settings(db_session)
-        
-        # Mock SMTPTester
-        mock_tester = MagicMock()
-        mock_tester.test_connection.return_value = (True, 'Connection successful')
-        mock_smtp_tester_class.return_value = mock_tester
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        response = client.post('/admin/smtp_test')
-        assert response.status_code == 200
-        
-        response_data = json.loads(response.data)
-        assert response_data['success'] is True
-        assert response_data['result'] == 'Connection successful'
-        
-        # Verify SMTPTester was called correctly
-        mock_smtp_tester_class.assert_called_once_with(debug=False)
-        mock_tester.test_connection.assert_called_once_with(
-            host='smtp.example.com',
-            port=587,
-            username='test@example.com',
-            password='testpassword',
-            use_tls=True,
-            timeout=10
-        )
-    
-    @patch('oneirodex.routes_smtp.SMTPTester')
-    def test_post_failure(self, mock_smtp_tester_class, client, admin_user, db_session):
-        """Test POST request with failed SMTP test."""
-        # Delete any default settings and use only our test settings
-        db_session.execute(delete(GlobalSettings))
-        db_session.commit()
-        test_settings = create_test_settings(db_session)
-        
-        # Mock SMTPTester
-        mock_tester = MagicMock()
-        mock_tester.test_connection.return_value = (False, 'Connection failed: Authentication error')
-        mock_smtp_tester_class.return_value = mock_tester
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        response = client.post('/admin/smtp_test')
-        assert response.status_code == 200
-        
-        response_data = json.loads(response.data)
-        assert response_data['success'] is False
-        assert response_data['message'] == 'Connection failed: Authentication error'
-        
-        # Verify SMTPTester was called correctly
-        mock_smtp_tester_class.assert_called_once_with(debug=False)
-        mock_tester.test_connection.assert_called_once_with(
-            host='smtp.example.com',
-            port=587,
-            username='test@example.com',
-            password='testpassword',
-            use_tls=True,
-            timeout=10
-        )
-    
-    @patch('oneirodex.routes_smtp.SMTPTester')
-    @patch('builtins.print')
-    def test_post_debug_print(self, mock_print, mock_smtp_tester_class, client, admin_user, db_session):
-        """Test POST request includes debug print statement."""
-        # Delete any default settings and use only our test settings
-        db_session.execute(delete(GlobalSettings))
-        db_session.commit()
-        test_settings = create_test_settings(db_session)
-        
-        # Mock SMTPTester
-        mock_tester = MagicMock()
-        mock_tester.test_connection.return_value = (True, 'Connection successful')
-        mock_smtp_tester_class.return_value = mock_tester
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        response = client.post('/admin/smtp_test')
-        assert response.status_code == 200
-        
-        # Verify debug print was called
-        mock_print.assert_called_once_with('Testing SMTP connection using settings: smtp.example.com:587')

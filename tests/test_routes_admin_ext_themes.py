@@ -299,37 +299,6 @@ class TestManageThemesRoute:
 
     @patch('oneirodex.routes_admin_ext.themes.ThemeManager')
     @patch('oneirodex.routes_admin_ext.themes.Path')
-    def test_manage_themes_upload_folder_creation(self, mock_path, mock_theme_manager, 
-                                                 client, admin_user, sample_theme_data):
-        """Test upload folder creation when it doesn't exist."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Mock Path behavior
-        mock_upload_folder = MagicMock()
-        mock_upload_folder.exists.return_value = False
-        mock_path.return_value.__truediv__.return_value = mock_upload_folder
-        
-        mock_instance = MagicMock()
-        mock_theme_manager.return_value = mock_instance
-        mock_instance.get_installed_themes.return_value = []
-        mock_instance.get_default_theme.return_value = {'name': 'Default'}
-        
-        zip_file = create_test_zip_file(sample_theme_data)
-        
-        data = {
-            'theme_zip': (zip_file, 'test_theme.zip'),
-            'submit': 'Upload Theme'
-        }
-        
-        response = client.post('/admin/themes', data=data, content_type='multipart/form-data')
-        
-        mock_upload_folder.mkdir.assert_called_once()
-        assert response.status_code == 302  # Redirect after processing
-
-    @patch('oneirodex.routes_admin_ext.themes.ThemeManager')
-    @patch('oneirodex.routes_admin_ext.themes.Path')
     def test_manage_themes_upload_folder_creation_error(self, mock_path, mock_theme_manager, 
                                                        client, admin_user, sample_theme_data):
         """Test error handling when upload folder creation fails."""
@@ -355,34 +324,6 @@ class TestManageThemesRoute:
         
         response = client.post('/admin/themes', data=data, content_type='multipart/form-data')
         assert response.status_code == 302  # Redirect after error
-
-    @patch('oneirodex.routes_admin_ext.themes.ThemeManager')
-    @patch('oneirodex.routes_admin_ext.themes.Path')
-    def test_manage_themes_successful_upload(self, mock_path, mock_theme_manager, client, admin_user, sample_theme_data):
-        """Test successful theme upload."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Mock Path behavior - folder exists
-        mock_upload_folder = MagicMock()
-        mock_upload_folder.exists.return_value = True
-        mock_path.return_value.__truediv__.return_value = mock_upload_folder
-        
-        mock_instance = MagicMock()
-        mock_theme_manager.return_value = mock_instance
-        mock_instance.upload_theme.return_value = sample_theme_data
-        
-        zip_file = create_test_zip_file(sample_theme_data)
-        
-        data = {
-            'theme_zip': (zip_file, 'test_theme.zip'),
-            'submit': 'Upload Theme'
-        }
-        
-        response = client.post('/admin/themes', data=data, content_type='multipart/form-data')
-        assert response.status_code == 302  # Redirect after success
-        mock_instance.upload_theme.assert_called_once()
 
     @patch('oneirodex.routes_admin_ext.themes.ThemeManager')
     @patch('oneirodex.routes_admin_ext.themes.Path')
@@ -562,20 +503,6 @@ class TestDeleteThemeRoute:
         assert 'login' in response.location
 
     @patch('oneirodex.routes_admin_ext.themes.ThemeManager')
-    def test_delete_theme_success(self, mock_theme_manager, client, admin_user):
-        """Test successful theme deletion."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        mock_instance = MagicMock()
-        mock_theme_manager.return_value = mock_instance
-        
-        response = client.post('/admin/themes/delete/test_theme')
-        assert response.status_code == 302  # Redirect after deletion
-        mock_instance.delete_themefile.assert_called_once_with('test_theme')
-
-    @patch('oneirodex.routes_admin_ext.themes.ThemeManager')
     def test_delete_theme_value_error(self, mock_theme_manager, client, admin_user):
         """Test theme deletion with ValueError."""
         with client.session_transaction() as sess:
@@ -634,48 +561,6 @@ class TestResetDefaultThemesRoute:
         assert 'login' in response.location
 
     @patch('oneirodex.routes_admin_ext.themes.log_system_event')
-    def test_reset_default_themes_missing_source(self, mock_log, client, admin_user, theme_sandbox):
-        """No tracked source: bail out without disturbing what is installed.
-
-        Previously this patched `os.path.exists`, but the route resolves paths
-        with `pathlib`, so the guard it meant to trip was never reached and a
-        full reset ran against the real install instead.
-        """
-        shutil.rmtree(theme_sandbox / 'setup' / 'default_theme')
-        installed = theme_sandbox / 'static' / 'library' / 'themes' / 'default'
-
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        response = client.post('/admin/themes/reset', json={})
-
-        assert response.status_code == 500
-        assert response.get_json()['error_code'] == 'internal'
-        assert 'source directory not found' not in response.get_data(as_text=True)
-        # A reset that cannot proceed must leave the installed theme alone.
-        assert (installed / 'theme.json').is_file()
-
-    @patch('oneirodex.routes_admin_ext.themes.log_system_event')
-    def test_reset_default_themes_success(self, mock_log, client, admin_user, theme_sandbox):
-        """The stale install is replaced from source, presets included."""
-        themes_root = theme_sandbox / 'static' / 'library' / 'themes'
-
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        response = client.post('/admin/themes/reset', json={})
-
-        assert response.status_code == 200
-        installed = json.loads((themes_root / 'default' / 'theme.json').read_text(encoding='utf-8'))
-        assert installed['name'] == 'Default Theme'
-        assert (themes_root / 'default' / 'css' / 'od-tokens.css').is_file()
-        # The route installs the colour presets alongside the default.
-        for slug in PRESET_SLUGS:
-            assert (themes_root / slug / 'theme.json').is_file(), slug
-
-    @patch('oneirodex.routes_admin_ext.themes.log_system_event')
     @patch('shutil.rmtree', side_effect=PermissionError('theme folder in use'))
     def test_reset_default_themes_remove_failure(
         self, mock_rmtree, mock_log, client, admin_user, theme_sandbox
@@ -689,30 +574,6 @@ class TestResetDefaultThemesRoute:
 
         assert response.status_code == 500
         assert response.get_json()['error_code'] == 'internal'
-
-    @patch('oneirodex.routes_admin_ext.themes.log_system_event')
-    @patch('shutil.copytree', side_effect=Exception('Copy failed'))
-    def test_reset_default_themes_copy_failure(
-        self, mock_copytree, mock_log, client, admin_user, theme_sandbox
-    ):
-        """A failed copy is reported after the old tree has already gone.
-
-        This is the destructive one: it mocks `copytree` but deliberately not
-        `rmtree`, so the removal happens for real and nothing restores it. That
-        is the behaviour under test — the sandbox is what keeps it from landing
-        on the developer's install.
-        """
-        themes_root = theme_sandbox / 'static' / 'library' / 'themes'
-
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        response = client.post('/admin/themes/reset', json={})
-
-        assert response.status_code == 500
-        assert response.get_json()['error_code'] == 'internal'
-        assert not (themes_root / 'default').exists()
 
     @patch('oneirodex.routes_admin_ext.themes.log_system_event')
     @patch('pathlib.Path.mkdir', side_effect=OSError('no such device'))

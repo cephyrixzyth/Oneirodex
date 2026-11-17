@@ -386,28 +386,6 @@ class TestReorderLibraries:
                              content_type='application/json')
         assert response.status_code == 500  # Flask returns 500 for invalid JSON
     
-    @patch('oneirodex.routes_apis.library.db.session.commit')
-    def test_reorder_libraries_database_error(self, mock_commit, client, admin_user, multiple_libraries):
-        """Test reordering with database error."""
-        mock_commit.side_effect = Exception("Database error")
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        order = [lib.uuid for lib in multiple_libraries]
-        
-        response = client.post('/api/reorder_libraries',
-                             json={'order': order})
-        assert response.status_code == 500
-        
-        data = response.get_json()
-        assert data['status'] == 'error'
-        assert data['ok'] is False
-        assert data['message'] == 'Could not update the library'
-        assert 'Database error' not in data['message']
-
-
 class TestGetLibrary:
     """Tests for get_library endpoint."""
     

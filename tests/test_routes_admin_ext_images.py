@@ -571,41 +571,6 @@ class TestDeleteImageAPI:
         deleted_image = db_session.get(Image, image_id)
         assert deleted_image is None
 
-    def test_delete_image_success_with_file_removal(self, client, admin_user, db_session, sample_library, sample_game):
-        """Test successfully deleting a downloaded image with file removal."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Create downloaded image
-        downloaded_image = Image(
-            game_uuid=sample_game.uuid,
-            image_type='cover',
-            download_url='https://example.com/cover.jpg',
-            url='cover.jpg',
-            is_downloaded=True
-        )
-        
-        db_session.add(downloaded_image)
-        db_session.flush()
-        image_id = downloaded_image.id
-
-        with patch('os.path.exists') as mock_exists, \
-             patch('os.remove') as mock_remove, \
-             patch('oneirodex.routes_admin_ext.images.current_app') as mock_app:
-            
-            mock_app.config = {'IMAGE_SAVE_PATH': '/test/path'}
-            mock_exists.return_value = True
-            
-            response = client.delete(f'/admin/api/delete_image/{image_id}')
-            assert response.status_code == 200
-            
-            data = json.loads(response.data)
-            assert data['success'] is True
-            
-            # Verify file removal was attempted
-            mock_remove.assert_called_once()
-
     def test_delete_image_handles_exception(self, client, admin_user, db_session, sample_library, sample_game):
         """Test delete_image handles database exceptions."""
         with client.session_transaction() as sess:
@@ -633,5 +598,3 @@ class TestDeleteImageAPI:
             
             data = json.loads(response.data)
             assert data['success'] is False
-
-

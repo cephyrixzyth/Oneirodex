@@ -1186,18 +1186,22 @@ def test_local_cover_serves_what_was_vetted_when_the_file_is_swapped_while_loggi
 
 
 def test_local_cover_of_a_game_folder_swapped_after_the_path_check_is_not_served(client, cover_game, secret, monkeypatch):
-    from oneirodex.routes_games_ext import details
+    from oneirodex.utils import security
 
     (secret.parent / 'cover.jpg').write_bytes(SECRET)  # a cover the folder never held
-    real_check = details.is_safe_path
+    real_check = security.is_safe_path
+    swapped = []
 
-    def check_then_swap(path, bases):
-        verdict = real_check(path, bases)
-        cover_game.folder.rename(cover_game.library_root / 'Cover Game.moved')
-        _link(cover_game.folder, secret.parent, directory=True)
+    def check_then_swap(path, bases, *args, **kwargs):
+        verdict = real_check(path, bases, *args, **kwargs)
+        if not swapped:
+            swapped.append(True)
+            cover_game.folder.rename(cover_game.library_root / 'Cover Game.moved')
+            _link(cover_game.folder, secret.parent, directory=True)
         return verdict
 
-    monkeypatch.setattr(details, 'is_safe_path', check_then_swap)
+    # The served route checks the path with this function, then opens the file.
+    monkeypatch.setattr(security, 'is_safe_path', check_then_swap)
     response = client.get(f'/game/{cover_game.game.uuid}/local_image/cover')
 
     assert SECRET not in response.data

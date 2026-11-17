@@ -45,6 +45,13 @@ def private_data(app, db_session, configured_install, tmp_path, monkeypatch):
     return owner, outsider, channel, attachment, invite
 
 
+def _refused(response):
+    """A token without the scope gets no data: 401/403, or a sign-in redirect for browser-only forms."""
+    if response.status_code in (401, 403):
+        return True
+    return response.status_code == 302 and (response.headers.get('location') or '').startswith('/login')
+
+
 def bearer(user, scopes):
     row, raw = generate_api_token(user, 'scope regression', scopes)
     assert row.scopes == scopes
@@ -114,7 +121,7 @@ def test_library_token_cannot_read_social_presence_profiles_or_activity(client, 
     ]
     for method, path in paths:
         response = client.open(path, method=method, headers=headers, json={})
-        assert response.status_code == 403, (method, path)
+        assert _refused(response), (method, path, response.status_code)
 
 
 def test_child_profile_total_excludes_games_outside_their_library_allowlist(
@@ -350,8 +357,9 @@ def test_invites_require_session_for_every_method(client, private_data, scopes):
                          ('GET', '/user/invites'), ('POST', '/user/invites'),
                          ('POST', f'/delete_invite/{invite.token}')]:
         response = client.open(path, method=method, headers=headers, json={})
-        assert response.status_code == 403, (method, path)
-        assert invite.token.encode() not in response.data
+        assert _refused(response), (method, path, response.status_code)
+        if response.status_code != 302:  # a sign-in redirect only echoes the requested path
+            assert invite.token.encode() not in response.data
 
 
 def test_browser_session_still_reads_invites_and_chat(client, private_data):

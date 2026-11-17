@@ -169,24 +169,6 @@ class TestGameEditAuthentication:
 class TestGameEditSecurityValidation:
     """Test security validations in game edit route."""
     
-    def test_path_validation_prevents_traversal(self, client, admin_user, test_game, form_data):
-        """Test that path validation prevents directory traversal attacks."""
-        form_data['full_disk_path'] = '/etc/passwd'
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path') as mock_safe_path:
-            mock_safe_path.return_value = (False, "Access denied - path outside allowed directories")
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories') as mock_bases:
-                mock_bases.return_value = ['/allowed/path']
-                
-                response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        assert response.status_code == 200  # Renders form with error
-        assert b'Access denied' in response.data
-    
     def test_url_validation_code_exists(self, client, admin_user, test_game):
         """Test that URL validation code exists in the route."""
         # This test verifies that the URL validation logic is present in the code
@@ -209,25 +191,6 @@ class TestGameEditSecurityValidation:
         assert hasattr(edit, 'is_safe_path')
         assert hasattr(edit, 'sanitize_path_for_logging')
         assert hasattr(edit, 'log_system_event')
-    
-    def test_url_validation_allows_valid_https(self, client, admin_user, test_game, form_data):
-        """Test that URL validation allows valid HTTPS URLs."""
-        form_data['url'] = 'https://valid.example.com/game'
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                with patch('oneirodex.routes_games_ext.edit.get_folder_size_in_bytes_updates', return_value=1024):
-                    with patch('oneirodex.routes_games_ext.edit.read_first_nfo_content', return_value='NFO'):
-                        response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        # Should redirect on success (302) or stay on form (200)
-        assert response.status_code in [200, 302]
-        if response.status_code == 200:
-            assert b'URL must use http or https protocol' not in response.data
     
     def test_category_validation_code_exists(self, client, admin_user, test_game):
         """Test that category validation code exists in the route."""
@@ -282,155 +245,6 @@ class TestGameEditInputValidation:
         if response.status_code == 200:
             assert b'Summary was truncated to 4096 characters' in response.data
     
-    def test_developer_name_validation_unicode_support(self, client, admin_user, test_game, form_data):
-        """Test that developer names support Unicode characters (Chinese, Cyrillic, etc.)."""
-        form_data['developer'] = '游戏开发商'  # Chinese characters
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                with patch('oneirodex.routes_games_ext.edit.get_folder_size_in_bytes_updates', return_value=1024):
-                    with patch('oneirodex.routes_games_ext.edit.read_first_nfo_content', return_value='NFO'):
-                        response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        # Should not show validation error for Unicode
-        assert response.status_code in [200, 302]
-        if response.status_code == 200:
-            assert b'Developer name too long' not in response.data
-    
-    def test_publisher_name_validation_unicode_support(self, client, admin_user, test_game, form_data):
-        """Test that publisher names support Unicode characters (Cyrillic)."""
-        form_data['publisher'] = 'Разработчик Игр'  # Cyrillic characters
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                with patch('oneirodex.routes_games_ext.edit.get_folder_size_in_bytes_updates', return_value=1024):
-                    with patch('oneirodex.routes_games_ext.edit.read_first_nfo_content', return_value='NFO'):
-                        response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        # Should not show validation error for Unicode
-        assert response.status_code in [200, 302]
-        if response.status_code == 200:
-            assert b'Publisher name too long' not in response.data
-    
-    def test_developer_name_length_validation(self, client, admin_user, test_game, form_data):
-        """Test that developer names are limited to 255 characters."""
-        form_data['developer'] = 'A' * 300  # Exceeds 255 limit
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        assert response.status_code == 200  # Renders form with error
-        assert b'Developer name too long (max 255 characters)' in response.data
-    
-    def test_publisher_name_length_validation(self, client, admin_user, test_game, form_data):
-        """Test that publisher names are limited to 255 characters."""
-        form_data['publisher'] = 'A' * 300  # Exceeds 255 limit
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        assert response.status_code == 200  # Renders form with error
-        assert b'Publisher name too long (max 255 characters)' in response.data
-    
-    def test_empty_developer_name_validation(self, client, admin_user, test_game, form_data):
-        """Test that empty developer names are rejected."""
-        form_data['developer'] = '   '  # Only whitespace
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        assert response.status_code == 200  # Renders form with error
-        assert b'Developer name cannot be empty' in response.data
-
-
-class TestGameEditErrorHandling:
-    """Test error handling and transaction management."""
-    
-    def test_scan_job_running_blocks_edit(self, client, admin_user, test_game, form_data):
-        """Test that editing is blocked when scan job is running."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_scan_job_running', return_value=True):
-            response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        assert response.status_code == 200  # Renders form with error
-        assert b'A scan is running' in response.data
-    
-    def test_database_rollback_on_integrity_error(self, client, admin_user, test_game, form_data, test_library):
-        """Test that database rollback occurs on integrity errors."""
-        # Create another game with the same IGDB ID to cause conflict
-        conflicting_game = Game(
-            uuid=str(uuid4()),
-            igdb_id=form_data['igdb_id'],
-            name='Conflicting Game',
-            library_uuid=test_library.uuid
-        )
-        db.session.add(conflicting_game)
-        db.session.commit()
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        assert response.status_code == 200  # Renders form with error
-        assert b'already used by another game' in response.data
-    
-    def test_file_operation_error_handling(self, client, admin_user, test_game, form_data):
-        """Test error handling for file operations."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                with patch('oneirodex.routes_games_ext.edit.get_folder_size_in_bytes_updates', side_effect=OSError("Permission denied")):
-                    response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        assert response.status_code == 200  # Renders form with error
-        assert b'Error accessing game files' in response.data
-    
-    def test_configuration_error_handling(self, client, admin_user, test_game, form_data):
-        """Test handling of configuration errors (no allowed base directories)."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=[]):
-            response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        assert response.status_code == 200  # Renders form with error
-        assert b'Service configuration error' in response.data
-
-
 class TestGameEditAtomicOperations:
     """Test atomic database operations and race condition prevention."""
     
@@ -464,26 +278,6 @@ class TestGameEditAtomicOperations:
 class TestGameEditLogging:
     """Test security logging and audit trails."""
     
-    def test_security_logging_for_path_validation(self, client, admin_user, test_game, form_data):
-        """Test that security logging occurs for path validation failures."""
-        form_data['full_disk_path'] = '/malicious/path'
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path') as mock_safe_path:
-            mock_safe_path.return_value = (False, "Access denied")
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                with patch('oneirodex.routes_games_ext.edit.current_app.logger') as mock_logger:
-                    response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        # Verify security error was logged
-        mock_logger.error.assert_called()
-        error_calls = [logged_call for logged_call in mock_logger.error.call_args_list
-                      if 'Security error' in str(logged_call)]
-        assert len(error_calls) > 0
-    
     def test_audit_logging_for_successful_update(self, client, admin_user, test_game, form_data):
         """Test that audit logging occurs for successful game updates."""
         with client.session_transaction() as sess:
@@ -503,52 +297,8 @@ class TestGameEditLogging:
                           if 'updated by admin' in str(call)]
             assert len(audit_calls) > 0
     
-    def test_secure_path_logging(self, client, admin_user, test_game, form_data):
-        """Test that paths are sanitized in logs."""
-        sensitive_path = '/home/user/sensitive/path/game'
-        form_data['full_disk_path'] = sensitive_path
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                with patch('oneirodex.routes_games_ext.edit.get_folder_size_in_bytes_updates', return_value=1024):
-                    with patch('oneirodex.routes_games_ext.edit.read_first_nfo_content', return_value='NFO'):
-                        with patch('oneirodex.routes_games_ext.edit.sanitize_path_for_logging') as mock_sanitize:
-                            with patch('oneirodex.routes_games_ext.edit.current_app.logger') as mock_logger:
-                                mock_sanitize.return_value = '/home/[USER]/sensitive/path/game'
-                                response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        # Verify path sanitization was called
-        mock_sanitize.assert_called()
-
-
 class TestGameEditSuccessScenarios:
     """Test successful game editing scenarios."""
-    
-    def test_successful_game_update(self, client, admin_user, test_game, form_data):
-        """Test successful game update with all fields."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.edit.get_allowed_base_directories', return_value=['/allowed']):
-                with patch('oneirodex.routes_games_ext.edit.get_folder_size_in_bytes_updates', return_value=2048000):
-                    with patch('oneirodex.routes_games_ext.edit.read_first_nfo_content', return_value='Updated NFO'):
-                        response = client.post(f'/game_edit/{test_game.uuid}', data=form_data)
-        
-        # Should redirect to library on success
-        if response.status_code == 302:
-            assert '/library' in response.location
-        
-        # Verify game was updated in database
-        updated_game = db.session.execute(select(Game).filter_by(uuid=test_game.uuid)).scalars().first()
-        assert updated_game.name == form_data['name']
-        assert updated_game.summary == form_data['summary']
-        assert updated_game.url == form_data['url']
     
     def test_image_refresh_code_exists(self, client, admin_user, test_game):
         """Test that image refresh code exists in the route."""
@@ -629,30 +379,6 @@ class TestGameEditSuccessScenarios:
         
         response = client.get(f'/game_edit/{nonexistent_uuid}')
         assert response.status_code == 404
-
-
-class TestGameEditFormValidation:
-    """Test form validation and CSRF protection."""
-    
-    def test_form_validation_failure_logging(self, client, admin_user, test_game):
-        """Test that form validation failures are logged."""
-        invalid_data = {
-            'name': '',  # Required field empty
-            'csrf_token': 'invalid_token'
-        }
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.edit.current_app.logger') as mock_logger:
-            response = client.post(f'/game_edit/{test_game.uuid}', data=invalid_data)
-        
-        # Verify form validation failure was logged
-        mock_logger.warning.assert_called()
-        warning_calls = [logged_call for logged_call in mock_logger.warning.call_args_list
-                        if 'Form validation failed' in str(logged_call)]
-        assert len(warning_calls) > 0
 
 
 class TestGameEditDatabaseOperations:

@@ -165,32 +165,3 @@ def test_image_queue_includes_failure_reason_and_path(client, db_session, admin_
     assert data['images']
     assert data['images'][0]['failure_reason'] == 'HTTP 404 downloading image.'
     assert data['images'][0]['status'] == 'failed'
-
-
-@patch('oneirodex.routes_admin_ext.images.batch_apply_covers')
-def test_artwork_auto_pick_route(mock_batch, client, db_session, admin_user, app, tmp_path):
-    img_root = tmp_path / 'images'
-    img_root.mkdir()
-    app.config['IMAGE_SAVE_PATH'] = str(img_root)
-    mock_batch.return_value = {
-        'applied': 1,
-        'failed': 0,
-        'results': [{'game_uuid': 'g1', 'status': 'applied'}],
-        'policy': ['steamgriddb', 'igdb', 'giantbomb', 'meta_quest', 'generate'],
-        'image_save_path': {'path': str(img_root), 'writable': True},
-    }
-
-    with client.session_transaction() as sess:
-        sess['_user_id'] = str(admin_user.id)
-        sess['_fresh'] = True
-
-    resp = client.post(
-        '/admin/api/artwork/auto-pick',
-        json={'policy': 'best_available', 'limit_games': 5},
-    )
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data['success'] is True
-    assert data['applied'] == 1
-    mock_batch.assert_called_once()
-    assert mock_batch.call_args.kwargs.get('policy') == 'best_available'

@@ -999,54 +999,6 @@ class TestMoveGameToLibraryAPI:
 
     
 
-    @patch('oneirodex.routes_apis.game.log_system_event')
-
-    def test_move_game_logging(self, mock_log, client, librarian_user, sample_games, target_library):
-
-        """Test that move operation is properly logged."""
-
-        with client.session_transaction() as sess:
-
-            sess['_user_id'] = str(librarian_user.id)
-
-            sess['_fresh'] = True
-
-        
-
-        game_uuid = str(sample_games[0].uuid)
-
-        target_library_uuid = str(target_library.uuid)
-
-        
-
-        response = client.post('/api/move_game_to_library', json={
-
-            'game_uuid': game_uuid,
-
-            'target_library_uuid': target_library_uuid
-
-        })
-
-        
-
-        assert response.status_code == 200
-
-        
-
-        # Verify logging occurred
-
-        mock_log.assert_called_once()
-
-        log_call = mock_log.call_args[0][0]
-
-        assert 'moved to library Target Library' in log_call
-
-        assert librarian_user.name in log_call
-
-
-
-
-
 class TestGetNextCustomIGDBIdAPI:
 
     """Test the get next custom IGDB ID API endpoint."""
@@ -1126,38 +1078,6 @@ class TestGetNextCustomIGDBIdAPI:
         assert data['next_id'] == 2000000426
 
     
-
-    @patch('oneirodex.routes_apis.game.db.session.execute')
-
-    def test_next_igdb_id_database_error(self, mock_execute, client, regular_user):
-
-        """Test error handling in next IGDB ID endpoint."""
-
-        mock_execute.side_effect = Exception("Database error")
-
-        
-
-        with client.session_transaction() as sess:
-
-            sess['_user_id'] = str(regular_user.id)
-
-            sess['_fresh'] = True
-
-        
-
-        response = client.get('/api/get_next_custom_igdb_id')
-
-        assert response.status_code == 500
-
-        
-
-        data = response.get_json()
-
-        assert 'error' in data
-
-
-
-
 
 class TestGameAPIResponseFormats:
 

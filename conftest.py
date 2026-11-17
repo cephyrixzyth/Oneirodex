@@ -349,17 +349,20 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(scope='function')
-def client(app):
-    """Create a test client for the Flask application."""
-    return app.test_client()
+def client(app, db_session):
+    """A client for the app production serves (the native ASGI runtime).
 
-
-@pytest.fixture(scope='function')
-def native_client(app, db_session):
-    """A client for the real ASGI app, bound to this test's database transaction."""
+    Bound to this test's database transaction; see tests/fixtures/native_client.py.
+    """
     from tests.fixtures.native_client import build_native_client
 
     return build_native_client(app, db_session)
+
+
+@pytest.fixture(scope='function')
+def native_client(client):
+    """Alias kept for tests written while both clients existed."""
+    return client
 
 
 # ---------------------------------------------------------------------------

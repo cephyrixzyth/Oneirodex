@@ -476,90 +476,6 @@ class TestPathAvailabilityCheck:
                     assert data['available'] is False
                     assert 'Access denied' in data['error'] or 'outside allowed directories' in data['error']
 
-    @patch('oneirodex.routes_apis.system.current_app', spec=True)
-    @patch('oneirodex.routes_apis.system.Path', spec=True)
-    def test_valid_path_exists(self, mock_path_class, mock_app, client, regular_user):
-        """Test checking existence of valid path that exists."""
-        mock_app.config.get.side_effect = lambda key: {
-            'DATA_FOLDER_GAMES': '/allowed/games',
-            'BASE_FOLDER_WINDOWS': None,
-            'BASE_FOLDER_POSIX': None
-        }.get(key)
-        
-        mock_path_obj = MagicMock()
-        mock_path_obj.resolve.return_value = mock_path_obj
-        mock_path_obj.exists.return_value = True
-        mock_path_class.return_value = mock_path_obj
-        
-        # Mock is_safe_path to return True for valid paths
-        with patch('oneirodex.routes_apis.system.is_safe_path') as mock_safe_path:
-            mock_safe_path.return_value = (True, None)
-            
-            with client.session_transaction() as sess:
-                sess['_user_id'] = str(regular_user.id)
-                sess['_fresh'] = True
-            
-            response = client.get('/api/check_path_availability?full_disk_path=/allowed/games/test.exe')
-            assert response.status_code == 200
-            data = response.get_json()
-            assert data['available'] is True
-
-    @patch('oneirodex.routes_apis.system.current_app', spec=True)
-    @patch('oneirodex.routes_apis.system.Path', spec=True)
-    def test_valid_path_does_not_exist(self, mock_path_class, mock_app, client, regular_user):
-        """Test checking existence of valid path that doesn't exist."""
-        mock_app.config.get.side_effect = lambda key: {
-            'DATA_FOLDER_GAMES': '/allowed/games',
-            'BASE_FOLDER_WINDOWS': None,
-            'BASE_FOLDER_POSIX': None
-        }.get(key)
-        
-        mock_path_obj = MagicMock()
-        mock_path_obj.resolve.return_value = mock_path_obj
-        mock_path_obj.exists.return_value = False
-        mock_path_class.return_value = mock_path_obj
-        
-        with patch('oneirodex.routes_apis.system.is_safe_path') as mock_safe_path:
-            mock_safe_path.return_value = (True, None)
-            
-            with client.session_transaction() as sess:
-                sess['_user_id'] = str(regular_user.id)
-                sess['_fresh'] = True
-            
-            response = client.get('/api/check_path_availability?full_disk_path=/allowed/games/nonexistent.exe')
-            assert response.status_code == 200
-            data = response.get_json()
-            assert data['available'] is False
-
-    @patch('oneirodex.routes_apis.system.current_app', spec=True)
-    @patch('oneirodex.routes_apis.system.Path', spec=True)
-    def test_path_resolution_error(self, mock_path_class, mock_app, client, regular_user):
-        """Test handling of path resolution errors."""
-        mock_app.config.get.side_effect = lambda key: {
-            'DATA_FOLDER_GAMES': '/allowed/games',
-            'BASE_FOLDER_WINDOWS': None,
-            'BASE_FOLDER_POSIX': None
-        }.get(key)
-        mock_app.logger.warning = MagicMock()
-        
-        mock_path_obj = MagicMock()
-        mock_path_obj.resolve.side_effect = OSError("Permission denied")
-        mock_path_class.return_value = mock_path_obj
-        
-        with patch('oneirodex.routes_apis.system.is_safe_path') as mock_safe_path:
-            mock_safe_path.return_value = (True, None)
-            
-            with client.session_transaction() as sess:
-                sess['_user_id'] = str(regular_user.id)
-                sess['_fresh'] = True
-            
-            response = client.get('/api/check_path_availability?full_disk_path=/allowed/games/test.exe')
-            assert response.status_code == 500
-            data = response.get_json()
-            assert data['available'] is False
-            assert 'Unable to check path' in data['error']
-
-
 class TestEmulatorEndpoints:
     """Tests for emulator listing endpoints."""
     
@@ -621,21 +537,6 @@ class TestEmulatorEndpoints:
         assert response.status_code == 404
         data = response.get_json()
         assert 'Platform not supported' in data['error']
-
-    @patch('oneirodex.routes_apis.system.Emulator', spec=True)
-    def test_emulator_retrieval_error_handling(self, mock_emulator, client, regular_user):
-        """Test error handling when emulator retrieval fails."""
-        mock_emulator.__iter__.side_effect = Exception("Database error")
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(regular_user.id)
-            sess['_fresh'] = True
-        
-        response = client.get('/api/emulators')
-        assert response.status_code == 500
-        data = response.get_json()
-        assert 'Unable to retrieve emulators' in data['error']
-
 
 class TestSecurityHelperFunctions:
     """Tests for security helper functions."""

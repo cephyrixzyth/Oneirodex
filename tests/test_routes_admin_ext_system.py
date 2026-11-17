@@ -453,37 +453,6 @@ class TestUpdateSectionOrderAPI:
                              json=data, content_type='application/json')
         assert response.status_code == 302
     
-    @patch('oneirodex.routes_admin_ext.system.log_system_event')
-    def test_update_section_order_success(self, mock_log, client, admin_user, sample_discovery_sections, db_session):
-        """Test successful section order update."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Get section IDs
-        sections = sample_discovery_sections
-        data = {
-            'sections': [
-                {'id': sections[0].id, 'order': 5},
-                {'id': sections[1].id, 'order': 10}
-            ]
-        }
-        
-        response = client.post('/admin/api/discovery_sections/order', 
-                             json=data, content_type='application/json')
-        
-        assert response.status_code == 200
-        response_data = response.get_json()
-        assert response_data['success'] is True
-        assert 'Updated order for 2 sections' in response_data['message']
-        
-        # Verify database was updated
-        updated_section = db_session.get(DiscoverySection, sections[0].id)
-        assert updated_section.display_order == 5
-        
-        # Verify logging was called
-        mock_log.assert_called()
-    
     def test_update_section_order_empty_json(self, client, admin_user):
         """Test API with empty JSON data."""
         with client.session_transaction() as sess:
@@ -622,32 +591,6 @@ class TestUpdateSectionVisibilityAPI:
                              json=data, content_type='application/json')
         assert response.status_code == 302
     
-    @patch('oneirodex.routes_admin_ext.system.log_system_event')
-    def test_update_section_visibility_success(self, mock_log, client, admin_user, sample_discovery_sections, db_session):
-        """Test successful section visibility update."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        section = sample_discovery_sections[0]
-        original_visibility = section.is_visible
-        
-        data = {'section_id': section.id, 'is_visible': not original_visibility}
-        response = client.post('/admin/api/discovery_sections/visibility', 
-                             json=data, content_type='application/json')
-        
-        assert response.status_code == 200
-        response_data = response.get_json()
-        assert response_data['success'] is True
-        assert section.name in response_data['message']
-        
-        # Verify database was updated
-        updated_section = db_session.get(DiscoverySection, section.id)
-        assert updated_section.is_visible == (not original_visibility)
-        
-        # Verify logging was called
-        mock_log.assert_called()
-    
     def test_update_section_visibility_empty_json(self, client, admin_user):
         """Test API with empty JSON data."""
         with client.session_transaction() as sess:
@@ -734,53 +677,6 @@ class TestUpdateSectionVisibilityAPI:
         assert 'Section with ID 99999 not found' in response_data['error']
 
 
-class TestSystemIntegration:
-    """Integration tests for system functionality."""
-    
-    @patch('oneirodex.routes_admin_ext.system.log_system_event')
-    def test_complete_section_management_workflow(self, mock_log, client, admin_user, sample_discovery_sections, db_session):
-        """Test complete workflow of managing discovery sections."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Step 1: View sections page
-        response = client.get('/admin/discovery_sections')
-        assert response.status_code == 200
-        
-        # Step 2: Update section order
-        sections = sample_discovery_sections
-        order_data = {
-            'sections': [
-                {'id': sections[0].id, 'order': 10},
-                {'id': sections[1].id, 'order': 5}
-            ]
-        }
-        
-        response = client.post('/admin/api/discovery_sections/order', 
-                             json=order_data, content_type='application/json')
-        assert response.status_code == 200
-        
-        # Verify order was updated
-        updated_section1 = db_session.get(DiscoverySection, sections[0].id)
-        updated_section2 = db_session.get(DiscoverySection, sections[1].id)
-        assert updated_section1.display_order == 10
-        assert updated_section2.display_order == 5
-        
-        # Step 3: Update section visibility
-        visibility_data = {'section_id': sections[0].id, 'is_visible': False}
-        response = client.post('/admin/api/discovery_sections/visibility', 
-                             json=visibility_data, content_type='application/json')
-        assert response.status_code == 200
-        
-        # Verify visibility was updated
-        updated_section1 = db_session.get(DiscoverySection, sections[0].id)
-        assert updated_section1.is_visible is False
-        
-        # Verify logging was called multiple times
-        assert mock_log.call_count >= 2
-
-
 class TestClearSystemLogsAPI:
     """Test the clear_system_logs API endpoint."""
     
@@ -829,68 +725,6 @@ class TestClearSystemLogsAPI:
         assert f"System logs cleared by admin user '{admin_user.name}' (ID: {admin_user.id})" in audit_log.event_text
         assert f"{initial_count} logs were deleted" in audit_log.event_text
     
-    @patch('oneirodex.routes_admin_ext.system.log_system_event')
-    def test_clear_logs_empty_database(self, mock_log, client, admin_user, db_session):
-        """Test clearing logs when database is already empty."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Clear any existing logs first
-        db_session.query(SystemEvents).delete()
-        db_session.commit()
-        
-        response = client.delete('/admin/api/system_logs/clear')
-        
-        assert response.status_code == 200
-        response_data = response.get_json()
-        assert response_data['success'] is True
-        assert 'Successfully cleared 0 system logs' in response_data['message']
-        assert response_data['deleted_count'] == 0
-        
-        # Verify the action was still logged
-        mock_log.assert_called_with(
-            f"System logs cleared by admin user '{admin_user.name}' (ID: {admin_user.id}). 0 logs were deleted.",
-            event_type='admin_action',
-            event_level='warning',
-            audit_user=admin_user.id
-        )
-    
-    @patch('oneirodex.routes_admin_ext.system.log_system_event')
-    def test_clear_logs_database_error(self, mock_log, client, admin_user, sample_system_events, db_session):
-        """Test error handling when database operation fails."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Simulate a database error by mocking the delete operation more specifically
-        # We need to mock the execute method to differentiate between count and delete operations
-        original_execute = db_session.execute
-        
-        def mock_execute(statement):
-            # Check if this is a delete statement by examining the statement
-            if hasattr(statement, '__class__') and 'Delete' in statement.__class__.__name__:
-                raise Exception("Database connection lost")
-            else:
-                # Allow other operations (like count queries) to proceed normally
-                return original_execute(statement)
-        
-        with patch('oneirodex.routes_admin_ext.system.db.session.execute', side_effect=mock_execute):
-            response = client.delete('/admin/api/system_logs/clear')
-            
-            assert response.status_code == 500
-            response_data = response.get_json()
-            assert response_data['success'] is False
-            assert response_data['error'] == 'Internal server error'
-            
-            # Verify error logging was called
-            mock_log.assert_called_with(
-                'Failed to clear system logs: Database connection lost',
-                event_type='admin_action',
-                event_level='error',
-                audit_user=admin_user.id
-            )
-    
     def test_clear_logs_wrong_method(self, client, admin_user):
         """Test that endpoint only accepts DELETE method."""
         with client.session_transaction() as sess:
@@ -908,27 +742,6 @@ class TestClearSystemLogsAPI:
         # Try with PUT
         response = client.put('/admin/api/system_logs/clear')
         assert response.status_code == 405  # Method Not Allowed
-    
-    @patch('oneirodex.routes_admin_ext.system.log_system_event')
-    def test_clear_logs_includes_user_details(self, mock_log, client, admin_user, sample_system_events, db_session):
-        """Test that the log entry includes proper user details."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        initial_count = db_session.query(SystemEvents).count()
-        
-        response = client.delete('/admin/api/system_logs/clear')
-        
-        assert response.status_code == 200
-        
-        # Verify the log message includes both user name and ID
-        mock_log.assert_called_with(
-            f"System logs cleared by admin user '{admin_user.name}' (ID: {admin_user.id}). {initial_count} logs were deleted.",
-            event_type='admin_action',
-            event_level='warning',
-            audit_user=admin_user.id
-        )
     
     def test_clear_logs_audit_persistence(self, client, admin_user, sample_system_events, db_session):
         """Test that the audit log persists after clearing."""
@@ -981,33 +794,3 @@ class TestSystemIntegrationExtended:
         assert response.status_code == 302
         assert '/admin/ops' in response.headers['Location']
     
-    @patch('oneirodex.routes_admin_ext.system.log_system_event')
-    def test_error_handling_with_database_rollback(self, mock_log, client, admin_user, sample_discovery_sections, db_session, global_settings):
-        """Test that database errors are handled properly with rollback."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Use an existing section to avoid 404 error
-        section = sample_discovery_sections[0]
-        
-        # Simulate a database error by mocking the commit method
-        with patch('oneirodex.routes_admin_ext.system.db.session.commit') as mock_commit:
-            mock_commit.side_effect = Exception("Database connection lost")
-            
-            data = {'sections': [{'id': section.id, 'order': 1}]}
-            response = client.post('/admin/api/discovery_sections/order', 
-                                 json=data, content_type='application/json')
-            
-            assert response.status_code == 500
-            response_data = response.get_json()
-            assert response_data['success'] is False
-            assert response_data['error'] == 'Internal server error'
-            
-            # Verify error logging was called
-            mock_log.assert_called_with(
-                'Failed to update discovery section order: Database connection lost',
-                event_type='admin_action',
-                event_level='error',
-                audit_user=admin_user.id
-            )

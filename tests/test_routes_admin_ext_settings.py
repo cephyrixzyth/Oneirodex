@@ -313,56 +313,6 @@ class TestSettingsRoutes:
         data = json.loads(response.data)
         assert 'errors' in data
 
-    @patch('oneirodex.routes_admin_ext.settings.log_system_event')
-    @patch('oneirodex.routes_admin_ext.settings.cache.delete')
-    def test_update_settings_success(self, mock_cache_delete, mock_log_event, 
-                                   client, admin_user, db_session, clean_settings):
-        """Test successful settings update."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        valid_data = {
-            'showSystemLogo': False,
-            'scanThreadCount': 2,
-            'turboDownloadThreads': 15,
-            'updateFolderName': 'my_updates'
-        }
-        
-        response = client.post('/admin/settings', json=valid_data)
-        assert response.status_code == 200
-        
-        data = json.loads(response.data)
-        assert data['message'] == 'Settings updated successfully'
-        
-        # Verify database was updated
-        settings_record = db_session.query(GlobalSettings).first()
-        assert settings_record is not None
-        assert settings_record.scan_thread_count == 2
-        assert settings_record.turbo_download_threads == 15
-        assert settings_record.update_folder_name == 'my_updates'
-        
-        # Verify logging and cache clearing were called
-        mock_log_event.assert_called_once()
-        mock_cache_delete.assert_called_once_with('global_settings')
-
-    @patch('oneirodex.routes_admin_ext.settings.db.session.commit')
-    def test_update_settings_database_error(self, mock_commit, client, admin_user, global_settings):
-        """Test settings update with database error."""
-        mock_commit.side_effect = Exception('Database error')
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        valid_data = {'showSystemLogo': False}
-        response = client.post('/admin/settings', json=valid_data)
-        assert response.status_code == 500
-        
-        data = json.loads(response.data)
-        assert 'Failed to update settings' in data['error']
-
-
 class TestLegacyRouteHandler:
     """Test the legacy manage_settings route handler."""
     

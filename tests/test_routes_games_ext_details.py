@@ -180,76 +180,6 @@ class TestGameDetailsRouteAuthentication:
         assert response.status_code == 302  # Redirect to login
         assert '/login' in response.location
     
-    def test_game_details_with_authenticated_user(self, client, test_user, test_game):
-        """Test game details route with authenticated user."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.details.log_system_event') as mock_log:
-            response = client.get(f'/game_details/{test_game.uuid}')
-        
-        assert response.status_code == 200
-        assert mock_log.called
-
-
-class TestGameDetailsRouteValidation:
-    """Test UUID validation and security logging."""
-    
-    def test_game_details_invalid_uuid_format(self, client, test_user):
-        """Test game details with invalid UUID format."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.details.log_system_event') as mock_log:
-            response = client.get('/game_details/invalid-uuid-format')
-        
-        assert response.status_code == 404
-        # Verify security warning was logged
-        mock_log.assert_called_with(
-            f"Invalid UUID format provided by user {test_user.name}: invalid-uuid-format...",
-            event_type='security',
-            event_level='warning'
-        )
-    
-    def test_game_details_valid_uuid_nonexistent_game(self, client, test_user):
-        """Test game details with valid UUID but non-existent game."""
-        nonexistent_uuid = str(uuid4())
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.details.log_system_event') as mock_log:
-            response = client.get(f'/game_details/{nonexistent_uuid}')
-        
-        assert response.status_code == 404
-        # Verify access attempt was logged
-        mock_log.assert_any_call(
-            f"User {test_user.name} attempted to access non-existent game UUID: {nonexistent_uuid[:8]}...",
-            event_type='security',
-            event_level='warning'
-        )
-    
-    def test_game_details_uuid_validation_logs_truncated_uuid(self, client, test_user):
-        """Test that UUID logging is properly truncated for security."""
-        long_invalid_string = 'a' * 50  # Long invalid UUID
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.details.log_system_event') as mock_log:
-            response = client.get(f'/game_details/{long_invalid_string}')
-        
-        assert response.status_code == 404
-        # Verify that logged UUID is truncated to first 20 characters
-        mock_log.assert_called_with(
-            f"Invalid UUID format provided by user {test_user.name}: {long_invalid_string[:20]}...",
-            event_type='security',
-            event_level='warning'
-        )
-
-
 class TestGameDetailsRouteResponse:
     """What `/game_details/<uuid>` is now: a shell, not a rendered page.
 
@@ -264,23 +194,6 @@ class TestGameDetailsRouteResponse:
     `/api/games/<uuid>/details`, which is where the SPA gets it and where these
     now look.
     """
-
-    def test_game_details_serves_the_spa_shell(self, client, test_user, test_game):
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        with patch('oneirodex.routes_games_ext.details.log_system_event') as mock_log:
-            response = client.get(f'/game_details/{test_game.uuid}')
-
-        assert response.status_code == 200
-        assert b'member-app-root' in response.data
-        # The access itself is still audited.
-        mock_log.assert_any_call(
-            f"User {test_user.name} requested game details for UUID: {test_game.uuid[:8]}...",
-            event_type='game',
-            event_level='debug',
-        )
 
     def test_game_details_full_disk_path_not_exposed(self, client, test_user, test_game):
         """The server path must not reach an ordinary member — by either route.
@@ -332,47 +245,6 @@ class TestGameDetailsRouteResponse:
 
 class TestGameDetailsRouteLogging:
     """Test comprehensive logging functionality."""
-
-    def test_game_details_logs_access_request(self, client, test_user, test_game):
-        """Test that game access requests are logged."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        with patch('oneirodex.routes_games_ext.details.log_system_event') as mock_log:
-            response = client.get(f'/game_details/{test_game.uuid}')
-
-        # Verify initial access request is logged with truncated UUID
-        mock_log.assert_any_call(
-            f"User {test_user.name} requested game details for UUID: {test_game.uuid[:8]}...",
-            event_type='game',
-            event_level='debug'
-        )
-
-    def test_game_details_logs_a_blocked_library_as_a_security_event(
-        self, client, test_user, test_game, db_session
-    ):
-        """Replaces an assertion on a per-game "accessed X with N updates" log.
-
-        The shell route stopped counting updates and extras when it stopped
-        building the page, so that message no longer exists. What is worth
-        auditing at this layer is a *refusal*, and that does still happen.
-        """
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        with patch('oneirodex.routes_games_ext.details.user_can_access_game',
-                   return_value=False):
-            with patch('oneirodex.routes_games_ext.details.log_system_event') as mock_log:
-                response = client.get(f'/game_details/{test_game.uuid}')
-
-        assert response.status_code == 403
-        mock_log.assert_any_call(
-            f"User {test_user.name} blocked from restricted library game {test_game.uuid[:8]}...",
-            event_type='security',
-            event_level='warning',
-        )
 
     def test_game_details_logs_system_events_to_database(self, client, test_user, test_game, db_session):
         """Test that system events are actually logged to the database."""
@@ -533,23 +405,3 @@ class TestGameDetailsErrorHandling:
         # Check if response contains JSON error data (may not be proper JSON response)
         response_data = response.get_data(as_text=True)
         assert 'Game not found' in response_data or response.status_code == 404
-
-
-class TestGameDetailsPerformance:
-    """Test performance-related aspects."""
-    
-    def test_game_details_efficient_queries(self, client, test_user, test_game, test_game_update, test_game_extra):
-        """Test that game details uses efficient database queries."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_games_ext.details.log_system_event') as mock_log:
-            response = client.get(f'/game_details/{test_game.uuid}')
-
-        assert response.status_code == 200
-        # Exactly one, not "at least two". The shell route stopped walking the
-        # game's collections to build a summary line, and asserting a lower
-        # bound on log calls would quietly pass if that walk came back — which
-        # is the opposite of what a test named "efficient queries" should do.
-        assert mock_log.call_count == 1

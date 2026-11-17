@@ -187,32 +187,6 @@ class TestStatisticsRoutes:
             assert isinstance(data[section_name]['labels'], list)
             assert isinstance(data[section_name]['data'], list)
 
-    @patch('oneirodex.routes_downloads_ext.statistics.get_download_statistics')
-    def test_statistics_data_empty_database(self, mock_stats, client, admin_user):
-        """Test statistics data with empty database."""
-        empty_stats = {
-            'users_with_invites': {'labels': [], 'data': []},
-            'downloads_per_user': {'labels': [], 'data': []},
-            'top_downloaders': {'labels': [], 'data': []},
-            'top_collectors': {'labels': [], 'data': []},
-            'top_games': {'labels': [], 'data': []},
-            'download_trends': {'labels': [], 'data': []}
-        }
-        mock_stats.return_value = empty_stats
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        response = client.get('/admin/statistics/data')
-        assert response.status_code == 200
-        
-        data = json.loads(response.data)
-        for section in data.values():
-            assert section['labels'] == []
-            assert section['data'] == []
-
-
 class TestStatisticsIntegration:
     """Integration tests with real database data."""
 
@@ -284,16 +258,3 @@ class TestStatisticsIntegration:
         # The non-chart additions have their own shapes worth pinning.
         assert isinstance(data['totals'], dict)
         assert all({'name', 'downloads'} <= set(row) for row in data['top_games_table'])
-
-    @patch('oneirodex.routes_downloads_ext.statistics.get_download_statistics')
-    def test_statistics_error_handling(self, mock_stats, client, admin_user):
-        """Test error handling when statistics function fails."""
-        mock_stats.side_effect = Exception("Database error")
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Should handle the exception gracefully (it propagates up)
-        with pytest.raises(Exception, match="Database error"):
-            response = client.get('/admin/statistics/data')

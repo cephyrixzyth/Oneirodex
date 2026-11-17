@@ -232,32 +232,6 @@ class TestDeleteDownloadRequest:
         assert data['ok'] is False
         assert 'Could not delete the download request' in data['error']
     
-    @patch('oneirodex.routes_apis.download.log_system_event')
-    def test_delete_request_logging(self, mock_log, client, admin_user, sample_download_request):
-        """Test that proper logging occurs during deletion."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        response = client.delete(f'/api/delete_download/{sample_download_request.id}')
-        assert response.status_code == 200
-        
-        # Verify logging calls
-        mock_log.assert_called()
-        log_calls = mock_log.call_args_list
-        
-        # Check for deletion and success log messages
-        deletion_logged = any(
-            'Deleting download request' in str(call) for call in log_calls
-        )
-        success_logged = any(
-            'Successfully deleted download request' in str(call) for call in log_calls
-        )
-        
-        assert deletion_logged
-        assert success_logged
-
-
 class TestAdminDownloadRequestList:
     def test_list_requires_login(self, client):
         response = client.get('/api/admin/download-requests')

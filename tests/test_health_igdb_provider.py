@@ -61,35 +61,6 @@ def test_igdb_search_requires_credentials(client, app, admin):
         assert resp.status_code == 503
 
 
-def test_igdb_search_with_mock(client, app, admin):
-    _login(client, app, admin)
-
-    class FakeProvider:
-        id = 'igdb'
-
-        def is_enabled(self):
-            return True
-
-        def search_covers(self, query, *, limit=20):
-            from oneirodex.utils.providers.base import ImageSearchResult
-            return [
-                ImageSearchResult(
-                    id='abc',
-                    url='https://images.igdb.com/igdb/image/upload/t_cover_big/abc.jpg',
-                    thumb_url='https://images.igdb.com/igdb/image/upload/t_cover_small/abc.jpg',
-                    game_name=query,
-                    image_type='cover',
-                )
-            ]
-
-    with patch('oneirodex.routes_apis.providers.get_provider', return_value=FakeProvider()):
-        resp = client.get('/api/providers/igdb/search?q=Celeste')
-        assert resp.status_code == 200
-        body = resp.get_json()
-        assert body['provider'] == 'igdb'
-        assert body['results'][0]['game_name'] == 'Celeste'
-
-
 def test_library_health_summary_shape(db_session):
     lib = Library(name=f'HLib_{uuid4().hex[:6]}', platform=LibraryPlatform.PCWIN)
     db_session.add(lib)

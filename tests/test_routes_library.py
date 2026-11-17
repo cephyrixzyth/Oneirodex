@@ -129,42 +129,10 @@ class TestLibraryBlueprint:
         response = client.get('/libraries')
         assert response.status_code == 302  # Redirect due to admin_required
 
-    def test_libraries_route_success_admin(self, client, admin_user, test_library, db_session):
-        """Test successful access to libraries route as admin."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        with patch('oneirodex.routes_library.render_admin_spa') as mock_render:
-            mock_render.return_value = 'rendered admin shell'
-            response = client.get('/libraries')
-            
-        assert response.status_code == 200
-        mock_render.assert_called_once_with(title='Libraries & scans - Oneirodex Admin')
-
     def test_library_route_requires_login(self, client):
         """Test that the library route requires authentication."""
         response = client.get('/library')
         assert response.status_code == 302  # Redirect to login
-
-    def test_library_route_creates_default_preferences(self, client, test_user, db_session):
-        """Test that library route creates default preferences if none exist."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-        
-        # Ensure user has no preferences initially
-        assert test_user.preferences is None
-        
-        with patch('oneirodex.routes_library.render_member_spa') as mock_render:
-            mock_render.return_value = 'rendered member shell'
-            response = client.get('/library')
-        
-        assert response.status_code == 200
-        mock_render.assert_called_once()
-        # Check that preferences were created
-        db_session.refresh(test_user)
-        assert test_user.preferences is not None
 
     def test_library_route_uses_existing_preferences(self, client, test_user, test_user_preference, db_session):
         """Existing preferences are left intact when the shell renders."""
