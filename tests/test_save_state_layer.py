@@ -76,8 +76,8 @@ def _row(db_session, user, game, slot, *, filename='cloud.state', age_minutes=0)
     return row
 
 
-def _login(client, user):
-    with client.session_transaction() as sess:
+def _login(native_client, user):
+    with native_client.session_transaction() as sess:
         sess['_user_id'] = str(user.id)
         sess['_fresh'] = True
 
@@ -126,7 +126,7 @@ def test_latest_state_by_game_picks_the_newest_state_and_skips_sram(db_session):
     assert latest_state_by_game(user.id, []) == {}
 
 
-def test_saves_api_lists_newest_first_and_flags_states(client, db_session, configured_install):
+def test_saves_api_lists_newest_first_and_flags_states(native_client, db_session, configured_install):
     user = _user(db_session)
     library = _library(db_session)
     game = _game(db_session, library)
@@ -134,8 +134,8 @@ def test_saves_api_lists_newest_first_and_flags_states(client, db_session, confi
     _row(db_session, user, game, CLOUD_SRAM_SLOT, filename='cloud.srm', age_minutes=20)
     _row(db_session, user, game, QUICK_SAVE_PREFIX + 'lab', age_minutes=2)
 
-    _login(client, user)
-    body = client.get(f'/api/games/{game.uuid}/saves').get_json()
+    _login(native_client, user)
+    body = native_client.get(f'/api/games/{game.uuid}/saves').get_json()
     slots = [(row['slot_name'], row['is_state']) for row in body['saves']]
     assert slots == [
         (QUICK_SAVE_PREFIX + 'lab', True),
@@ -144,7 +144,7 @@ def test_saves_api_lists_newest_first_and_flags_states(client, db_session, confi
     ]
 
 
-def test_browse_tile_carries_resume_state(client, db_session, configured_install):
+def test_browse_tile_carries_resume_state(native_client, db_session, configured_install):
     """The tile reads `resume_state` to say Resume instead of Play."""
     user = _user(db_session)
     library = _library(db_session)
@@ -152,8 +152,8 @@ def test_browse_tile_carries_resume_state(client, db_session, configured_install
     fresh = _game(db_session, library)
     _row(db_session, user, played, AUTO_STATE_SLOT, age_minutes=3)
 
-    _login(client, user)
-    response = client.get(f'/browse_games?library_uuid={library.uuid}&per_page=50')
+    _login(native_client, user)
+    response = native_client.get(f'/browse_games?library_uuid={library.uuid}&per_page=50')
     assert response.status_code == 200, response.get_json()
     games = {row['uuid']: row for row in response.get_json()['games']}
     assert games[played.uuid]['resume_state']['slot_name'] == AUTO_STATE_SLOT
@@ -161,15 +161,15 @@ def test_browse_tile_carries_resume_state(client, db_session, configured_install
     assert games[fresh.uuid]['resume_state'] is None
 
 
-def test_uploading_a_state_updates_the_resume_summary(client, db_session, configured_install, tmp_path, app):
+def test_uploading_a_state_updates_the_resume_summary(native_client, db_session, configured_install, tmp_path, app):
     """Store a state through the API and the tile summary follows it."""
     app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
     user = _user(db_session)
     library = _library(db_session)
     game = _game(db_session, library)
-    _login(client, user)
+    _login(native_client, user)
 
-    response = client.post(
+    response = native_client.post(
         f'/api/games/{game.uuid}/saves',
         data={'slot': AUTO_STATE_SLOT, 'file': (BytesIO(b'state-bytes'), 'cloud.state')},
         content_type='multipart/form-data',
@@ -180,15 +180,15 @@ def test_uploading_a_state_updates_the_resume_summary(client, db_session, config
 
 
 def test_invalid_expected_revision_returns_bad_request_without_writing(
-    client, db_session, configured_install, tmp_path, app,
+    native_client, db_session, configured_install, tmp_path, app,
 ):
     app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
     user = _user(db_session)
     library = _library(db_session)
     game = _game(db_session, library)
-    _login(client, user)
+    _login(native_client, user)
 
-    response = client.post(
+    response = native_client.post(
         f'/api/games/{game.uuid}/saves',
         data={
             'slot': AUTO_STATE_SLOT,
@@ -204,7 +204,7 @@ def test_invalid_expected_revision_returns_bad_request_without_writing(
     assert not (tmp_path / str(user.id) / game.uuid).exists()
 
 
-def test_save_quota_counts_all_games_for_the_member(client, db_session, configured_install, tmp_path, app):
+def test_save_quota_counts_all_games_for_the_member(native_client, db_session, configured_install, tmp_path, app):
     app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
     app.config['EMULATOR_SAVES_USER_QUOTA_MB'] = 1
     user = _user(db_session)
@@ -221,9 +221,9 @@ def test_save_quota_counts_all_games_for_the_member(client, db_session, configur
         encrypted=False,
     ))
     db_session.commit()
-    _login(client, user)
+    _login(native_client, user)
 
-    response = client.post(
+    response = native_client.post(
         f'/api/games/{target_game.uuid}/saves',
         data={'slot': 'new-slot', 'file': (BytesIO(b'new-state'), 'new.state')},
         content_type='multipart/form-data',
@@ -234,7 +234,7 @@ def test_save_quota_counts_all_games_for_the_member(client, db_session, configur
     assert not (tmp_path / str(user.id) / target_game.uuid).exists()
 
 
-def test_save_quota_charges_only_replacement_growth(client, db_session, configured_install, tmp_path, app):
+def test_save_quota_charges_only_replacement_growth(native_client, db_session, configured_install, tmp_path, app):
     app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
     app.config['EMULATOR_SAVES_USER_QUOTA_MB'] = 1
     user = _user(db_session)
@@ -252,9 +252,9 @@ def test_save_quota_charges_only_replacement_growth(client, db_session, configur
         encrypted=False,
     ))
     db_session.commit()
-    _login(client, user)
+    _login(native_client, user)
 
-    response = client.post(
+    response = native_client.post(
         f'/api/games/{game.uuid}/saves',
         data={'slot': 'replace-me', 'file': (BytesIO(b'new-state'), 'new.state')},
         content_type='multipart/form-data',
@@ -271,7 +271,7 @@ def test_save_quota_charges_only_replacement_growth(client, db_session, configur
 
 
 def test_save_replacement_keeps_prior_generation_and_uses_unique_paths(
-    client, db_session, configured_install, tmp_path, app, monkeypatch,
+    native_client, db_session, configured_install, tmp_path, app, monkeypatch,
 ):
     app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
     from oneirodex.utils import emulator_saves
@@ -284,8 +284,8 @@ def test_save_replacement_keeps_prior_generation_and_uses_unique_paths(
     user = _user(db_session)
     library = _library(db_session)
     game = _game(db_session, library)
-    _login(client, user)
-    first = client.post(
+    _login(native_client, user)
+    first = native_client.post(
         f'/api/games/{game.uuid}/saves',
         data={'slot': 'a/b', 'file': (BytesIO(b'first'), 'same.state')},
         content_type='multipart/form-data',
@@ -293,7 +293,7 @@ def test_save_replacement_keeps_prior_generation_and_uses_unique_paths(
     assert first.status_code == 201
     first_row = db_session.query(EmulatorSave).filter_by(user_id=user.id, game_uuid=game.uuid).one()
     old_path = Path(first_row.storage_path)
-    second = client.post(
+    second = native_client.post(
         f'/api/games/{game.uuid}/saves',
         data={'slot': 'a?b', 'file': (BytesIO(b'second'), 'same.state')},
         content_type='multipart/form-data',
@@ -305,7 +305,7 @@ def test_save_replacement_keeps_prior_generation_and_uses_unique_paths(
     assert old_path.read_bytes() == b'first'
     assert db_session.query(EmulatorSaveGeneration).count() == 0
 
-    replacement = client.post(
+    replacement = native_client.post(
         f'/api/games/{game.uuid}/saves',
         data={
             'slot': 'a/b', 'expected_revision': '1',
@@ -322,7 +322,7 @@ def test_save_replacement_keeps_prior_generation_and_uses_unique_paths(
     history = db_session.query(EmulatorSaveGeneration).filter_by(save_id=active.id).one()
     assert Path(history.storage_path).read_bytes() == b'first'
     assert Path(active.storage_path).read_bytes() == b'updated'
-    stale = client.post(
+    stale = native_client.post(
         f'/api/games/{game.uuid}/saves',
         data={
             'slot': 'a/b', 'expected_revision': '1',
@@ -335,19 +335,19 @@ def test_save_replacement_keeps_prior_generation_and_uses_unique_paths(
 
 
 def test_bounded_repeated_replacements_keep_every_committed_generation(
-    client, db_session, configured_install, tmp_path, app,
+    native_client, db_session, configured_install, tmp_path, app,
 ):
     """A short burst of sequential writes must retain a complete readable chain."""
     app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
     user = _user(db_session)
     library = _library(db_session)
     game = _game(db_session, library)
-    _login(client, user)
+    _login(native_client, user)
     committed_paths = []
 
     for revision in range(20):
         payload = f'committed-generation-{revision}'.encode()
-        response = client.post(
+        response = native_client.post(
             f'/api/games/{game.uuid}/saves',
             data={
                 'slot': 'stress-slot',
@@ -382,14 +382,14 @@ def test_bounded_repeated_replacements_keep_every_committed_generation(
 
 
 def test_directory_sync_failure_keeps_old_pointer_and_is_reported_as_orphan(
-    client, db_session, configured_install, tmp_path, app, monkeypatch,
+    native_client, db_session, configured_install, tmp_path, app, monkeypatch,
 ):
     app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
     user = _user(db_session)
     library = _library(db_session)
     game = _game(db_session, library)
-    _login(client, user)
-    initial = client.post(
+    _login(native_client, user)
+    initial = native_client.post(
         f'/api/games/{game.uuid}/saves',
         data={'slot': 'slot', 'file': (BytesIO(b'committed'), 'old.state')},
         content_type='multipart/form-data',
@@ -406,7 +406,7 @@ def test_directory_sync_failure_keeps_old_pointer_and_is_reported_as_orphan(
         raise OSError('synthetic directory sync failure')
 
     monkeypatch.setattr(emulator_saves, '_fsync_directory', fail_directory_sync)
-    failed = client.post(
+    failed = native_client.post(
         f'/api/games/{game.uuid}/saves',
         data={'slot': 'slot', 'file': (BytesIO(b'not committed'), 'new.state')},
         content_type='multipart/form-data',
@@ -503,14 +503,14 @@ def test_explicit_save_delete_keeps_legacy_path_until_last_reference_is_removed(
 
 
 def test_failed_save_commit_keeps_previous_generation_readable(
-    client, db_session, configured_install, tmp_path, app, monkeypatch,
+    native_client, db_session, configured_install, tmp_path, app, monkeypatch,
 ):
     app.config['EMULATOR_SAVES_PATH'] = str(tmp_path)
     user = _user(db_session)
     library = _library(db_session)
     game = _game(db_session, library)
-    _login(client, user)
-    initial = client.post(
+    _login(native_client, user)
+    initial = native_client.post(
         f'/api/games/{game.uuid}/saves',
         data={'slot': 'slot', 'file': (BytesIO(b'committed'), 'old.state')},
         content_type='multipart/form-data',
@@ -587,7 +587,7 @@ def test_shell_never_auto_loads_a_pulled_state():
 # box before these tests were written.
 
 
-def test_the_saves_listing_hands_the_play_room_a_csrf_token(client, db_session, configured_install):
+def test_the_saves_listing_hands_the_play_room_a_csrf_token(native_client, db_session, configured_install):
     """The room is a static file, so this listing is its only source of one.
 
     `webretro.html` is served from /static and never rendered, so its
@@ -600,8 +600,8 @@ def test_the_saves_listing_hands_the_play_room_a_csrf_token(client, db_session, 
     library = _library(db_session)
     game = _game(db_session, library)
 
-    _login(client, user)
-    body = client.get(f'/api/games/{game.uuid}/saves').get_json()
+    _login(native_client, user)
+    body = native_client.get(f'/api/games/{game.uuid}/saves').get_json()
     assert body['csrf_token'], 'the room has no other way to obtain a token'
 
 

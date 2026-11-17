@@ -354,6 +354,14 @@ def client(app):
     return app.test_client()
 
 
+@pytest.fixture(scope='function')
+def native_client(app, db_session):
+    """A client for the real ASGI app, bound to this test's database transaction."""
+    from tests.fixtures.native_client import build_native_client
+
+    return build_native_client(app, db_session)
+
+
 # ---------------------------------------------------------------------------
 # Bucket-E opt-out: no_savepoint_db (docs/dev/test-harness-2026-09-10.md)
 # ---------------------------------------------------------------------------

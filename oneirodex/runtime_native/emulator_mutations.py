@@ -552,7 +552,7 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                     if isinstance(exc, SaveRevisionConflict):
                         return _error(
                             409, 'conflict', str(exc),
-                            current_revision=exc.current_revision,
+                            detail={'current_revision': exc.current_revision},
                         )
                     code = getattr(exc, 'code', 'bad_request')
                     return _error(413 if code == 'payload_too_large' else 400, code, str(exc))
