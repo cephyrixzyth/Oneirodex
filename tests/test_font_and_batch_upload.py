@@ -116,7 +116,7 @@ class TestFontUpload:
 
         body = json.loads(response.data)
         assert response.status_code == 503
-        assert body['error'] == 'Could not write the font file.'
+        assert body['error'] == 'Could not write to the font folder'
         assert private_path not in response.get_data(as_text=True)
 
     def test_magic_check_covers_every_accepted_container(self):

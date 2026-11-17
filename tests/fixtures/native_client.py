@@ -184,16 +184,25 @@ class NativeTestClient:
         if json is not None:
             kwargs['json'] = json
         elif isinstance(data, dict):
-            files = {k: v for k, v in data.items() if isinstance(v, tuple)}
-            fields = {k: v for k, v in data.items() if not isinstance(v, tuple)}
-            if files:
-                kwargs['files'] = {
-                    k: ((v[1] if len(v) > 1 else k), v[0].read() if hasattr(v[0], 'read') else v[0])
-                    for k, v in files.items()
-                }
-                kwargs['data'] = fields
-            else:
-                kwargs['data'] = fields
+            def is_file(value):
+                return isinstance(value, tuple) and value and hasattr(value[0], 'read') or (
+                    isinstance(value, tuple) and len(value) >= 2 and isinstance(value[0], (bytes, bytearray)))
+
+            def as_part(name, value):
+                body = value[0].read() if hasattr(value[0], 'read') else value[0]
+                return (name, ((value[1] if len(value) > 1 else name), body))
+
+            parts, fields = [], {}
+            for key, value in data.items():
+                if isinstance(value, list) and value and all(is_file(item) for item in value):
+                    parts.extend(as_part(key, item) for item in value)
+                elif is_file(value):
+                    parts.append(as_part(key, value))
+                else:
+                    fields[key] = value
+            if parts:
+                kwargs['files'] = parts
+            kwargs['data'] = fields
         elif data is not None:
             kwargs['content'] = data
             if content_type:
