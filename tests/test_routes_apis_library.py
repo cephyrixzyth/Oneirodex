@@ -279,8 +279,8 @@ class TestReorderLibraries:
         
         response = client.post('/api/reorder_libraries',
                              json={'order': []})
-        assert response.status_code == 302
-        assert 'login' in response.location
+        assert response.status_code == 403
+        assert response.get_json()['error_code'] == 'forbidden'
     
     def test_reorder_libraries_successful_reorder(self, client, admin_user, multiple_libraries):
         """Test successful library reordering."""
@@ -384,7 +384,7 @@ class TestReorderLibraries:
         response = client.post('/api/reorder_libraries',
                              data='invalid json',
                              content_type='application/json')
-        assert response.status_code == 500  # Flask returns 500 for invalid JSON
+        assert response.status_code == 400  # malformed JSON is the caller's error
     
 class TestGetLibrary:
     """Tests for get_library endpoint."""

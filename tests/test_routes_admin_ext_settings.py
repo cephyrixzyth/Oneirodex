@@ -276,7 +276,7 @@ class TestSettingsRoutes:
             sess['_fresh'] = True
 
         response = client.post('/admin/settings', json={'test': 'data'})
-        assert response.status_code == 302
+        assert response.status_code == 403
 
     def test_update_settings_invalid_json(self, client, admin_user):
         """Test POST settings with invalid JSON."""
@@ -311,7 +311,8 @@ class TestSettingsRoutes:
         response = client.post('/admin/settings', json=invalid_data)
         assert response.status_code == 400
         data = json.loads(response.data)
-        assert 'errors' in data
+        assert data['error_code'] == 'bad_request'
+        assert 'bounds' in data['error']
 
 class TestLegacyRouteHandler:
     """Test the legacy manage_settings route handler."""

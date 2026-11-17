@@ -210,8 +210,7 @@ class TestDownloadRomRoute:
     def test_downloadrom_requires_login(self, client, test_game_with_file):
         """Test that downloadrom requires authentication."""
         response = client.get(f'/api/downloadrom/{test_game_with_file.uuid}')
-        assert response.status_code == 302  # Should redirect to login
-        assert 'login' in response.location or '/auth' in response.location
+        assert response.status_code == 401  # an API download is refused, not redirected
     
 class TestSecurityIntegration:
     """Integration tests for security features."""

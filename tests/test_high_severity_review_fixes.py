@@ -107,7 +107,7 @@ class TestDeleteFolderRoute:
         (root / 'Game A').mkdir(parents=True)
         (root / 'Game A' / 'game.iso').write_bytes(b'x')
         with patch(
-            'oneirodex.routes_admin_ext.game_delete.get_allowed_base_directories',
+            'oneirodex.utils.security.get_allowed_base_directories',
             return_value=[str(root)],
         ):
             yield root
@@ -131,8 +131,11 @@ class TestDeleteFolderRoute:
         assert library.exists()
 
     def test_refuses_while_a_scan_runs(self, client, db_session, admin_user, library):
+        from oneirodex.models import ScanJob
+
         self._login_admin(client, admin_user)
-        with patch('oneirodex.routes_admin_ext.game_delete.is_scan_job_running', return_value=True):
-            response = client.post('/delete_folder', json={'folder_path': str(library / 'Game A')})
+        db_session.add(ScanJob(status='Running', content_type='Games', folders={}))
+        db_session.commit()
+        response = client.post('/delete_folder', json={'folder_path': str(library / 'Game A')})
         assert response.status_code == 403
         assert (library / 'Game A').exists()
