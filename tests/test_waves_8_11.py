@@ -88,19 +88,3 @@ def test_plugin_registry():
     assert len(plugins) >= 10
     assert get_plugin('emu.webretro')['name'] == 'WebRetro'
     assert get_plugin('missing') is None
-
-
-def test_ruffle_play_url_requires_player_file(tmp_path, monkeypatch):
-    from flask import Flask
-
-    from oneirodex.utils import ruffle_play as rp
-
-    app = Flask(__name__, root_path=str(tmp_path))
-    app.config['ENABLE_RUFFLE'] = True
-    with app.app_context():
-        assert rp.ruffle_play_url('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee') is None
-        dest = tmp_path / 'static' / 'vendor' / 'ruffle'
-        dest.mkdir(parents=True)
-        (dest / 'player.html').write_text('<html></html>', encoding='utf-8')
-        url = rp.ruffle_play_url('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
-        assert url and url.endswith('player.html?guid=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')

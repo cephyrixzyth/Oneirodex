@@ -1,9 +1,10 @@
 /**
  * Phase 3 of the security/legal playbook (S5).
  *
- * assists.ts interpolated server-supplied `pack.title` / `pack.policy` straight
- * into innerHTML while every other site in this client escaped. In a Tauri
- * webview that is script execution with IPC reach.
+ * An assist overlay module (since removed, it was never wired into the app)
+ * interpolated server-supplied `pack.title` / `pack.policy` straight into
+ * innerHTML while every other site in this client escaped. In a Tauri webview
+ * that is script execution with IPC reach.
  *
  * Testing the fixed function alone would not stop the next one, and this client
  * has no DOM in its test environment anyway — so the guard is a source scan, in
@@ -95,12 +96,6 @@ describe('innerHTML interpolation contract', () => {
       .map((site) => `${site.file}: \${${site.expression}}`)
 
     expect(unsafe).toEqual([])
-  })
-
-  it('escapes the assist overlay specifically', () => {
-    const source = readFileSync(join(SRC_DIR, 'assists.ts'), 'utf8')
-    expect(source).toContain('escapeHtml(pack.title)')
-    expect(source).toContain('escapeHtml(pack.policy)')
   })
 
   it('keeps one shared implementation rather than per-file copies', () => {
