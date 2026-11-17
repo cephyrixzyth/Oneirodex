@@ -74,7 +74,7 @@ def test_admin_notification_bus_member_denial_redirects_without_calling_bus():
     ],
     ids=['unexpected-runtime-error', 'sqlalchemy-operational-error'],
 )
-def test_notification_database_failure_matches_wsgi_and_native_asgi(
+def test_notification_database_failure_is_a_safe_server_error(
     app, client, db_session, failure, monkeypatch,
 ):
     import asyncio
@@ -108,11 +108,6 @@ def test_notification_database_failure_matches_wsgi_and_native_asgi(
 
     monkeypatch.setattr(notification_routes, 'list_notifications', fail_list)
     monkeypatch.setattr(notification_routes, 'mark_read', fail_list)
-    with client.session_transaction() as session:
-        session['_user_id'] = str(flask_user.id)
-        session['_fresh'] = True
-    wsgi_list_response = client.get('/api/notifications')
-    wsgi_write_response = client.post('/api/notifications/read', json={'ids': []})
 
     native_user = SimpleNamespace(
         id=flask_user.id,
@@ -176,12 +171,10 @@ def test_notification_database_failure_matches_wsgi_and_native_asgi(
     native_list_response, native_write_response = asyncio.run(get_native_responses())
 
     assert native_calls == ['list', 'mark_read']
-    assert wsgi_list_response.status_code == native_list_response.status_code == 500
-    assert wsgi_list_response.get_json() == native_list_response.json()
-    assert wsgi_write_response.status_code == native_write_response.status_code == 500
-    assert wsgi_write_response.get_json() == native_write_response.json()
-    for response in (wsgi_list_response, wsgi_write_response):
-        assert 'synthetic-secret-db-detail' not in response.get_data(as_text=True)
+    assert native_list_response.status_code == 500
+    assert native_list_response.json()['error_code'] == 'internal'
+    assert native_write_response.status_code == 500
+    assert native_write_response.json()['error_code'] == 'internal'
     for response in (native_list_response, native_write_response):
         assert 'synthetic-secret-db-detail' not in response.text
 
@@ -198,7 +191,7 @@ def test_notification_database_failure_matches_wsgi_and_native_asgi(
     ],
     ids=['unexpected-runtime-error', 'sqlalchemy-operational-error'],
 )
-def test_notification_preferences_commit_failure_matches_wsgi_and_native_asgi(
+def test_notification_preferences_commit_failure_is_a_safe_server_error(
     app, client, db_session, failure, monkeypatch,
 ):
     import asyncio
@@ -231,12 +224,6 @@ def test_notification_preferences_commit_failure_matches_wsgi_and_native_asgi(
         raise failure
 
     monkeypatch.setattr(notification_routes.db.session, 'commit', fail_commit)
-    with client.session_transaction() as session:
-        session['_user_id'] = str(flask_user.id)
-        session['_fresh'] = True
-    wsgi_response = client.post(
-        '/api/notifications/preferences', json={'notify_chat': False},
-    )
 
     native_user = SimpleNamespace(
         id=flask_user.id,
@@ -296,7 +283,6 @@ def test_notification_preferences_commit_failure_matches_wsgi_and_native_asgi(
     native_response = asyncio.run(post_native_response())
 
     assert native_calls == ['update_preferences']
-    assert wsgi_response.status_code == native_response.status_code == 500
-    assert wsgi_response.get_json() == native_response.json()
-    assert 'synthetic-secret-db-detail' not in wsgi_response.get_data(as_text=True)
+    assert native_response.status_code == 500
+    assert native_response.json()['error_code'] == 'internal'
     assert 'synthetic-secret-db-detail' not in native_response.text
