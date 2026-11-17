@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import pytest
 from unittest.mock import patch, Mock, MagicMock
 from datetime import datetime, timezone
@@ -42,6 +43,15 @@ def regular_user(db_session):
     return user
 
 
+@contextmanager
+def _signed_in(client, user):
+    """Sign the client in as ``user`` for the block (a real session, not a patch)."""
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(user.id)
+        sess['_fresh'] = True
+    yield
+
+
 class TestAdminServerStatusRoute:
     """The standalone page is retired; Ops is the one health surface (W27-D1)."""
 
@@ -59,14 +69,14 @@ class TestAdminServerStatusRoute:
         mock_current_user.role = 'user'
         mock_current_user.id = regular_user.id
 
-        with patch('flask_login.utils._get_user', return_value=regular_user):
+        with _signed_in(client, regular_user):
             response = client.get('/admin/server_status_page')
 
         assert response.status_code in [302, 403]
 
     def test_admin_server_status_redirects_admins_to_ops(self, client, admin_user):
         """Bookmarks of the old page land on the Ops console."""
-        with patch('flask_login.utils._get_user', return_value=admin_user):
+        with _signed_in(client, admin_user):
             response = client.get('/admin/server_status_page')
 
         assert response.status_code == 302
@@ -128,7 +138,7 @@ class TestErrorHandling:
     def test_server_status_page_still_redirects_when_settings_would_have_failed(
         self, client, admin_user
     ):
-        with patch('flask_login.utils._get_user', return_value=admin_user):
+        with _signed_in(client, admin_user):
             response = client.get('/admin/server_status_page')
 
         assert response.status_code == 302
@@ -154,7 +164,7 @@ class TestOpsLogsApi:
         mock_current_user.role = 'user'
         mock_current_user.id = regular_user.id
 
-        with patch('flask_login.utils._get_user', return_value=regular_user):
+        with _signed_in(client, regular_user):
             response = client.get('/admin/api/ops/logs')
 
             assert response.status_code in [302, 403]
@@ -167,7 +177,7 @@ class TestOpsLogsApi:
         mock_current_user.role = 'admin'
         mock_current_user.id = admin_user.id
 
-        with patch('flask_login.utils._get_user', return_value=admin_user):
+        with _signed_in(client, admin_user):
             response = client.get('/admin/api/ops/logs')
 
             assert response.status_code == 200
@@ -188,7 +198,7 @@ class TestOpsLogsApi:
         mock_current_user.role = 'admin'
         mock_current_user.id = admin_user.id
 
-        with patch('flask_login.utils._get_user', return_value=admin_user):
+        with _signed_in(client, admin_user):
             response = client.get('/admin/api/ops/logs?limit=99999')
 
             assert response.status_code == 200
@@ -207,7 +217,7 @@ class TestOpsLogsApi:
         mock_current_user.role = 'admin'
         mock_current_user.id = admin_user.id
 
-        with patch('flask_login.utils._get_user', return_value=admin_user):
+        with _signed_in(client, admin_user):
             response = client.get('/admin/new_server_info')
 
             assert response.status_code == 404
