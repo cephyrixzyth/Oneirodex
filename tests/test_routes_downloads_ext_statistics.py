@@ -143,7 +143,7 @@ class TestStatisticsRoutes:
         
         response = client.get('/admin/statistics')
         assert response.status_code == 200
-        assert b'statistics' in response.data or b'Statistics' in response.data
+        assert b'id="admin-app-root"' in response.data
 
     @patch('oneirodex.routes_downloads_ext.statistics.get_download_statistics')
     def test_statistics_data_admin_user(self, mock_stats, client, admin_user, sample_statistics_data):

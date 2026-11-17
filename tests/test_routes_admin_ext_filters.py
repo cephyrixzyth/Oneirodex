@@ -83,7 +83,7 @@ class TestEditFiltersRoute:
         
         response = client.get('/admin/edit_filters')
         assert response.status_code == 200
-        assert b'<title>Release filters' in response.data
+        assert b'<title>Oneirodex Admin</title>' in response.data
         assert b'data-admin-render="spa"' in response.data
         api_response = client.get('/api/admin/scan-filters')
         filters = api_response.get_json()['filters']

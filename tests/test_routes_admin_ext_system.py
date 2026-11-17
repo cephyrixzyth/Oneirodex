@@ -304,7 +304,7 @@ class TestDiscoverySectionsRoute:
         assert response.status_code == 200
         assert b'<title>' in response.data and b'Oneirodex Admin</title>' in response.data
         assert b'id="admin-app-root"' in response.data
-        assert b'/static/dist/admin-app/admin-app.js' in response.data
+        assert b'/static/dist/admin-pilot/' in response.data
 
 
 class TestCustomDiscoveryZones:

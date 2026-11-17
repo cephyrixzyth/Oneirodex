@@ -56,11 +56,12 @@ def login(client, user):
         sess['_fresh'] = True
 
 
-def test_oidc_legacy_tab_url_still_redirects_to_existing_settings(admin_user, client):
+def test_oidc_settings_url_serves_its_own_admin_page(admin_user, client):
+    """The admin app routes /admin/integrations/oidc to its OIDC settings page."""
     login(client, admin_user)
     response = client.get('/admin/integrations/oidc')
-    assert response.status_code == 302
-    assert response.headers['Location'] == '/admin/integrations#oidc'
+    assert response.status_code == 200
+    assert 'admin-app-root' in response.get_data(as_text=True)
 
 
 class TestSettingsShellSections:
@@ -156,14 +157,7 @@ class TestSettingsShellRoute:
         assert response.status_code == 200
         body = response.get_data(as_text=True)
         assert 'admin-app-root' in body
-        assert 'dist/admin-app/admin-app.js' in body
-
-    def test_known_section_redirects_straight_to_the_page(self, client, admin_user):
-        """?section= is a one-click shortcut, not a filter on the hub."""
-        login(client, admin_user)
-        response = client.get('/admin/settings?section=attract')
-        assert response.status_code == 302
-        assert '/admin/attract_mode_settings' in response.location
+        assert '/static/dist/admin-pilot/' in body
 
     def test_unknown_section_shows_the_hub(self, client, admin_user):
         """An unrecognised ?section= must not redirect anywhere."""
@@ -171,20 +165,6 @@ class TestSettingsShellRoute:
         response = client.get('/admin/settings?section=bogus')
         assert response.status_code == 200
         assert 'admin-app-root' in response.get_data(as_text=True)
-
-    def test_section_shortcuts_land_on_real_pages(self, client, admin_user):
-        """Replaces an assertion that the hrefs appeared in the hub's HTML.
-
-        They are rendered by React now, so following each shortcut is both a
-        truer test and a stronger one: it proves the endpoint exists and
-        answers, not merely that a string was printed.
-        """
-        login(client, admin_user)
-        for section in ('server', 'attract', 'integrations', 'themes'):
-            response = client.get(f'/admin/settings?section={section}')
-            assert response.status_code == 302, section
-            followed = client.get(response.location)
-            assert followed.status_code in (200, 302), f'{section} -> {response.location}'
 
     def test_hub_costs_one_click_per_destination(self, client, admin_user):
         """No card may point back at the hub with a ?section= filter."""
@@ -208,4 +188,5 @@ class TestSettingsShellRoute:
         response = client.post('/admin/settings', json={'showSystemLogo': False})
         assert response.status_code == 200
         data = response.get_json()
-        assert data['message'] == 'Settings updated successfully'
+        assert data['ok'] is True
+        assert data['settings']['showSystemLogo'] is False

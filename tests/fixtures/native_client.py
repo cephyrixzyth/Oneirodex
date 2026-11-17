@@ -281,6 +281,14 @@ def build_native_client(app, db_session):
         asyncio.run(asgi_app._ensure_flask())
         _SHARED_APP = (asgi_app, dict(asgi_app._flask_app.config))
     asgi_app, pristine = _SHARED_APP
+    # Never let a request write test data into the repository's library folder.
+    import tempfile
+    from pathlib import Path
+
+    scratch = Path(tempfile.mkdtemp(prefix='od-native-client-'))
+    for key in ('EMULATOR_SAVES_PATH',):
+        if not app.config.get(key) or 'static' in str(app.config.get(key)):
+            app.config[key] = str(scratch / key.lower())
     asgi_app._native_sqlalchemy_engine = connection
     runtime = asgi_app._flask_app
     if hasattr(runtime, 'native_engine'):

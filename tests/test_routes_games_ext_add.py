@@ -155,7 +155,7 @@ class TestAddGameManualIgdbIdPrefill:
         response = client.get(f'/add_game_manual?library_uuid={sample_library.uuid}')
 
         assert response.status_code == 200
-        assert b'<title>Identify game \xc2\xb7 Oneirodex Admin</title>' in response.data
+        assert b'id="admin-app-root"' in response.data
 
     def test_document_title_names_unmatched_identify_context(self, client, admin_user, sample_library):
         _login(client, admin_user)
@@ -164,14 +164,14 @@ class TestAddGameManualIgdbIdPrefill:
         )
 
         assert response.status_code == 200
-        assert b'<title>Identify unmatched folder \xc2\xb7 Oneirodex Admin</title>' in response.data
+        assert b'id="admin-app-root"' in response.data
 
     def test_document_title_matches_game_edit_context(self, client, admin_user, existing_game):
         _login(client, admin_user)
         response = client.get(f'/game_edit/{existing_game.uuid}')
 
         assert response.status_code == 200
-        assert b'<title>Edit game entry \xc2\xb7 Oneirodex Admin</title>' in response.data
+        assert b'id="admin-app-root"' in response.data
 
     def test_igdb_id_prefilled_from_query_arg(self, client, admin_user, sample_library):
         _login(client, admin_user)

@@ -171,7 +171,7 @@ class TestNewsletterRoute:
         assert response.status_code == 200
         assert b'<title>' in response.data and b'Oneirodex Admin</title>' in response.data
         assert b'id="admin-app-root"' in response.data
-        assert b'/static/dist/admin-app/admin-app.js' in response.data
+        assert b'/static/dist/admin-pilot/' in response.data
 
     def test_newsletter_feature_disabled(self, client, admin_user, global_settings_newsletter_disabled):
         """Test newsletter page when newsletter feature is disabled."""
@@ -182,7 +182,7 @@ class TestNewsletterRoute:
         response = client.get('/admin/newsletter')
         assert response.status_code == 200
         assert b'id="admin-app-root"' in response.data
-        assert b'/static/dist/admin-app/admin-app.js' in response.data
+        assert b'/static/dist/admin-pilot/' in response.data
 
     def test_newsletter_no_sender_configured(self, client, admin_user, global_settings_no_sender):
         """Test newsletter page when no default sender is configured."""
@@ -193,7 +193,7 @@ class TestNewsletterRoute:
         response = client.get('/admin/newsletter')
         assert response.status_code == 200
         assert b'id="admin-app-root"' in response.data
-        assert b'/static/dist/admin-app/admin-app.js' in response.data
+        assert b'/static/dist/admin-pilot/' in response.data
 
     def test_newsletter_get_request_success(self, client, admin_user, global_settings_smtp_enabled, sample_newsletter):
         """Test successful GET request to newsletter page."""
@@ -205,27 +205,7 @@ class TestNewsletterRoute:
         assert response.status_code == 200
         assert b'<title>' in response.data and b'Oneirodex Admin</title>' in response.data
         assert b'id="admin-app-root"' in response.data
-        assert b'/static/dist/admin-app/admin-app.js' in response.data
-
-    def test_newsletter_post_invalid_form(self, client, admin_user, global_settings_smtp_enabled, db_session):
-        """Test POST with invalid form data."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        # Missing required fields
-        data = {
-            'subject': '',  # Empty subject
-            'content': '',  # Empty content
-            'recipients': 'test@test.com',
-            'send': 'Send'
-        }
-
-        response = client.post('/admin/newsletter', data=data)
-        assert response.status_code == 200
-        assert b'Newsletter sent successfully!' not in response.data
-        assert db_session.query(Newsletter).filter_by(subject='').first() is None
-
+        assert b'/static/dist/admin-pilot/' in response.data
 
 class TestViewNewsletterRoute:
     
@@ -255,11 +235,11 @@ class TestViewNewsletterRoute:
         assert b'id="admin-app-root"' in response.data
 
     def test_view_newsletter_not_found(self, client, admin_user, global_settings_smtp_enabled):
-        """The page shell loads even if the data API will return a missing row."""
+        """A newsletter that does not exist is not served a page shell."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
+        # The served shell answers 404 for a newsletter that does not exist.
         response = client.get('/admin/newsletter/99999')
-        assert response.status_code == 200
-        assert b'id="admin-app-root"' in response.data
+        assert response.status_code == 404

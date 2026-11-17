@@ -116,7 +116,7 @@ class TestManageDownloadsRoute:
 
         response = client.get('/admin/manage-downloads')
         assert response.status_code == 200
-        assert b'<title>Downloads admin' in response.data
+        assert b'<title>Oneirodex Admin</title>' in response.data
         assert b'id="admin-app-root"' in response.data
         assert b'data-admin-render="spa"' in response.data
 

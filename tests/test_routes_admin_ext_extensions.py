@@ -64,7 +64,7 @@ class TestExtensionsRoute:
         
         response = client.get('/admin/extensions')
         assert response.status_code == 200
-        assert b'admin_manage_extensions.html' in response.data or b'Extensions' in response.data
+        assert b'id="admin-app-root"' in response.data
     
     def test_extensions_displays_allowed_types(self, client, admin_user):
         unique_suffix = str(int(time.time() * 1000))[-6:]
@@ -85,7 +85,7 @@ class TestExtensionsRoute:
             # The page is an admin SPA shell now; the file types are never in
             # this HTML. The React ExtensionsPage fetches them, so that is where
             # "displays allowed types" has to be checked from the server side.
-            assert b'admin-app.js' in response.data
+            assert b'/static/dist/admin-pilot/' in response.data
 
             api = client.get('/api/file_types/allowed')
             assert api.status_code == 200
