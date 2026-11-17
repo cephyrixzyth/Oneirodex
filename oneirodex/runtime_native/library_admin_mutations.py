@@ -649,6 +649,11 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
                 csrf_token = first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
         elif auth.token is None and request.headers.get('X-CSRFToken') is None:
             try:
+                # Buffer first: a form read that fails partway (an attached
+                # image exceeds max_files=0) must not consume the body the
+                # action handler re-reads afterwards. The outer ASGI limit
+                # bounds this buffer.
+                await request.body()
                 form = await request.form(max_files=0, max_fields=10, max_part_size=16 * 1024)
                 csrf_token = first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
             except Exception:
