@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
@@ -30,11 +31,11 @@ class FakeSettings:
         return {'max_depth': payload['max_depth'], 'success': True}
 
 
-def make_client(*, data=None):
+def make_client(*, data=None, role='admin', signed_in=True):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-admin-settings-secret', TESTING=True, WTF_CSRF_ENABLED=False)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
-    user = SimpleNamespace(id=7, role='admin', is_active=True, state=True, is_authenticated=True)
+    user = SimpleNamespace(id=7, role=role, is_active=True, state=True, is_authenticated=True)
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={}, login_message='Please log in.',
         login_message_category='message', localize_callback=None, session_protection='basic',
@@ -47,7 +48,8 @@ def make_client(*, data=None):
         login_manager=manager, data_access=data or FakeSettings(),
     ))
     client = TestClient(app)
-    client.cookies.set('session', dump_session_cookie({'_user_id': '7:fp'}, 'native-admin-settings-secret'))
+    if signed_in:
+        client.cookies.set('session', dump_session_cookie({'_user_id': '7:fp'}, 'native-admin-settings-secret'))
     return client
 
 
@@ -93,3 +95,35 @@ def test_policy_config_head_preserves_legacy_non_get_validation():
         assert response.status_code == 400
         assert response.content == b''
         assert response.headers['content-length'] == '118'
+
+
+POLICY_ROUTES = [
+    ('get', '/api/admin/remote-play/config', None),
+    ('put', '/api/admin/remote-play/config', {'enabled': True, 'host': 'moonlight.local'}),
+    ('get', '/api/admin/scan-match/config', None),
+    ('put', '/api/admin/scan-match/config', {'max_depth': 5}),
+]
+
+
+@pytest.mark.parametrize(('method', 'path', 'body'), POLICY_ROUTES)
+def test_policy_settings_are_refused_for_members(method, path, body):
+    data = FakeSettings()
+    kwargs = {'json': body} if body is not None else {}
+    response = getattr(make_client(data=data, role='user'), method)(path, follow_redirects=False, **kwargs)
+
+    # A signed-in member is turned away exactly as the admin decorator always did:
+    # a redirect, never the settings and never a write.
+    assert response.status_code in (302, 403)
+    assert data.saved_remote is None and data.saved_scan is None
+    assert 'operator_secret' not in response.text and 'include_extensions' not in response.text
+
+
+@pytest.mark.parametrize(('method', 'path', 'body'), POLICY_ROUTES)
+def test_policy_settings_are_refused_for_anonymous_callers(method, path, body):
+    data = FakeSettings()
+    kwargs = {'json': body} if body is not None else {}
+    response = getattr(make_client(data=data, signed_in=False), method)(path, follow_redirects=False, **kwargs)
+
+    assert response.status_code in (302, 401)
+    assert data.saved_remote is None and data.saved_scan is None
+    assert 'include_extensions' not in response.text

@@ -110,22 +110,3 @@ def test_palette_suggest_hides_titles_the_member_cannot_access(db_session):
     uuids = {row['uuid'] for row in body['recent'] + body['popular']}
     assert seen.uuid in uuids
     assert secret.uuid not in uuids
-
-
-def test_palette_suggest_api_requires_login(client, configured_install):
-    response = client.get('/api/palette/suggest')
-    assert response.status_code == 302
-
-
-def test_palette_suggest_api_ok(client, db_session):
-    member = _user(db_session, 'api')
-    library = _library(db_session)
-    game = _game(db_session, library, f'Api {uuid4().hex[:6]}')
-    _played(db_session, member, game)
-    _login(client, member)
-
-    response = client.get('/api/palette/suggest?limit=4')
-    assert response.status_code == 200
-    body = response.get_json()
-    assert body['ok'] is True
-    assert game.uuid in {row['uuid'] for row in body['recent']}

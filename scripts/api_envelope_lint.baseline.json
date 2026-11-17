@@ -4,6 +4,5 @@
   "oneirodex/routes_apis/game_batch.py": 5,
   "oneirodex/routes_apis/library.py": 1,
   "oneirodex/routes_apis/oidc_status.py": 1,
-  "oneirodex/routes_apis/storage.py": 1,
-  "oneirodex/routes_info.py": 1
+  "oneirodex/routes_apis/storage.py": 1
 }

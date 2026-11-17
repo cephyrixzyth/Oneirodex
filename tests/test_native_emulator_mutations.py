@@ -409,6 +409,41 @@ def test_save_upload_list_download_and_delete_keep_user_scoping(native):
     assert ('store_save', 7, 'game-1', 'qs-one', 'save.state', b'bytes', None) in data.calls
 
 
+def test_unreadable_save_does_not_leak_the_storage_path(native, monkeypatch):
+    app, api, data, _ = native
+    cookie, csrf = _cookie(app, csrf=True)
+    _request(api, 'POST', '/api/games/game-1/saves?slot=slot1', cookie=cookie, csrf=csrf,
+             files={'file': ('s.state', b'abc')})
+
+    def boom(_row):
+        raise PermissionError(13, 'Permission denied', '/srv/oneirodex/saves/secret/path/s.state')
+
+    monkeypatch.setattr(data, 'read_save', boom)
+    response = _request(api, 'GET', '/api/games/game-1/saves/slot1', cookie=cookie)
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body['error'] == 'Failed to read save'
+    assert body['error_code'] == 'internal'
+    assert '/srv' not in response.text and 'secret' not in response.text
+
+
+def test_missing_save_file_reads_as_not_found(native, monkeypatch):
+    app, api, data, _ = native
+    cookie, csrf = _cookie(app, csrf=True)
+    _request(api, 'POST', '/api/games/game-1/saves?slot=slot1', cookie=cookie, csrf=csrf,
+             files={'file': ('s.state', b'abc')})
+
+    def gone(_row):
+        raise FileNotFoundError(2, 'No such file', '/srv/oneirodex/saves/secret/path/s.state')
+
+    monkeypatch.setattr(data, 'read_save', gone)
+    response = _request(api, 'GET', '/api/games/game-1/saves/slot1', cookie=cookie)
+
+    assert response.status_code == 404
+    assert '/srv' not in response.text
+
+
 def test_child_can_save_own_progress_in_accessible_game(native):
     app, api, data, user = native
     user.role = 'child'

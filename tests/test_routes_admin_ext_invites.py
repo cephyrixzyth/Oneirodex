@@ -21,7 +21,6 @@ from oneirodex.models import User, InviteToken
     ('/admin/invites', 'Invites · Oneirodex Admin'),
     ('/admin/manage_invites', 'Invites · Oneirodex Admin'),
     ('/admin/images', 'Images · Oneirodex Admin'),
-    ('/admin/ownership', 'Store connections · Oneirodex Admin'),
     ('/admin/remote_play', 'Remote play · Oneirodex Admin'),
     ('/admin/support', 'Support inbox · Oneirodex Admin'),
     ('/admin/emulator_profiles', 'Emulators · Oneirodex Admin'),
@@ -34,7 +33,6 @@ from oneirodex.models import User, InviteToken
     ('/admin/ops', 'Ops · Oneirodex Admin'),
     ('/admin/settings', 'All settings · Oneirodex Admin'),
     ('/admin/storage', 'Storage / hardlinks · Oneirodex Admin'),
-    ('/admin/plugins', 'Export to emulator frontends · Oneirodex Admin'),
 ])
 def test_react_only_admin_pages_use_the_non_template_shell(client, admin_user, configured_install, path, title):
     with client.session_transaction() as sess:

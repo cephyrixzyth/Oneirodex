@@ -22,11 +22,11 @@ class FakeManualIdentify:
         return {'game': {'uuid': game_uuid}, 'scan_running': False} if game_uuid == 'game-1' else None
 
 
-def make_client(data=None):
+def make_client(data=None, *, role='admin', signed_in=True):
     flask_app = Flask(__name__)
     flask_app.config.update(SECRET_KEY='native-manual-identify-read-secret', TESTING=True)
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
-    user = SimpleNamespace(id=7, role='admin', is_active=True, state=True, is_authenticated=True)
+    user = SimpleNamespace(id=7, role=role, is_active=True, state=True, is_authenticated=True)
     manager = SimpleNamespace(
         login_view='login.login', blueprint_login_views={},
         login_message='Please log in to access this page.', login_message_category='message',
@@ -40,7 +40,8 @@ def make_client(data=None):
         login_manager=manager, data_access=data or FakeManualIdentify(),
     ))
     client = TestClient(app)
-    client.cookies.set('session', dump_session_cookie({'_user_id': '7:fp'}, 'native-manual-identify-read-secret'))
+    if signed_in:
+        client.cookies.set('session', dump_session_cookie({'_user_id': '7:fp'}, 'native-manual-identify-read-secret'))
     return client
 
 
@@ -74,3 +75,23 @@ def test_game_state_keeps_editor_payload():
     assert response.status_code == 200
     assert response.json()['game']['uuid'] == 'game-1'
     assert response.json()['scan_running'] is False
+
+
+def test_manual_identify_reads_are_refused_for_members_and_anonymous_callers():
+    class Recording(FakeManualIdentify):
+        def __init__(self):
+            self.reads = 0
+
+        def __getattribute__(self, name):
+            value = super().__getattribute__(name)
+            if callable(value) and not name.startswith('__'):
+                object.__setattr__(self, 'reads', super().__getattribute__('reads') + 1)
+            return value
+
+    for path in ('/api/admin/manual-identify/options', '/api/admin/manual-identify/game-1'):
+        for client_kwargs, allowed in (({'role': 'user'}, (302, 403)), ({'signed_in': False}, (302, 401))):
+            data = Recording()
+            response = make_client(data, **client_kwargs).get(path, follow_redirects=False)
+
+            assert response.status_code in allowed, (path, client_kwargs)
+            assert data.reads == 0, (path, client_kwargs)
