@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The retired Flask route layer (about 26,000 lines): `oneirodex/routes_*`, the Flask-WTF forms, the Flask auth decorators and the classic page renderers. The server has answered every request from the native app since 1.2.0; this code only ran in tests. Also removed: the unused form posts `POST /scan_management`, `POST /scan_manual_folder` and `POST /link_existing_game`, 31 static scripts and images from the classic pages, and unused imports across the server.
 
 ### Changed
+- Dependency updates: FastAPI 0.162, Starlette 1.10, SQLAlchemy 2.1.8, Pydantic 2.14 (with its matching core), Alembic 1.20.1, Authlib 1.9.5 and smaller Python, npm, Rust and GitHub Actions bumps. The desktop companion's launch hash no longer depends on the `sha2` crate's formatting, so its 0.11 update builds.
 - Sign-in `next` addresses are checked by one shared function, which now also refuses control characters (a browser drops a tab or newline, so `/\t/evil.example` would have become `//evil.example`).
 
 ### Fixed

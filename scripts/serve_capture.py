@@ -260,61 +260,91 @@ def seed() -> None:
 
 
 
-def seed_via_http(app) -> None:
-    """Covers and chat, through the product's own endpoints.
+class _Browser:
+    """One signed-in browser against the served app, in-process.
 
-    Deliberately **outside** any `app.app_context()`: Flask-Login caches the
-    signed-in user on `g`, which is app-context scoped, so two test clients
-    driven inside one long-lived context both act as whoever logged in first
-    — the member's lines were being posted as the admin. Each request here
-    gets its own context and therefore its own identity.
+    Bootstraps a session and CSRF token, signs in through /api/auth/login
+    and sends the token on every write, as the SPA does.
     """
+
+    def __init__(self, username: str, password: str):
+        import asyncio
+        import httpx
+
+        from asgi import asgi_app
+
+        self._loop = asyncio.new_event_loop()
+        self._client = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=asgi_app, client=("127.0.0.1", 50000)),
+            base_url=f"http://127.0.0.1:{PORT}",
+        )
+        self.token = ""
+        self._refresh_token()
+        r = self.post("/api/auth/login", json={"username": username, "password": password})
+        self.status = r.status_code
+        self._refresh_token()
+
+    def _run(self, coro):
+        return self._loop.run_until_complete(coro)
+
+    def _refresh_token(self) -> None:
+        # The sign-in screen bootstraps its CSRF token (and session) here.
+        response = self._run(self._client.get("/api/auth/runtime-bootstrap"))
+        if response.status_code == 200:
+            self.token = response.json().get("csrf_token") or self.token
+
+    def get(self, path: str):
+        return self._run(self._client.get(path))
+
+    def post(self, path: str, **kwargs):
+        headers = {"X-CSRFToken": self.token, **kwargs.pop("headers", {})}
+        return self._run(self._client.post(path, headers=headers, **kwargs))
+
+    def close(self) -> None:
+        self._run(self._client.aclose())
+        self._loop.close()
+
+
+def seed_via_http(app) -> None:
+    """Covers and chat, through the served app's own endpoints."""
     from sqlalchemy import select
 
     from oneirodex import db
     from oneirodex.models import ChatMessage
 
-    # --- covers + chat, through the product's own endpoints -----------
-    # In-process test clients, so the form and header CSRF tokens are
-    # noise here — the running server keeps CSRF on.
-    app.config["WTF_CSRF_ENABLED"] = False
-    client = app.test_client()
-    r = client.post("/login", data={"username": USER, "password": PASSWORD}, follow_redirects=False)
-    print("login:", r.status_code, r.headers.get("Location"))
-    headers: dict[str, str] = {}
+    admin = _Browser(USER, PASSWORD)
+    print("login:", admin.status)
+    r = admin.post("/admin/api/art-studio/batch-generate", json={})
+    print("covers:", r.status_code)
 
-    r = client.post("/admin/api/art-studio/batch-generate", json={}, headers=headers)
-    print("covers:", r.status_code, (r.get_json() or {}).get("data", r.get_json()))
-
-    def _channels(c):
-        payload = c.get("/api/chat/channels").get_json() or {}
+    def _channels(browser):
+        payload = browser.get("/api/chat/channels").json() or {}
         return (payload.get("data") or payload).get("channels") or []
 
     def _find(chs, slug):
         return next((c for c in chs if str(c.get("slug") or c.get("name") or "").lstrip("#") == slug), None)
 
-    chans = _channels(client)
+    chans = _channels(admin)
     for name, slug in (("general", "general"), ("looking-for-players", "looking-for-players")):
         if _find(chans, slug) is None:
-            r = client.post("/api/chat/channels", json={"name": name, "slug": slug}, headers=headers)
+            r = admin.post("/api/chat/channels", json={"name": name, "slug": slug})
             print("chat : created", name, r.status_code)
-    chans = _channels(client)
+    chans = _channels(admin)
 
     # Two voices, so presence, avatars and reactions have something to show.
-    member = app.test_client()
-    member.post("/login", data={"username": MEMBER_USER, "password": MEMBER_PASS}, follow_redirects=False)
-    mheaders: dict[str, str] = {}
+    member = _Browser(MEMBER_USER, MEMBER_PASS)
+    print("member login:", member.status)
 
     script = {
         "general": [
-            (client, headers, "Scan finished — the NES and Genesis shelves are up."),
-            (member, mheaders, "Nice. Is dmg-acid2 the one with the smiley test screen?"),
-            (client, headers, "That's the one. Covers are generated now too, check the tiles."),
-            (member, mheaders, "The pixel icon pack looks great on the living-room TV."),
+            (admin, "Scan finished — the NES and Genesis shelves are up."),
+            (member, "Nice. Is dmg-acid2 the one with the smiley test screen?"),
+            (admin, "That's the one. Covers are generated now too, check the tiles."),
+            (member, "The pixel icon pack looks great on the living-room TV."),
         ],
         "looking-for-players": [
-            (member, mheaders, "Anyone up for a paddle-tester high-score run tonight?"),
-            (client, headers, "In. 9pm, voice room?"),
+            (member, "Anyone up for a paddle-tester high-score run tonight?"),
+            (admin, "In. 9pm, voice room?"),
         ],
     }
     for slug, lines in script.items():
@@ -323,8 +353,8 @@ def seed_via_http(app) -> None:
             print("chat : no channel", slug)
             continue
         with app.app_context():
-            # Re-seed only when the history is wrong: a single-author run of
-            # this script (the bug above) or nothing at all.
+            # Re-seed only when the history is wrong: a single-author run or
+            # nothing at all.
             rows = db.session.execute(
                 select(ChatMessage).filter_by(channel_id=ch["id"])
             ).scalars().all()
@@ -333,9 +363,11 @@ def seed_via_http(app) -> None:
             for m in rows:
                 db.session.delete(m)
             db.session.commit()
-        for who, hdrs, text in lines:
-            who.post(f"/api/chat/channels/{ch['id']}/messages", json={"body": text}, headers=hdrs)
+        for who, text in lines:
+            who.post(f"/api/chat/channels/{ch['id']}/messages", json={"body": text})
         print("chat : seeded", len(lines), "messages in #" + slug)
+    admin.close()
+    member.close()
 
 
 def serve() -> None:

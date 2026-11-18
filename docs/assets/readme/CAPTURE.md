@@ -44,6 +44,13 @@ still requires Playwright Chromium and the isolated populated instance below.
 
 ## Recipe
 
+**2026-11-17 full-surface review (no media replaced):** after the Flask route
+layer was removed, `serve_capture.py` seeds covers and chat through the served
+app (`/api/auth/runtime-bootstrap` CSRF token, `/api/auth/login`) instead of a
+Flask test client. All 55 member and admin surfaces passed the health gate
+into a git-ignored scratch folder, and the run skill's authenticated smoke
+returned 17/17. README and docs images were not replaced.
+
 **2026-11-07 focused account-session capture:** the populated local capture
 instance was rebuilt from the current member bundle with background workers
 and external integrations disabled. Authenticated Playwright capture of

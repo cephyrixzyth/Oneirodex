@@ -767,6 +767,8 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
   width: 1.625rem;
   height: 1.625rem;
   flex: 0 0 auto;
+  margin-inline-end: 0.5rem;
+  vertical-align: middle;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
