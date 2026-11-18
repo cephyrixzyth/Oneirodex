@@ -85,10 +85,6 @@ def get_effective_installed_cores(cores_dir: str | Path | None = None) -> frozen
     return shipped | discover_webretro_cores(cores_dir)
 
 
-def wasm_present_on_disk(core_id: str, cores_dir: str | Path | None = None) -> bool:
-    return any((root / f'{core_id}_libretro.wasm').is_file() for root in core_dirs(cores_dir))
-
-
 def deferred_core_status(cores_dir: str | Path | None = None) -> dict[str, dict]:
     """Operator-facing status for Wave 19 deferred WASM cores."""
     roots = core_dirs(cores_dir)

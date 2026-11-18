@@ -93,8 +93,8 @@ def test_member_cannot_read_admin_theme_inventory():
     client, data = _client(role='user')
     response = client.get('/api/admin/themes', follow_redirects=False)
 
-    assert response.status_code == 302
-    assert response.headers['location'].startswith('/login')
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert data.calls == []
 
 

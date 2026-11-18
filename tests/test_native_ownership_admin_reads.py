@@ -10,9 +10,7 @@ from oneirodex.runtime_native.ownership_admin_reads import (
     create_ownership_admin_read_router,
 )
 from oneirodex.runtime_native import ownership_admin_reads as native_ownership_admin
-from oneirodex.runtime_native.session_compat import (
-    dump_session_cookie, load_session_cookie,
-)
+from oneirodex.runtime_native.session_compat import dump_session_cookie
 
 
 class FakeOwnershipAdminReadData:
@@ -162,13 +160,6 @@ def test_non_admin_redirects_and_does_not_read_member_connections():
     response = make_client(role='user', data=data).get(
         '/api/admin/ownership/connections', follow_redirects=False,
     )
-    assert response.status_code == 302
-    assert response.headers['location'] == '/login'
-    session = load_session_cookie(
-        response.cookies['session'], 'ownership-admin-read-secret',
-        max_age=31_536_000,
-    )
-    assert session['_flashes'] == [
-        ('danger', 'You must be an admin to access this page.'),
-    ]
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert data.calls == []

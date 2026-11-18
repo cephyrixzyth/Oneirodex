@@ -8,7 +8,7 @@ Tests the admin-only games search endpoint used by the Identify page's
 import pytest
 from uuid import uuid4
 
-from sqlalchemy import delete, text
+from sqlalchemy import text
 
 from oneirodex.models import User, Game, Library, LibraryPlatform
 
@@ -107,7 +107,7 @@ class TestAdminGamesSearchAPI:
         _login(client, regular_user)
         response = client.get('/api/admin/games_search?q=alpha')
         # admin_required redirects non-admins rather than 403ing
-        assert response.status_code == 302
+        assert response.status_code == 403
 
     def test_empty_query_returns_empty_list(self, client, admin_user):
         _login(client, admin_user)

@@ -131,8 +131,8 @@ def test_login_admin_gate_and_head_semantics(runtime):
 
     assert anonymous.status_code == 302
     assert anonymous.headers['location'] == '/login?next=%2Fapi%2Funmatched_folders'
-    assert member.status_code == 302
-    assert member.headers['location'] == '/login'
+    assert member.status_code == 403
+    assert member.json()['error_code'] == 'forbidden'
     assert head.status_code == 200
     assert head.content == b''
 

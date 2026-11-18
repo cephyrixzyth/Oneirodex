@@ -3,20 +3,11 @@ import pytest
 import os
 import tempfile
 import shutil
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch
 from uuid import uuid4
-from flask import Flask
 
-from oneirodex import create_app, db
 from oneirodex.models import Game
-from oneirodex.utils.gamenames import (
-    get_game_names_from_folder,
-    get_game_names_from_files,
-    get_game_name_by_uuid,
-    clean_game_name,
-    detect_goty_pattern,
-    generate_goty_variants
-)
+from oneirodex.utils.gamenames import get_game_names_from_folder, get_game_names_from_files, clean_game_name, detect_goty_pattern, generate_goty_variants
 from oneirodex.utils.game_name_parse import parse_game_label
 
 
@@ -239,32 +230,6 @@ class TestGetGameNamesFromFiles:
         result = get_game_names_from_files(temp_directory, ['exe'], [], [])
         
         assert result == []
-
-
-class TestGetGameNameByUUID:
-    """Test cases for get_game_name_by_uuid function."""
-    
-    def test_existing_game_uuid(self, db_session, sample_games, capsys):
-        """Test retrieval of existing game by UUID."""
-        test_game = sample_games[0]
-        
-        result = get_game_name_by_uuid(test_game.uuid)
-        
-        assert result == test_game.name
-        captured = capsys.readouterr()
-        assert f"Searching for game UUID: {test_game.uuid}" in captured.out
-        assert f"Game with name {test_game.name} and UUID {test_game.uuid} found" in captured.out
-    
-    def test_non_existent_uuid(self, db_session, capsys):
-        """Test behavior when UUID doesn't exist."""
-        non_existent_uuid = str(uuid4())
-        
-        result = get_game_name_by_uuid(non_existent_uuid)
-        
-        assert result is None
-        captured = capsys.readouterr()
-        assert f"Searching for game UUID: {non_existent_uuid}" in captured.out
-        assert "Game not found" in captured.out
 
 
 class TestCleanGameName:

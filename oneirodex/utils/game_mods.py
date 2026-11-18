@@ -42,12 +42,6 @@ def _setting(name: str, default=None):
     return current_app.config.get(name, default)
 
 
-def mods_enabled() -> bool:
-    return str(_setting('ENABLE_MOD_TRACKING', 'true')).lower() in (
-        '1', 'true', 'yes', 'on',
-    )
-
-
 def mods_root() -> str:
     root = _setting('GAME_MODS_PATH')
     if root:

@@ -253,9 +253,12 @@ def render_member_shell(user, app_config, settings, session_data, csrf_token, *,
         package_root=package_root,
     ))
     flash_html = _flashes(session_data)
+    # Set server-side so the retired page headers never flash before the app
+    # script marks the document itself.
+    chrome_attr = ' data-chrome="v2"' if app_config.config.get('ENABLE_NEW_CHROME', True) else ''
 
     html = f'''<!DOCTYPE html>
-<html lang="en" data-theme="{_e(theme)}" data-era="{_e(era_for_theme(theme))}" data-icon-pack="{_e(icon_pack)}">
+<html lang="en" data-theme="{_e(theme)}" data-era="{_e(era_for_theme(theme))}" data-icon-pack="{_e(icon_pack)}"{chrome_attr}>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta charset="utf-8">

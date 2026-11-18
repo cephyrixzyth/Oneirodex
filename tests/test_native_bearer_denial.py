@@ -87,7 +87,7 @@ class NativeBearerDenialContracts(unittest.TestCase):
         manager=SimpleNamespace(login_view='/login',blueprint_login_views={},login_message=None)
         context=SimpleNamespace(user=SimpleNamespace(id=27),session_data={},should_set_session_cookie=False)
         response=_companion_login_response(settings,request,manager,context)
-        self.assertEqual(response.status_code,302);self.assertNotIn('www-authenticate',response.headers)
+        self.assertEqual(response.status_code,403);self.assertNotIn('www-authenticate',response.headers)
 
     def test_actual_personal_token_route_preserves_expired_bearer_redirect_without_data_access(self):
         request=Request({'type':'http','method':'GET','scheme':'http','path':'/api/tokens','query_string':b'',

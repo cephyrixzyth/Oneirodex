@@ -2,11 +2,6 @@ from oneirodex.utils.global_settings import global_settings_row
 from oneirodex import app_version
 import json
 
-def get_loc(page):
-    
-    with open(f'oneirodex/static/localization/en/{page}.json', 'r', encoding='utf8') as f:
-            loc_data = json.load(f)    
-    return loc_data
 
 def get_global_settings():
     """Helper function to get global settings with defaults"""

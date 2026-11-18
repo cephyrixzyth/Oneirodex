@@ -5,12 +5,7 @@ from uuid import uuid4
 
 from oneirodex.models import Game, Genre, Library, User, UserGameProgress, user_favorites
 from oneirodex.platform import LibraryPlatform
-from oneirodex.utils.discover_hubs import (
-    build_genre_hub,
-    catalog_href_for_genre,
-    hub_path_for_genre,
-    resolve_genre,
-)
+from oneirodex.utils.discover_hubs import build_genre_hub, catalog_href_for_genre, resolve_genre
 
 NOW = datetime.now(timezone.utc)
 
@@ -136,6 +131,3 @@ def test_genre_hub_api_404_and_ok(client, db_session, configured_install, global
     assert payload['sections']
 
 
-def test_hub_path_quotes_spaces():
-    genre = type('G', (), {'name': 'Role Playing'})()
-    assert hub_path_for_genre(genre) == '/discover/hub/genre/Role%20Playing'

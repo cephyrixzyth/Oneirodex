@@ -218,16 +218,3 @@ def room_for_platform(platform_key: str | None) -> dict:
     return room
 
 
-def room_css_vars(platform_key: str | None) -> dict[str, str]:
-    """Custom properties the play surface can apply directly.
-
-    Emitted as data rather than a stylesheet so the caller decides scope — the
-    play page themes itself without a global theme switch.
-    """
-    room = room_for_platform(platform_key)
-    return {
-        '--od-room-backdrop': room['backdrop'],
-        '--od-room-glow': room['glow'],
-        '--od-room-accent': room['accent'],
-        '--od-room-font': room['font_stack'],
-    }

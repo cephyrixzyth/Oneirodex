@@ -80,10 +80,3 @@ PLATFORM_RELEASE_ESTIMATES: dict[str, int] = {
 }
 
 
-def estimate_for(library_platform: str | None) -> int | None:
-    """Return a built-in estimate, or None when we have no ballpark."""
-    key = (library_platform or '').strip()
-    if not key:
-        return None
-    n = PLATFORM_RELEASE_ESTIMATES.get(key)
-    return int(n) if n and n > 0 else None

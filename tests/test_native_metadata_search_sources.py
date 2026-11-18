@@ -75,6 +75,6 @@ def test_metadata_search_sources_remains_admin_only():
     client, data = _client(role='user')
     response = client.get('/api/search_metadata/sources', follow_redirects=False)
 
-    assert response.status_code == 302
-    assert response.headers['location'].startswith('/login')
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert data.reads == 0

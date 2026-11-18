@@ -8,7 +8,6 @@ import pytest
 from flask_login import login_user
 from sqlalchemy import select
 
-from oneirodex import db
 from oneirodex.models import GlobalSettings, User
 from oneirodex.utils import arr_connectors
 from oneirodex.utils.arr_connectors import search_indexers
@@ -19,7 +18,6 @@ from oneirodex.utils.indexer_registry import (
     list_indexers,
     load_indexer_presets,
     normalize_indexer,
-    presets_path,
 )
 
 pytestmark = pytest.mark.usefixtures('reusable_secret_keyring')
@@ -286,7 +284,8 @@ def test_native_indexer_ssrf_reject(app, db_session, monkeypatch):
 
 
 def test_enable_presets_copies_without_mutating_pack(app, db_session):
-    pack_path = presets_path()
+    from oneirodex.utils.indexer_registry import _PRESETS_PATH as pack_path
+
     before = pack_path.read_text(encoding='utf-8')
     presets = load_indexer_presets()
     assert len(presets) >= 2

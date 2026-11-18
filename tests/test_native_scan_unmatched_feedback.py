@@ -200,7 +200,7 @@ def test_role_and_csrf_gates_precede_data_access(runtime):
     denied_librarian = request(app, '/api/unmatched/existing/bad_match',
                                cookie=cookies['member'], method='POST', json={'reason': 'wrong_game'})
     denied_anonymous = request(app, '/api/unmatched/bad_match_reasons')
-    assert admin_only.status_code == 302 and admin_only.headers['location'] == '/login'
+    assert admin_only.status_code == 403
     assert denied_librarian.status_code == 403
     assert denied_anonymous.status_code == 302
     assert not data.calls

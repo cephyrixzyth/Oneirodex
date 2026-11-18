@@ -131,20 +131,6 @@ def freshness_public_view(game) -> dict:
 DEFAULT_SCAN_FRESHNESS_LIMIT = 50
 
 
-def scan_freshness_enabled(settings=None) -> bool:
-    """Opt-in. A scan that silently starts calling stores is a surprise."""
-    if settings is None:
-        try:
-            from flask import current_app
-
-            return bool(current_app.config.get('SCAN_CHECK_FRESHNESS', False))
-        except (ImportError, RuntimeError):
-            return False
-    if isinstance(settings, dict):
-        return bool(settings.get('scan_check_freshness'))
-    return bool(getattr(settings, 'scan_check_freshness', False))
-
-
 def check_library_freshness(
     library_uuid: str,
     *,

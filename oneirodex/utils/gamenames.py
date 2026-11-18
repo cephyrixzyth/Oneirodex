@@ -244,15 +244,6 @@ def get_game_names_from_files(folder_path, extensions, insensitive_patterns, sen
     return game_names_with_paths
 
 
-def get_game_name_by_uuid(uuid):
-    print(f"Searching for game UUID: {uuid}")
-    game = db.session.execute(select(Game).filter_by(uuid=uuid)).scalars().first()
-    if game:
-        print(f"Game with name {game.name} and UUID {game.uuid} found")
-        return game.name
-    else:
-        print("Game not found")
-        return None
     
     
 def detect_goty_pattern(filename):

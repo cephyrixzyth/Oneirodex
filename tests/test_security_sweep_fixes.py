@@ -100,12 +100,6 @@ def test_changing_your_own_password_keeps_you_signed_in(app, db_session):
 
 # -- rate limiting keys on the real address ------------------------------------
 
-def test_a_forged_forwarded_for_header_does_not_change_the_rate_limit_key():
-    from oneirodex.utils.login_rate_limit import client_ip_from_request
-
-    request = SimpleNamespace(headers={'X-Forwarded-For': '203.0.113.9'}, remote_addr='192.0.2.7')
-    assert client_ip_from_request(request) == '192.0.2.7'
-
 
 # -- API tokens need the admin scope for admin routes --------------------------
 

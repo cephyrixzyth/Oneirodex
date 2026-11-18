@@ -1,19 +1,14 @@
 import pytest
 import json
-import os
-import tempfile
-from unittest.mock import patch, Mock, MagicMock, mock_open
+from unittest.mock import patch
 from datetime import datetime, timezone
 from uuid import uuid4
 from io import BytesIO
 from werkzeug.datastructures import FileStorage
 from sqlalchemy import select, func
 
-from oneirodex import create_app, db
-from oneirodex.models import (
-    User, Game, Library, Genre, GameMode, Theme, Platform, 
-    PlayerPerspective, Image, ScanJob, UnmatchedFolder, user_favorites
-)
+from oneirodex import db
+from oneirodex.models import User, Game, Library, Genre, Platform, Image, ScanJob, UnmatchedFolder
 from oneirodex.platform import LibraryPlatform
 
 
@@ -639,14 +634,12 @@ class TestMainBlueprint:
 
     @patch('flask_login.current_user')
     @patch('oneirodex.utils.background.run_in_background')
-    @patch('oneirodex.utils.gamenames.get_game_name_by_uuid')
-    def test_refresh_game_images(self, mock_get_name, mock_background,
+    def test_refresh_game_images(self, mock_background,
                                 mock_current_user, client, app, db_session, admin_user, test_game):
         """Test refreshing game images."""
         mock_current_user.is_authenticated = True
         mock_current_user.role = 'admin'
         mock_current_user.name = admin_user.name
-        mock_get_name.return_value = 'Test Game'
         
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -656,8 +649,7 @@ class TestMainBlueprint:
 
     @patch('flask_login.current_user')
     @patch('oneirodex.utils.background.run_in_background')
-    @patch('oneirodex.utils.gamenames.get_game_name_by_uuid')
-    def test_refresh_game_images_ajax(self, mock_get_name, mock_background, mock_current_user,
+    def test_refresh_game_images_ajax(self, mock_background, mock_current_user,
                                      client, app, db_session, admin_user, test_game):
         """Test refreshing game images via AJAX.
 
@@ -671,7 +663,6 @@ class TestMainBlueprint:
         mock_current_user.is_authenticated = True
         mock_current_user.role = 'admin'
         mock_current_user.name = admin_user.name
-        mock_get_name.return_value = 'Test Game'
 
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)

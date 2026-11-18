@@ -71,25 +71,6 @@ def record_impressions(user_id, game_uuids) -> int:
     return len(uuids)
 
 
-def record_click(user_id, game_uuid) -> None:
-    """A title the member actually opened stops being damped."""
-    if user_id is None or not game_uuid:
-        return
-    stamp = _now()
-    statement = pg_insert(UserDiscoverImpression.__table__).values(
-        user_id=user_id,
-        game_uuid=game_uuid,
-        shown_count=0,
-        clicked_at=stamp,
-    )
-    statement = statement.on_conflict_do_update(
-        constraint='uq_user_discover_impression',
-        set_={'clicked_at': stamp},
-    )
-    db.session.execute(statement)
-    db.session.commit()
-
-
 def damping_for(user_id) -> dict[str, float]:
     """Per-title score multipliers for one member.
 
@@ -120,13 +101,3 @@ def damping_for(user_id) -> dict[str, float]:
     return damping
 
 
-def rotation_seed(user_id, *, today=None) -> int:
-    """A seed that changes daily and differs per member.
-
-    Derived rather than random so the same member gets the same arrangement all
-    day: a feed that reshuffles on every request reads as broken rather than
-    fresh.
-    """
-    day = (today or date.today()).isoformat()
-    digest = hashlib.sha1(f'{user_id}:{day}'.encode('utf-8')).hexdigest()
-    return int(digest[:8], 16)

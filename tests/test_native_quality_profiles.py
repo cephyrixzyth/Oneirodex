@@ -129,12 +129,8 @@ def test_non_admin_redirects_with_danger_flash_without_next_or_data_access():
     response = make_client(role='user', data=data).get(
         '/api/quality-profiles?from=settings', follow_redirects=False
     )
-    assert response.status_code == 302
-    assert response.headers['location'] == '/login'
-    session = load_session_cookie(
-        response.cookies['session'], 'native-quality-profiles-secret', max_age=31_536_000
-    )
-    assert session['_flashes'] == [('danger', 'You must be an admin to access this page.')]
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert data.calls == 0
 
 

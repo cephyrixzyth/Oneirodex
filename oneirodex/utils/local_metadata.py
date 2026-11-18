@@ -295,34 +295,6 @@ def has_local_metadata(full_disk_path, filename=DEFAULT_METADATA_FILENAME):
         return False
 
 
-def delete_local_metadata(full_disk_path, filename=DEFAULT_METADATA_FILENAME):
-    """
-    Delete local metadata file from game folder.
-
-    Args:
-        full_disk_path: Full path to game folder
-        filename: Metadata filename
-
-    Returns:
-        bool: True if deleted or didn't exist, False on error
-    """
-    try:
-        metadata_path = os.path.join(full_disk_path, filename)
-        if os.path.exists(metadata_path):
-            os.remove(metadata_path)
-            logger.info(f"Deleted local metadata: {metadata_path}")
-        # Also remove legacy sidecar if present
-        if filename != LEGACY_METADATA_FILENAME:
-            legacy_path = os.path.join(full_disk_path, LEGACY_METADATA_FILENAME)
-            if os.path.exists(legacy_path):
-                os.remove(legacy_path)
-                logger.info(f"Deleted legacy local metadata: {legacy_path}")
-        return True
-    except Exception as e:
-        logger.error(f"Error deleting local metadata from {full_disk_path}: {e}")
-        return False
-
-
 def get_local_cover_path(full_disk_path):
     """
     Get path to local cover image if it exists.

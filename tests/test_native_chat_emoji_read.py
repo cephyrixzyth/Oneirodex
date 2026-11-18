@@ -85,8 +85,8 @@ def test_chat_emoji_read_keeps_envelope_no_store_and_head():
 
 def test_chat_emoji_read_requires_admin():
     response = _client(role='user').get('/api/admin/chat-emoji', follow_redirects=False)
-    assert response.status_code == 302
-    assert response.headers['location'].startswith('/login')
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
 
 
 def test_chat_emoji_read_uses_generic_error_on_storage_failure():

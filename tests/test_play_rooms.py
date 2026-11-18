@@ -2,16 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 
-from oneirodex.utils.play_rooms import (
-    DEFAULT_ROOM,
-    PLATFORM_ROOMS,
-    ROOMS,
-    room_css_vars,
-    room_for_platform,
-    room_id_for_platform,
-)
+from oneirodex.utils.play_rooms import DEFAULT_ROOM, PLATFORM_ROOMS, ROOMS, room_for_platform, room_id_for_platform
 
 
 class TestRoomMapping:
@@ -85,14 +77,6 @@ class TestRoomPayload:
             assert arcade['backdrop'] != living['backdrop']
             assert arcade['ambience'] != living['ambience']
 
-    def test_css_vars_are_ready_to_apply(self, app):
-        with app.app_context():
-            css = room_css_vars('PSX')
-            assert set(css) == {
-                '--od-room-backdrop', '--od-room-glow',
-                '--od-room-accent', '--od-room-font',
-            }
-            assert all(v for v in css.values())
 
     def test_no_room_imitates_manufacturer_trade_dress(self, app):
         """Period setting, not branding — same line the font registry holds."""

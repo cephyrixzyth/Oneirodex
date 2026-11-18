@@ -9,18 +9,9 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from PIL import Image
 
 from oneirodex.models import Game, Image as GameImage, Library, LibraryPlatform, User
-from oneirodex.utils.cover_art_studio import (
-    bake_default_fallbacks,
-    build_zip_bytes,
-    generate_size_matrix,
-    render_cover_art,
-    safe_pack_dir,
-    safe_pack_file,
-    save_pack,
-)
+from oneirodex.utils.cover_art_studio import build_zip_bytes, generate_size_matrix, render_cover_art, safe_pack_dir, safe_pack_file, save_pack
 
 pytestmark = pytest.mark.integration  # A3.1: kept out of the fast `-m "not integration"` core -- PIL cover-art rendering matrix.
 
@@ -151,20 +142,6 @@ def test_save_pack_and_zip(tmp_path, app):
     with zipfile.ZipFile(io.BytesIO(payload)) as zf:
         names = zf.namelist()
         assert any('tile_600x900.webp' in n for n in names)
-
-
-def test_bake_default_fallbacks(tmp_path):
-    ns = tmp_path / 'newstyle'
-    with patch('oneirodex.utils.cover_art_studio.newstyle_root', return_value=ns):
-        paths = bake_default_fallbacks()
-    assert Path(paths['default_cover']).is_file()
-    assert Path(paths['default_library']).is_file()
-    assert Path(paths['default_library_large']).is_file()
-    cover = Image.open(paths['default_cover'])
-    assert cover.size == (600, 900)
-    # Branded blank is not a flat single-color box
-    extrema = cover.getextrema()
-    assert any(lo != hi for lo, hi in extrema)
 
 
 @pytest.fixture

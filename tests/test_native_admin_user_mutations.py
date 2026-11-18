@@ -190,7 +190,7 @@ def test_user_mutations_reject_non_admin_before_data_access():
         '/admin/api/user/42', json={'about': 'child account'},
         headers={'X-CSRFToken': csrf}, follow_redirects=False,
     )
-    assert response.status_code == 302
+    assert response.status_code == 403
     assert data.calls == []
 
 

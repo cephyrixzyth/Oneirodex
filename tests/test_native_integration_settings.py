@@ -169,7 +169,7 @@ def test_integration_settings_denies_non_admin_before_read():
         '/api/admin/integrations/community', follow_redirects=False,
     )
 
-    assert response.status_code == 302
+    assert response.status_code == 403
     assert data.community_saved is None
 
 

@@ -308,3 +308,9 @@
     flex-wrap: wrap;
   }
 }
+
+/* The open, pinned dock floats over the bottom-right of the page; keep the
+   end of the page scrollable past it (height set by SocialCompanionDock). */
+html[data-dock-reserve] .od-shell__main {
+  padding-bottom: calc(var(--od-section-gap, 1.5rem) + var(--od-dock-reserve, 0px));
+}

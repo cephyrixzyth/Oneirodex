@@ -11,7 +11,7 @@ rail and shell stylesheet. Every CSS fix in that file had been invisible since
 it was written.
 """
 
-from oneirodex.utils.theme_freshness import theme_freshness, theme_freshness_summary
+from oneirodex.utils.theme_freshness import theme_freshness
 
 
 def _write(path, text='body { color: red }'):
@@ -20,28 +20,7 @@ def _write(path, text='body { color: red }'):
 
 
 class TestThemeFreshness:
-    def test_identical_copies_are_fresh(self, tmp_path):
-        _write(tmp_path / 'setup' / 'default_theme' / 'css' / 'a.css')
-        _write(tmp_path / 'static' / 'library' / 'themes' / 'default' / 'css' / 'a.css')
 
-        data = theme_freshness(tmp_path)
-
-        assert data['checked'] == 1
-        assert data['stale'] is False
-        assert theme_freshness_summary(tmp_path) == 'Up to date'
-
-    def test_a_changed_source_file_is_reported_behind(self, tmp_path):
-        _write(tmp_path / 'setup' / 'default_theme' / 'css' / 'a.css', 'NEW')
-        _write(
-            tmp_path / 'static' / 'library' / 'themes' / 'default' / 'css' / 'a.css',
-            'OLD',
-        )
-
-        data = theme_freshness(tmp_path)
-
-        assert data['stale'] is True
-        assert data['outdated'] == ['css/a.css']
-        assert 'Reset Themes' in theme_freshness_summary(tmp_path)
 
     def test_a_never_deployed_file_is_missing_not_fresh(self, tmp_path):
         """The od-shell.css case: a new file no reset has ever copied."""
@@ -80,12 +59,6 @@ class TestThemeFreshness:
         assert data['missing_count'] == 2
         assert data['stale'] is True
 
-    def test_missing_source_says_so_rather_than_claiming_freshness(self, tmp_path):
-        data = theme_freshness(tmp_path)
-
-        assert data['stale'] is False
-        assert data['reason'] == 'source theme not found'
-        assert theme_freshness_summary(tmp_path) == 'source theme not found'
 
     def test_long_lists_are_capped_but_counts_are_not(self, tmp_path):
         """An undeployed theme must not dump a hundred paths into an Ops panel."""

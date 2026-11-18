@@ -57,8 +57,8 @@ def test_admin_notification_bus_member_denial_redirects_without_calling_bus():
 
     response = client.post('/api/admin/notify-bus/test', headers={'X-CSRFToken': csrf})
 
-    assert response.status_code == 302
-    assert response.headers['location'] == '/login'
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert bus_calls == []
 
 

@@ -444,29 +444,6 @@ def _solver_client(config=None) -> ChallengeSolverClient | None:
     )
 
 
-def _token_client(config=None) -> TokenCaptchaClient | None:
-    values = _config_values(config)
-    cfg = get_challenge_config(values)
-    if cfg.get('provider') != 'token_api':
-        return None
-    token_url = cfg.get('token_api_url') or ''
-    if not token_url:
-        return None
-    ok, cleaned = validate_connector_http_url(token_url)
-    if not ok:
-        _set_last_error(cleaned)
-        return None
-    arr = _arr_cfg()
-    api_key = (
-        arr.get('challenge_token_api_key')
-        or values.get('CHALLENGE_TOKEN_API_KEY')
-        or ''
-    )
-    if not api_key:
-        return None
-    return TokenCaptchaClient(cleaned, api_key)
-
-
 def _apply_solution_to_request_kwargs(
     kwargs: dict[str, Any],
     solution: SolverSolution,

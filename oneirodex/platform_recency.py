@@ -170,22 +170,3 @@ def platform_rank(platform_key: str | None) -> int:
     return PLATFORM_LAUNCH_YEAR.get(str(platform_key), _UNKNOWN_RANK)
 
 
-def newest_platform(platform_keys) -> str | None:
-    """The newest platform among the given keys, or None when there are none.
-
-    Ties break alphabetically so the choice is stable across requests — two
-    systems from the same year must not swap places between page loads.
-    """
-    keys = [str(key) for key in (platform_keys or []) if key]
-    if not keys:
-        return None
-    return sorted(keys, key=lambda key: (-platform_rank(key), key))[0]
-
-
-def missing_platforms() -> list[str]:
-    """Enum members this table does not rank. Empty is the only healthy value."""
-    return sorted(
-        member.name
-        for member in LibraryPlatform
-        if member.name not in PLATFORM_LAUNCH_YEAR
-    )

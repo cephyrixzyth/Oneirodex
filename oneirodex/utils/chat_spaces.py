@@ -49,26 +49,6 @@ def _aware(value: datetime | None) -> datetime | None:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def ensure_household_space() -> ChatSpace:
-    """Get (or create) the default household space that adopts legacy channels."""
-    space = db.session.execute(
-        select(ChatSpace).where(ChatSpace.slug == HOUSEHOLD_SLUG)
-    ).scalars().first()
-    if space:
-        return space
-    space = ChatSpace(
-        name='Household',
-        slug=HOUSEHOLD_SLUG,
-        description='Default space for household channels.',
-        visibility='household',
-        is_child_safe=True,
-        display_order=0,
-    )
-    db.session.add(space)
-    db.session.commit()
-    return space
-
-
 def get_space_member(space_id: int, user_id: int) -> ChatSpaceMember | None:
     return db.session.execute(
         select(ChatSpaceMember).where(

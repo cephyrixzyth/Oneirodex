@@ -134,54 +134,6 @@ async def async_generate_file_chunks(file_path, chunk_size=2097152):
         raise
 
 
-async def create_async_streaming_response(file_path, filename, chunk_size=2097152):
-    """
-    Create an async streaming response for file downloads.
-    This function returns an async generator and headers for ASGI usage.
-    
-    Args:
-        file_path (str): Absolute path to the file to stream
-        filename (str): Filename to use for download (will be secured)
-        chunk_size (int): Size of each chunk in bytes (default 2MB)
-        
-    Returns:
-        tuple: (async_generator, headers_dict)
-        
-    Raises:
-        FileNotFoundError: If file doesn't exist
-        PermissionError: If file cannot be read
-        IOError: If other I/O errors occur
-    """
-    try:
-        # Secure the filename to prevent directory traversal
-        secure_name = secure_filename(filename)
-        if not secure_name:
-            secure_name = "download.zip"
-            
-        # Get file size for Content-Length header
-        file_size = os.path.getsize(file_path)
-        
-        # Determine correct content-type based on file extension
-        content_type = get_content_type_for_file(file_path, filename)
-        
-        # Create headers for download
-        headers = {
-            'content-type': content_type,
-            'content-disposition': f'attachment; filename="{secure_name}"',
-            'content-length': str(file_size),
-            'cache-control': 'no-cache'
-        }
-        
-        # Return the async generator and headers
-        async_generator = async_generate_file_chunks(file_path, chunk_size)
-        return async_generator, headers
-        
-    except Exception as e:
-        log_system_event(f"Failed to create async streaming response: {str(e)}", 
-                        event_type='download', event_level='error')
-        raise
-
-
 def async_generate_zipstream_response(source_path, filename, chunk_size=65536, 
                                       compression_level=0, enable_zip64=True,
                                       source_is_resolved=False):
@@ -237,41 +189,3 @@ def async_generate_zipstream_response(source_path, filename, chunk_size=65536,
         raise
 
 
-def get_download_info(file_path, filename):
-    """
-    Create a download info dict for Flask routes to return.
-    This tells the ASGI handler to stream the file asynchronously.
-    
-    Args:
-        file_path (str): Absolute path to the file to stream
-        filename (str): Filename to use for download
-        
-    Returns:
-        dict: Download info for ASGI handler
-    """
-    return {
-        'async_download': True,
-        'file_path': file_path,
-        'filename': filename,
-        'file_size': os.path.getsize(file_path) if os.path.exists(file_path) else 0
-    }
-
-
-def get_zipstream_download_info(source_path, filename):
-    """
-    Create a download info dict for zipstream downloads.
-    This tells the ASGI handler to create a ZIP stream asynchronously.
-    
-    Args:
-        source_path (str): Absolute path to the source file or directory to ZIP
-        filename (str): Filename to use for download
-        
-    Returns:
-        dict: Download info for ASGI handler
-    """
-    return {
-        'async_zipstream': True,
-        'source_path': source_path,
-        'filename': filename,
-        'streaming': True
-    }

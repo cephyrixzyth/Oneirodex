@@ -124,6 +124,11 @@ def _companion_login_response(flask_app, request: Request, login_manager, auth_c
 
 def _login_redirect(flask_app, request: Request, login_manager, auth_context: RequestAuthContext):
     """Mirror Flask-Login's default unauthorized handling for the ``apis`` BP."""
+    from .oidc_status import signed_in_api_refusal
+
+    refusal = signed_in_api_refusal(flask_app, request, auth_context)
+    if refusal is not None:
+        return refusal
     from oneirodex.utils.security_headers import security_header_values
 
     blueprint_views = getattr(login_manager, 'blueprint_login_views', {}) or {}

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from oneirodex.models import GlobalSettings, Game
 from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.runtime_native.db_session import native_db as db
-from sqlalchemy import select, create_engine, func
+from sqlalchemy import select, create_engine
 from sqlalchemy.orm import sessionmaker
 from config import Config
 
@@ -279,55 +279,6 @@ def get_games_without_hltb(limit=None):
             engine.dispose()
 
 
-def get_hltb_stats():
-    """
-    Get statistics about HLTB data coverage.
-
-    Returns:
-    dict: Statistics including total games, games with HLTB data, percentage coverage.
-    """
-    # Try to use Flask app context first (for API calls)
-    try:
-        total_games = db.session.execute(select(func.count(Game.id))).scalar()
-        games_with_hltb = db.session.execute(select(func.count(Game.id)).where(Game.hltb_id.isnot(None))).scalar()
-        coverage_percentage = (games_with_hltb / total_games * 100) if total_games > 0 else 0
-
-        return {
-            'total_games': total_games,
-            'games_with_hltb': games_with_hltb,
-            'games_without_hltb': total_games - games_with_hltb,
-            'coverage_percentage': round(coverage_percentage, 2)
-        }
-    except:
-        # Fallback to direct session (for standalone scripts)
-        engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
-        SessionLocal = sessionmaker(bind=engine)
-        session = SessionLocal()
-
-        try:
-            total_games = session.execute(select(func.count(Game.id))).scalar()
-            games_with_hltb = session.execute(select(func.count(Game.id)).where(Game.hltb_id.isnot(None))).scalar()
-            coverage_percentage = (games_with_hltb / total_games * 100) if total_games > 0 else 0
-
-            return {
-                'total_games': total_games,
-                'games_with_hltb': games_with_hltb,
-                'games_without_hltb': total_games - games_with_hltb,
-                'coverage_percentage': round(coverage_percentage, 2)
-            }
-        except Exception as e:
-            print(f"Error calculating HLTB stats: {e}")
-            return {
-                'total_games': 0,
-                'games_with_hltb': 0,
-                'games_without_hltb': 0,
-                'coverage_percentage': 0
-            }
-        finally:
-            session.close()
-            engine.dispose()
-
-
 # Helper function to run async code in a separate thread (ASGI-safe)
 def _run_async_in_thread(coro):
     """
@@ -367,24 +318,3 @@ def update_game_hltb_sync(game_uuid, game_name=None):
         return False
 
 
-def fetch_hltb_data_sync(game_name):
-    """
-    Synchronous wrapper for fetch_hltb_data.
-    Searches HowLongToBeat for a game by name.
-
-    Parameters:
-    game_name (str): The name of the game to search for.
-
-    Returns:
-    dict: HLTB data or None if not found.
-    """
-    if not HLTB_AVAILABLE:
-        return None
-
-    try:
-        # Run async code in a separate thread to avoid event loop conflicts
-        return _run_async_in_thread(fetch_hltb_data(game_name))
-
-    except Exception as e:
-        print(f"Error in sync HLTB fetch for '{game_name}': {e}")
-        return None

@@ -10,10 +10,6 @@ from oneirodex.utils.library_paths import PACKAGE_ROOT, library_dir
 from oneirodex.utils.asset_version import asset_version, clear_asset_versions
 
 
-def verify_file(full_path: str | os.PathLike[str]) -> bool:
-    return os.path.exists(full_path) or os.access(full_path, os.R_OK)
-
-
 def _static_url(filename: str, *, static_url_path: str | None, **query) -> str:
     if static_url_path is not None:
         url = f"{static_url_path.rstrip('/')}/{quote(filename.lstrip('/'), safe='/')}"

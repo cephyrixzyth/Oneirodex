@@ -7,16 +7,7 @@ import pytest
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils.gamenames import generate_goty_variants
 from oneirodex.utils.rom_language import parse_rom_language_tags
-from oneirodex.utils.rom_name_peel import (
-    ARCADE_PROPOSE_FIRST_CHILD_THRESHOLD,
-    arcade_library_is_large,
-    looks_like_arcade_set_basename,
-    looks_like_console_rom_dump_label,
-    neogeo_aes_cd_conflict,
-    parse_console_rom_label,
-    should_arcade_propose_first,
-    should_use_console_rom_peel,
-)
+from oneirodex.utils.rom_name_peel import ARCADE_PROPOSE_FIRST_CHILD_THRESHOLD, arcade_library_is_large, looks_like_arcade_set_basename, looks_like_console_rom_dump_label, parse_console_rom_label, should_arcade_propose_first, should_use_console_rom_peel
 from oneirodex.utils.set_completion import normalize_set_title
 from oneirodex.utils.software_identify import (
     filter_tgdb_hits_for_platform,
@@ -764,15 +755,6 @@ def test_be_det8_propose_first_set_and_large(tmp_path):
     assert should_arcade_propose_first(
         _Lib(LibraryPlatform.NEOGEO), '/roms/mslug', set_parsed,
     ) is False
-
-
-def test_be_det8_neogeo_aes_cd_conflict_helper():
-    assert neogeo_aes_cd_conflict(LibraryPlatform.NEOGEO, LibraryPlatform.NEOGEO_CD)
-    assert neogeo_aes_cd_conflict('NEOGEO', 'NEOGEO_CD')
-    assert neogeo_aes_cd_conflict('Neo Geo AES', 'Neo Geo CD')
-    assert not neogeo_aes_cd_conflict(LibraryPlatform.NEOGEO, LibraryPlatform.NEOGEO)
-    assert not neogeo_aes_cd_conflict(LibraryPlatform.NEOGEO, LibraryPlatform.ARCADE)
-    assert not neogeo_aes_cd_conflict(LibraryPlatform.NEOGEO_CD, LibraryPlatform.ARCADE)
 
 
 def test_be_det8_tgdb_aes_never_matches_cd():

@@ -125,9 +125,3 @@ def _accumulate_progress(session: PlaySession) -> None:
     row.last_played_at = session.ended_at or _utcnow()
 
 
-def compute_duration_seconds(started_at: datetime, ended_at: datetime) -> int:
-    if started_at.tzinfo is None:
-        started_at = started_at.replace(tzinfo=timezone.utc)
-    if ended_at.tzinfo is None:
-        ended_at = ended_at.replace(tzinfo=timezone.utc)
-    return max(0, int((ended_at - started_at).total_seconds()))

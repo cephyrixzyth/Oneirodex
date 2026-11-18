@@ -134,6 +134,11 @@ def _secure_response(response: Response, flask_app, request: Request):
 
 def _login_redirect(flask_app, request: Request, login_manager, auth: RequestAuthContext):
     """Match Flask-Login's default ``apis`` blueprint redirect and flash."""
+    from .oidc_status import signed_in_api_refusal
+
+    refusal = signed_in_api_refusal(flask_app, request, auth)
+    if refusal is not None:
+        return refusal
     from oneirodex.utils.security_headers import security_header_values
 
     blueprint_views = getattr(login_manager, 'blueprint_login_views', {}) or {}

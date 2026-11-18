@@ -87,6 +87,6 @@ def test_non_admin_cannot_search_full_disk_paths():
     client, data = _client(role='user')
     response = client.get('/api/admin/games_search?q=Alpha', follow_redirects=False)
 
-    assert response.status_code == 302
-    assert response.headers['location'].startswith('/login')
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert data.queries == []

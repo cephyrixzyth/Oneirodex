@@ -107,8 +107,8 @@ def test_non_admin_is_denied_before_inventory_adapter_runs():
         '/api/admin/integrations/inventory', follow_redirects=False
     )
 
-    assert response.status_code == 302
-    assert response.headers['location'] == '/login'
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert data.calls == 0
 
 

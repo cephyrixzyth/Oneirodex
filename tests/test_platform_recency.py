@@ -12,21 +12,7 @@ tests make that failure loud.
 from __future__ import annotations
 
 from oneirodex.platform import LibraryPlatform
-from oneirodex.platform_recency import (
-    PLATFORM_LAUNCH_YEAR,
-    missing_platforms,
-    newest_platform,
-    platform_rank,
-)
-
-
-def test_every_platform_is_ranked():
-    missing = missing_platforms()
-    assert not missing, (
-        'These LibraryPlatform members have no entry in PLATFORM_LAUNCH_YEAR, '
-        'so they rank as the oldest thing in the library and can never '
-        f'represent a title: {", ".join(missing)}'
-    )
+from oneirodex.platform_recency import PLATFORM_LAUNCH_YEAR, platform_rank
 
 
 def test_no_rank_for_a_platform_that_no_longer_exists():
@@ -52,42 +38,12 @@ def test_newer_hardware_outranks_older_within_a_family():
     assert platform_rank('BBC_MICRO') < platform_rank('PC_98')
 
 
-def test_the_example_that_was_asked_for():
-    """A title on NES, GBA and SNES is represented by its GBA copy."""
-    assert newest_platform(['NES', 'GBA', 'SNES']) == 'GBA'
-
-
 def test_pc_outranks_every_console():
     """A PC release is the copy that is still current — see the module docstring."""
     for member in LibraryPlatform:
         if member.name in {'PCWIN', 'MAC'}:
             continue
         assert platform_rank('PCWIN') > platform_rank(member.name), member.name
-
-
-def test_arcade_is_the_original_not_the_newest():
-    """An arcade board is what a console version was ported *from*."""
-    assert platform_rank('ARCADE') < platform_rank('NES')
-    assert newest_platform(['ARCADE', 'SNES']) == 'SNES'
-
-
-def test_unknown_platforms_lose_rather_than_break():
-    assert platform_rank(None) == 0
-    assert platform_rank('NOT_A_PLATFORM') == 0
-    # An identified system still wins over one this table has not caught up with.
-    assert newest_platform(['NOT_A_PLATFORM', 'NES']) == 'NES'
-
-
-def test_unclassified_libraries_never_represent_a_title():
-    assert newest_platform(['OTHER', 'ATARI_2600']) == 'ATARI_2600'
-
-
-def test_ties_break_stably_so_tiles_do_not_swap_between_page_loads():
-    # Saturn and Jaguar are both ranked 1994 and 1993; use two genuine ties.
-    assert platform_rank('SEGA_SATURN') == platform_rank('PCFX')
-    first = newest_platform(['SEGA_SATURN', 'PCFX'])
-    assert first == newest_platform(['PCFX', 'SEGA_SATURN'])
-    assert first == 'PCFX'  # alphabetical, deterministic
 
 
 def test_no_platforms_without_a_source_of_truth():

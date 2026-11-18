@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 from flask import Flask, redirect as flask_redirect, request
 
 from tests.fixtures.native_auth import login_identity_for, persistent_login_store
-from flask_login import LoginManager
 from werkzeug.exceptions import HTTPException
 
 from oneirodex.runtime_native.reference_sets_read import create_reference_sets_router
@@ -94,8 +93,8 @@ def test_reference_sets_read_keeps_payload_cache_and_head_contract():
 
 def test_reference_sets_read_requires_admin():
     response = _client(role='user').get('/api/admin/reference-sets', follow_redirects=False)
-    assert response.status_code == 302
-    assert response.headers['location'].startswith('/login')
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
 
 
 def test_reference_sets_upload_checks_csrf_then_preserves_upload_contract(monkeypatch):

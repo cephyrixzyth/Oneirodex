@@ -81,8 +81,8 @@ def test_admin_download_list_preserves_shared_envelope():
 def test_non_admin_cannot_read_admin_download_queue():
     response = make_client(role='user').get('/api/admin/download-requests', follow_redirects=False)
 
-    assert response.status_code == 302
-    assert response.headers['location'] == '/login'
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
 
 
 def test_admin_delete_uses_csrf_and_reports_missing_requests():

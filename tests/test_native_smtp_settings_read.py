@@ -100,8 +100,8 @@ def test_smtp_settings_read_keeps_secret_free_envelope_and_head():
 
 def test_smtp_settings_requires_admin():
     response = _client(role='user').get('/api/admin/smtp/settings', follow_redirects=False)
-    assert response.status_code == 302
-    assert response.headers['location'].startswith('/login')
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
 
 
 def test_smtp_public_state_reports_password_presence_only():

@@ -21,7 +21,6 @@ from PIL import Image, ImageDraw
 from sqlalchemy import select
 from werkzeug.utils import secure_filename
 from oneirodex.utils.runtime_config import get_runtime_config
-from oneirodex.utils.static_urls import static_asset_url
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, Image as GameImage
@@ -437,10 +436,6 @@ def save_pack(
     return manifest
 
 
-def pack_preview_url(pack_id: str, filename: str = 'tile_400x600.webp') -> str:
-    return static_asset_url(f'library/generated/{pack_id}/{filename}')
-
-
 def build_zip_bytes(pack_id: str, package_root: str | Path | None = None) -> bytes:
     pack_dir = resolve_pack_dir(pack_id, package_root)
     if not pack_dir.is_dir():
@@ -592,25 +587,3 @@ def apply_pack_as_fallback(
     }
 
 
-def bake_default_fallbacks(package_root: str | Path | None = None) -> dict[str, str]:
-    """Write branded default_cover.jpg / default_library.jpg (artistic empty-title pack).
-
-    Blanks use intentional Oneirodex composition (mark, geometric frame, aurora
-    field) — regenerable via Admin Art Studio "Set as fallback pack" as well.
-    """
-    ns_root = newstyle_root(package_root)
-    ns_root.mkdir(parents=True, exist_ok=True)
-    cover = render_cover_art(600, 900, title='', system='', variant='tile', artistic=True)
-    library = render_cover_art(1920, 1080, title='', system='', variant='wide', artistic=True)
-    large = render_cover_art(1920, 1080, title='', system='', variant='hero', artistic=True)
-    cover_path = ns_root / 'default_cover.jpg'
-    library_path = ns_root / 'default_library.jpg'
-    large_path = ns_root / 'default_library_large.jpg'
-    cover.save(cover_path, format='JPEG', quality=90, optimize=True)
-    library.save(library_path, format='JPEG', quality=90, optimize=True)
-    large.save(large_path, format='JPEG', quality=90, optimize=True)
-    return {
-        'default_cover': str(cover_path),
-        'default_library': str(library_path),
-        'default_library_large': str(large_path),
-    }

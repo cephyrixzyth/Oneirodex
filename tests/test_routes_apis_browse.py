@@ -6,10 +6,6 @@ directory browsing, security, and error handling.
 """
 
 import pytest
-import json
-import os
-import tempfile
-from unittest.mock import patch, MagicMock
 from uuid import uuid4
 
 from oneirodex.models import User
@@ -82,6 +78,6 @@ class TestBrowseFoldersSS:
             sess['_fresh'] = True
         
         response = client.get('/api/browse_folders_ss')
-        assert response.status_code == 302  # Redirect due to admin_required decorator
+        assert response.status_code == 403  # Redirect due to admin_required decorator
     
     

@@ -127,8 +127,8 @@ def test_provider_catalog_routes_require_admin_before_adapter_reads():
     artwork = client.get('/api/providers', follow_redirects=False)
     patch_catalog = client.get('/api/patch-catalog/providers', follow_redirects=False)
 
-    assert artwork.status_code == 302
-    assert patch_catalog.status_code == 302
+    assert artwork.status_code == 403
+    assert patch_catalog.status_code == 403
     assert data.artwork_calls == 0
     assert data.patch_configs == []
 

@@ -230,12 +230,6 @@ def _success(payload):
     return JSONResponse(api_ok_payload(payload))
 
 
-def _from_flask(response, status):
-    from .oidc_status import _from_flask_response
-
-    return _from_flask_response(response, status)
-
-
 def _finish(response, flask_app, request, auth):
     if auth.should_set_session_cookie:
         _set_session_cookie(response, flask_app, auth)

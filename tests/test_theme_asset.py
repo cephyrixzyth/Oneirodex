@@ -1,7 +1,6 @@
 """Versioned static asset URLs for the non-template shell builders."""
 
 from pathlib import Path
-from unittest.mock import patch
 
 from flask import Flask
 
@@ -50,13 +49,3 @@ def test_asset_helpers_do_not_register_framework_template_filters():
     assert not source.exists()
 
 
-def test_verify_file_checks_exists_and_readability():
-    from oneirodex.utils.asset_urls import verify_file
-
-    with patch('oneirodex.utils.asset_urls.os.path.exists', return_value=True):
-        assert verify_file('/test/path') is True
-    with patch('oneirodex.utils.asset_urls.os.path.exists', return_value=False):
-        with patch('oneirodex.utils.asset_urls.os.access', return_value=False):
-            assert verify_file('/test/path') is False
-        with patch('oneirodex.utils.asset_urls.os.access', return_value=True):
-            assert verify_file('/test/path') is True

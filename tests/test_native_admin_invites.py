@@ -113,8 +113,8 @@ def test_quota_adjustment_rejects_oversized_json_before_mutation():
 def test_admin_invites_reject_members():
     client, data, _csrf = _client(role='user')
     response = client.get('/admin/api/invites', follow_redirects=False)
-    assert response.status_code == 302
-    assert response.headers['location'].startswith('/login')
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert data.calls == []
 
 

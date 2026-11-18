@@ -235,8 +235,31 @@ export function SocialCompanionDock({
     }
   }
 
+  // While the floating dock is open and pinned it covers the bottom-right of
+  // the page; reserve its height so the end of every page can scroll clear.
+  const panelRef = useRef<HTMLElement | null>(null)
+  const reserveSpace = mode === 'dock' && open && pinned
+  useEffect(() => {
+    const root = document.documentElement
+    const panelEl = panelRef.current
+    if (!reserveSpace || !panelEl) return undefined
+    const update = () => {
+      root.style.setProperty('--od-dock-reserve', `${Math.ceil(panelEl.offsetHeight)}px`)
+    }
+    update()
+    root.dataset.dockReserve = 'true'
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+    observer?.observe(panelEl)
+    return () => {
+      observer?.disconnect()
+      delete root.dataset.dockReserve
+      root.style.removeProperty('--od-dock-reserve')
+    }
+  }, [reserveSpace])
+
   const panel = (
     <aside
+      ref={panelRef}
       className={`od-social-dock od-glass-panel od-social-dock--${mode}${open ? ' is-open' : ''}${pinned ? ' is-pinned' : ''}`}
       aria-label="Friends companion"
     >

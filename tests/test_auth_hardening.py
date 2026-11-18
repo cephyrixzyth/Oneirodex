@@ -14,18 +14,11 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from flask import Flask, g
+from flask import g
 from flask_login import login_user
 
 from oneirodex.models import ApiToken, User
-from oneirodex.utils import api_tokens
-from oneirodex.utils.api_tokens import (
-    generate_api_token,
-    require_api_scope,
-    require_api_token_scope,
-    user_has_scope,
-    verify_bearer_token_detailed,
-)
+from oneirodex.utils.api_tokens import generate_api_token, user_has_scope, verify_bearer_token_detailed
 from oneirodex.utils.safe_redirect import safe_next_url
 
 
@@ -227,62 +220,6 @@ class TestSessionScopes:
 
 
 # --- S11: envelope on the scope decorator ---------------------------------
-
-class TestScopeDecoratorEnvelope:
-    def _route(self, app, scope='admin'):
-        @require_api_scope(scope)
-        def handler():
-            return {'ok': True}
-
-        return handler
-
-    def test_unauthenticated_returns_the_envelope(self, app):
-        with app.test_request_context('/api/thing'):
-            response, status = self._route(app)()
-            assert status == 401
-            body = response.get_json()
-            assert body['ok'] is False
-            assert body['error_code'] == 'unauthorized'
-
-    def test_missing_scope_returns_the_envelope(self, app):
-        with app.test_request_context('/api/thing'):
-            g.api_token = None
-            _login_scope_actor('user')
-            response, status = self._route(app)()
-            assert status == 403
-            body = response.get_json()
-            assert body['ok'] is False
-            assert body['error_code'] == 'forbidden'
-            assert body['detail']['required_scope'] == 'admin'
-
-
-def test_bearer_scope_decorator_denies_narrow_token_and_keeps_sessions(monkeypatch):
-    app = Flask(__name__)
-    monkeypatch.setattr(
-        api_tokens,
-        'user_has_scope',
-        lambda scope: scope == 'read:social',
-        raising=False,
-    )
-    calls = []
-
-    @require_api_token_scope('read:library')
-    def protected_route():
-        calls.append('called')
-        return {'ok': True}
-
-    with app.test_request_context('/api/library'):
-        g.api_token = object()
-        denied, status = protected_route()
-        assert status == 403
-        assert denied.get_json()['detail'] == {'required_scope': 'read:library'}
-
-    assert calls == []
-
-    with app.test_request_context('/api/library'):
-        g.api_token = None
-        assert protected_route() == {'ok': True}
-    assert calls == ['called']
 
 
 # --- Child ACL: Bearer deny-list, minting, acquire, companion commands ------

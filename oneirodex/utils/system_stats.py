@@ -122,29 +122,6 @@ def get_process_memory():
         return None
 
 
-def get_process_count():
-    """Get number of running processes"""
-    try:
-        return len(psutil.pids())
-    except Exception as e:
-        print(f"Error getting process count: {e}")
-        return None
-
-def get_open_files():
-    """Get number of open files (platform specific)"""
-    try:
-        if platform.system() == 'Linux':
-            # On Linux, we can get this from /proc/sys/fs/file-nr
-            with open('/proc/sys/fs/file-nr') as f:
-                return int(f.read().split()[0])
-        else:
-            # On Windows, we'll return the number of handles as an approximation
-            return len(psutil.Process().open_files())
-    except Exception as e:
-        print(f"Error getting open files count: {e}")
-        return None
-
-
 # --- GPU (INSP-44 / MISS-OPS-3) ------------------------------------------------
 #
 # Two honest sources and nothing bundled: NVIDIA's own management library when

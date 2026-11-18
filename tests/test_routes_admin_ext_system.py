@@ -1,12 +1,8 @@
 import pytest
-from flask import url_for
-from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
 from oneirodex.models import User, SystemEvents, DiscoverySection, Game, Library
 from oneirodex.platform import LibraryPlatform
-from oneirodex import db
 from uuid import uuid4
-import json
 
 
 @pytest.fixture
@@ -226,7 +222,7 @@ class TestCustomDiscoveryZones:
             json={'name': 'Staff Picks', 'mode': 'manual', 'game_uuids': ['x']},
             content_type='application/json',
         )
-        assert response.status_code == 302
+        assert response.status_code == 403
 
     def test_create_manual_zone_success(self, client, admin_user, db_session, test_games_for_zones):
         self._login(client, admin_user)
@@ -355,7 +351,7 @@ class TestUpdateSectionOrderAPI:
         data = {'sections': [{'id': 1, 'order': 1}]}
         response = client.post('/admin/api/discovery_sections/order', 
                              json=data, content_type='application/json')
-        assert response.status_code == 302
+        assert response.status_code == 403
     
     def test_update_section_order_empty_json(self, client, admin_user):
         """Test API with empty JSON data."""
@@ -493,7 +489,7 @@ class TestUpdateSectionVisibilityAPI:
         data = {'section_id': 1, 'is_visible': True}
         response = client.post('/admin/api/discovery_sections/visibility', 
                              json=data, content_type='application/json')
-        assert response.status_code == 302
+        assert response.status_code == 403
     
     def test_update_section_visibility_empty_json(self, client, admin_user):
         """Test API with empty JSON data."""
@@ -597,7 +593,7 @@ class TestClearSystemLogsAPI:
             sess['_fresh'] = True
         
         response = client.delete('/admin/api/system_logs/clear')
-        assert response.status_code == 302
+        assert response.status_code == 403
     
     def test_clear_logs_success(self, client, admin_user, sample_system_events, db_session):
         """Test successful log clearing."""

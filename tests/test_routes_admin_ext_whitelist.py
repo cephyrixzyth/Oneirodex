@@ -6,8 +6,7 @@ Tests whitelist management routes including adding, deleting, and viewing whitel
 
 import pytest
 import json
-from unittest.mock import patch, MagicMock
-from flask import url_for
+from unittest.mock import patch
 from uuid import uuid4
 from sqlalchemy import select
 from werkzeug.exceptions import NotFound
@@ -128,7 +127,7 @@ class TestWhitelistRoutes:
         with client.session_transaction() as sess:
             sess['_user_id'] = str(regular_user.id)
             sess['_fresh'] = True
-        assert client.get('/admin/api/whitelist').status_code == 302
+        assert client.get('/admin/api/whitelist').status_code == 403
 
     @patch('oneirodex.utils.event_logging.log_system_event')
     def test_whitelist_post_normalizes_email(self, mock_log, client, db_session, admin_user):

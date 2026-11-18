@@ -192,23 +192,6 @@ def icon_pack_previews_css_url(
     return None
 
 
-def icon_pack_image_url(
-    pack_id: str | None, key: str, *, static_url_path: str | None = None,
-) -> str | None:
-    """Optional branded image override (logo, default_cover)."""
-    pack = get_icon_pack(pack_id)
-    images = pack.get('images') if isinstance(pack.get('images'), dict) else {}
-    rel = images.get(key)
-    if not rel:
-        return None
-    path = icon_themes_root() / pack['id'] / rel
-    if path.is_file():
-        return _static_asset_url(
-            f"library/icon-themes/{pack['id']}/{rel}", static_url_path,
-        )
-    return None
-
-
 def pack_glyph_override_css(pack_id: str, *, url_prefix: str | None = None) -> str:
     """Mask the inline glyph with a pack SVG so packs are drawings, not stroke tints.
 
@@ -235,28 +218,6 @@ def pack_glyph_override_css(pack_id: str, *, url_prefix: str | None = None) -> s
                 f'}}'
             )
     return '\n'.join(blocks)
-
-
-def icon_pack_previews_css() -> str:
-    """Chip-scoped masks; urls are relative to ``icon-themes/previews.css``."""
-    chunks = [
-        '/* Chip previews — always loaded so unselected packs still show their drawing. */'
-    ]
-    for pack_id in DRAWING_PACKS:
-        for key in PACK_GLYPH_KEYS:
-            url = f'{pack_id}/icons/{key}.svg'
-            for data_icon in _pack_glyph_data_icons(key):
-                chunks.append(
-                    f'.icon-pack-chip[data-icon-pack="{pack_id}"] .od-icon[data-icon="{data_icon}"] {{\n'
-                    f'  background-color: currentColor;\n'
-                    f'  -webkit-mask: url("{url}") center / contain no-repeat;\n'
-                    f'  mask: url("{url}") center / contain no-repeat;\n'
-                    f'}}\n'
-                    f'.icon-pack-chip[data-icon-pack="{pack_id}"] .od-icon[data-icon="{data_icon}"] > * {{\n'
-                    f'  opacity: 0;\n'
-                    f'}}'
-                )
-    return '\n'.join(chunks) + '\n'
 
 
 def _sync_pack_drawings(src: Path, dest: Path) -> None:

@@ -272,7 +272,7 @@ def test_request_schema_is_strict_and_does_not_reach_data_adapter(runtime, bad_p
 def test_admin_and_path_gates_precede_scan_or_preview_effects(runtime):
     _app, _flask_app, data, cookies = runtime
     denied = request(runtime, cookie=cookies['member'], json=body())
-    assert denied.status_code == 302
+    assert denied.status_code == 403
     assert data.calls == []
     data.calls.clear()
     data.resolved_path = '/outside/scan'

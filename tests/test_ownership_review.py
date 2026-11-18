@@ -172,7 +172,6 @@ def test_playnite_repeat_import_preserves_reviewed_clear(client, monkeypatch):
     row.store = 'playnite'
     db.session.commit()
     assert client.post('/match/1',json={'game_uuid':None,'expected_revision':0}).status_code == 200
-    monkeypatch.setattr(playnite_import,'_match_game_by_name',lambda name:SimpleNamespace(uuid=B))
     playnite_import.import_playnite_json(1,[{'Id':'1','Name':'Changed title'}])
     assert db.session.get(UserOwnedTitle,1).matched_game_uuid is None
 

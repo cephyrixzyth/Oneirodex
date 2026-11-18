@@ -108,7 +108,7 @@ def test_arr_indexers_read_keeps_module_and_admin_gates():
     disabled = _client(enabled=False).get('/api/arr/indexers')
     forbidden = _client(role='user').get('/api/arr/indexers', follow_redirects=False)
     assert disabled.status_code == 403
-    assert forbidden.status_code == 302
+    assert forbidden.status_code == 403
 
 
 def test_arr_module_status_is_available_while_the_module_is_disabled():

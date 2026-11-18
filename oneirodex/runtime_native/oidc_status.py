@@ -112,6 +112,31 @@ def _from_flask_response(flask_response, status: int) -> Response:
     )
 
 
+def signed_in_api_refusal(flask_app, request, auth_context):
+    """403 for a signed-in caller refused on a JSON API path, else ``None``.
+
+    A redirect to the sign-in page is right for someone who is not signed in,
+    and for pages. A signed-in member who lacks a role on an API endpoint is
+    already signed in: sending them to /login made the member app treat a
+    permission refusal as an expired session, and some admin APIs answered
+    403 while others redirected.
+    """
+    user = getattr(auth_context, 'user', None)
+    path = request.url.path
+    if user is None or not (path.startswith('/api/') or path.startswith('/admin/api/')):
+        return None
+    from starlette.responses import JSONResponse
+
+    from oneirodex.utils.api_contract import api_error_payload
+    from oneirodex.utils.security_headers import security_header_values
+
+    payload, status = api_error_payload('You do not have access to this.', code='forbidden')
+    response = JSONResponse(payload, status_code=status)
+    for key, value in security_header_values(flask_app.config).items():
+        response.headers.setdefault(key, value)
+    return response
+
+
 def _login_redirect(
     flask_app,
     request: Request,
@@ -124,6 +149,10 @@ def _login_redirect(
 ):
     """Match Flask-Login unauthorized and admin_required redirect variants."""
     from oneirodex.utils.security_headers import security_header_values
+
+    refusal = signed_in_api_refusal(flask_app, request, auth_context)
+    if refusal is not None:
+        return refusal
 
     if message is _DEFAULT_LOGIN_MESSAGE:
         message = getattr(login_manager, 'login_message', None)

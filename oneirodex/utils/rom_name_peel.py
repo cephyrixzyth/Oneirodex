@@ -440,48 +440,6 @@ def should_arcade_propose_first(
     return arcade_library_is_large(library, full_disk_path)
 
 
-def neogeo_aes_cd_conflict(
-    left: LibraryPlatform | str | None,
-    right: LibraryPlatform | str | None,
-) -> bool:
-    """True when one side is Neo Geo AES and the other is Neo Geo CD.
-
-    Hard guard — never identify/remap AES ↔ CD (BE-DET-8).
-    """
-    def _key(value: LibraryPlatform | str | None) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, LibraryPlatform):
-            return value.name
-        text = str(value).strip()
-        if not text:
-            return None
-        upper = text.upper().replace(' ', '_')
-        if upper in ('NEOGEO', 'NEOGEO_AES', 'NEO_GEO_AES'):
-            return 'NEOGEO'
-        if upper in ('NEOGEO_CD', 'NEO_GEO_CD', 'NEOCD'):
-            return 'NEOGEO_CD'
-        try:
-            return LibraryPlatform[upper].name
-        except KeyError:
-            pass
-        # Display strings
-        folded = text.casefold()
-        if 'neo geo cd' in folded or folded in ('neogeocd', 'neocd'):
-            return 'NEOGEO_CD'
-        if 'neo geo aes' in folded or folded in ('neogeo', 'neogeoaes'):
-            return 'NEOGEO'
-        if 'neo geo' in folded and 'cd' not in folded:
-            return 'NEOGEO'
-        return upper
-
-    a, b = _key(left), _key(right)
-    if not a or not b:
-        return False
-    pair = {a, b}
-    return pair == {'NEOGEO', 'NEOGEO_CD'}
-
-
 def _primary_rom_basenames_in_folder(folder_path: str) -> list[str]:
     """Immediate file children with a known ROM/archive extension (sorted)."""
     if not folder_path or not os.path.isdir(folder_path):

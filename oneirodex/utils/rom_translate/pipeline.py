@@ -2,28 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
-
-
-class OfflineTranslatePipeline(Protocol):
-    """Per-system plugin contract for future offline auto-translate."""
-
-    id: str
-    platform: str
-    status: str  # unsupported | stub | external_tool
-    docs_url: str
-
-    def supports(self, platform: str | None) -> bool:
-        ...
-
-    def extract(self, rom_path: str) -> dict[str, Any]:
-        ...
-
-    def translate(self, extracted: dict[str, Any], *, target_lang: str) -> dict[str, Any]:
-        ...
-
-    def build(self, rom_path: str, translated: dict[str, Any], *, output_path: str) -> str:
-        ...
+from typing import Any
 
 
 class BaseOfflineStub:

@@ -50,27 +50,6 @@ def get_debrid_config(*, config=None) -> dict[str, Any]:
     }
 
 
-def save_debrid_config(payload: dict[str, Any]) -> dict[str, Any]:
-    from oneirodex.utils.secret_store import read_arr_settings, write_arr_settings
-
-    row = _settings()
-    if not row:
-        row = GlobalSettings()
-        db.session.add(row)
-    current = read_arr_settings(row)
-    for key in ('real_debrid_token', 'alldebrid_api_key', 'premiumize_api_key', 'torbox_api_key'):
-        if key in payload and payload[key] is not None:
-            current[key] = str(payload[key]).strip()
-    write_arr_settings(row, current)
-    db.session.commit()
-    return {
-        'real_debrid_token': '***' if current.get('real_debrid_token') else '',
-        'alldebrid_api_key': '***' if current.get('alldebrid_api_key') else '',
-        'premiumize_api_key': '***' if current.get('premiumize_api_key') else '',
-        'torbox_api_key': '***' if current.get('torbox_api_key') else '',
-    }
-
-
 def debrid_status(*, config=None) -> list[dict[str, Any]]:
     cfg = get_debrid_config(config=config)
     return [

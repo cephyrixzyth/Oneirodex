@@ -15,8 +15,8 @@ from types import SimpleNamespace
 
 import pytest
 import requests
-from flask import Blueprint, Flask, g
-from flask_login import LoginManager, UserMixin
+from flask import Flask
+from flask_login import UserMixin
 from sqlalchemy import delete as sa_delete, event, func, select, text, update
 
 from oneirodex import db
@@ -483,7 +483,7 @@ def test_admin_diagnostics_are_redacted_and_admin_only(app, monkeypatch):
         store_ownership_common.upsert_owned_title(OTHER, 'epic', 'cat-1', 'Very Private Title')
         db.session.commit()
         _job(OTHER, 'epic', 'failed', reason='credential_rejected', finished=utcnow())
-        assert _client(app, MEMBER).get('/api/admin/ownership/connections').status_code == 302
+        assert _client(app, MEMBER).get('/api/admin/ownership/connections').status_code == 403
         response = _client(app, ADMIN).get('/api/admin/ownership/connections')
         assert response.status_code == 200
         text_body = response.get_data(as_text=True)
@@ -509,7 +509,7 @@ def test_admin_retry_and_cancel_act_for_the_member(app, monkeypatch):
         assert admin.post('/api/admin/ownership/connections/999/gog/sync').status_code == 404
         _job(OTHER, 'gog')
         assert admin.post(f'/api/admin/ownership/connections/{OTHER}/gog/cancel').status_code == 202
-        assert _client(app, MEMBER).post(f'/api/admin/ownership/connections/{OTHER}/gog/cancel').status_code == 302
+        assert _client(app, MEMBER).post(f'/api/admin/ownership/connections/{OTHER}/gog/cancel').status_code == 403
 
 
 def test_finished_jobs_are_pruned_per_member_and_store(app, monkeypatch):

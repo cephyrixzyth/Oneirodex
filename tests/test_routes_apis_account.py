@@ -16,13 +16,7 @@ from oneirodex.utils.accounts import (
     is_placeholder_email,
     placeholder_email,
 )
-from oneirodex.utils.avatar import (
-    DEFAULT_AVATAR,
-    LEGACY_DEFAULT_AVATAR,
-    STOCK_AVATARS,
-    is_shipped_avatar,
-    thumbnail_for,
-)
+from oneirodex.utils.avatar import DEFAULT_AVATAR, LEGACY_DEFAULT_AVATAR, STOCK_AVATARS, is_shipped_avatar
 
 
 @pytest.fixture
@@ -328,17 +322,6 @@ class TestStockAvatars:
         assert is_shipped_avatar(LEGACY_DEFAULT_AVATAR)
         assert all(is_shipped_avatar(entry['path']) for entry in STOCK_AVATARS)
         assert not is_shipped_avatar('library/images/avatars_users/abc.png')
-
-    def test_shipped_avatars_are_their_own_thumbnail(self):
-        # They are SVGs: no `_thumbnail` file was ever written for them, and
-        # deriving one produced a broken image beside "Thumbnail preview".
-        assert thumbnail_for(DEFAULT_AVATAR) == DEFAULT_AVATAR
-        assert thumbnail_for(STOCK_AVATARS[0]['path']) == STOCK_AVATARS[0]['path']
-
-    def test_uploads_still_get_a_derived_thumbnail(self):
-        assert thumbnail_for('library/images/avatars_users/abc.png') == (
-            'library/images/avatars_users/abc_thumbnail.png'
-        )
 
 
 class TestPlaceholderEmails:
