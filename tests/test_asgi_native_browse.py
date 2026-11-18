@@ -12180,28 +12180,6 @@ def test_lazy_asgi_dispatches_legacy_attract_mode_post_alias(monkeypatch):
     assert calls == [(7, {**body, 'filters': {'library_uuid': None, 'genres': [], 'themes': [], 'date_from': None, 'date_to': None}})]
 
 
-def test_lazy_asgi_dispatches_legacy_scan_filter_add_form(monkeypatch):
-    from oneirodex.runtime_native import admin_scan_filters as native_scan_filters
-
-    calls = []
-    data = SimpleNamespace(
-        add=lambda pattern, case_sensitive: calls.append((pattern, case_sensitive)),
-        rollback=lambda: None,
-    )
-    monkeypatch.setattr(native_scan_filters, 'AdminScanFiltersData', lambda: data)
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-    cookie, csrf = _signed_session_with_csrf()
-    response = _run(
-        runtime, '/admin/edit_filters', cookie=cookie, method='POST',
-        headers={'X-CSRFToken': csrf},
-        form_body={'filter_pattern': 'Scene Release', 'case_sensitive': 'yes', 'csrf_token': csrf},
-    )
-
-    assert response.status_code == 302
-    assert response.headers['location'] == '/admin/edit_filters'
-    assert calls == [('Scene Release', True)]
-
-
 def test_lazy_asgi_dispatches_legacy_manage_downloads_post_to_pilot(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch, admin=True)
     _flask_app.static_folder = str(asgi.Path(__file__).resolve().parents[1] / 'oneirodex' / 'static')
@@ -12326,37 +12304,6 @@ def test_lazy_asgi_dispatches_legacy_library_create_and_edit_forms(monkeypatch):
     assert edited.status_code == 302
     assert edited.headers['location'] == '/libraries'
     assert [call[0] for call in calls] == ['create', 'update']
-
-
-def test_lazy_asgi_dispatches_legacy_link_existing_game_form(monkeypatch):
-    from oneirodex.runtime_native import library_tools_mutations as native_tools
-
-    calls = []
-    fake = SimpleNamespace(
-        allowed_bases=lambda _app: ['/safe'],
-        safe_path=lambda _app, path: (path.startswith('/safe'), 'outside allowed roots'),
-        game_path_readable=lambda path: path == '/safe/Game',
-        link_existing_game=lambda _app, game_uuid, path, actor, actor_id: (
-            calls.append((game_uuid, path, actor, actor_id)) or {
-                'game_uuid': game_uuid, 'game_name': 'Game', 'full_disk_path': path,
-                'removed_from_unmatched': True,
-            }, None,
-        ),
-    )
-    monkeypatch.setattr(native_tools, 'LibraryToolsMutationData', lambda: fake)
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-    cookie, csrf = _signed_session_with_csrf()
-    response = _run(
-        runtime, '/link_existing_game', cookie=cookie, method='POST',
-        headers={'X-CSRFToken': csrf},
-        form_body={'game_uuid': 'game-1', 'full_disk_path': '/safe/Game',
-                   'library_uuid': 'library-1', 'from_unmatched': 'true',
-                   'csrf_token': csrf},
-    )
-
-    assert response.status_code == 302
-    assert response.headers['location'] == '/scan_management?active_tab=unmatched'
-    assert calls == [('game-1', '/safe/Game', 'administrator', 7)]
 
 
 def test_lazy_asgi_local_game_image_uses_vetted_descriptor_and_ranges(monkeypatch, tmp_path):
@@ -12546,68 +12493,6 @@ def test_lazy_asgi_dispatches_legacy_single_game_image_upload(monkeypatch):
     assert accepted.status_code == 200
     assert accepted.json()['image_id'] == 11
     assert calls == [('game-1', 'cover.jpg', 'cover', b'fixture-image')]
-
-
-def test_lazy_asgi_dispatches_legacy_manual_scan_folder_form(monkeypatch):
-    from oneirodex.runtime_native import legacy_scan_forms as native_scan_forms
-
-    calls = []
-    fake = SimpleNamespace(
-        library_exists=lambda library_uuid: (
-            calls.append(('library_exists', library_uuid)) or
-            library_uuid == 'library-1'
-        ),
-        resolve_path=lambda _app, folder_path, library_root: ('/safe/ROMs', None),
-        allowed_bases=lambda _app: ['/safe'],
-        safe_path=lambda path, _bases: (calls.append(('safe', path)) or True, None),
-        readable_directory=lambda path: path == '/safe/ROMs',
-        scan_patterns=lambda: (['ignored'], ['CaseSensitive']),
-        list_games=lambda path, insensitive, sensitive: (
-            calls.append(('list', path, insensitive, sensitive)) or
-            [{'name': 'Example Game', 'full_path': '/safe/ROMs/Example Game'}]
-        ),
-    )
-    monkeypatch.setattr(native_scan_forms, 'LegacyScanFormData', lambda: fake)
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-    cookie, csrf = _signed_session_with_csrf()
-    response = _run(
-        runtime, '/scan_manual_folder', cookie=cookie, method='POST',
-        headers={'X-CSRFToken': csrf},
-        form_body={'csrf_token': csrf, 'folder_path': '/safe/ROMs',
-                   'library_uuid': 'library-1'},
-    )
-
-    assert response.status_code == 302
-    assert response.headers['location'] == '/scan_management?active_tab=manual'
-    assert calls == [
-        ('library_exists', 'library-1'),
-        ('safe', '/safe/ROMs'),
-        ('list', '/safe/ROMs', ['ignored'], ['CaseSensitive']),
-    ]
-
-
-def test_lazy_asgi_dispatches_legacy_scan_management_filter_form(monkeypatch):
-    from oneirodex.runtime_native import legacy_scan_management as native_scan_management
-
-    added = []
-    fake = SimpleNamespace(
-        add_filter=lambda pattern, case_sensitive: added.append((pattern, case_sensitive)),
-    )
-    monkeypatch.setattr(
-        native_scan_management, 'LegacyScanManagementData', lambda: fake,
-    )
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-    cookie, csrf = _signed_session_with_csrf()
-    response = _run(
-        runtime, '/scan_management', cookie=cookie, method='POST',
-        headers={'X-CSRFToken': csrf},
-        form_body={'submit': 'AddReleaseGroup', 'filter_pattern': ' Scene ',
-                   'case_sensitive': 'yes', 'csrf_token': csrf},
-    )
-
-    assert response.status_code == 302
-    assert response.headers['location'] == '/scan_management?active_tab=scan_filters'
-    assert added == [('Scene', True)]
 
 
 def test_lazy_asgi_dispatches_native_oidc_start_and_callback(monkeypatch):

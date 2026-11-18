@@ -34,7 +34,6 @@ import uuid
 from pathlib import Path
 from importlib import import_module
 
-import aiofiles
 from werkzeug.exceptions import RequestedRangeNotSatisfiable
 from werkzeug.utils import secure_filename, send_file as werkzeug_send_file
 
@@ -210,7 +209,7 @@ def _install_native_api_error_handlers(native_app, config, logger, *, routing_ap
     """Keep native API failures in the shared envelope without Flask context."""
     from fastapi import Request
     from starlette.exceptions import HTTPException as StarletteHTTPException
-    from starlette.responses import JSONResponse, Response
+    from starlette.responses import JSONResponse
     from werkzeug.exceptions import NotFound
 
     from oneirodex.utils.api_contract import api_error_payload
@@ -1310,7 +1309,6 @@ class LazyASGIApp:
             from oneirodex.runtime_native.batch_wishlist import mount_batch_wishlist_routes
             from oneirodex.runtime_native.batch_refresh import mount_batch_refresh_routes
             from oneirodex.runtime_native.member_game_state import mount_member_game_state_routes
-            from oneirodex.runtime_native.db_session import native_engine_session_scope
             from oneirodex.runtime_native.favorites import mount_favorites_routes
             from oneirodex.runtime_native.member_meta import mount_member_meta_routes
             from oneirodex.runtime_native.vr_reads import mount_vr_read_routes
@@ -1384,8 +1382,7 @@ class LazyASGIApp:
             from oneirodex.runtime_native.admin_attract_mode import mount_admin_attract_mode_routes
             from oneirodex.runtime_native.admin_features import mount_admin_features_routes
             from oneirodex.runtime_native.admin_scan_filters import mount_admin_scan_filters_routes
-            from oneirodex.runtime_native.legacy_scan_forms import mount_legacy_scan_form_routes
-            from oneirodex.runtime_native.legacy_scan_management import mount_legacy_scan_management_routes
+            from oneirodex.runtime_native.manual_identify_session_preview import mount_manual_identify_session_preview_routes
             from oneirodex.runtime_native.admin_discovery_sections import mount_admin_discovery_sections_routes
             from oneirodex.runtime_native.admin_invites import mount_admin_invites_routes
             from oneirodex.runtime_native.admin_users_read import mount_admin_users_read_routes
@@ -2465,17 +2462,7 @@ class LazyASGIApp:
                 login_manager=manager,
                 database_scope=lambda app: self._native_database_scope(app),
             )
-            mount_legacy_scan_form_routes(
-                self._native_read_api_app,
-                self._flask_app,
-                find_user=find_user,
-                find_token=find_token,
-                commit_token_touch=commit_token_touch,
-                load_user_id=load_user_id,
-                login_manager=manager,
-                database_scope=lambda app: self._native_database_scope(app),
-            )
-            mount_legacy_scan_management_routes(
+            mount_manual_identify_session_preview_routes(
                 self._native_read_api_app,
                 self._flask_app,
                 find_user=find_user,
@@ -3341,30 +3328,6 @@ class LazyASGIApp:
                 self._native_read_api_app is not None
                 and scope.get('method') == 'POST'
                 and (path == '/admin/library/add' or is_library_edit_route(path))
-            ):
-                await self._native_read_api_app(scope, receive, send)
-                return
-
-            if (
-                self._native_read_api_app is not None
-                and path == '/link_existing_game'
-                and scope.get('method') == 'POST'
-            ):
-                await self._native_read_api_app(scope, receive, send)
-                return
-
-            if (
-                self._native_read_api_app is not None
-                and path == '/scan_manual_folder'
-                and scope.get('method') == 'POST'
-            ):
-                await self._native_read_api_app(scope, receive, send)
-                return
-
-            if (
-                self._native_read_api_app is not None
-                and path == '/scan_management'
-                and scope.get('method') == 'POST'
             ):
                 await self._native_read_api_app(scope, receive, send)
                 return
@@ -5126,7 +5089,7 @@ class LazyASGIApp:
             content_type = 'font/woff'
 
         try:
-            size = candidate.stat().st_size
+            candidate.stat()
         except OSError:
             await self._send_error(send, 404, "Not Found")
             return
