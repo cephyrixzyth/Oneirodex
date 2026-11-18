@@ -281,6 +281,11 @@ def _empty_payload(code: str, message: str) -> dict:
 
 def _login_redirect(flask_app, request: Request, login_manager, auth_context):
     """Mirror Flask-Login's default unauthorized redirect and ``next`` value."""
+    from .oidc_status import signed_in_api_refusal
+
+    refusal = signed_in_api_refusal(flask_app, request, auth_context)
+    if refusal is not None:
+        return refusal
     from oneirodex.utils.security_headers import security_header_values
 
     if login_manager:
