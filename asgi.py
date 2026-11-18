@@ -1379,7 +1379,6 @@ class LazyASGIApp:
             from oneirodex.runtime_native.download_request_reads import mount_download_request_read_routes
             from oneirodex.runtime_native.manual_identify_reads import mount_manual_identify_read_routes
             from oneirodex.runtime_native.manual_identify_mutations import mount_manual_identify_mutation_routes
-            from oneirodex.runtime_native.legacy_manual_identify_forms import mount_legacy_manual_identify_routes
             from oneirodex.runtime_native.retroachievements_settings import mount_retroachievements_settings_routes
             from oneirodex.runtime_native.admin_policy_settings import mount_admin_policy_settings_routes
             from oneirodex.runtime_native.admin_attract_mode import mount_admin_attract_mode_routes
@@ -2412,16 +2411,6 @@ class LazyASGIApp:
                 database_scope=lambda app: self._native_database_scope(app),
             )
             mount_manual_identify_mutation_routes(
-                self._native_read_api_app,
-                self._flask_app,
-                find_user=find_user,
-                find_token=find_token,
-                commit_token_touch=commit_token_touch,
-                load_user_id=load_user_id,
-                login_manager=manager,
-                database_scope=lambda app: self._native_database_scope(app),
-            )
-            mount_legacy_manual_identify_routes(
                 self._native_read_api_app,
                 self._flask_app,
                 find_user=find_user,
