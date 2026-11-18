@@ -68,7 +68,7 @@ def test_approve_proposal_does_not_return_filesystem_error_path(
     _login(client, app, admin_user)
     private_path = str(tmp_path / 'private-library-root')
     monkeypatch.setattr(
-        'oneirodex.routes_apis.library_tools.is_safe_path',
+        'oneirodex.utils.security.is_safe_path',
         lambda _path, _bases: (True, None),
     )
 
@@ -76,7 +76,7 @@ def test_approve_proposal_does_not_return_filesystem_error_path(
         raise OSError(f'permission denied: {private_path}')
 
     monkeypatch.setattr(
-        'oneirodex.routes_apis.library_tools.remove_proposal_files', fail,
+        'oneirodex.utils.match_proposal.remove_proposal_files', fail,
     )
     response = client.post(
         '/api/library_tools/proposals/approve',
@@ -84,7 +84,7 @@ def test_approve_proposal_does_not_return_filesystem_error_path(
     )
 
     assert response.status_code == 500
-    assert response.get_json()['error'] == 'Could not clear proposal files'
+    assert response.get_json()['error'] == 'Could not clear the proposal'
     assert private_path not in response.get_data(as_text=True)
 
 

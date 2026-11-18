@@ -250,25 +250,26 @@ def test_batch_clear_mark_fix_amend(client, app, db_session, admin, lib):
     e = _folder(db_session, lib, path='/games/Amend Me')
 
     _login(client, app, admin)
+    a_id, b_id, c_id = a.id, b.id, c.id  # these rows are gone after their requests
 
-    clear = client.post('/api/unmatched_folders/batch/clear', json={'ids': [a.id, b.id, 'missing-id']})
+    clear = client.post('/api/unmatched_folders/batch/clear', json={'ids': [a_id, b_id, 'missing-id']})
     assert clear.status_code == 200
     clear_body = clear.get_json()
     assert clear_body['cleared'] == 2
     assert clear_body['failed'] == 1
     assert clear_body['disk_io'] is False
-    assert db_session.get(UnmatchedFolder, a.id) is None
-    assert db_session.get(UnmatchedFolder, b.id) is None
+    assert db_session.get(UnmatchedFolder, a_id) is None
+    assert db_session.get(UnmatchedFolder, b_id) is None
 
     mark = client.post(
         '/api/unmatched_folders/batch/mark_kind',
-        json={'ids': [c.id], 'item_kind': 'tool'},
+        json={'ids': [c_id], 'item_kind': 'tool'},
     )
     assert mark.status_code == 200
     mark_body = mark.get_json()
     assert mark_body['marked'] == 1
     assert mark_body['results'][0]['ok'] is True
-    assert db_session.get(UnmatchedFolder, c.id) is None
+    assert db_session.get(UnmatchedFolder, c_id) is None
     created = db_session.execute(
         select(Game).filter_by(uuid=mark_body['results'][0]['game_uuid'])
     ).scalars().first()

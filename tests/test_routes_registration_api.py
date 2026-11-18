@@ -29,10 +29,8 @@ def inviter(db_session):
 
 
 def test_invite_registration_claims_link_and_sends_confirmation(client, db_session, monkeypatch):
-    import oneirodex.routes_login as routes_login
-
     sent = []
-    monkeypatch.setattr(routes_login, 'send_email', lambda *args: sent.append(args) or True)
+    monkeypatch.setattr('oneirodex.utils.smtp.send_email_quiet', lambda *args, **_kw: sent.append(args) or True)
     owner = inviter(db_session)
     invite = InviteToken(token=f'inv-{uuid4().hex}', creator_user_id=owner.user_id)
     db_session.add(invite)
@@ -94,9 +92,7 @@ def test_native_registration_persists_only_confirmation_token_digest(app, db_ses
 
 
 def test_allowlisted_email_can_register_without_invite(client, db_session, monkeypatch):
-    import oneirodex.routes_login as routes_login
-
-    monkeypatch.setattr(routes_login, 'send_email', lambda *_args: True)
+    monkeypatch.setattr('oneirodex.utils.smtp.send_email_quiet', lambda *_args, **_kw: True)
     payload = registration_payload(email=f'{uuid4().hex[:8]}@Example.com')
     db_session.add(Whitelist(email=payload['email'].lower()))
     db_session.commit()

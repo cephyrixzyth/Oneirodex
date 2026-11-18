@@ -168,13 +168,12 @@ class TestDeleteDownloadRequestRoute:
         
         with client.session_transaction() as session:
             session['_user_id'] = str(admin_user.id)
-        
-        response = client.post(f'/delete_download_request/{download_request.id}')
+        request_id = download_request.id  # the row is gone after the request
+
+        response = client.post(f'/delete_download_request/{request_id}')
         assert response.status_code == 302
-        
-        # Verify the download request was deleted
-        deleted_request = db.session.get(DownloadRequest, download_request.id)
-        assert deleted_request is None
+
+        assert db.session.get(DownloadRequest, request_id) is None
 
     def test_delete_unauthenticated(self, client, sample_download_request):
         """Test that unauthenticated users cannot delete download requests."""

@@ -48,7 +48,7 @@ def _create(client, **body):
 class TestReportKind:
     def test_defaults_to_issue_when_unstated(self, client, member):
         login(client, member)
-        with patch('oneirodex.routes_apis.support.create_github_issue') as create_issue:
+        with patch('oneirodex.utils.github_issues.create_github_issue') as create_issue:
             response = _create(client)
 
         assert response.status_code == 201
@@ -60,7 +60,7 @@ class TestReportKind:
         monkeypatch.setenv('SUPPORT_GITHUB_TOKEN', 'synthetic-support-operator')
         login(client, member)
         with patch(
-            'oneirodex.routes_apis.support.create_github_issue',
+            'oneirodex.utils.github_issues.create_github_issue',
             return_value={'ok': True, 'number': 17, 'url': 'https://github.com/example/repo/issues/17'},
         ) as create_issue:
             response = _create(client, sync_to_github=True)
@@ -103,7 +103,7 @@ class TestReportKind:
         monkeypatch.setenv('SUPPORT_GITHUB_TOKEN', 'synthetic-support-operator')
         login(client, member)
         with patch(
-            'oneirodex.routes_apis.support.create_github_issue',
+            'oneirodex.utils.github_issues.create_github_issue',
             return_value={'ok': False, 'skipped': True},
         ) as create_issue:
             responses = [

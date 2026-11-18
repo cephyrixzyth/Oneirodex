@@ -133,7 +133,7 @@ def test_hardlink_apply_api_requires_flags(client, app, admin, tmp_path, monkeyp
     monkeypatch.setitem(app.config, 'ALLOW_HARDLINK_APPLY', False)
     # Bypass path sandbox for unit test by pointing allowed bases via monkeypatch
     monkeypatch.setattr(
-        'oneirodex.routes_apis.storage.get_allowed_base_directories',
+        'oneirodex.utils.security.get_allowed_base_directories',
         lambda _app: [str(tmp_path)],
     )
     resp = client.post(
@@ -153,7 +153,7 @@ def test_hardlink_apply_does_not_return_local_os_error_paths(
     monkeypatch.setitem(app.config, 'ENABLE_HARDLINK_HELPERS', True)
     monkeypatch.setitem(app.config, 'ALLOW_HARDLINK_APPLY', True)
     monkeypatch.setattr(
-        'oneirodex.routes_apis.storage.get_allowed_base_directories',
+        'oneirodex.utils.security.get_allowed_base_directories',
         lambda _app: [str(tmp_path)],
     )
     secret_path = str(tmp_path / 'private-storage-root')
@@ -161,13 +161,13 @@ def test_hardlink_apply_does_not_return_local_os_error_paths(
     def fail(*_args, **_kwargs):
         raise OSError(f'permission denied: {secret_path}')
 
-    monkeypatch.setattr('oneirodex.routes_apis.storage.apply_hardlink', fail)
+    monkeypatch.setattr('oneirodex.utils.hardlinks.apply_hardlink', fail)
     response = client.post(
         '/api/storage/hardlink/apply', json={'source': str(src), 'dest': str(dest)},
     )
 
     assert response.status_code == 500
-    assert response.get_json()['error'] == 'Hardlink operation failed'
+    assert response.get_json()['error'] == 'Hardlink failed'
     assert secret_path not in response.get_data(as_text=True)
 
 

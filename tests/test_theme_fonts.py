@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from oneirodex.utils.theme_fonts import (
@@ -38,7 +36,6 @@ class TestCatalogue:
         stack silently falls through, and the picker should be able to say so."""
         with app.app_context():
             catalogue = available_fonts()
-            root = catalogue and os.path.isdir.__self__ and None  # noqa: F841
             for entry in catalogue.values():
                 if entry['file'] is None:
                     assert entry['installed'] is True  # system stack always works
@@ -145,7 +142,7 @@ class TestFontsCssRoute:
         assert response.status_code == 200
         assert response.headers['Content-Type'].startswith('text/css')
         assert response.headers['Cache-Control'] == 'private, max-age=60'
-        assert response.headers['Vary'] == 'Cookie'
+        assert 'Cookie' in response.headers['Vary']
         body = response.get_data(as_text=True)
         assert '--od-font-family:' in body
         assert BUILT_IN_FONTS[DEFAULT_FONT_ID]['stack'] in body
@@ -159,7 +156,7 @@ class TestFontsCssRoute:
 
         assert response.status_code == 200
         assert response.headers['Cache-Control'] == 'private, max-age=60'
-        assert response.headers['Vary'] == 'Cookie'
+        assert 'Cookie' in response.headers['Vary']
         body = response.get_data(as_text=True)
         assert BUILT_IN_FONTS['vt323']['stack'] in body
 

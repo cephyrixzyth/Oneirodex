@@ -175,7 +175,7 @@ def test_art_studio_system_marks_api_catalog_and_generate(client, db_session, ad
         sess['_fresh'] = True
 
     with patch(
-        'oneirodex.routes_admin_ext.art_studio.list_system_marks_catalog',
+        'oneirodex.utils.system_marks.list_system_marks_catalog',
         return_value=[{
             'theme': 'default',
             'era': 'wood_den_80s',
@@ -203,7 +203,7 @@ def test_art_studio_system_marks_api_catalog_and_generate(client, db_session, ad
     assert 'path' not in lab_body
 
     with patch(
-        'oneirodex.routes_admin_ext.art_studio.generate_system_marks',
+        'oneirodex.utils.system_marks.generate_system_marks',
         return_value={'generated': 1, 'skipped': 0, 'errors': [], 'results': []},
     ) as gen:
         response = client.post(
@@ -233,7 +233,7 @@ def test_art_studio_lab_prompt_requires_one_pair(client, db_session, admin_user)
     assert rejected.get_json().get('error_code') == 'bad_request'
 
     with patch(
-        'oneirodex.routes_admin_ext.art_studio.generate_system_marks',
+        'oneirodex.utils.system_marks.generate_system_marks',
         return_value={'generated': 1, 'skipped': 0, 'errors': [], 'results': []},
     ) as gen:
         ok = client.post(

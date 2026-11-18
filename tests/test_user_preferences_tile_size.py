@@ -177,15 +177,12 @@ def test_partial_save_keeps_the_fields_it_did_not_send(client, member, db_sessio
 
 
 def test_engine_picker_choice_is_exposed_only_when_admin_allows_it(client, member, monkeypatch):
-    from oneirodex.routes_apis import preferences as preferences_api
-
     with client.session_transaction() as sess:
         sess['_user_id'] = str(member.id)
         sess['_fresh'] = True
 
     monkeypatch.setattr(
-        preferences_api,
-        'play_engine_fields',
+        'oneirodex.utils.browser_player.play_engine_fields',
         lambda: {'browser_player_member_choice': False},
     )
     hidden = client.get('/api/account/preferences')
@@ -197,8 +194,7 @@ def test_engine_picker_choice_is_exposed_only_when_admin_allows_it(client, membe
     }
 
     monkeypatch.setattr(
-        preferences_api,
-        'play_engine_fields',
+        'oneirodex.utils.browser_player.play_engine_fields',
         lambda: {'browser_player_member_choice': True},
     )
     visible = client.get('/api/account/preferences')

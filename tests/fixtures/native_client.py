@@ -175,8 +175,7 @@ class NativeTestClient:
             for key, value in self._source_config.items():
                 if key != 'SQLALCHEMY_DATABASE_URI':
                     self._config[key] = value
-        if environ_base and environ_base.get('REMOTE_ADDR'):
-            headers.setdefault('X-Test-Remote-Addr', environ_base['REMOTE_ADDR'])
+        remote_addr = (environ_base or {}).get('REMOTE_ADDR') or '127.0.0.1'
         if query_string:
             sep = '&' if '?' in path else '?'
             path += sep + (query_string if isinstance(query_string, str) else urlencode(query_string, doseq=True))
@@ -184,11 +183,18 @@ class NativeTestClient:
         if json is not None:
             kwargs['json'] = json
         elif isinstance(data, dict):
+            def is_upload(value):
+                # werkzeug FileStorage, still used by some tests to build uploads
+                return hasattr(value, 'stream') and hasattr(value, 'filename')
+
             def is_file(value):
-                return isinstance(value, tuple) and value and hasattr(value[0], 'read') or (
+                return is_upload(value) or isinstance(value, tuple) and value and hasattr(value[0], 'read') or (
                     isinstance(value, tuple) and len(value) >= 2 and isinstance(value[0], (bytes, bytearray)))
 
             def as_part(name, value):
+                if is_upload(value):
+                    return (name, (value.filename or name, value.stream.read(),
+                                   value.content_type or 'application/octet-stream'))
                 body = value[0].read() if hasattr(value[0], 'read') else value[0]
                 return (name, ((value[1] if len(value) > 1 else name), body))
 
@@ -214,7 +220,8 @@ class NativeTestClient:
             headers['Cookie'] = '; '.join(f'{k}={v}' for k, v in self.cookies.items())
 
         async def perform():
-            transport = httpx.ASGITransport(app=self._app, client=('127.0.0.1', 50000))
+            transport = httpx.ASGITransport(app=self._app, client=(remote_addr, 50000),
+                                           raise_app_exceptions=False)
             async with httpx.AsyncClient(transport=transport, base_url='http://localhost') as client:
                 return await client.request(method, path, headers=headers,
                                             follow_redirects=False, **kwargs)

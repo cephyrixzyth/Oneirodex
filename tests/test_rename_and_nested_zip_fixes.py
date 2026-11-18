@@ -149,7 +149,7 @@ def library_game(db_session, tmp_path):
     db_session.add(update)
     db_session.commit()
     with patch(
-        'oneirodex.routes_apis.library_tools.get_allowed_base_directories',
+        'oneirodex.utils.security.get_allowed_base_directories',
         return_value=[str(lib_dir)],
     ):
         yield lib_dir, folder, game, update

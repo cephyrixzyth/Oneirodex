@@ -242,12 +242,13 @@ def test_cleanup_orphans_api_librarian(client, app, db_session, admin, lib, tmp_
     db_session.commit()
 
     _login(client, app, admin)
+    gone_uuid, keep_uuid = gone.uuid, keep.uuid  # `gone` is deleted by the request
     resp = client.post(f'/api/games/{game.uuid}/versions/cleanup_orphans')
     assert resp.status_code == 200, resp.get_json()
     body = resp.get_json()
     assert body['ok'] is True
-    assert any(r['uuid'] == gone.uuid for r in body['removed'])
-    assert any(r['uuid'] == keep.uuid for r in body['kept'])
+    assert any(r['uuid'] == gone_uuid for r in body['removed'])
+    assert any(r['uuid'] == keep_uuid for r in body['kept'])
 
 
 @patch('oneirodex.utils.artwork_apply.get_provider')

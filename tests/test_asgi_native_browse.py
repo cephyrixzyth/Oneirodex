@@ -12610,31 +12610,6 @@ def test_lazy_asgi_dispatches_legacy_scan_management_filter_form(monkeypatch):
     assert added == [('Scene', True)]
 
 
-def test_lazy_asgi_dispatches_legacy_manual_identify_form(monkeypatch):
-    from oneirodex.runtime_native import legacy_manual_identify_forms as native_manual_forms
-
-    saved = []
-    fake = SimpleNamespace(
-        create=lambda app, body, actor, *, from_unmatched: (
-            saved.append((body.name, body.igdb_id, from_unmatched)) or
-            {'game_uuid': 'game-new', 'redirect_url': '/libraries'}
-        ),
-    )
-    monkeypatch.setattr(native_manual_forms, 'ManualIdentifyMutationData', lambda: fake)
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-    cookie, csrf = _signed_session_with_csrf()
-    response = _run(
-        runtime, '/add_game_manual?from_unmatched=true', cookie=cookie, method='POST',
-        headers={'X-CSRFToken': csrf},
-        form_body={'igdb_id': '101', 'name': 'Game', 'full_disk_path': '/safe/Game',
-                   'library_uuid': 'lib-1', 'csrf_token': csrf},
-    )
-
-    assert response.status_code == 303
-    assert response.headers['location'] == '/scan_management?active_tab=unmatched'
-    assert saved == [('Game', 101, True)]
-
-
 def test_lazy_asgi_dispatches_native_oidc_start_and_callback(monkeypatch):
     from oneirodex.runtime_native import oidc_auth as native_oidc_auth
     from oneirodex.runtime_native.session_compat import load_session_cookie

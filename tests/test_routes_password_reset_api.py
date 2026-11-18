@@ -22,12 +22,23 @@ def reset_user(db_session):
     return user
 
 
+def _capture_reset_mail(sent):
+    """Record (recipient, raw token) from the reset email the server sends."""
+    import re
+    from urllib.parse import unquote
+
+    def capture(to, _subject, html, **_kwargs):
+        match = re.search(r'/reset_password/([^"<\s]+)', html)
+        sent.append((to, unquote(match.group(1)) if match else None))
+        return True
+    return capture
+
+
 def test_reset_request_response_does_not_reveal_account_existence(client, db_session, monkeypatch):
-    import oneirodex.routes_login as routes_login
 
     user = reset_user(db_session)
     sent = []
-    monkeypatch.setattr(routes_login, 'send_password_reset_email', lambda *args: sent.append(args))
+    monkeypatch.setattr('oneirodex.utils.smtp.send_email_quiet', _capture_reset_mail(sent))
 
     known = client.post('/api/auth/password-reset/request', json={'email': user.email})
     unknown = client.post('/api/auth/password-reset/request', json={'email': 'missing@example.com'})
@@ -45,7 +56,6 @@ def test_reset_request_response_does_not_reveal_account_existence(client, db_ses
 def test_recipient_throttle_is_cross_ip_and_does_not_reveal_account_existence(
     app, client, db_session, monkeypatch,
 ):
-    import oneirodex.routes_login as routes_login
     from oneirodex.utils.login_rate_limit import reset_for_tests
 
     reset_for_tests()
@@ -53,7 +63,7 @@ def test_recipient_throttle_is_cross_ip_and_does_not_reveal_account_existence(
     app.config['LOGIN_RATE_LIMIT_WINDOW_SECONDS'] = 300
     user = reset_user(db_session)
     sent = []
-    monkeypatch.setattr(routes_login, 'send_password_reset_email', lambda *args: sent.append(args))
+    monkeypatch.setattr('oneirodex.utils.smtp.send_email_quiet', _capture_reset_mail(sent))
 
     def request(email, index):
         return client.post(

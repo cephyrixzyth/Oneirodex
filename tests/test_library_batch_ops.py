@@ -289,22 +289,16 @@ class TestBatchDeleteLibraries:
         lib = _make_library(db_session, name='Exact Name')
         _login(client, admin_user)
         with patch(
-            'oneirodex.routes_apis.library.delete_library_background',
-            create=True,
-        ):
-            # Patch where used: _start_library_delete_job imports the worker
-            # from routes_admin_ext.library_delete.
-            with patch(
-                'oneirodex.routes_admin_ext.library_delete.delete_library_background'
-            ) as mock_bg:
-                mock_bg.return_value = None
-                resp = client.post(
-                    '/api/admin/libraries/batch/delete',
-                    json={
-                        'library_uuids': [lib.uuid],
-                        'confirm_names': {lib.uuid: 'Exact Name'},
-                    },
-                )
+            'oneirodex.utils.library_deletion.delete_library_background'
+        ) as mock_bg:
+            mock_bg.return_value = None
+            resp = client.post(
+                '/api/admin/libraries/batch/delete',
+                json={
+                    'library_uuids': [lib.uuid],
+                    'confirm_names': {lib.uuid: 'Exact Name'},
+                },
+            )
         assert resp.status_code == 200
         body = resp.get_json()
         assert body['ok'] is True

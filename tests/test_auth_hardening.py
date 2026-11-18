@@ -426,16 +426,14 @@ class TestChildAcquireAndCommands:
     def test_acquire_search_accepts_read_library_scope_for_bearer_tokens(
         self, client, member, db_session, monkeypatch,
     ):
-        from oneirodex.routes_apis import acquire
-
         calls = []
-        monkeypatch.setattr(acquire, 'arr_module_on', lambda: True)
+        monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda **_kw: True)
         monkeypatch.setattr(
-            acquire, 'search_indexers',
+            'oneirodex.utils.arr_connectors.search_indexers',
             lambda query: calls.append(query) or [],
         )
         monkeypatch.setattr(
-            acquire, 'indexer_status_summary', lambda: {'warnings': []},
+            'oneirodex.utils.indexer_registry.indexer_status_summary', lambda: {'warnings': []},
         )
         _row, library_token = generate_api_token(
             member, 'library-read', ['read:library'],

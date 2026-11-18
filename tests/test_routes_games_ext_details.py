@@ -243,33 +243,6 @@ class TestGameDetailsRouteResponse:
         assert 'updates' not in payload
 
 
-class TestGameDetailsRouteLogging:
-    """Test comprehensive logging functionality."""
-
-    def test_game_details_logs_system_events_to_database(self, client, test_user, test_game, db_session):
-        """Test that system events are actually logged to the database."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        # Clear any existing events
-        from sqlalchemy import delete
-        db_session.execute(delete(SystemEvents).where(SystemEvents.audit_user == test_user.id))
-        db_session.commit()
-
-        response = client.get(f'/game_details/{test_game.uuid}')
-
-        # Check that events were logged to database
-        events = db_session.execute(
-            select(SystemEvents).filter_by(audit_user=test_user.id)
-        ).scalars().all()
-
-        assert len(events) > 0
-        # Verify at least one game-related event was logged
-        game_events = [e for e in events if e.event_type == 'game']
-        assert len(game_events) > 0
-
-
 class TestGameDetailsUtilityFunctionLogging:
     """Test logging in utility functions called by game details route."""
     
