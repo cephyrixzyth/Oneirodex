@@ -767,17 +767,31 @@ async def _preview_cropped_image(request, data):
         )
         return JSONResponse(payload, status_code=status)
     try:
+        from PIL import UnidentifiedImageError
         from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
         preview_url = await run_image_work_in_threadpool(data.preview_image, model.image_data)
     except ImageWorkBusy:
         return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
+    except (ValueError, UnidentifiedImageError) as exc:
+        # Our own validation messages are member-safe; anything else a decoder
+        # raises as ValueError gets the generic wording.
+        message = str(exc) if str(exc) in _SAFE_PREVIEW_ERRORS else 'The library image could not be read.'
+        return _error(message, 'bad_request', 400)
     except Exception:
         return _error('Failed to process image', 'internal', 500)
     return JSONResponse(api_ok_payload({
         'status': 'success', 'preview_url': preview_url,
         'message': 'Image processed successfully',
     }))
+
+
+_SAFE_PREVIEW_ERRORS = frozenset({
+    'Library image must be 10 MB or smaller.',
+    'The library image data is invalid.',
+    'Choose a supported library image format.',
+    'Library image dimensions are too large.',
+})
 
 
 async def _create(request, app, data, user):

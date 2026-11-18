@@ -482,10 +482,7 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                             payload = await upload.read()
                             row = data.store_cheat(game_uuid, upload.filename, payload)
                         except ValueError as exc:
-                            return _error(400, 'bad_request', str(exc))
-                        except Exception as exc:
-                            code = getattr(exc, 'code', 'bad_request')
-                            return _error(413 if code == 'payload_too_large' else 400, code, str(exc))
+                            return _cheat_refusal(exc)
                         return JSONResponse(row, status_code=201)
                 finally:
                     await form.close()
@@ -501,8 +498,7 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                     row = data.create_cheat(game_uuid, name=body.get('name'),
                                             codes=body.get('codes'), dialect=body.get('dialect'))
                 except ValueError as exc:
-                    code = getattr(exc, 'code', 'bad_request')
-                    return _error(413 if code == 'payload_too_large' else 400, code, str(exc))
+                    return _cheat_refusal(exc)
                 return JSONResponse(row, status_code=201)
             return _error(400, 'bad_request', 'Send a .cht file, or a JSON body with name and codes')
 
@@ -833,3 +829,10 @@ async def _empty_body():
 def mount_emulator_mutation_routes(app: FastAPI, flask_app, **kwargs):
     app.include_router(create_emulator_mutations_router(flask_app, **kwargs))
     return app
+
+
+def _cheat_refusal(exc: ValueError):
+    """Map a cheat refusal (size, file cap, bad input) to its status code."""
+    code = getattr(exc, 'code', 'bad_request')
+    status = {'payload_too_large': 413, 'conflict': 409}.get(code, 400)
+    return _error(status, code, str(exc))

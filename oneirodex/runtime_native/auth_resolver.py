@@ -215,38 +215,46 @@ def _verify_bearer(
     now: datetime | None,
     touch: bool = True,
 ) -> tuple[Any | None, Any | None]:
-    if not raw or not raw.startswith("gt_"):
-        return None, None
-    body = raw[len("gt_"):]
-    if "_" not in body:
-        return None, None
-    prefix, secret = body.split("_", 1)
-    if not prefix or not secret:
-        return None, None
-    token = find_token(prefix)
-    if token is None or getattr(token, "revoked_at", None) is not None:
-        return None, None
-    expected = hashlib.sha256(secret.encode("utf-8")).hexdigest()
-    if not hmac.compare_digest(str(getattr(token, "token_hash", "")), expected):
-        return None, None
-    expired = getattr(token, "is_expired", None)
-    if callable(expired):
-        if expired(now):
-            return None, None
-    elif _is_expired(getattr(token, "expires_at", None), now):
-        return None, None
-    try:
-        user = find_user(int(token.user_id))
-    except (TypeError, ValueError, AttributeError):
-        return None, None
-    # Match the existing bearer request loader: persisted false/NULL state is
-    # rejected there. Session and remember resolution use User.is_active parity.
-    if user is None or not getattr(user, "state", False):
+    user, token, reason = _check_bearer(raw, find_user, find_token, now=now)
+    if reason is not None:
+        # Operators debug companion connects from this line; it never
+        # carries the secret, only the public prefix and the reason.
+        from oneirodex.utils.api_tokens import _log_api_token_auth_failed
+        _log_api_token_auth_failed(reason, raw)
         return None, None
     if touch:
         token.last_used_at = now or datetime.now(timezone.utc)
         commit_token_touch(token)
     return user, token
+
+
+def _check_bearer(raw, find_user, find_token, *, now):
+    if not raw or not raw.startswith("gt_"):
+        return None, None, "malformed"
+    body = raw[len("gt_"):]
+    if "_" not in body:
+        return None, None, "malformed"
+    prefix, secret = body.split("_", 1)
+    if not prefix or not secret:
+        return None, None, "malformed"
+    token = find_token(prefix)
+    if token is None or getattr(token, "revoked_at", None) is not None:
+        return None, None, "unknown_prefix"
+    expected = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(str(getattr(token, "token_hash", "")), expected):
+        return None, None, "bad_hash"
+    expired = getattr(token, "is_expired", None)
+    if expired(now) if callable(expired) else _is_expired(getattr(token, "expires_at", None), now):
+        return None, None, "expired"
+    try:
+        user = find_user(int(token.user_id))
+    except (TypeError, ValueError, AttributeError):
+        return None, None, "inactive_user"
+    # Match the existing bearer request loader: persisted false/NULL state is
+    # rejected there. Session and remember resolution use User.is_active parity.
+    if user is None or not getattr(user, "state", False):
+        return None, None, "inactive_user"
+    return user, token, None
 
 
 def _is_expired(expires_at: datetime | None, now: datetime | None) -> bool:

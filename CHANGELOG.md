@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- The old form-post endpoints for saving a game edit (`POST /game_edit/<id>` and `POST /add_game_manual`). The admin app saves through `/api/admin/manual-identify`, which is unchanged; the pages themselves still open at the same addresses.
+
 ### Fixed
+- Recording owned games works again for launcher imports, store CSV imports and member-started store syncs. In 1.2.0 they failed with a generic error, because the code that saves each owned title asked for the database session in a way the 1.2.0 server no longer supports.
+- A store CSV import that would go past the ownership safety limit answers 409 with the limit message, as the store sync does, instead of a generic 400.
+- The library image preview rejects an oversized, unsupported or unreadable image with a clear message (400) instead of "Failed to process image" (500).
+- An oversized cheat file answers 413 and a game at its cheat-file limit answers 409; both were reported as a generic 400.
+- Rejected API tokens are logged again for operators (`api_token_auth_failed` with the reason and public prefix, never the secret). The 1.2.0 server had stopped writing that line, which made companion connection problems hard to diagnose.
+- Approving a match proposal with missing fields now answers 422 with the field names, like the other library tools.
 - Creating a library with a cover image through the API no longer fails with "Library name is required" when the request carries its CSRF token as a form field rather than a header. The admin pages were not affected.
 - Audit events record which member acted again. Since 1.1.9 most events written by the server were stored without a user. Refused attempts to delete someone else's download request are logged as security events again.
 - Replacing a game's cover (or another single image) no longer deletes the old file while another game still uses it. The new image is written durably before the database switches to it, and file names no longer include the raw game id from the address.

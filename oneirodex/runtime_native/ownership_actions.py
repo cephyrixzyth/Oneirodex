@@ -266,6 +266,10 @@ async def _dispatch_action(request, flask_app, data, auth, action, store):
     except PermissionError as exc:
         return _error(403, 'forbidden', str(exc))
     except ValueError as exc:
+        from oneirodex.utils.store_sync_errors import REASONS, StoreSyncError
+        if isinstance(exc, StoreSyncError) and exc.reason == 'ownership_limit':
+            reason = REASONS[exc.reason]
+            return _error(reason.http_status, reason.envelope_code, reason.message)
         return _error(400, 'bad_request', str(exc))
     extra = {}
     if store == 'meta_quest':

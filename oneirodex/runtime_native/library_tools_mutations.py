@@ -495,17 +495,18 @@ async def _rename_preview(request, app, data):
 
 
 async def _approve_proposal(request, app, data):
-    body = await _json_body(request)
-    if body is None or not isinstance(body.get('path'), str) or not body['path'].strip() \
-            or 'igdb_id' not in body:
-        return _error(400, 'bad_request', 'path and igdb_id required')
-    path, igdb_id = body['path'], body['igdb_id']
-    if (igdb_id in (None, '') or isinstance(igdb_id, bool)
-            or not isinstance(igdb_id, (int, str))):
-        return _error(400, 'bad_request', 'path and igdb_id required')
-    path = path.strip()
-    if not path:
-        return _error(400, 'bad_request', 'path and igdb_id required')
+    from pydantic import ValidationError
+    from oneirodex.schemas.library_tools import ApproveProposalBody
+    from oneirodex.utils.validation import format_validation_errors
+
+    try:
+        body = ApproveProposalBody.model_validate(await _json_body(request))
+    except ValidationError as exc:
+        return _error(422, 'unprocessable', 'Invalid request.',
+                      detail=format_validation_errors(exc))
+    path, igdb_id = body.path, body.igdb_id
+    if isinstance(igdb_id, str) and not igdb_id.strip():
+        return _error(422, 'unprocessable', 'Invalid request.', detail={'igdb_id': 'Required'})
     safe, error = data.safe_path(app, path)
     if not safe:
         return _error(403, 'forbidden', error or 'Unsafe path')

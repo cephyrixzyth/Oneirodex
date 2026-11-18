@@ -16,6 +16,7 @@ import requests
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import scoped_session
 
 from oneirodex.runtime_native.db_session import native_db as db
 from oneirodex.models import Game, GameURL, StoreAccount, User, UserOwnedTitle
@@ -324,7 +325,10 @@ def upsert_owned_title(
     if len(str(external_app_id)) > EXTERNAL_APP_ID_MAX:
         from oneirodex.utils.store_sync_errors import StoreSyncError
         raise StoreSyncError('A store returned an ID longer than Oneirodex records', 'invalid_response')
-    session = db.session()
+    session = db.session
+    if isinstance(session, scoped_session):
+        # Workers and scripts get the registry; requests get a plain Session.
+        session = session()
     transaction = session.get_nested_transaction() or session.get_transaction()
     quota = session.info.get(_OWNERSHIP_QUOTA_SESSION_KEY)
     if quota is None or quota['transaction'] is not transaction:
