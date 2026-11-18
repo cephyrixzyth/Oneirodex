@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-11-18
+
 ### Removed
 - The old form-post endpoints for saving a game edit (`POST /game_edit/<id>` and `POST /add_game_manual`). The admin app saves through `/api/admin/manual-identify`, which is unchanged; the pages themselves still open at the same addresses.
 - The retired Flask route layer (about 26,000 lines): `oneirodex/routes_*`, the Flask-WTF forms, the Flask auth decorators and the classic page renderers. The server has answered every request from the native app since 1.2.0; this code only ran in tests. Also removed: the unused form posts `POST /scan_management`, `POST /scan_manual_folder` and `POST /link_existing_game`, 31 static scripts and images from the classic pages, and unused imports across the server.
