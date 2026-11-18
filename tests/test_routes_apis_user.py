@@ -177,33 +177,22 @@ class TestCheckUsernameEndpoint:
         data = json.loads(response.data)
         assert data['exists'] is True
 
-    def test_check_username_bearer_requires_social_read_scope(
-        self, client, regular_user, monkeypatch,
-    ):
-        # The Flask compatibility route runs under global CSRF protection;
-        # this test disables that global preflight to isolate the scope gate.
-        client.application.config['WTF_CSRF_ENABLED'] = False
-        from types import SimpleNamespace
-        from oneirodex.utils import api_tokens
+    def test_check_username_bearer_requires_social_read_scope(self, client, regular_user):
+        from oneirodex.utils.api_tokens import generate_api_token
 
-        scopes = {'write:presence'}
-        token = SimpleNamespace(has_scope=lambda scope: scope in scopes)
-        monkeypatch.setattr(
-            api_tokens, 'verify_bearer_token_detailed',
-            lambda _raw: (regular_user, token, None),
-        )
+        _row, presence_only = generate_api_token(regular_user, 'scope test', ['write:presence'])
         denied = client.post(
             '/api/check_username', json={'username': regular_user.name},
-            headers={'Authorization': 'Bearer gt_00000000_scope-test'},
+            headers={'Authorization': f'Bearer {presence_only}'},
         )
         assert denied.status_code == 403
         assert denied.get_json()['error_code'] == 'forbidden'
         assert denied.get_json()['detail'] == {'required_scope': 'read:social'}
 
-        scopes.add('read:social')
+        _row, social = generate_api_token(regular_user, 'scope test', ['write:presence', 'read:social'])
         allowed = client.post(
             '/api/check_username', json={'username': regular_user.name},
-            headers={'Authorization': 'Bearer gt_00000000_scope-test'},
+            headers={'Authorization': f'Bearer {social}'},
         )
         assert allowed.status_code == 200, allowed.get_json()
         assert allowed.get_json() == {'exists': True}

@@ -149,7 +149,7 @@ def test_calendar_endpoint_without_igdb(client, app, admin, monkeypatch):
         }]
 
     monkeypatch.setattr(
-        'oneirodex.routes_apis.calendar.fetch_release_calendar',
+        'oneirodex.utils.release_calendar.fetch_release_calendar',
         fake_fetch,
     )
     resp = client.get('/api/calendar')

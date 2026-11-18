@@ -1,6 +1,7 @@
 """Assist packs, and the companion overlay links (INSP-45 / H4f): maps, guides,
 clips, a wiki -- pages beside the game, never a hand inside it."""
 from __future__ import annotations
+from tests.fixtures.native_client import served_client
 
 from uuid import uuid4
 
@@ -9,8 +10,8 @@ from flask_login import login_user
 
 from oneirodex.models import Game, Library, User
 from oneirodex.platform import LibraryPlatform
-from oneirodex.routes_apis.assists import (
-    _pack_path,
+from oneirodex.utils.assist_packs import (
+    pack_path as _pack_path,
     assists_enabled,
     default_overlay_links,
     load_assist_pack,
@@ -106,7 +107,7 @@ def test_admin_writes_a_validated_pack_and_members_read_the_overlay(client, app,
     assert client.put(url, json={'overlay_links': [{'label': 'x', 'url': 'https://ok/', 'kind': 'inject'}]}).status_code == 422
     assert client.put(url, json={'memory_patch': True}).status_code == 422
 
-    member_client = app.test_client()
+    member_client = served_client(app)
     _login(member_client, app, member)
     resp = member_client.get(url)
     assert resp.status_code == 200

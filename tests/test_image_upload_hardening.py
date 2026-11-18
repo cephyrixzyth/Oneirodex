@@ -28,7 +28,10 @@ from PIL import Image as PILImage
 from sqlalchemy import select, text
 
 from oneirodex.models import Game, Image, Library, LibraryPlatform, User
-from oneirodex.routes_admin_ext.game_images import MAX_IMAGE_PIXELS, MAX_IMAGE_UPLOAD_BYTES
+from oneirodex.utils.image_upload_limits import (
+    GAME_IMAGE_MAX_BYTES as MAX_IMAGE_UPLOAD_BYTES,
+    GAME_IMAGE_MAX_PIXELS as MAX_IMAGE_PIXELS,
+)
 
 
 @pytest.fixture(scope='function', autouse=True)
@@ -150,9 +153,10 @@ class TestUploadCeiling:
         def fail_fsync(*_args):
             raise OSError('injected image publication failure')
 
-        monkeypatch.setattr('oneirodex.routes_admin_ext.game_images.os.fsync', fail_fsync)
-        with pytest.raises(OSError, match='injected image publication failure'):
-            _upload(client, admin_user, sample_game, _png(640, 900))
+        monkeypatch.setattr('oneirodex.utils.image_files.os.fsync', fail_fsync)
+        response = _upload(client, admin_user, sample_game, _png(640, 900))
+        assert response.status_code == 500
+        assert 'injected' not in response.get_data(as_text=True)
 
         db_session.expire_all()
         retained = db_session.get(Image, old_id)
@@ -173,12 +177,20 @@ class TestUploadCeiling:
         old_path = image_dir / old_filename
         old_bytes = old_path.read_bytes()
 
-        def fail_commit():
-            raise RuntimeError('injected commit failure')
+        from sqlalchemy.orm import Session
 
-        monkeypatch.setattr('oneirodex.routes_admin_ext.game_images.db.session.commit', fail_commit)
-        with pytest.raises(RuntimeError, match='injected commit failure'):
-            _upload(client, admin_user, sample_game, _png(640, 900))
+        real_commit = Session.commit
+
+        def fail_commit(session):
+            # Fail only the upload's own commit, while its new image row is pending.
+            if any(isinstance(obj, Image) for obj in session.new):
+                raise RuntimeError('injected commit failure')
+            return real_commit(session)
+
+        monkeypatch.setattr(Session, 'commit', fail_commit)
+        response = _upload(client, admin_user, sample_game, _png(640, 900))
+        monkeypatch.setattr(Session, 'commit', real_commit)
+        assert response.status_code == 500
 
         db_session.rollback()
         db_session.expire_all()
@@ -197,7 +209,8 @@ class TestUploadCeiling:
         old = db_session.execute(
             select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
         ).scalar_one()
-        old_path = image_dir / old.url
+        old_url = old.url
+        old_path = image_dir / old_url
 
         response = _upload(client, admin_user, sample_game, _png(640, 900))
 
@@ -207,7 +220,7 @@ class TestUploadCeiling:
             select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
         ).scalars().all()
         assert len(rows) == 1
-        assert rows[0].url != old.url
+        assert rows[0].url != old_url
         assert not old_path.exists()
         assert (image_dir / rows[0].url).is_file()
 
@@ -218,7 +231,8 @@ class TestUploadCeiling:
         old = db_session.execute(
             select(Image).where(Image.game_uuid == sample_game.uuid, Image.image_type == 'cover')
         ).scalar_one()
-        old_path = image_dir / old.url
+        old_url = old.url
+        old_path = image_dir / old_url
         other_game = Game(
             library_uuid=sample_game.library_uuid,
             name=f'Shared image reference {uuid4().hex[:8]}',
@@ -226,7 +240,7 @@ class TestUploadCeiling:
         )
         db_session.add(other_game)
         db_session.flush()
-        db_session.add(Image(game_uuid=other_game.uuid, image_type='screenshot', url=old.url))
+        db_session.add(Image(game_uuid=other_game.uuid, image_type='screenshot', url=old_url))
         db_session.commit()
 
         response = _upload(client, admin_user, sample_game, _png(640, 900))
@@ -235,7 +249,7 @@ class TestUploadCeiling:
         db_session.expire_all()
         assert old_path.is_file()
         assert db_session.execute(
-            select(Image.id).where(Image.game_uuid == other_game.uuid, Image.url == old.url)
+            select(Image.id).where(Image.game_uuid == other_game.uuid, Image.url == old_url)
         ).first() is not None
 
     def test_decoded_format_sets_saved_suffix_not_client_filename(

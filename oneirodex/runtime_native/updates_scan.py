@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response

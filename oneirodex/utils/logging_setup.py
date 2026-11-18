@@ -6,7 +6,8 @@ void (no root handler), while hundreds of other call sites used bare ``print``.
 Operators on Unraid got an unfiltered, unstructured, un-levelled stream on
 stdout and nothing to grep by.
 
-``configure_logging(app)`` is called once, early in ``create_app()``. It wires
+``configure_logging()`` runs once at startup (``asgi.py``; ``create_app()`` for
+scripts and tests). It wires
 stdlib logging through :func:`logging.config.dictConfig`:
 
 * a single console handler on **stdout** (Docker/Unraid capture stdout),
@@ -78,12 +79,11 @@ class RequestIdFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003 - stdlib name
-        try:
-            from flask import g, has_request_context, request
-        except ImportError:
-            g = request = None
-            has_request_context = lambda: False
-        if has_request_context():
+        # Only consult Flask when something else already loaded it: the served
+        # (ASGI) runtime must not import Flask just to format a log line.
+        flask = sys.modules.get("flask")
+        if flask is not None and flask.has_request_context():
+            g, request = flask.g, flask.request
             rid = getattr(g, "request_id", None)
             if not rid:
                 rid = new_request_id()
@@ -163,8 +163,6 @@ def install_uvicorn_access_secret_filter() -> None:
 
 def configure_logging(app=None) -> None:
     """Install the console logging config. Idempotent."""
-    from flask import g
-
     level = _level()
     formatter = "json" if _json_enabled() else "console"
 
@@ -237,7 +235,9 @@ def configure_logging(app=None) -> None:
         except (AttributeError, ValueError, OSError):  # pragma: no cover - stream-dependent
             pass
 
-    if app is not None:
+    if app is not None and hasattr(app, "before_request"):
+        from flask import g
+
         app.logger.setLevel(level)
 
         @app.before_request

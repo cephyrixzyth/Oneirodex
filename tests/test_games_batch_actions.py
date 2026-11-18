@@ -271,7 +271,7 @@ def test_batch_freshness_rejects_over_limit(client, member_user):
 
 
 def test_batch_freshness_rejects_oversized_json_before_processing(client, member_user):
-    from oneirodex.routes_apis.game_batch import BATCH_FRESHNESS_JSON_MAX_BYTES
+    from oneirodex.runtime_native.batch_refresh import BATCH_FRESHNESS_JSON_MAX_BYTES
 
     _login(client, member_user)
     body = b'{"uuids":[],"padding":"' + b'a' * BATCH_FRESHNESS_JSON_MAX_BYTES + b'"}'
@@ -511,7 +511,7 @@ def test_batch_wishlist_forbidden_acl_and_over_limit(
             return False
         return real_acl(user, game)
 
-    monkeypatch.setattr('oneirodex.routes_apis.game_batch.user_can_access_game', fake_acl)
+    monkeypatch.setattr('oneirodex.utils.library_acl.user_can_access_game', fake_acl)
 
     resp = client.post(
         '/api/games/batch/wishlist',
@@ -599,16 +599,16 @@ def test_batch_refresh_images_queues_happy_path(
     # The route hands work to run_in_background now, which owns the thread and
     # the worker's session (utils/background.py). Intercepting there keeps this
     # test about *what gets queued* without starting real threads.
-    def fake_run_in_background(app, func, *args, name=None, **kwargs):
+    def fake_run_in_background(_owner, func, *args, name=None, **kwargs):
         started.append((func, args))
         return None
 
     monkeypatch.setattr(
-        'oneirodex.routes_apis.game_batch.run_in_background', fake_run_in_background
+        'oneirodex.utils.background.run_in_background', fake_run_in_background
     )
     monkeypatch.setattr(
-        'oneirodex.routes_apis.game_batch.refresh_images_in_background',
-        lambda game_uuid: None,
+        'oneirodex.utils.scanning.refresh_images_in_background',
+        lambda game_uuid, **_kwargs: None,
     )
     _login(client, librarian_user)
 
@@ -644,17 +644,17 @@ def test_batch_refresh_images_reports_partial_queue_failure(
     queued = _make_game(db_session, library, 'Refresh Queue Success', igdb_id=_unique_igdb_id())
     started = []
 
-    def fake_run_in_background(app, func, *args, name=None, **kwargs):
+    def fake_run_in_background(_owner, func, *args, name=None, **kwargs):
         if args == (failed.uuid,):
             raise RuntimeError('postgres://private-user:private-password@db/private-db')
         started.append((func, args))
 
     monkeypatch.setattr(
-        'oneirodex.routes_apis.game_batch.run_in_background', fake_run_in_background
+        'oneirodex.utils.background.run_in_background', fake_run_in_background
     )
     monkeypatch.setattr(
-        'oneirodex.routes_apis.game_batch.refresh_images_in_background',
-        lambda game_uuid: None,
+        'oneirodex.utils.scanning.refresh_images_in_background',
+        lambda game_uuid, **_kwargs: None,
     )
     _login(client, librarian_user)
 
@@ -696,10 +696,10 @@ def test_batch_refresh_images_skips_not_found_and_forbidden(
             return False
         return real_acl(user, game)
 
-    monkeypatch.setattr('oneirodex.routes_apis.game_batch.user_can_access_game', fake_acl)
+    monkeypatch.setattr('oneirodex.utils.library_acl.user_can_access_game', fake_acl)
     monkeypatch.setattr(
-        'oneirodex.routes_apis.game_batch.run_in_background',
-        lambda app, func, *args, name=None, **kwargs: None,
+        'oneirodex.utils.background.run_in_background',
+        lambda _owner, func, *args, name=None, **kwargs: None,
     )
 
     missing = str(uuid4())

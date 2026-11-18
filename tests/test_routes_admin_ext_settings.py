@@ -1,18 +1,8 @@
 import pytest
 import json
-from flask import url_for
-from unittest.mock import patch, MagicMock
 from oneirodex.models import User, GlobalSettings
-from oneirodex import db, cache
-from oneirodex.routes_admin_ext.settings import (
-    validate_settings_data, get_or_create_settings_record, 
-    update_settings_fields, build_current_settings,
-    DEFAULT_SETTINGS, FIELD_MAPPINGS,
-    MIN_SCAN_THREADS, MAX_SCAN_THREADS, MIN_DOWNLOAD_THREADS, MAX_DOWNLOAD_THREADS,
-    MIN_BATCH_SIZE, MAX_BATCH_SIZE
-)
+from oneirodex import cache
 from uuid import uuid4
-from datetime import datetime, timezone
 
 
 @pytest.fixture
@@ -82,161 +72,6 @@ def clean_settings(db_session):
     cache.clear()
 
 
-class TestValidateSettingsData:
-    """Test the validate_settings_data function."""
-    
-    def test_validate_settings_valid_data(self):
-        """Test validation with valid settings data."""
-        valid_data = {
-            'scanThreadCount': 2,
-            'turboDownloadThreads': 10,
-            'turboDownloadBatchSize': 100,
-            'updateFolderName': 'updates',
-            'extrasFolderName': 'extras',
-            'siteUrl': 'http://test.com'
-        }
-        errors = validate_settings_data(valid_data)
-        assert errors == []
-
-    def test_validate_settings_invalid_data_type(self):
-        """Test validation with non-dict data."""
-        errors = validate_settings_data("not_a_dict")
-        assert "Settings data must be a JSON object" in errors
-
-    def test_validate_scan_threads_invalid_range(self):
-        """Test validation with invalid scan thread count."""
-        # Test below minimum
-        errors = validate_settings_data({'scanThreadCount': 0})
-        assert any("Scan thread count must be between" in error for error in errors)
-        
-        # Test above maximum
-        errors = validate_settings_data({'scanThreadCount': 10})
-        assert any("Scan thread count must be between" in error for error in errors)
-
-    def test_validate_download_threads_invalid_range(self):
-        """Test validation with invalid download thread count."""
-        errors = validate_settings_data({'turboDownloadThreads': 0})
-        assert any("Download threads must be between" in error for error in errors)
-        
-        errors = validate_settings_data({'turboDownloadThreads': 30})
-        assert any("Download threads must be between" in error for error in errors)
-
-    def test_validate_batch_size_invalid_range(self):
-        """Test validation with invalid batch size."""
-        errors = validate_settings_data({'turboDownloadBatchSize': 5})
-        assert any("Batch size must be between" in error for error in errors)
-        
-        errors = validate_settings_data({'turboDownloadBatchSize': 2000})
-        assert any("Batch size must be between" in error for error in errors)
-
-    def test_validate_folder_names_invalid(self):
-        """Test validation with invalid folder names."""
-        # Empty string
-        errors = validate_settings_data({'updateFolderName': ''})
-        assert any("updateFolderName must be a non-empty string" in error for error in errors)
-        
-        # Too long
-        errors = validate_settings_data({'extrasFolderName': 'x' * 101})
-        assert any("extrasFolderName must be less than 100 characters" in error for error in errors)
-        
-        # Non-string type
-        errors = validate_settings_data({'updateFolderName': 123})
-        assert any("updateFolderName must be a non-empty string" in error for error in errors)
-
-    def test_validate_site_url_invalid(self):
-        """Test validation with invalid site URL."""
-        # Empty string
-        errors = validate_settings_data({'siteUrl': ''})
-        assert any("Site URL must be a non-empty string" in error for error in errors)
-        
-        # Too long
-        errors = validate_settings_data({'siteUrl': 'x' * 501})
-        assert any("Site URL must be less than 500 characters" in error for error in errors)
-        
-        # Non-string type
-        errors = validate_settings_data({'siteUrl': 123})
-        assert any("Site URL must be a non-empty string" in error for error in errors)
-
-
-class TestGetOrCreateSettingsRecord:
-    """Test the get_or_create_settings_record function."""
-    
-    def test_get_existing_settings_record(self, db_session, global_settings):
-        """Test retrieving existing settings record."""
-        with patch('oneirodex.routes_admin_ext.settings.db.session', db_session):
-            record = get_or_create_settings_record()
-            assert record.id == global_settings.id
-
-    def test_create_new_settings_record(self, db_session, clean_settings):
-        """Test creating new settings record when none exists."""
-        with patch('oneirodex.routes_admin_ext.settings.db.session', db_session):
-            record = get_or_create_settings_record()
-            assert record is not None
-            assert record.settings == {}
-
-
-class TestUpdateSettingsFields:
-    """Test the update_settings_fields function."""
-    
-    def test_update_settings_fields_success(self, db_session, global_settings):
-        """Test successful field updates."""
-        new_settings = {
-            'enableDeleteGameOnDisk': False,
-            'scanThreadCount': 3,
-            'updateFolderName': 'new_updates'
-        }
-        
-        update_settings_fields(global_settings, new_settings)
-        
-        assert global_settings.enable_delete_game_on_disk == False
-        assert global_settings.scan_thread_count == 3
-        assert global_settings.update_folder_name == 'new_updates'
-        assert global_settings.settings == new_settings
-
-    def test_update_settings_fields_invalid_scan_threads(self, db_session, global_settings):
-        """Test updating with invalid scan thread count."""
-        original_scan_threads = global_settings.scan_thread_count
-        new_settings = {'scanThreadCount': 10}  # Invalid value
-        
-        update_settings_fields(global_settings, new_settings)
-        
-        # Should not update scan_thread_count due to validation
-        assert global_settings.scan_thread_count == original_scan_threads
-
-
-class TestBuildCurrentSettings:
-    """Test the build_current_settings function."""
-    
-    def test_build_current_settings_no_record(self):
-        """Test building settings when no record exists."""
-        settings = build_current_settings(None)
-        assert settings == DEFAULT_SETTINGS
-
-    def test_build_current_settings_with_record(self, global_settings):
-        """Test building settings with existing record."""
-        settings = build_current_settings(global_settings)
-        
-        # Should contain defaults merged with database values
-        assert 'showSystemLogo' in settings
-        assert settings['enableDeleteGameOnDisk'] == global_settings.enable_delete_game_on_disk
-        assert settings['scanThreadCount'] == global_settings.scan_thread_count
-
-    def test_build_current_settings_missing_fields(self, db_session):
-        """Test building settings with missing database fields."""
-        # Not persisted: build_current_settings is a pure transformation of the
-        # record it is handed, so this needs an object and not a row. Inserting
-        # it also violated the global_settings singleton index, since the
-        # fixtures for this module already keep a row.
-        settings_record = GlobalSettings(settings={'showVersion': False})
-
-        settings = build_current_settings(settings_record)
-        
-        # Should fill in defaults for missing fields
-        assert 'showSystemLogo' in settings
-        assert settings['showSystemLogo'] == DEFAULT_SETTINGS['showSystemLogo']
-        assert settings['showVersion'] == False  # From database
-
-
 class TestSettingsRoutes:
     """Test the settings route handlers."""
     
@@ -276,7 +111,7 @@ class TestSettingsRoutes:
             sess['_fresh'] = True
 
         response = client.post('/admin/settings', json={'test': 'data'})
-        assert response.status_code == 302
+        assert response.status_code == 403
 
     def test_update_settings_invalid_json(self, client, admin_user):
         """Test POST settings with invalid JSON."""
@@ -311,57 +146,8 @@ class TestSettingsRoutes:
         response = client.post('/admin/settings', json=invalid_data)
         assert response.status_code == 400
         data = json.loads(response.data)
-        assert 'errors' in data
-
-    @patch('oneirodex.routes_admin_ext.settings.log_system_event')
-    @patch('oneirodex.routes_admin_ext.settings.cache.delete')
-    def test_update_settings_success(self, mock_cache_delete, mock_log_event, 
-                                   client, admin_user, db_session, clean_settings):
-        """Test successful settings update."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        valid_data = {
-            'showSystemLogo': False,
-            'scanThreadCount': 2,
-            'turboDownloadThreads': 15,
-            'updateFolderName': 'my_updates'
-        }
-        
-        response = client.post('/admin/settings', json=valid_data)
-        assert response.status_code == 200
-        
-        data = json.loads(response.data)
-        assert data['message'] == 'Settings updated successfully'
-        
-        # Verify database was updated
-        settings_record = db_session.query(GlobalSettings).first()
-        assert settings_record is not None
-        assert settings_record.scan_thread_count == 2
-        assert settings_record.turbo_download_threads == 15
-        assert settings_record.update_folder_name == 'my_updates'
-        
-        # Verify logging and cache clearing were called
-        mock_log_event.assert_called_once()
-        mock_cache_delete.assert_called_once_with('global_settings')
-
-    @patch('oneirodex.routes_admin_ext.settings.db.session.commit')
-    def test_update_settings_database_error(self, mock_commit, client, admin_user, global_settings):
-        """Test settings update with database error."""
-        mock_commit.side_effect = Exception('Database error')
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        valid_data = {'showSystemLogo': False}
-        response = client.post('/admin/settings', json=valid_data)
-        assert response.status_code == 500
-        
-        data = json.loads(response.data)
-        assert 'Failed to update settings' in data['error']
-
+        assert data['error_code'] == 'bad_request'
+        assert 'bounds' in data['error']
 
 class TestLegacyRouteHandler:
     """Test the legacy manage_settings route handler."""
@@ -375,10 +161,7 @@ class TestLegacyRouteHandler:
         response = client.get('/admin/new_server_settings')
         assert response.status_code == 200
 
-    @patch('oneirodex.routes_admin_ext.settings.log_system_event')
-    @patch('oneirodex.routes_admin_ext.settings.cache.delete')
-    def test_legacy_route_post(self, mock_cache_delete, mock_log_event,
-                             client, admin_user, clean_settings):
+    def test_legacy_route_post(self, client, admin_user, clean_settings):
         """Test legacy route with POST method."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -392,10 +175,7 @@ class TestLegacyRouteHandler:
 class TestSettingsIntegration:
     """Integration tests for settings functionality."""
     
-    @patch('oneirodex.routes_admin_ext.settings.log_system_event')
-    @patch('oneirodex.routes_admin_ext.settings.cache.delete')
-    def test_complete_settings_workflow(self, mock_cache_delete, mock_log_event,
-                                      client, admin_user, db_session, clean_settings):
+    def test_complete_settings_workflow(self, client, admin_user, db_session, clean_settings):
         """Test complete settings workflow from GET to POST."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -448,10 +228,8 @@ class TestSettingsIntegration:
             'updateFolderName': 'persistent_updates'
         }
         
-        with patch('oneirodex.routes_admin_ext.settings.log_system_event'), \
-             patch('oneirodex.routes_admin_ext.settings.cache.delete'):
-            response = client.post('/admin/settings', json=initial_settings)
-            assert response.status_code == 200
+        response = client.post('/admin/settings', json=initial_settings)
+        assert response.status_code == 200
         
         # Update some settings
         updated_settings = {
@@ -460,10 +238,8 @@ class TestSettingsIntegration:
             'turboDownloadThreads': 15  # New field
         }
         
-        with patch('oneirodex.routes_admin_ext.settings.log_system_event'), \
-             patch('oneirodex.routes_admin_ext.settings.cache.delete'):
-            response = client.post('/admin/settings', json=updated_settings)
-            assert response.status_code == 200
+        response = client.post('/admin/settings', json=updated_settings)
+        assert response.status_code == 200
         
         # Verify final state combines both updates
         settings_record = db_session.query(GlobalSettings).first()

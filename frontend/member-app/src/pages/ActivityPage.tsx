@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button, useShellConfig } from '@oneirodex/ui'
 import {
@@ -38,7 +38,7 @@ export function ActivityPage() {
   const [friendMsg, setFriendMsg] = useState<any>(null)
   const [friendsOnly, setFriendsOnly] = useState(false)
 
-  function reload() {
+  const reload = useCallback(() => {
     const controller = new AbortController()
     Promise.all([
       fetchActivity({ signal: controller.signal, friendsOnly }),
@@ -54,7 +54,7 @@ export function ActivityPage() {
         if (err.name !== 'AbortError') setError(err)
       })
     return () => controller.abort()
-  }
+  }, [friendsOnly])
 
   useEffect(() => {
     const cleanup = reload()
@@ -126,7 +126,7 @@ export function ActivityPage() {
       window.clearTimeout(sseTimer)
       source?.close()
     }
-  }, [friendsOnly])
+  }, [friendsOnly, reload])
 
   async function requestFriend(event: any) {
     event.preventDefault()

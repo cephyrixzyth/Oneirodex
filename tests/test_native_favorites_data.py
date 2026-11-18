@@ -10,7 +10,7 @@ from oneirodex.runtime_native.favorites import FavoritesData
 
 
 @pytest.mark.parametrize('failure_kind', ['runtime', 'sqlalchemy'])
-def test_favorites_database_failure_matches_wsgi_and_native_asgi(
+def test_favorites_database_failure_is_a_safe_server_error(
     app, client, db_session, configured_install, monkeypatch, failure_kind,
 ):
     import asyncio
@@ -21,7 +21,6 @@ def test_favorites_database_failure_matches_wsgi_and_native_asgi(
     from fastapi import FastAPI
 
     import asgi
-    from oneirodex.routes_apis import user as user_routes
     from oneirodex.runtime_native.favorites import create_favorites_router
     from oneirodex.runtime_native.session_compat import dump_session_cookie
     from oneirodex import login_manager
@@ -44,12 +43,7 @@ def test_favorites_database_failure_matches_wsgi_and_native_asgi(
             )
         raise RuntimeError('synthetic-secret-db-detail')
 
-    monkeypatch.setattr(user_routes.db, 'paginate', fail_with_sensitive_database_detail)
 
-    with client.session_transaction() as session:
-        session['_user_id'] = str(user.id)
-        session['_fresh'] = True
-    wsgi_response = client.get('/api/favorites')
 
     user = SimpleNamespace(
         id=37, role='user', state=True, is_active=True, is_authenticated=True,
@@ -87,9 +81,8 @@ def test_favorites_database_failure_matches_wsgi_and_native_asgi(
 
     native_response = asyncio.run(get_native_response())
 
-    assert wsgi_response.status_code == native_response.status_code == 500
-    assert wsgi_response.get_json() == native_response.json()
-    assert 'synthetic-secret-db-detail' not in wsgi_response.get_data(as_text=True)
+    assert native_response.status_code == 500
+    assert native_response.json()['error_code'] == 'internal'
     assert 'synthetic-secret-db-detail' not in native_response.text
 
 

@@ -144,23 +144,22 @@ def test_refresh_and_report(app, client, db_session):
         assert 'release_dates.region' in query
         return payload
 
-    with app.app_context():
-        result = refresh_platform_catalog('NES', delay_s=0, request_fn=fake_request)
-        assert result['unique_titles'] == 2
-        assert result['pages'] == 1
-        assert result['cached_rows'] == 3
+    result = refresh_platform_catalog('NES', delay_s=0, request_fn=fake_request)
+    assert result['unique_titles'] == 2
+    assert result['pages'] == 1
+    assert result['cached_rows'] == 3
 
-        report = licensed_catalog_report('NES', member)
-        assert report['empty'] is False
-        assert report['unique_titles'] == 2
-        assert report['owned_titles'] == 1
-        by_code = {row['region_code']: row for row in report['by_region']}
-        assert by_code['USA']['titles'] == 2
-        assert by_code['USA']['owned'] == 1
-        assert by_code['JPN']['titles'] == 1
-        assert by_code['JPN']['owned'] == 1
-        assert by_code['FRA']['source'] == 'dat_only'
-        assert by_code['FRA']['titles'] == 0
+    report = licensed_catalog_report('NES', member)
+    assert report['empty'] is False
+    assert report['unique_titles'] == 2
+    assert report['owned_titles'] == 1
+    by_code = {row['region_code']: row for row in report['by_region']}
+    assert by_code['USA']['titles'] == 2
+    assert by_code['USA']['owned'] == 1
+    assert by_code['JPN']['titles'] == 1
+    assert by_code['JPN']['owned'] == 1
+    assert by_code['FRA']['source'] == 'dat_only'
+    assert by_code['FRA']['titles'] == 0
 
     with client:
         _login(client, app, member)

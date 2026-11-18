@@ -47,7 +47,7 @@ import { AiAssistPage } from '../pages/AiAssistPage'
 import { ArrPage } from '../pages/ArrPage'
 import { AdminHelpPage } from '../pages/AdminHelpPage'
 import { LibraryEditorPage } from '../pages/LibraryEditorPage'
-import { SETTINGS_CARDS, railDestinations } from './navConfig'
+import { railDestinations } from './navConfig'
 
 /**
  * Explicit admin route table (PR-4 c).
@@ -97,22 +97,6 @@ import { SETTINGS_CARDS, railDestinations } from './navConfig'
  * the same `<LibrariesPage />`), so same-section navigation still does not
  * remount.
  */
-
-/**
- * Temporary fallback for settings modules that do not have a React body yet.
- * Keep their destination visible instead of showing a blank panel.
- */
-function SettingsSectionPage() {
-  const { pathname } = useLocation()
-  const card = SETTINGS_CARDS.find((c) => c.to === pathname)
-  return (
-    <HubPage
-      title={card?.title || 'Settings module'}
-      lede={card?.blurb || 'Server module settings.'}
-      links={card ? [{ href: card.to, label: `Open ${card.title}` }] : []}
-    />
-  )
-}
 
 function ScanManagementRoute() {
   const location = useLocation()

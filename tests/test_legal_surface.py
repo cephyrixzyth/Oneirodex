@@ -97,14 +97,9 @@ class TestSourceOffer:
             monkeypatch.delenv('ONEIRODEX_SOURCE_URL', raising=False)
             importlib.reload(config_module)
 
-    def test_python_shell_passes_the_offer_to_the_member_app(self):
-        """The source offer crosses the shell boundary through React config."""
-        shell = (REPO_ROOT / 'oneirodex' / 'utils' / 'member_spa.py').read_text(encoding='utf-8')
-        assert "'source-url': source_url" in shell
-        assert "'app-version': app_version" in shell
 
     def test_member_shell_hands_it_to_the_spa(self):
-        shell = (REPO_ROOT / 'oneirodex' / 'utils' / 'member_spa.py').read_text(encoding='utf-8')
+        shell = (REPO_ROOT / 'oneirodex' / 'runtime_native' / 'member_shell.py').read_text(encoding='utf-8')
         assert "'source-url': source_url" in shell
 
     def _help_page_source(self) -> str:
@@ -131,7 +126,7 @@ class TestSourceOffer:
 
     def test_admin_carries_no_licence_footer(self):
         """Removed by request; asserted so it does not creep back unnoticed."""
-        shell = (REPO_ROOT / 'oneirodex' / 'utils' / 'admin_spa.py').read_text(encoding='utf-8')
+        shell = (REPO_ROOT / 'oneirodex' / 'runtime_native' / 'admin_pilot.py').read_text(encoding='utf-8')
         assert 'od-admin-licence' not in shell
 
 

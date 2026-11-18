@@ -30,7 +30,6 @@ def _library(db_session):
 
 
 def test_idle_manual_list_returns_candidates_without_starting_scan(client, app, db_session, tmp_path, monkeypatch):
-    import oneirodex.routes_apis.library_tools as route
     import oneirodex.utils.scan_queue as queue
 
     user = _admin(db_session)
@@ -39,10 +38,10 @@ def test_idle_manual_list_returns_candidates_without_starting_scan(client, app, 
     folder = tmp_path / 'Manual'
     folder.mkdir()
     app.config['DATA_FOLDER_GAMES'] = str(tmp_path)
-    monkeypatch.setattr(route, 'resolve_scan_path', lambda *_args: (str(folder), None))
-    monkeypatch.setattr(route, 'resolve_scan_mode_for_path', lambda _path, _mode: 'folders')
-    monkeypatch.setattr(route, 'load_scanning_filter_patterns', lambda: ([], []))
-    monkeypatch.setattr(route, 'get_game_names_from_folder', lambda *_args, **_kwargs: [{'name': 'Metroid', 'full_path': str(folder / 'Metroid')}])
+    monkeypatch.setattr('oneirodex.utils.library_roots.resolve_scan_path', lambda *_args: (str(folder), None))
+    monkeypatch.setattr('oneirodex.utils.services.scan_orchestration.resolve_scan_mode_for_path', lambda _path, _mode: 'folders')
+    monkeypatch.setattr('oneirodex.utils.functions.load_scanning_filter_patterns', lambda: ([], []))
+    monkeypatch.setattr('oneirodex.utils.gamenames.get_game_names_from_folder', lambda *_args, **_kwargs: [{'name': 'Metroid', 'full_path': str(folder / 'Metroid')}])
     monkeypatch.setattr('oneirodex.utils.global_settings.global_settings_row', lambda: SimpleNamespace(write_local_metadata=False))
     busy = Mock(return_value=False)
     start = Mock()
@@ -62,7 +61,6 @@ def test_idle_manual_list_returns_candidates_without_starting_scan(client, app, 
 
 
 def test_busy_manual_list_queues_same_folder_and_manual_options(client, app, db_session, tmp_path, monkeypatch):
-    import oneirodex.routes_apis.library_tools as route
     import oneirodex.utils.scan_queue as queue
 
     user = _admin(db_session)
@@ -71,8 +69,8 @@ def test_busy_manual_list_queues_same_folder_and_manual_options(client, app, db_
     folder = tmp_path / 'Manual'
     folder.mkdir()
     app.config['DATA_FOLDER_GAMES'] = str(tmp_path)
-    monkeypatch.setattr(route, 'resolve_scan_path', lambda *_args: (str(folder), None))
-    monkeypatch.setattr(route, 'resolve_scan_mode_for_path', lambda _path, _mode: 'files')
+    monkeypatch.setattr('oneirodex.utils.library_roots.resolve_scan_path', lambda *_args: (str(folder), None))
+    monkeypatch.setattr('oneirodex.utils.services.scan_orchestration.resolve_scan_mode_for_path', lambda _path, _mode: 'files')
     monkeypatch.setattr(queue, 'is_scan_busy', lambda: True)
     start = Mock(return_value={'status': 'queued', 'message': 'Queued manual scan.', 'job_id': 'job-1', 'position': 2})
     monkeypatch.setattr(queue, 'start_or_queue_scan', start)
@@ -86,7 +84,8 @@ def test_busy_manual_list_queues_same_folder_and_manual_options(client, app, db_
     body = response.get_json()
     assert body['action'] == 'queued' and body['read_only'] is False
     assert body['job_id'] == 'job-1' and body['position'] == 2
-    assert start.call_args.kwargs == {
+    kwargs = {k: v for k, v in start.call_args.kwargs.items() if k not in ('app', 'database_scope')}
+    assert kwargs == {
         'folder_path': str(folder),
         'library_uuid': library.uuid,
         'scan_mode': 'files',
@@ -98,12 +97,10 @@ def test_busy_manual_list_queues_same_folder_and_manual_options(client, app, db_
         'schedule': None,
         'queue_policy': 'queue',
         'allow_force': True,
-        'app': app,
     }
 
 
 def test_busy_manual_inspect_returns_conflict_without_queuing(client, app, db_session, tmp_path, monkeypatch):
-    import oneirodex.routes_apis.library_tools as route
     import oneirodex.utils.scan_queue as queue
 
     user = _admin(db_session)
@@ -112,8 +109,8 @@ def test_busy_manual_inspect_returns_conflict_without_queuing(client, app, db_se
     folder = tmp_path / 'Manual'
     folder.mkdir()
     app.config['DATA_FOLDER_GAMES'] = str(tmp_path)
-    monkeypatch.setattr(route, 'resolve_scan_path', lambda *_args: (str(folder), None))
-    monkeypatch.setattr(route, 'resolve_scan_mode_for_path', lambda _path, _mode: 'folders')
+    monkeypatch.setattr('oneirodex.utils.library_roots.resolve_scan_path', lambda *_args: (str(folder), None))
+    monkeypatch.setattr('oneirodex.utils.services.scan_orchestration.resolve_scan_mode_for_path', lambda _path, _mode: 'folders')
     monkeypatch.setattr(queue, 'is_scan_busy', lambda: True)
     start = Mock()
     monkeypatch.setattr(queue, 'start_or_queue_scan', start)

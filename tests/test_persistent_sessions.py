@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.fixtures.native_client import served_client
 
 import hashlib
 from datetime import datetime, timedelta, timezone
@@ -124,7 +125,7 @@ def test_classic_logout_revokes_identity_loaded_only_from_remember_cookie(app, d
         session_id = session_id_from_identity(identity)
         remember_cookie = encode_remember_cookie(identity, app.config['SECRET_KEY'])
 
-    client = app.test_client()
+    client = served_client(app)
     client.set_cookie(app.config.get('REMEMBER_COOKIE_NAME', 'remember_token'), remember_cookie)
     response = client.post('/logout')
 
@@ -155,7 +156,7 @@ def test_rotating_the_secret_key_invalidates_existing_remember_cookies(app, db_s
 
     # The stale cookie no longer identifies anyone, so logout has no session to revoke.
     app.config['SECRET_KEY'] = rotated_key
-    client = app.test_client()
+    client = served_client(app)
     client.set_cookie(app.config.get('REMEMBER_COOKIE_NAME', 'remember_token'), remember_cookie)
     assert client.post('/logout').status_code == 302
     assert db_session.get(PersistentLoginSession, session_id).revoked_at is None

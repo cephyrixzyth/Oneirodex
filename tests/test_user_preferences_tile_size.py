@@ -33,9 +33,9 @@ def test_user_preferences_form_includes_tile_size():
     app.config['WTF_CSRF_ENABLED'] = False
 
     with app.app_context():
-        with patch('oneirodex.forms.ThemeManager') as tm:
+        with patch('oneirodex.forms_native.ThemeManager') as tm:
             tm.return_value.get_installed_themes.return_value = []
-            from oneirodex.forms import UserPreferencesForm
+            from oneirodex.forms_native import UserPreferencesForm
 
             form = UserPreferencesForm()
             assert 'tile_size' in form._fields
@@ -50,7 +50,7 @@ class TestTilePercentNormalization:
     """The conversion that lets old rows keep working."""
 
     def test_legacy_sizes_map_onto_the_percentage_scale(self):
-        from oneirodex.routes_settings import _normalize_tile_percent
+        from oneirodex.forms_native import normalize_tile_percent as _normalize_tile_percent
 
         mapped = {size: _normalize_tile_percent(size) for size in ('S', 'M', 'L', 'XL')}
         assert all(v.isdigit() for v in mapped.values())
@@ -60,18 +60,18 @@ class TestTilePercentNormalization:
         ]
 
     def test_lowercase_legacy_values_still_map(self):
-        from oneirodex.routes_settings import _normalize_tile_percent
+        from oneirodex.forms_native import normalize_tile_percent as _normalize_tile_percent
 
         assert _normalize_tile_percent('m') == _normalize_tile_percent('M')
 
     def test_out_of_range_is_clamped_not_rejected(self):
-        from oneirodex.routes_settings import _normalize_tile_percent
+        from oneirodex.forms_native import normalize_tile_percent as _normalize_tile_percent
 
         assert _normalize_tile_percent('999') == '100'
         assert _normalize_tile_percent('-40') == '0'
 
     def test_nonsense_falls_back_to_the_default(self):
-        from oneirodex.routes_settings import _normalize_tile_percent
+        from oneirodex.forms_native import normalize_tile_percent as _normalize_tile_percent
 
         for junk in ('', None, 'huge', '12px'):
             assert _normalize_tile_percent(junk) == '50'
@@ -177,15 +177,12 @@ def test_partial_save_keeps_the_fields_it_did_not_send(client, member, db_sessio
 
 
 def test_engine_picker_choice_is_exposed_only_when_admin_allows_it(client, member, monkeypatch):
-    from oneirodex.routes_apis import preferences as preferences_api
-
     with client.session_transaction() as sess:
         sess['_user_id'] = str(member.id)
         sess['_fresh'] = True
 
     monkeypatch.setattr(
-        preferences_api,
-        'play_engine_fields',
+        'oneirodex.utils.browser_player.play_engine_fields',
         lambda: {'browser_player_member_choice': False},
     )
     hidden = client.get('/api/account/preferences')
@@ -197,8 +194,7 @@ def test_engine_picker_choice_is_exposed_only_when_admin_allows_it(client, membe
     }
 
     monkeypatch.setattr(
-        preferences_api,
-        'play_engine_fields',
+        'oneirodex.utils.browser_player.play_engine_fields',
         lambda: {'browser_player_member_choice': True},
     )
     visible = client.get('/api/account/preferences')

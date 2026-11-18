@@ -151,11 +151,6 @@ class TestDiscoverRoute:
         assert response.status_code == 302
         assert '/login' in response.location
 
-    def test_discover_route_callable(self, app):
-        """Test discover route core functionality with mocked authentication."""
-        with app.app_context():
-            from oneirodex.routes_discover import discover
-            assert callable(discover)
 
 
 class TestDiscoverSectionsApi:
@@ -166,7 +161,7 @@ class TestDiscoverSectionsApi:
         assert response.status_code in (302, 401)
 
     def test_build_discover_sections_shape(self, app, db_session, test_user, test_discovery_sections, test_games):
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
 
         with app.app_context():
             with app.test_request_context('/'):
@@ -292,7 +287,7 @@ class TestGameDetails:
     def test_discover_game_data_matches_shared_card_shape(
         self, mock_game_card_flags, tmp_path
     ):
-        from oneirodex.routes_discover import serialize_discover_game
+        from oneirodex.utils.discover_projections import serialize_discover_game
 
         # root_path decides where cover placeholders are rendered. Plain
         # `Flask(__name__)` puts it at tests/, so a resolved title wrote a real
@@ -325,7 +320,7 @@ class TestGameDetails:
         assert result['client_connected'] is False
 
     def test_discover_game_data_preserves_static_cover_url(self, tmp_path):
-        from oneirodex.routes_discover import serialize_discover_game
+        from oneirodex.utils.discover_projections import serialize_discover_game
 
         # Same reason as above: cover resolution runs for real here, and its
         # placeholder step writes to root_path.

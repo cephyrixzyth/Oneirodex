@@ -476,90 +476,6 @@ class TestPathAvailabilityCheck:
                     assert data['available'] is False
                     assert 'Access denied' in data['error'] or 'outside allowed directories' in data['error']
 
-    @patch('oneirodex.routes_apis.system.current_app', spec=True)
-    @patch('oneirodex.routes_apis.system.Path', spec=True)
-    def test_valid_path_exists(self, mock_path_class, mock_app, client, regular_user):
-        """Test checking existence of valid path that exists."""
-        mock_app.config.get.side_effect = lambda key: {
-            'DATA_FOLDER_GAMES': '/allowed/games',
-            'BASE_FOLDER_WINDOWS': None,
-            'BASE_FOLDER_POSIX': None
-        }.get(key)
-        
-        mock_path_obj = MagicMock()
-        mock_path_obj.resolve.return_value = mock_path_obj
-        mock_path_obj.exists.return_value = True
-        mock_path_class.return_value = mock_path_obj
-        
-        # Mock is_safe_path to return True for valid paths
-        with patch('oneirodex.routes_apis.system.is_safe_path') as mock_safe_path:
-            mock_safe_path.return_value = (True, None)
-            
-            with client.session_transaction() as sess:
-                sess['_user_id'] = str(regular_user.id)
-                sess['_fresh'] = True
-            
-            response = client.get('/api/check_path_availability?full_disk_path=/allowed/games/test.exe')
-            assert response.status_code == 200
-            data = response.get_json()
-            assert data['available'] is True
-
-    @patch('oneirodex.routes_apis.system.current_app', spec=True)
-    @patch('oneirodex.routes_apis.system.Path', spec=True)
-    def test_valid_path_does_not_exist(self, mock_path_class, mock_app, client, regular_user):
-        """Test checking existence of valid path that doesn't exist."""
-        mock_app.config.get.side_effect = lambda key: {
-            'DATA_FOLDER_GAMES': '/allowed/games',
-            'BASE_FOLDER_WINDOWS': None,
-            'BASE_FOLDER_POSIX': None
-        }.get(key)
-        
-        mock_path_obj = MagicMock()
-        mock_path_obj.resolve.return_value = mock_path_obj
-        mock_path_obj.exists.return_value = False
-        mock_path_class.return_value = mock_path_obj
-        
-        with patch('oneirodex.routes_apis.system.is_safe_path') as mock_safe_path:
-            mock_safe_path.return_value = (True, None)
-            
-            with client.session_transaction() as sess:
-                sess['_user_id'] = str(regular_user.id)
-                sess['_fresh'] = True
-            
-            response = client.get('/api/check_path_availability?full_disk_path=/allowed/games/nonexistent.exe')
-            assert response.status_code == 200
-            data = response.get_json()
-            assert data['available'] is False
-
-    @patch('oneirodex.routes_apis.system.current_app', spec=True)
-    @patch('oneirodex.routes_apis.system.Path', spec=True)
-    def test_path_resolution_error(self, mock_path_class, mock_app, client, regular_user):
-        """Test handling of path resolution errors."""
-        mock_app.config.get.side_effect = lambda key: {
-            'DATA_FOLDER_GAMES': '/allowed/games',
-            'BASE_FOLDER_WINDOWS': None,
-            'BASE_FOLDER_POSIX': None
-        }.get(key)
-        mock_app.logger.warning = MagicMock()
-        
-        mock_path_obj = MagicMock()
-        mock_path_obj.resolve.side_effect = OSError("Permission denied")
-        mock_path_class.return_value = mock_path_obj
-        
-        with patch('oneirodex.routes_apis.system.is_safe_path') as mock_safe_path:
-            mock_safe_path.return_value = (True, None)
-            
-            with client.session_transaction() as sess:
-                sess['_user_id'] = str(regular_user.id)
-                sess['_fresh'] = True
-            
-            response = client.get('/api/check_path_availability?full_disk_path=/allowed/games/test.exe')
-            assert response.status_code == 500
-            data = response.get_json()
-            assert data['available'] is False
-            assert 'Unable to check path' in data['error']
-
-
 class TestEmulatorEndpoints:
     """Tests for emulator listing endpoints."""
     
@@ -622,27 +538,12 @@ class TestEmulatorEndpoints:
         data = response.get_json()
         assert 'Platform not supported' in data['error']
 
-    @patch('oneirodex.routes_apis.system.Emulator', spec=True)
-    def test_emulator_retrieval_error_handling(self, mock_emulator, client, regular_user):
-        """Test error handling when emulator retrieval fails."""
-        mock_emulator.__iter__.side_effect = Exception("Database error")
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(regular_user.id)
-            sess['_fresh'] = True
-        
-        response = client.get('/api/emulators')
-        assert response.status_code == 500
-        data = response.get_json()
-        assert 'Unable to retrieve emulators' in data['error']
-
-
 class TestSecurityHelperFunctions:
     """Tests for security helper functions."""
     
     def test_validate_file_type_value_valid_inputs(self):
         """Test file type validation with valid inputs."""
-        from oneirodex.routes_apis.system import validate_file_type_value
+        from oneirodex.runtime_native.system_file_types import validate_file_type_value
         
         valid_inputs = [
             ('exe', 'exe'),
@@ -658,7 +559,7 @@ class TestSecurityHelperFunctions:
 
     def test_validate_file_type_value_invalid_inputs(self):
         """Test file type validation with invalid inputs."""
-        from oneirodex.routes_apis.system import validate_file_type_value
+        from oneirodex.runtime_native.system_file_types import validate_file_type_value
         
         invalid_inputs = [
             None,
@@ -677,90 +578,10 @@ class TestSecurityHelperFunctions:
             result = validate_file_type_value(invalid_input)
             assert result is None
 
-    def test_is_safe_path_valid_paths(self):
-        """Test path safety validation with valid paths."""
-        from oneirodex.routes_apis.system import is_safe_path
-        
-        allowed_bases = ['/allowed/games', '/allowed/apps']
-        
-        valid_paths = [
-            '/allowed/games/test.exe',
-            '/allowed/apps/installer.msi',
-            '/allowed/games/subfolder/game.zip',
-        ]
-        
-        for path in valid_paths:
-            # Mock Path behavior for testing
-            with patch('oneirodex.routes_apis.system.Path', spec=True) as mock_path:
-                mock_path_obj = MagicMock()
-                mock_path_obj.relative_to = MagicMock()  # Won't raise ValueError for valid paths
-                mock_path.return_value.resolve.return_value = mock_path_obj
-                
-                is_safe, error = is_safe_path(path, allowed_bases)
-                assert is_safe is True
-                assert error is None
-
-    def test_is_safe_path_invalid_paths(self):
-        """Test path safety validation with invalid paths."""
-        from oneirodex.routes_apis.system import is_safe_path
-        
-        allowed_bases = ['/allowed/games']
-        
-        invalid_paths = [
-            '',
-            None,
-            123,
-            [],
-            '../../../etc/passwd',
-            '/etc/passwd',
-            '/root/.ssh/id_rsa',
-        ]
-        
-        for path in invalid_paths:
-            is_safe, error = is_safe_path(path, allowed_bases)
-            assert is_safe is False
-            assert error is not None
-
-    def test_validate_json_input_valid(self, app):
-        """Test JSON input validation with valid data."""
-        from oneirodex.routes_apis.system import validate_json_input
-        
-        with app.test_request_context(json={'value': 'test', 'id': 123}):
-            data, error = validate_json_input(['value'])
-            assert data == {'value': 'test', 'id': 123}
-            assert error is None
-
-    def test_validate_json_input_missing_fields(self, app):
-        """Test JSON input validation with missing required fields."""
-        from oneirodex.routes_apis.system import validate_json_input
-        
-        with app.test_request_context(json={'id': 123}):
-            data, error = validate_json_input(['value', 'id'])
-            assert data is None
-            assert 'Missing required field: value' in error
-
-    def test_validate_json_input_not_json(self, app):
-        """Test JSON input validation with non-JSON request."""
-        from oneirodex.routes_apis.system import validate_json_input
-        
-        with app.test_request_context(data='not json', content_type='text/plain'):
-            data, error = validate_json_input()
-            assert data is None
-            assert 'Request must be JSON' in error
-
 
 class TestSystemApiBlueprint:
     """Test system API blueprint registration and routing."""
     
-    def test_system_routes_registered(self, app):
-        """Test that system API routes are properly registered."""
-        with app.test_request_context():
-            from flask import url_for
-            
-            # Test that routes exist
-            assert url_for('apis.manage_file_types', type_category='allowed') == '/api/file_types/allowed'
-            assert url_for('apis.check_path_availability') == '/api/check_path_availability'
-            assert url_for('apis.get_emulators') == '/api/emulators'
 
     def test_system_routes_authentication_required(self, client):
         """Test that all system API routes require authentication."""

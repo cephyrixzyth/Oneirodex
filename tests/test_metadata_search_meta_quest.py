@@ -340,7 +340,7 @@ def admin_user_for_meta(db_session):
     return user
 
 
-@patch('oneirodex.routes_apis.metadata_search.search_meta_quest_games')
+@patch('oneirodex.utils.secondary_scrapers.search_meta_quest_games')
 def test_search_metadata_meta_alias(mock_search, client, db_session, admin_user_for_meta):
     mock_search.return_value = [
         {'source': 'meta_quest', 'id': 1, 'name': 'Quest Game', 'ownership_only': True, 'is_vr': True}
@@ -356,24 +356,8 @@ def test_search_metadata_meta_alias(mock_search, client, db_session, admin_user_
     assert 'api_mode' in data
 
 
-@patch('oneirodex.routes_apis.metadata_search.search_meta_quest_games')
-def test_search_metadata_meta_quest_route(mock_search, client, db_session, admin_user_for_meta):
-    mock_search.return_value = [
-        {'source': 'meta_quest', 'id': 1, 'name': 'Quest Game', 'ownership_only': True}
-    ]
-    with client.session_transaction() as sess:
-        sess['_user_id'] = str(admin_user_for_meta.id)
-        sess['_fresh'] = True
-    resp = client.get('/api/search_metadata?name=Quest&source=meta_quest')
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data['source'] == 'meta_quest'
-    assert data['ownership_only'] is True
-    assert len(data['results']) == 1
-
-
-@patch('oneirodex.routes_apis.metadata_search.get_mobygames_api_key', return_value=None)
-@patch('oneirodex.routes_apis.metadata_search.search_mobygames_games', return_value=[])
+@patch('oneirodex.utils.providers.mobygames.get_mobygames_api_key', return_value=None)
+@patch('oneirodex.utils.secondary_scrapers.search_mobygames_games', return_value=[])
 def test_search_metadata_mobygames_honest_without_key(
     mock_search, mock_key, client, db_session, admin_user_for_meta,
 ):
@@ -390,34 +374,8 @@ def test_search_metadata_mobygames_honest_without_key(
     assert 'MOBYGAMES_API_KEY' in data['note']
 
 
-@patch('oneirodex.routes_apis.metadata_search.get_mobygames_api_key', return_value='moby-key')
-@patch('oneirodex.routes_apis.metadata_search.search_mobygames_games')
-def test_search_metadata_moby_alias(mock_search, mock_key, client, db_session, admin_user_for_meta):
-    mock_search.return_value = [
-        {
-            'source': 'mobygames',
-            'id': 15,
-            'name': 'Doom',
-            'url': 'https://www.mobygames.com/game/15/doom/',
-            'cover_url': 'https://cdn.example/doom.jpg',
-            'mobygames_id': 15,
-        }
-    ]
-    with client.session_transaction() as sess:
-        sess['_user_id'] = str(admin_user_for_meta.id)
-        sess['_fresh'] = True
-    resp = client.get('/api/search_metadata?name=Doom&source=moby')
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data['source'] == 'mobygames'
-    assert data['key_configured'] is True
-    assert len(data['results']) == 1
-    assert data['results'][0]['mobygames_id'] == 15
-    mock_search.assert_called_once()
-
-
-@patch('oneirodex.routes_apis.metadata_search.get_thegamesdb_api_key', return_value=None)
-@patch('oneirodex.routes_apis.metadata_search.search_thegamesdb_games', return_value=[])
+@patch('oneirodex.utils.providers.thegamesdb.get_thegamesdb_api_key', return_value=None)
+@patch('oneirodex.utils.secondary_scrapers.search_thegamesdb_games', return_value=[])
 def test_search_metadata_thegamesdb_honest_without_key(
     mock_search, mock_key, client, db_session, admin_user_for_meta,
 ):
@@ -432,29 +390,3 @@ def test_search_metadata_thegamesdb_honest_without_key(
     assert data['needs_key'] is True
     assert data['key_configured'] is False
     assert 'THEGAMESDB_API_KEY' in data['note']
-
-
-@patch('oneirodex.routes_apis.metadata_search.get_thegamesdb_api_key', return_value='tgdb-key')
-@patch('oneirodex.routes_apis.metadata_search.search_thegamesdb_games')
-def test_search_metadata_tgdb_alias(mock_search, mock_key, client, db_session, admin_user_for_meta):
-    mock_search.return_value = [
-        {
-            'source': 'thegamesdb',
-            'id': 42,
-            'name': 'Sonic the Hedgehog',
-            'url': 'https://thegamesdb.net/game.php?id=42',
-            'cover_url': 'https://cdn.thegamesdb.net/images/large/boxart/front/42-1.jpg',
-            'thegamesdb_id': 42,
-        }
-    ]
-    with client.session_transaction() as sess:
-        sess['_user_id'] = str(admin_user_for_meta.id)
-        sess['_fresh'] = True
-    resp = client.get('/api/search_metadata?name=Sonic&source=tgdb')
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data['source'] == 'thegamesdb'
-    assert data['key_configured'] is True
-    assert len(data['results']) == 1
-    assert data['results'][0]['thegamesdb_id'] == 42
-    mock_search.assert_called_once()

@@ -101,7 +101,10 @@ def native_engine_session_scope(engine, database=None) -> Iterator[None]:
     """
     from sqlalchemy.orm import Session
 
-    session = Session(engine, expire_on_commit=False)
+    # ``join_transaction_mode`` only matters when ``engine`` is a Connection
+    # already inside a transaction (the test harness): a request's rollback
+    # then undoes its own savepoint instead of the caller's transaction.
+    session = Session(engine, expire_on_commit=False, join_transaction_mode='create_savepoint')
     session_key_token = _native_session_key.set(object())
     engine_token = _native_engine.set(engine)
     session_token = _native_session.set(session)

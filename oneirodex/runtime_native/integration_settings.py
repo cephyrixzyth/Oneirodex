@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from datetime import datetime, timezone
-import logging
 import os
 from typing import Any, Callable
 
@@ -91,7 +90,6 @@ class IntegrationSettingsData:
 
 
 def _oidc_public_settings(row) -> dict:
-    from oneirodex.utils.oidc import oidc_readiness_report
     from oneirodex.utils.secret_store import has_global_secret
 
     return {

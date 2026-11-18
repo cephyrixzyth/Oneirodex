@@ -109,7 +109,7 @@ def test_login_allows_unverified_placeholder_accounts(client, db_session):
 
 
 def test_login_rate_limit_returns_stable_json_refusal(client, monkeypatch):
-    monkeypatch.setattr('oneirodex.routes_login.is_rate_limited', lambda _key: True)
+    monkeypatch.setattr('oneirodex.utils.login_rate_limit.is_rate_limited', lambda _key: True)
 
     response = client.post('/api/auth/login', json={
         'username': 'alice',

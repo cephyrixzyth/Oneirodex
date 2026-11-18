@@ -153,7 +153,7 @@ class TestGameServersApi:
         db_session.commit()
         _login(client, regular_user)
         with patch(
-            'oneirodex.routes_apis.game_servers.probe_server_health',
+            'oneirodex.utils.game_servers.probe_server_health',
             return_value={'reachable': True, 'method': 'http', 'status_code': 200, 'error': None},
         ):
             response = client.get(f'/api/game-servers/{server.uuid}/status')
@@ -186,7 +186,7 @@ class TestGameServersApi:
         token.scopes = ['read:social']
         db_session.commit()
         with patch(
-            'oneirodex.routes_apis.game_servers.probe_server_health',
+            'oneirodex.utils.game_servers.probe_server_health',
             return_value={'reachable': True, 'method': 'http', 'status_code': 200, 'error': None},
         ):
             allowed = [client.get(path, headers=headers) for path in paths]

@@ -637,7 +637,6 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
         )
         from .csrf_compat import csrf_error_response
         from .csrf_compat import csrf_html_error_response
-        from .acquire_status import _login_redirect
 
         csrf_token = None
         delete_payload = None
@@ -649,6 +648,11 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
                 csrf_token = first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
         elif auth.token is None and request.headers.get('X-CSRFToken') is None:
             try:
+                # Buffer first: a form read that fails partway (an attached
+                # image exceeds max_files=0) must not consume the body the
+                # action handler re-reads afterwards. The outer ASGI limit
+                # bounds this buffer.
+                await request.body()
                 form = await request.form(max_files=0, max_fields=10, max_part_size=16 * 1024)
                 csrf_token = first_form_value(form, str(flask_app.config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'))
             except Exception:
@@ -762,17 +766,31 @@ async def _preview_cropped_image(request, data):
         )
         return JSONResponse(payload, status_code=status)
     try:
+        from PIL import UnidentifiedImageError
         from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
         preview_url = await run_image_work_in_threadpool(data.preview_image, model.image_data)
     except ImageWorkBusy:
         return _error('Image processing is busy. Try again shortly.', 'unavailable', 503)
+    except (ValueError, UnidentifiedImageError) as exc:
+        # Our own validation messages are member-safe; anything else a decoder
+        # raises as ValueError gets the generic wording.
+        message = str(exc) if str(exc) in _SAFE_PREVIEW_ERRORS else 'The library image could not be read.'
+        return _error(message, 'bad_request', 400)
     except Exception:
         return _error('Failed to process image', 'internal', 500)
     return JSONResponse(api_ok_payload({
         'status': 'success', 'preview_url': preview_url,
         'message': 'Image processed successfully',
     }))
+
+
+_SAFE_PREVIEW_ERRORS = frozenset({
+    'Library image must be 10 MB or smaller.',
+    'The library image data is invalid.',
+    'Choose a supported library image format.',
+    'Library image dimensions are too large.',
+})
 
 
 async def _create(request, app, data, user):
@@ -800,7 +818,7 @@ async def _create(request, app, data, user):
         _, content = image
         if len(content) > LIBRARY_IMAGE_MAX_BYTES:
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
-        from PIL import Image as PILImage, UnidentifiedImageError
+        from PIL import UnidentifiedImageError
         try:
             from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
@@ -850,7 +868,7 @@ async def _update(request, app, data, user, library_uuid):
         _, content = image
         if len(content) > LIBRARY_IMAGE_MAX_BYTES:
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
-        from PIL import Image as PILImage, UnidentifiedImageError
+        from PIL import UnidentifiedImageError
         try:
             from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 

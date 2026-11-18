@@ -88,30 +88,6 @@ def test_arr_status_disabled_by_default(client, app, db_session, admin_user, mon
     assert resp.get_json()['enabled'] is False
 
 
-def test_arr_status_enabled_via_config(client, app, db_session, admin_user):
-    _login(client, app, admin_user)
-    with app.app_context():
-        app.config['ENABLE_ARR_MODULE'] = True
-        # 'scaffold' was the placeholder from when the module was a stub. The
-        # endpoint reports readiness now: 'ready' once a connector is
-        # configured, 'enabled' while on but unconfigured, 'disabled' otherwise.
-        #
-        # Connectors are stated rather than inherited. Reading whatever the
-        # database happens to hold makes the answer depend on which other file
-        # ran first — with none configured it is 'enabled', and in a full run
-        # another file's indexer rows turn it into 'ready'.
-        with patch('oneirodex.routes_arr.connector_status', return_value=[]):
-            resp = client.get('/api/arr/status')
-            assert resp.status_code == 200
-            assert resp.get_json()['enabled'] is True
-            assert resp.get_json()['status'] == 'enabled'
-
-        configured = [{'id': 'native_indexers', 'configured': True}]
-        with patch('oneirodex.routes_arr.connector_status', return_value=configured):
-            body = client.get('/api/arr/status').get_json()
-            assert body['status'] == 'ready'
-
-
 def test_oidc_readiness_reports_missing(app, db_session, monkeypatch):
     monkeypatch.setenv('OIDC_ENABLED', 'false')
     _ensure_settings(db_session, oidc_enabled=False)

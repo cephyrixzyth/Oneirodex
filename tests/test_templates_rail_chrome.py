@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_member_shell_mounts_the_react_app_and_has_one_main_region():
-    source = (ROOT / 'oneirodex' / 'utils' / 'member_spa.py').read_text(encoding='utf-8')
+    source = (ROOT / 'oneirodex' / 'runtime_native' / 'member_shell.py').read_text(encoding='utf-8')
     assert 'id="member-app-root"' in source
     assert '<div id="content" class="member-spa-content">' in source
     assert '<main id="content"' not in source
@@ -30,7 +30,3 @@ def test_rail_destination_links_remain_in_react_navigation():
         assert href in source
 
 
-def test_auth_shell_has_no_member_navigation():
-    source = (ROOT / 'oneirodex' / 'utils' / 'member_auth_spa.py').read_text(encoding='utf-8')
-    assert 'member-auth' in source
-    assert 'id="member-app-root"' not in source

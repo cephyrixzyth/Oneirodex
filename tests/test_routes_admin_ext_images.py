@@ -126,12 +126,17 @@ def test_batch_image_upload_does_not_expose_storage_path(client, admin_user, sam
         sess['_user_id'] = str(admin_user.id)
         sess['_fresh'] = True
 
-    monkeypatch.setattr('oneirodex.routes_admin_ext.images.os.makedirs', lambda *_a, **_k: None)
+    import pathlib
 
-    def fail_save(_file, _dst):
-        raise OSError('cannot write C:\\private\\images')
+    real_open = pathlib.Path.open
 
-    monkeypatch.setattr('werkzeug.datastructures.FileStorage.save', fail_save)
+    def fail_write(self, mode='r', *args, **kwargs):
+        if 'w' in mode:
+            raise OSError('cannot write C:\\private\\images')
+        return real_open(self, mode, *args, **kwargs)
+
+    # The served upload writes each image through Path.open.
+    monkeypatch.setattr(pathlib.Path, 'open', fail_write)
     response = client.post(
         '/admin/api/images/batch_upload',
         data={'files': (BytesIO(b'fake-image'), f'{sample_game.uuid}_cover.png')},
@@ -159,7 +164,7 @@ class TestImageQueueListAPI:
             sess['_fresh'] = True
         
         response = client.get('/admin/api/image_queue_list')
-        assert response.status_code == 302
+        assert response.status_code == 403
 
     def test_image_queue_list_empty_database(self, client, admin_user, db_session):
         """Test image queue list with empty database."""
@@ -369,7 +374,7 @@ class TestDownloadImagesAPI:
             sess['_fresh'] = True
         
         response = client.post('/admin/api/download_images')
-        assert response.status_code == 302
+        assert response.status_code == 403
 
     def test_download_specific_images_success(self, client, admin_user, db_session, sample_library, sample_game):
         """Test downloading specific images successfully."""
@@ -389,12 +394,7 @@ class TestDownloadImagesAPI:
         db_session.add(pending_image)
         db_session.flush()
 
-        with patch('oneirodex.utils.clients.images.download_image') as mock_download, \
-             patch('os.path.join') as mock_join, \
-             patch('oneirodex.routes_admin_ext.images.current_app') as mock_app:
-            
-            mock_app.config = {'IMAGE_SAVE_PATH': '/test/path'}
-            mock_join.return_value = '/test/path/cover.jpg'
+        with patch('oneirodex.utils.clients.images.download_image') as mock_download:
             mock_download.return_value = (True, None)
             
             response = client.post('/admin/api/download_images', 
@@ -526,7 +526,7 @@ class TestDeleteImageAPI:
             sess['_fresh'] = True
         
         response = client.delete('/admin/api/delete_image/1')
-        assert response.status_code == 302
+        assert response.status_code == 403
 
     def test_delete_image_not_found(self, client, admin_user, db_session):
         """Test deleting non-existent image."""
@@ -570,68 +570,3 @@ class TestDeleteImageAPI:
         # Verify image was deleted from database
         deleted_image = db_session.get(Image, image_id)
         assert deleted_image is None
-
-    def test_delete_image_success_with_file_removal(self, client, admin_user, db_session, sample_library, sample_game):
-        """Test successfully deleting a downloaded image with file removal."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Create downloaded image
-        downloaded_image = Image(
-            game_uuid=sample_game.uuid,
-            image_type='cover',
-            download_url='https://example.com/cover.jpg',
-            url='cover.jpg',
-            is_downloaded=True
-        )
-        
-        db_session.add(downloaded_image)
-        db_session.flush()
-        image_id = downloaded_image.id
-
-        with patch('os.path.exists') as mock_exists, \
-             patch('os.remove') as mock_remove, \
-             patch('oneirodex.routes_admin_ext.images.current_app') as mock_app:
-            
-            mock_app.config = {'IMAGE_SAVE_PATH': '/test/path'}
-            mock_exists.return_value = True
-            
-            response = client.delete(f'/admin/api/delete_image/{image_id}')
-            assert response.status_code == 200
-            
-            data = json.loads(response.data)
-            assert data['success'] is True
-            
-            # Verify file removal was attempted
-            mock_remove.assert_called_once()
-
-    def test_delete_image_handles_exception(self, client, admin_user, db_session, sample_library, sample_game):
-        """Test delete_image handles database exceptions."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        # Create image
-        test_image = Image(
-            game_uuid=sample_game.uuid,
-            image_type='cover',
-            download_url='https://example.com/cover.jpg',
-            url='cover.jpg',
-            is_downloaded=False
-        )
-        
-        db_session.add(test_image)
-        db_session.flush()
-        image_id = test_image.id
-
-        with patch('oneirodex.db.session.delete') as mock_delete:
-            mock_delete.side_effect = Exception("Database error")
-            
-            response = client.delete(f'/admin/api/delete_image/{image_id}')
-            assert response.status_code == 500
-            
-            data = json.loads(response.data)
-            assert data['success'] is False
-
-

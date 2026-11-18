@@ -521,9 +521,13 @@ The zero-Jinja runtime migration is incomplete. The authored template directory,
 template render calls, and direct Jinja imports have been retired. The legacy
 route inventory now has zero unmatched method/path pairs, and ASGI sends final
 dispatch to FastAPI; the WSGI fallback and `a2wsgi` dependency are retired.
-`create_app()` still constructs Flask, native session/CSRF adapters preserve
-signed-cookie compatibility, and Flask-SQLAlchemy still owns mapped models and
-legacy service fallbacks. These are the remaining strict runtime gates.
+The Flask route layer (`oneirodex/routes_*`, Flask-WTF forms, Flask auth
+decorators) was deleted in 1.2.1; production never built it after 1.2.0.
+`create_app()` remains only for scripts and the test fixtures: it hosts
+configuration, the database session and login state and registers no routes.
+Native session/CSRF adapters preserve signed-cookie compatibility, and
+Flask-SQLAlchemy still owns the mapped models. These are the remaining strict
+runtime gates.
 
 JSON errors go through `api_ok` / `api_error` (`oneirodex/utils/api_response.py`). Eleven sites stay off that helper on purpose — [api-envelope-keeps.md](api-envelope-keeps.md).
 

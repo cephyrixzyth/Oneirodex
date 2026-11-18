@@ -119,8 +119,14 @@ def test_single_image_replacement_flushes_old_row_and_recovers_files(
 
     class Session:
         def execute(self, statement):
-            entity = statement.column_descriptions[0]['entity']
-            return Result([game] if entity is Game else [old_row])
+            description = statement.column_descriptions[0]
+            if description['entity'] is Game:
+                return Result([game])
+            if description['name'] == 'id':
+                # "Is the old file still referenced?" -- not once the
+                # replacement (which deleted the old row) has committed.
+                return Result([] if 'commit' in events else [old_row])
+            return Result([old_row])
 
         def delete(self, row):
             assert row is old_row
@@ -153,7 +159,10 @@ def test_single_image_replacement_flushes_old_row_and_recovers_files(
                 game_uuid, 'replacement.jpeg', 'cover', png.getvalue(),
             )
         assert old_path.read_bytes() == b'previous cover'
-        assert list(image_root.iterdir()) == [old_path]
+        # The new file stays as an unreferenced recovery candidate: a commit
+        # error can be ambiguous, so it is never deleted to hide that state.
+        assert old_path in list(image_root.iterdir())
+        assert len(list(image_root.iterdir())) == 2
         assert events == ['delete', 'flush', 'add', 'commit', 'rollback']
     else:
         result = data.upload_single(

@@ -205,10 +205,8 @@ class CollectionReadData:
         return {'game_uuid': game_uuid}, None
 
     def reorder(self, user, collection_uuid: str, game_uuids: list, *, admin_access: bool):
-        from sqlalchemy import select
 
         from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.models import GameCollection
 
         collection, refusal = self._editable_collection(collection_uuid, user, admin_access)
         if refusal:

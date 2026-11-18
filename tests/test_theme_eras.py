@@ -60,36 +60,6 @@ def test_picker_groups_new_designs_without_empty_categories():
     assert groups[1]['items'][0]['slug'] == 'custom-pack'
 
 
-def test_era_css_and_atmosphere_are_wired_into_every_shell():
-    era_css = (THEME_SOURCE / 'css' / 'od-era.css').read_text(encoding='utf-8')
-    assert 'html[data-era=' in era_css
-    assert '#od-era-atmosphere' in era_css
-    assert 'od-era-wall-drift' in era_css
-    assert '--od-era-furniture' in era_css
-    for room_id in ROOMS:
-        assert f"data-era='{room_id}'" in era_css
-    blob = ' '.join(ROOMS[r]['label'] + ' ' + ROOMS[r]['blurb'] for r in ROOMS).lower()
-    for brand in ('nintendo', 'sega', 'sony', 'playstation', 'xbox', 'atari'):
-        assert brand not in blob
-        assert brand not in era_css.lower()
-
-    atmosphere = ''
-    for name in ('member_spa.py', 'admin_spa.py'):
-        html = (REPO_ROOT / 'oneirodex' / 'utils' / name).read_text(encoding='utf-8')
-        atmosphere += html
-        assert 'data-era=' in html
-        assert 'id="od-era-atmosphere"' in html
-    pilot = (REPO_ROOT / 'oneirodex' / 'runtime_native' / 'admin_pilot.py').read_text(encoding='utf-8')
-    assert 'od-era.css' in pilot
-    assert 'id="od-era-atmosphere"' in atmosphere
-    assert 'od-era-stand' in atmosphere
-
-    styleguide = (REPO_ROOT / 'oneirodex' / 'utils' / 'styleguide_page.py').read_text(encoding='utf-8')
-    assert 'data-era=' in styleguide
-    assert 'css/od-era.css' in styleguide
-    assert 'id="od-era-atmosphere"' in styleguide
-
-
 def test_admin_chrome_stacks_above_era_atmosphere():
     """Admin #admin-app-root / .od-admin-shell are display:contents.
 

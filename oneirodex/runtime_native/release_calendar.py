@@ -28,10 +28,16 @@ def create_release_calendar_router(
 ) -> APIRouter:
     """Build the native GET/HEAD calendar endpoint with an injectable fetch."""
     router = APIRouter()
-    if fetch_calendar is None:
+    injected_fetch = fetch_calendar
+
+    def fetch_calendar(**kwargs):
+        if injected_fetch is not None:
+            return injected_fetch(**kwargs)
+        # Resolved per request, like the other native helpers, so the provider
+        # module stays the single place to replace it.
         from oneirodex.utils.release_calendar import fetch_release_calendar
 
-        fetch_calendar = fetch_release_calendar
+        return fetch_release_calendar(**kwargs)
 
     @router.api_route('/api/calendar', methods=['GET', 'HEAD'])
     def release_calendar(request: Request):

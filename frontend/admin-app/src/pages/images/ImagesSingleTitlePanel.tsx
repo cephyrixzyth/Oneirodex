@@ -1,4 +1,4 @@
-import type { GameHit, ImageRow } from './imagesModel'
+import type { GameHit } from './imagesModel'
 import { ArtworkPicker } from '../../components/ArtworkPicker'
 import { Button } from '@oneirodex/ui'
 

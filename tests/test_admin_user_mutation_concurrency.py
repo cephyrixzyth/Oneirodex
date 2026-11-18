@@ -9,10 +9,9 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 
 from oneirodex import db
 from oneirodex.models import SystemEvents, User
-from oneirodex.routes_admin_ext import users as users_routes
 
 
-def test_legacy_null_state_admin_cannot_be_deactivated(app, db_session):
+def test_legacy_null_state_admin_cannot_be_deactivated(client, db_session):
     suffix = uuid4().hex[:10]
     admin = User(
         name=f'legacy_admin_{suffix}', email=f'legacy_admin_{suffix}@example.com',
@@ -26,7 +25,6 @@ def test_legacy_null_state_admin_cannot_be_deactivated(app, db_session):
     )
     db_session.expire(admin)
 
-    client = app.test_client()
     with client.session_transaction() as session:
         session['_user_id'] = admin.get_id()
         session['_fresh'] = True
@@ -63,21 +61,18 @@ def test_concurrent_admin_deactivation_keeps_one_active(app, db_session, monkeyp
         independent.commit()
         ids = [admin.id for admin in admins]
 
+        from oneirodex.runtime_native.admin_user_mutations import AdminUserMutationData
+
         barrier = Barrier(2)
-        original_lock = users_routes._lock_admin_user_mutation
-
-        def arrive_together():
-            barrier.wait(timeout=15)
-            return original_lock()
-
-        monkeypatch.setattr(users_routes, '_lock_admin_user_mutation', arrive_together)
 
         def deactivate(admin):
-            client = app.test_client()
-            with client.session_transaction() as session:
-                session['_user_id'] = admin.get_id()
-                session['_fresh'] = True
-            return client.put(f'/admin/api/user/{admin.id}', json={'state': False}).status_code
+            # Each admin deactivates themself; only one may succeed.
+            barrier.wait(timeout=15)
+            with app.app_context():
+                _user, error, *_rest = AdminUserMutationData().update(
+                    admin.id, {'state': False}, admin.id,
+                )
+                return 200 if error is None else 403
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             first = pool.submit(deactivate, admins[0])

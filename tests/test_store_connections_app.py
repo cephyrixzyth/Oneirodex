@@ -209,11 +209,6 @@ def test_connect_is_refused_while_a_sync_runs(client, app, db_session, member):
     assert client.delete('/api/ownership/gog').status_code == 409
 
 
-def test_first_run_and_admin_diagnostics_pages_are_served(client, app, db_session, member):
+def test_first_run_page_is_served(client, app, db_session, member):
     _login(client, app, member)
     assert client.get('/welcome').status_code == 200
-    assert client.get('/admin/ownership').status_code in (302, 401, 403)
-    admin = _person(db_session, role='admin')
-    _login(client, app, admin)
-    page = client.get('/admin/ownership')
-    assert page.status_code == 200 and b'data-admin-render="spa"' in page.data

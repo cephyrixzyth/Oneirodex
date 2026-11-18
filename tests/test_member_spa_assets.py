@@ -6,13 +6,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_member_spa_links_member_app_assets_without_jinja():
-    shell = (ROOT / 'oneirodex' / 'utils' / 'member_spa.py').read_text(encoding='utf-8')
-    assert 'dist_asset_url("member-app/member-app.css")' in shell
-    assert "dist_asset_url('member-app/member-app.js')" in shell
-    assert 'render_template' not in shell
-
-
 def test_entrypoint_warns_on_missing_member_app_css():
     sh = (ROOT / 'entrypoint.sh').read_text(encoding='utf-8')
     assert 'member-app.css' in sh
@@ -30,7 +23,7 @@ def test_default_accent_is_green():
 
 
 def test_member_spa_shell_keeps_shared_delete_actions():
-    shell = (ROOT / 'oneirodex' / 'utils' / 'member_spa.py').read_text(encoding='utf-8')
+    shell = (ROOT / 'oneirodex' / 'runtime_native' / 'member_shell.py').read_text(encoding='utf-8')
     assert 'popup_menu.js' in shell
     assert 'delete_game_modal.js' in shell
     assert 'delete_full_game' in shell

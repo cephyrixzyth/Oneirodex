@@ -16,8 +16,6 @@ from oneirodex.runtime_native.library_tools_mutations import create_library_tool
 from oneirodex.runtime_native.library_tools import LibraryToolsData
 from oneirodex.runtime_native.library_tools_manual_identify import ManualIdentifyListData
 from oneirodex.runtime_native.session_compat import dump_session_cookie
-from oneirodex.routes_apis import apis_bp
-import oneirodex.routes_apis.library_tools  # register the legacy route on apis_bp
 from asgi import _install_native_api_error_handlers
 
 
@@ -106,7 +104,6 @@ def runtime():
     flask_app.add_url_rule('/login', endpoint='login.login', view_func=lambda: 'login')
     flask_app.add_url_rule('/api/options-mixed', endpoint='options_mixed',
                            view_func=lambda: 'ok', methods=['GET', 'POST'])
-    flask_app.register_blueprint(apis_bp, url_prefix='/api')
     fake = FakeToolsData()
     app = FastAPI()
     app.include_router(create_library_tools_router(
@@ -318,21 +315,14 @@ def test_explicit_options_match_does_not_treat_mount_as_handler():
     )
 
 
-def test_propose_leaf_options_matches_legacy_method_order(runtime):
+def test_propose_leaf_options_lists_its_methods(runtime):
     app, _data, _cookies = runtime
-    path = '/api/library_tools/propose_leaf_libraries'
-    legacy = app.state.legacy_flask_app.test_client().options(path)
-    native = _request(app, path, method='OPTIONS')
+    native = _request(app, '/api/library_tools/propose_leaf_libraries', method='OPTIONS')
 
-    assert native.status_code == legacy.status_code == 200
-    assert native.headers['content-type'] == legacy.headers['Content-Type']
-    # Current host Flask may order this list differently than the pinned 1.1.8
-    # image; the exact-image replay fixes the compatibility order below.
-    expected_methods = {'HEAD', 'GET', 'OPTIONS', 'POST'}
-    assert set(legacy.headers['Allow'].split(', ')) == expected_methods
-    assert set(native.headers['allow'].split(', ')) == expected_methods
+    assert native.status_code == 200
+    assert set(native.headers['allow'].split(', ')) == {'HEAD', 'GET', 'OPTIONS', 'POST'}
     assert native.headers['content-length'] == '0'
-    assert native.content == legacy.data == b''
+    assert native.content == b''
 
 
 def test_propose_leaf_malformed_json_keeps_structured_client_error(runtime):
@@ -399,27 +389,16 @@ def test_proposal_scan_roots_matches_legacy_body_validation(runtime):
     '/api/library_tools/doctor/write_proposals',
     '/api/library_tools/doctor/apply_renames',
 ])
-def test_library_doctor_auth_matches_legacy_flask(runtime, identity, path):
-    app, _data, cookies = runtime
-    legacy_client = app.state.legacy_flask_app.test_client()
+def test_library_doctor_refuses_signed_out_and_members(runtime, identity, path):
+    app, data, cookies = runtime
     cookie = cookies[identity] if identity else None
-    if identity:
-        with legacy_client.session_transaction() as session:
-            session['_user_id'] = login_identity_for(8)
-            session['_fresh'] = True
-
-    legacy = legacy_client.post(
-        path, json={'roots': ['/safe'], 'rows': []},
-    )
     native = _request(
         app, path, cookie=cookie, method='POST',
         json={'roots': ['/safe'], 'rows': []},
     )
 
-    assert native.status_code == legacy.status_code
-    assert native.headers.get('location') == legacy.headers.get('Location')
-    assert native.headers.get('content-type') == legacy.headers.get('Content-Type')
-    assert native.content == legacy.data
+    assert native.status_code == 302
+    assert native.headers['location'].startswith('/login')
 
 
 def test_import_preview_json_and_multipart_use_injected_parser(runtime):

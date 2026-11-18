@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- The old form-post endpoints for saving a game edit (`POST /game_edit/<id>` and `POST /add_game_manual`). The admin app saves through `/api/admin/manual-identify`, which is unchanged; the pages themselves still open at the same addresses.
+- The retired Flask route layer (about 26,000 lines): `oneirodex/routes_*`, the Flask-WTF forms, the Flask auth decorators and the classic page renderers. The server has answered every request from the native app since 1.2.0; this code only ran in tests. Also removed: the unused form posts `POST /scan_management`, `POST /scan_manual_folder` and `POST /link_existing_game`, 31 static scripts and images from the classic pages, and unused imports across the server.
+
+### Changed
+- Dependency updates: FastAPI 0.162, Starlette 1.10, SQLAlchemy 2.1.8, Pydantic 2.14 (with its matching core), Alembic 1.20.1, Authlib 1.9.5 and smaller Python, npm, Rust and GitHub Actions bumps. The desktop companion's launch hash no longer depends on the `sha2` crate's formatting, so its 0.11 update builds.
+- Sign-in `next` addresses are checked by one shared function, which now also refuses control characters (a browser drops a tab or newline, so `/\t/evil.example` would have become `//evil.example`).
+
+### Fixed
+- Signing out now also ends a sign-in that was restored from the "remember me" cookie. Before, only the browser's cookie was cleared, and a copy of it kept working until it expired.
+- Server logs honour `ONEIRODEX_LOG_LEVEL` and `ONEIRODEX_LOG_JSON` again, and informational lines reach the container log. Since 1.2.0 the logging setup only ran in the unused Flask app factory.
+- Recording owned games works again for launcher imports, store CSV imports and member-started store syncs. In 1.2.0 they failed with a generic error, because the code that saves each owned title asked for the database session in a way the 1.2.0 server no longer supports.
+- A store CSV import that would go past the ownership safety limit answers 409 with the limit message, as the store sync does, instead of a generic 400.
+- The library image preview rejects an oversized, unsupported or unreadable image with a clear message (400) instead of "Failed to process image" (500).
+- An oversized cheat file answers 413 and a game at its cheat-file limit answers 409; both were reported as a generic 400.
+- Rejected API tokens are logged again for operators (`api_token_auth_failed` with the reason and public prefix, never the secret). The 1.2.0 server had stopped writing that line, which made companion connection problems hard to diagnose.
+- Approving a match proposal with missing fields now answers 422 with the field names, like the other library tools.
+- Creating a library with a cover image through the API no longer fails with "Library name is required" when the request carries its CSRF token as a form field rather than a header. The admin pages were not affected.
+- Audit events record which member acted again. Since 1.1.9 most events written by the server were stored without a user. Refused attempts to delete someone else's download request are logged as security events again.
+- Replacing a game's cover (or another single image) no longer deletes the old file while another game still uses it. The new image is written durably before the database switches to it, and file names no longer include the raw game id from the address.
+- The desktop command queue, per-member install states and wanted updates, mod packs, assist packs and generated theme files are now replaced in one step under a lock shared between workers. An interrupted write no longer empties the file, and running more than one worker no longer loses updates.
+
 ## [1.2.0] — 2026-11-16
 
 ### Added

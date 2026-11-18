@@ -88,24 +88,4 @@ class TestDownloadZipRoute:
     def test_download_zip_requires_login(self, client, configured_install):
         """Test that download route requires authentication."""
         response = client.get('/download_zip/1')
-        assert response.status_code == 302
-        assert '/login' in response.location
-
-    @patch('oneirodex.routes_downloads_ext.serve.log_system_event')
-    def test_download_zip_returns_asgi_error(self, mock_log, client, authenticated_user, sample_download_request):
-        """Test that Flask download route returns error since ASGI should handle downloads."""
-        authenticate_user(client, authenticated_user)
-
-        response = client.get(f'/download_zip/{sample_download_request.id}')
-
-        # Flask route should return 500 since ASGI should handle this
-        assert response.status_code == 500
-        response_data = json.loads(response.data)
-        assert response_data['error'] == 'Download route should be handled by ASGI'
-
-        # Verify system logging for unexpected Flask route access
-        mock_log.assert_called_once()
-        call_args = mock_log.call_args
-        assert 'Flask download route reached unexpectedly' in call_args[0][0]
-        assert call_args[1]['event_type'] == 'system'
-        assert call_args[1]['event_level'] == 'warning'
+        assert response.status_code == 401

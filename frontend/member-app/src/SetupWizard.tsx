@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Button, loadSetupState, submitSetupStep, type SetupState } from '@oneirodex/ui'
-import { errorFromResponse } from '@oneirodex/ui'
 
 const STEP_URLS: Record<number, string> = {
   1: '/setup',

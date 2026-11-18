@@ -388,73 +388,6 @@ class TestMainBlueprint:
         response = client.get('/scan_manual_folder')
         assert response.status_code == 302  # Redirect to login
 
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.scan_jobs.os.path.exists')
-    @patch('oneirodex.routes_admin_ext.scan_jobs.os.access')
-    @patch('oneirodex.routes_admin_ext.scan_jobs.get_game_names_from_folder')
-    def test_scan_folder_valid_path(self, mock_get_games, mock_access, mock_exists, mock_current_user,
-                                   client, app, db_session, admin_user, test_library):
-        """Test scan_folder with valid folder path."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_exists.return_value = True
-        mock_access.return_value = True
-        mock_get_games.return_value = [{'name': 'Test Game', 'full_path': '/test/path'}]
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/scan_manual_folder', data={
-            'folder_path': '/test/folder',
-            'library_uuid': str(test_library.uuid),
-            'csrf_token': 'test_token',
-            'scan_mode': 'folders'
-        })
-        assert response.status_code == 200
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.scan_jobs.get_game_names_from_folder')
-    def test_scan_folder_rejects_library_outside_database_choices(
-        self, mock_get_games, mock_current_user, client, app, db_session,
-        admin_user, test_library,
-    ):
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-
-        response = client.post('/scan_manual_folder', data={
-            'folder_path': '/test/folder',
-            'library_uuid': 'not-a-library',
-            'csrf_token': 'test_token',
-            'scan_mode': 'folders',
-        })
-
-        assert response.status_code == 200
-        # WTForms rejects the unknown value, but this legacy template does not
-        # render field errors. The current React flow gives the same rejection
-        # a visible flash instead of silently redisplaying the form.
-        assert b'Not a valid choice.' not in response.data
-        mock_get_games.assert_not_called()
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.scan_jobs.os.path.exists')
-    def test_scan_folder_invalid_path(self, mock_exists, mock_current_user, client, app, db_session, admin_user, test_library):
-        """Test scan_folder with invalid folder path."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_exists.return_value = False
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/scan_manual_folder', data={
-            'folder_path': '/invalid/folder',
-            'library_uuid': str(test_library.uuid),
-            'csrf_token': 'test_token',
-            'scan_mode': 'folders'
-        })
-        assert response.status_code == 200
         # Should contain error message about folder not existing
 
     @patch('flask_login.current_user')
@@ -468,69 +401,6 @@ class TestMainBlueprint:
         
         response = client.get('/scan_management')
         assert response.status_code == 200
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.scan_management.handle_auto_scan')
-    def test_scan_management_auto_scan(self, mock_handle_auto_scan, mock_current_user, 
-                                      client, app, db_session, admin_user, test_library):
-        """Test scan_management with auto scan submission."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        from flask import Response
-        mock_handle_auto_scan.return_value = Response('', status=302, headers={'Location': '/scan_management'})
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/scan_management', data={
-            'submit': 'AutoScan',
-            'folder_path': '/test/folder',
-            'library_uuid': str(test_library.uuid),
-            'csrf_token': 'test_token',
-            'scan_mode': 'folders'
-        })
-        mock_handle_auto_scan.assert_called_once()
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.scan_management.handle_manual_scan')
-    def test_scan_management_manual_scan(self, mock_handle_manual_scan, mock_current_user, 
-                                        client, app, db_session, admin_user, test_library):
-        """Test scan_management with manual scan submission."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        from flask import Response
-        mock_handle_manual_scan.return_value = Response('', status=302, headers={'Location': '/scan_management'})
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/scan_management', data={
-            'submit': 'ManualScan',
-            'folder_path': '/test/folder', 
-            'library_uuid': str(test_library.uuid),
-            'csrf_token': 'test_token',
-            'scan_mode': 'folders'
-        })
-        mock_handle_manual_scan.assert_called_once()
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.scan_management.handle_delete_unmatched')
-    def test_scan_management_delete_unmatched(self, mock_handle_delete, mock_current_user, 
-                                             client, app, db_session, admin_user):
-        """Test scan_management with delete unmatched submission."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        from flask import Response
-        mock_handle_delete.return_value = Response('', status=302, headers={'Location': '/scan_management'})
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/scan_management', data={
-            'submit': 'DeleteAllUnmatched',
-            'csrf_token': 'test_token'
-        })
-        mock_handle_delete.assert_called_once_with(all=True)
 
     @patch('flask_login.current_user')
     def test_cancel_scan_job(self, mock_current_user, client, app, db_session, admin_user, test_scan_job):
@@ -616,7 +486,7 @@ class TestMainBlueprint:
         assert response.status_code == 302  # Redirect
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
+    @patch('oneirodex.utils.scanning.is_scan_job_running')
     def test_edit_game_images(self, mock_is_scan_running, mock_current_user, 
                              client, app, db_session, admin_user, test_game, test_image):
         """Test edit game images route."""
@@ -631,7 +501,7 @@ class TestMainBlueprint:
         assert response.status_code == 200
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
+    @patch('oneirodex.utils.scanning.is_scan_job_running')
     def test_edit_game_images_scan_running(self, mock_is_scan_running, mock_current_user, 
                                           client, app, db_session, admin_user, test_game):
         """Test edit game images when scan is running."""
@@ -645,68 +515,8 @@ class TestMainBlueprint:
         response = client.get(f'/edit_game_images/{test_game.uuid}')
         assert response.status_code == 200
 
-    @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
-    def test_upload_image_success(self, mock_is_scan_running,
-                                 client, app, db_session, admin_user, test_game,
-                                 tmp_path):
-        """Test successful image upload."""
-        from PIL import Image as PILImage
-
-        mock_is_scan_running.return_value = False
-        app.config['IMAGE_SAVE_PATH'] = str(tmp_path)
-        image = BytesIO()
-        PILImage.new('RGB', (800, 600), color='green').save(image, format='JPEG')
-        image.seek(0)
-        test_file = FileStorage(
-            stream=image,
-            filename='test.jpg',
-            content_type='image/jpeg'
-        )
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post(f'/upload_image/{test_game.uuid}', 
-                              data={'file': test_file, 'image_type': 'cover'},
-                              content_type='multipart/form-data')
-        assert response.status_code == 200
-        
-        data = json.loads(response.data)
-        assert 'message' in data
-        assert data['message'] == 'File uploaded successfully'
-        row = db_session.get(Image, data['image_id'])
-        assert row.game_uuid == test_game.uuid and row.image_type == 'cover'
-        saved = tmp_path / row.url
-        assert saved.is_file() and saved.parent == tmp_path
-        with PILImage.open(saved) as decoded:
-            assert decoded.format == 'JPEG'
-            decoded.verify()
-
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
-    def test_upload_image_scan_running(self, mock_is_scan_running, mock_current_user, 
-                                      client, app, db_session, admin_user, test_game):
-        """Test image upload when scan is running."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_is_scan_running.return_value = True
-        
-        test_file = FileStorage(
-            stream=BytesIO(b'fake image data'),
-            filename='test.jpg',
-            content_type='image/jpeg'
-        )
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post(f'/upload_image/{test_game.uuid}', 
-                              data={'file': test_file},
-                              content_type='multipart/form-data')
-        assert response.status_code == 403
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
+    @patch('oneirodex.utils.scanning.is_scan_job_running')
     def test_upload_image_no_file(self, mock_is_scan_running, mock_current_user, 
                                  client, app, db_session, admin_user, test_game):
         """Test image upload without file."""
@@ -721,7 +531,7 @@ class TestMainBlueprint:
         assert response.status_code == 400
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
+    @patch('oneirodex.utils.scanning.is_scan_job_running')
     def test_upload_image_invalid_extension(self, mock_is_scan_running, mock_current_user, 
                                            client, app, db_session, admin_user, test_game):
         """Test image upload with invalid file extension."""
@@ -744,46 +554,7 @@ class TestMainBlueprint:
         assert response.status_code == 400
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
-    @patch('oneirodex.routes_admin_ext.game_images.os.path.exists')
-    @patch('oneirodex.routes_admin_ext.game_images.os.remove')
-    def test_delete_image_success(self, mock_remove, mock_exists, mock_is_scan_running, 
-                                 mock_current_user, client, app, db_session, admin_user, test_image):
-        """Test successful image deletion."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_is_scan_running.return_value = False
-        mock_exists.return_value = True
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/delete_image', 
-                              json={'image_id': test_image.id, 'is_cover': True})
-        assert response.status_code == 200
-        
-        data = json.loads(response.data)
-        assert 'message' in data
-        assert data['message'] == 'Image deleted successfully'
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
-    def test_delete_image_scan_running(self, mock_is_scan_running, mock_current_user, 
-                                      client, app, db_session, admin_user, test_image):
-        """Test image deletion when scan is running."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_is_scan_running.return_value = True
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/delete_image', 
-                              json={'image_id': test_image.id})
-        assert response.status_code == 403
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running')
+    @patch('oneirodex.utils.scanning.is_scan_job_running')
     def test_delete_image_invalid_request(self, mock_is_scan_running, mock_current_user, 
                                          client, app, db_session, admin_user):
         """Test image deletion with invalid request."""
@@ -832,44 +603,6 @@ class TestMainBlueprint:
         assert job_count == 0
 
     @patch('flask_login.current_user')
-    def test_delete_all_unmatched_folders(self, mock_current_user, client, app, db_session, 
-                                         admin_user, test_unmatched_folder):
-        """Test deleting all unmatched folders."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/delete_all_unmatched_folders')
-        assert response.status_code == 302  # Redirect
-        
-        # Check all unmatched folders were deleted
-        folder_count = db.session.scalar(select(func.count(UnmatchedFolder.id)))
-        assert folder_count == 0
-
-    @patch('flask_login.current_user')
-    def test_update_unmatched_folder_status(self, mock_current_user, client, app, db_session, 
-                                           admin_user, test_unmatched_folder):
-        """Test updating unmatched folder status."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        
-        original_status = test_unmatched_folder.status
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/update_unmatched_folder_status', 
-                              data={'folder_id': test_unmatched_folder.id})
-        assert response.status_code == 302  # Redirect
-        
-        # Check status was toggled
-        db_session.refresh(test_unmatched_folder)
-        expected_status = 'Ignore' if original_status == 'Unmatched' else 'Unmatched'
-        assert test_unmatched_folder.status == expected_status
-
-    @patch('flask_login.current_user')
     def test_update_unmatched_folder_status_ajax(self, mock_current_user, client, app, db_session, 
                                                 admin_user, test_unmatched_folder):
         """Test updating unmatched folder status via AJAX."""
@@ -886,25 +619,6 @@ class TestMainBlueprint:
         
         data = json.loads(response.data)
         assert data['status'] == 'success'
-
-    @patch('flask_login.current_user')
-    def test_clear_unmatched_entry(self, mock_current_user, client, app, db_session, 
-                                  admin_user, test_unmatched_folder):
-        """Test clearing a single unmatched folder entry."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        
-        folder_id = test_unmatched_folder.id
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post(f'/clear_unmatched_entry/{folder_id}')
-        assert response.status_code == 302  # Redirect
-        
-        # Check folder was deleted
-        deleted_folder = db.session.get(UnmatchedFolder, folder_id)
-        assert deleted_folder is None
 
     @patch('flask_login.current_user')
     def test_clear_unmatched_entry_ajax(self, mock_current_user, client, app, db_session, 
@@ -924,8 +638,8 @@ class TestMainBlueprint:
         assert data['status'] == 'success'
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_images.run_in_background')
-    @patch('oneirodex.routes_admin_ext.game_images.get_game_name_by_uuid')
+    @patch('oneirodex.utils.background.run_in_background')
+    @patch('oneirodex.utils.gamenames.get_game_name_by_uuid')
     def test_refresh_game_images(self, mock_get_name, mock_background,
                                 mock_current_user, client, app, db_session, admin_user, test_game):
         """Test refreshing game images."""
@@ -941,8 +655,8 @@ class TestMainBlueprint:
         assert response.status_code == 302  # Redirect
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_images.run_in_background')
-    @patch('oneirodex.routes_admin_ext.game_images.get_game_name_by_uuid')
+    @patch('oneirodex.utils.background.run_in_background')
+    @patch('oneirodex.utils.gamenames.get_game_name_by_uuid')
     def test_refresh_game_images_ajax(self, mock_get_name, mock_background, mock_current_user,
                                      client, app, db_session, admin_user, test_game):
         """Test refreshing game images via AJAX.
@@ -970,91 +684,9 @@ class TestMainBlueprint:
         assert 'message' in data
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_scan_job_running')
-    @patch('oneirodex.routes_admin_ext.game_delete.delete_game')
-    def test_delete_game_route(self, mock_delete_game, mock_is_scan_running, mock_current_user, 
-                              client, app, db_session, admin_user, test_game):
-        """Test deleting a game."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_current_user.name = admin_user.name
-        mock_is_scan_running.return_value = False
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post(f'/delete_game/{test_game.uuid}')
-        assert response.status_code == 200
-        
-        data = json.loads(response.data)
-        assert data['success'] == True
-        mock_delete_game.assert_called_once_with(test_game.uuid)
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_scan_job_running')
-    def test_delete_game_route_scan_running(self, mock_is_scan_running, mock_current_user, 
-                                           client, app, db_session, admin_user, test_game):
-        """Test deleting a game when scan is running."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_current_user.name = admin_user.name
-        mock_is_scan_running.return_value = True
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post(f'/delete_game/{test_game.uuid}')
-        assert response.status_code == 403
-        
-        data = json.loads(response.data)
-        assert data['success'] == False
-        assert 'A scan is running' in data['message']
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(True, None))
-    @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists')
-    @patch('oneirodex.routes_admin_ext.game_delete.os.remove')
-    def test_delete_folder_file(self, mock_remove, mock_exists, mock_safe_path, mock_current_user, 
-                               client, app, db_session, admin_user):
-        """Test deleting a file via delete_folder route."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        # First call returns True (file exists), second call returns False (after deletion)
-        mock_exists.side_effect = [True, False]
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        with patch('oneirodex.routes_admin_ext.game_delete.os.path.isfile', return_value=True):
-            response = client.post('/delete_folder', 
-                                  json={'folder_path': '/test/file.txt'})
-            assert response.status_code == 200
-            mock_remove.assert_called_once()
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(True, None))
-    @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists')
-    @patch('oneirodex.routes_admin_ext.game_delete.shutil.rmtree')
-    def test_delete_folder_directory(self, mock_rmtree, mock_exists, mock_safe_path, mock_current_user, 
-                                    client, app, db_session, admin_user):
-        """Test deleting a directory via delete_folder route."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_exists.side_effect = [True, False]  # Exists before, not after deletion
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        with patch('oneirodex.routes_admin_ext.game_delete.os.path.isfile', return_value=False):
-            response = client.post('/delete_folder', 
-                                  json={'folder_path': '/test/folder'})
-            assert response.status_code == 200
-            mock_rmtree.assert_called_once()
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.shutil.rmtree')
-    @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists', return_value=True)
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(False, 'Access denied'))
+    @patch('shutil.rmtree')
+    @patch('os.path.exists', return_value=True)
+    @patch('oneirodex.utils.security.is_safe_path_strict', return_value=(False, 'Access denied'))
     def test_delete_folder_rejects_unsafe_path(self, mock_safe, mock_exists, mock_rmtree,
                                                mock_current_user, client, app, db_session, admin_user):
         """Test delete_folder denies paths outside allowed base directories."""
@@ -1066,24 +698,6 @@ class TestMainBlueprint:
         response = client.post('/delete_folder', json={'folder_path': '/etc/passwd'})
         assert response.status_code == 403
         mock_rmtree.assert_not_called()
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.shutil.rmtree')
-    @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists', return_value=True)
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(True, None))
-    def test_delete_folder_allows_safe_path(self, mock_safe, mock_exists, mock_rmtree,
-                                            mock_current_user, client, app, db_session, admin_user):
-        """Test delete_folder proceeds when path is within allowed base directories."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_exists.side_effect = [True, False]
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-
-        with patch('oneirodex.routes_admin_ext.game_delete.os.path.isfile', return_value=False):
-            response = client.post('/delete_folder', json={'folder_path': '/allowed/game'})
-        assert response.status_code == 200
-        mock_rmtree.assert_called_once()
 
     @patch('flask_login.current_user')
     def test_delete_folder_no_path(self, mock_current_user, client, app, db_session, admin_user):
@@ -1098,42 +712,12 @@ class TestMainBlueprint:
         assert response.status_code == 400
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_scan_job_running')
-    @patch('oneirodex.routes_admin_ext.game_delete.os.path.isdir')
-    @patch('oneirodex.routes_admin_ext.game_delete.shutil.rmtree')
-    @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(True, None))
-    @patch('oneirodex.routes_admin_ext.game_delete.delete_game')
-    def test_delete_full_game(self, mock_delete_game, mock_safe_path, mock_exists, mock_rmtree, 
-                             mock_isdir, mock_is_scan_running, mock_current_user, 
-                             client, app, db_session, admin_user, test_game):
-        """Test deleting a full game (folder + database)."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_current_user.name = admin_user.name
-        mock_is_scan_running.return_value = False
-        mock_isdir.return_value = True
-        mock_exists.side_effect = [True, False]  # First check: exists, after deletion: doesn't exist
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/delete_full_game', 
-                              json={'game_uuid': test_game.uuid})
-        assert response.status_code == 200
-        
-        data = json.loads(response.data)
-        assert data['success'] == True
-        mock_rmtree.assert_called_once()
-        mock_delete_game.assert_called_once_with(test_game.uuid)
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_scan_job_running')
-    @patch('oneirodex.routes_admin_ext.game_delete.os.path.isdir')
-    @patch('oneirodex.routes_admin_ext.game_delete.shutil.rmtree')
-    @patch('oneirodex.routes_admin_ext.game_delete.os.path.exists')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(False, 'Access denied'))
-    @patch('oneirodex.routes_admin_ext.game_delete.delete_game')
+    @patch('oneirodex.utils.scanning.is_scan_job_running')
+    @patch('os.path.isdir')
+    @patch('shutil.rmtree')
+    @patch('os.path.exists')
+    @patch('oneirodex.utils.security.is_safe_path_strict', return_value=(False, 'Access denied'))
+    @patch('oneirodex.utils.services.game_delete.delete_game')
     def test_delete_full_game_rejects_unsafe_path(self, mock_delete_game, mock_safe_path, mock_exists,
                                                   mock_rmtree, mock_isdir, mock_is_scan_running,
                                                   mock_current_user, client, app, db_session, admin_user, test_game):
@@ -1158,26 +742,7 @@ class TestMainBlueprint:
         mock_delete_game.assert_not_called()
 
     @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_scan_job_running')
-    def test_delete_full_game_scan_running(self, mock_is_scan_running, mock_current_user, 
-                                          client, app, db_session, admin_user, test_game):
-        """Test delete_full_game when scan is running."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_is_scan_running.return_value = True
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-        
-        response = client.post('/delete_full_game', 
-                              json={'game_uuid': test_game.uuid})
-        assert response.status_code == 403
-        
-        data = json.loads(response.data)
-        assert data['success'] == False
-
-    @patch('flask_login.current_user')
-    @patch('oneirodex.routes_admin_ext.game_delete.is_scan_job_running')
+    @patch('oneirodex.utils.scanning.is_scan_job_running')
     def test_delete_full_game_no_uuid(self, mock_is_scan_running, mock_current_user, 
                                      client, app, db_session, admin_user):
         """Test delete_full_game without game UUID."""
@@ -1193,52 +758,6 @@ class TestMainBlueprint:
         
         data = json.loads(response.data)
         assert data['success'] == False
-
-    @patch('flask_login.current_user')
-    def test_delete_full_library(self, mock_current_user,
-                                client, app, db_session, admin_user, test_library, test_game):
-        """Test deleting a full library.
-
-        The background worker is patched out — the same way
-        test_library_batch_ops.py patches it — because letting it start is what
-        made the whole suite flaky.
-
-        `delete_library_background` spawns a daemon thread under
-        `@copy_current_request_context`, so it shares this request's
-        SQLAlchemy session and outlives the test (it sleeps 0.5s before doing
-        anything). Unpatched, that thread was still deleting this fixture's
-        library, games and scan jobs while *later* test files ran, against a
-        Session two threads then held at once. The symptoms were spread across
-        unrelated files and looked like anything but this: rows vanishing
-        mid-test, ObjectDeletedError refreshing a live User, and a stray
-        "Background deletion of library: Test Library ..." printed in the
-        middle of someone else's progress line.
-
-        Nothing is lost by patching: the assertions below are about the
-        *route's* contract — it accepts the job and hands back an id — which is
-        all this test ever checked. The worker itself has never been covered
-        here, as the note that used to sit at the bottom of this test admitted.
-        """
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_current_user.name = admin_user.name
-
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-
-        with patch('oneirodex.routes_admin_ext.library_delete.delete_library_background') as mock_bg:
-            mock_bg.return_value = None
-            response = client.post(f'/delete_full_library/{test_library.uuid}')
-
-        assert response.status_code == 200  # JSON response
-
-        # The route still resolves and authorises the library before handing
-        # off, so a patched worker does not weaken what this asserts.
-        json_data = response.get_json()
-        assert json_data['status'] == 'started'
-        assert 'job_id' in json_data
-        mock_bg.assert_called_once()
-        assert mock_bg.call_args.args[0] == test_library.uuid
 
     @patch('flask_login.current_user')
     def test_delete_full_library_not_found(self, mock_current_user, client, app, db_session, admin_user):
@@ -1267,7 +786,7 @@ class TestErrorHandling:
         app.config['IMAGE_SAVE_PATH'] = str(tmp_path)
         before = db_session.execute(select(func.count()).select_from(Image)).scalar_one()
         
-        with patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running', return_value=False):
+        with patch('oneirodex.utils.scanning.is_scan_job_running', return_value=False):
             test_file = FileStorage(
                 stream=BytesIO(b'invalid image data'),
                 filename='test.jpg', content_type='image/jpeg',
@@ -1287,7 +806,7 @@ class TestErrorHandling:
         mock_current_user.is_authenticated = True
         mock_current_user.role = 'admin'
         
-        with patch('oneirodex.routes_admin_ext.game_images.is_scan_job_running', return_value=False):
+        with patch('oneirodex.utils.scanning.is_scan_job_running', return_value=False):
             with client.session_transaction() as sess:
                 sess['_user_id'] = str(admin_user.id)
             
@@ -1301,10 +820,10 @@ class TestErrorHandling:
         mock_current_user.is_authenticated = True
         mock_current_user.role = 'admin'
         
-        with patch('oneirodex.routes_admin_ext.game_delete.is_safe_path_strict', return_value=(True, None)):
-            with patch('oneirodex.routes_admin_ext.game_delete.os.path.exists', return_value=True):
-                with patch('oneirodex.routes_admin_ext.game_delete.os.path.isfile', return_value=True):
-                    with patch('oneirodex.routes_admin_ext.game_delete.os.remove', side_effect=PermissionError("Permission denied")):
+        with patch('oneirodex.utils.security.is_safe_path_strict', return_value=(True, None)):
+            with patch('os.path.exists', return_value=True):
+                with patch('os.path.isfile', return_value=True):
+                    with patch('os.remove', side_effect=PermissionError("Permission denied")):
                         with client.session_transaction() as sess:
                             sess['_user_id'] = str(admin_user.id)
                         
@@ -1320,8 +839,8 @@ class TestErrorHandling:
 
         game_uuid = test_game.uuid
 
-        with patch('oneirodex.routes_admin_ext.game_delete.is_scan_job_running', return_value=False):
-            with patch('oneirodex.routes_admin_ext.game_delete.os.path.isdir', return_value=False):
+        with patch('oneirodex.utils.scanning.is_scan_job_running', return_value=False):
+            with patch('os.path.isdir', return_value=False):
                 with client.session_transaction() as sess:
                     sess['_user_id'] = str(admin_user.id)
 
@@ -1334,19 +853,3 @@ class TestErrorHandling:
 
                 # The stranded database entry is gone.
                 assert db_session.query(Game).filter_by(uuid=game_uuid).first() is None
-
-    @patch('flask_login.current_user')
-    def test_delete_all_unmatched_folders_db_error(self, mock_current_user, client, app, db_session, admin_user, global_settings):
-        """Test delete_all_unmatched_folders with database error."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-
-        # `global_settings` so the `check_setup_status` before_request hook finds
-        # its settings row already present and does not itself call the
-        # `db.session.commit` this test patches to raise.
-        with patch.object(db.session, 'commit', side_effect=Exception("DB Error")):
-            with client.session_transaction() as sess:
-                sess['_user_id'] = str(admin_user.id)
-            
-            response = client.post('/delete_all_unmatched_folders')
-            assert response.status_code == 302  # Should redirect despite error

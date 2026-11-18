@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@oneirodex/ui'
 import { requestOpenChatPanel } from '../hooks/chatPanelApi'
@@ -116,6 +116,10 @@ export function SocialCompanionDock({
     if (!controlled) setUncontrolledOpen(value)
     onOpenChange?.(value)
   }
+  // Window listeners below are registered once; they call the latest setOpen.
+  const setOpenRef = useRef(setOpen)
+  setOpenRef.current = setOpen
+
   const [pinned, setPinned] = useState(() => readCompanionPinned(true))
   const [busyKey, setBusyKey] = useState<any>(null)
   const [toast, setToast] = useState<any>(null)
@@ -139,7 +143,7 @@ export function SocialCompanionDock({
       if (event.key === 'y' || event.key === 'Y') {
         if (event.target?.closest?.('input, textarea, select, [contenteditable]')) return
         event.preventDefault()
-        setOpen((value: any) => !value)
+        setOpenRef.current((value: any) => !value)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -149,7 +153,7 @@ export function SocialCompanionDock({
   useEffect(() => {
     if (standalone) return undefined
     function onOpenRequest() {
-      setOpen(true)
+      setOpenRef.current(true)
     }
     window.addEventListener(OPEN_SOCIAL_EVENT, onOpenRequest)
     return () => window.removeEventListener(OPEN_SOCIAL_EVENT, onOpenRequest)

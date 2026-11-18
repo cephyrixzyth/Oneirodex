@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { InvitesPage } from './InvitesPage'
 import { SupportInboxPage } from './SupportInboxPage'
 

@@ -186,7 +186,10 @@ impl TrackingClaims {
         if state.client.as_deref() != Some(client) {
             return Err(io::Error::other("Reporter client was replaced"));
         }
-        let game_hash = format!("{:x}", Sha256::digest(game.as_bytes()));
+        let game_hash: String = Sha256::digest(game.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
         let key = format!("{profile}:{game_hash}");
         if state.claims.contains_key(&key) {
             return Ok(None);

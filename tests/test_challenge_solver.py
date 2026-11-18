@@ -421,33 +421,6 @@ def test_challenge_solver_failure_does_not_retain_or_log_url_secrets(monkeypatch
     assert 'private-token' not in (status['last_error'] or '')
 
 
-def test_challenge_solver_status_api(client, app, db_session, monkeypatch):
-    _disable_challenge_solver(app, db_session, monkeypatch)
-    from uuid import uuid4
-
-    from oneirodex.models import User
-
-    admin = User(
-        user_id=str(uuid4()),
-        name=f'chadmin_{uuid4().hex[:8]}',
-        email=f'chadmin_{uuid4().hex[:8]}@test.local',
-        role='admin',
-        is_email_verified=True,
-    )
-    admin.set_password('testpass123')
-    db_session.add(admin)
-    db_session.commit()
-    with client.session_transaction() as sess:
-        sess['_user_id'] = str(admin.id)
-        sess['_fresh'] = True
-    resp = client.get('/api/admin/challenge-solver/status')
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data['enabled'] is False
-    assert data['provider'] == 'flaresolverr_compat'
-    assert data['max_tier'] == 5
-
-
 def test_save_challenge_config_validates_url(app, db_session, global_settings, monkeypatch):
     monkeypatch.setitem(app.config, 'ALLOW_PRIVATE_LAN_URLS', True)
     with app.app_context():

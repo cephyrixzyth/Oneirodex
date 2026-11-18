@@ -244,7 +244,7 @@ class TestPinsEndpoint:
 
 class TestForcedShelvesReachTheFeed:
     def test_a_forced_shelf_leads_the_feed(self, app, db_session, pin_user):
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
 
         _force(db_session, 'highest_rated', 1)
 

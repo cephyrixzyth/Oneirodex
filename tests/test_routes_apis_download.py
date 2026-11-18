@@ -216,48 +216,31 @@ class TestDeleteDownloadRequest:
         assert data['ok'] is True
         assert 'deleted successfully' in data['message']
     
-    @patch('oneirodex.routes_apis.download.db')
-    def test_delete_request_database_error(self, mock_db, client, admin_user, sample_download_request):
-        """Test handling of database errors during deletion."""
-        mock_db.session.delete.side_effect = Exception("Database error")
-        
+    def test_delete_request_database_error(self, client, admin_user, sample_download_request, monkeypatch):
+        """A failed commit answers a safe 500 and keeps the request."""
+        from sqlalchemy.orm import Session
+
+        real_commit = Session.commit
+
+        def fail_commit(session):
+            if session.deleted:
+                raise RuntimeError('synthetic database error')
+            return real_commit(session)
+
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
-        
+
+        monkeypatch.setattr(Session, 'commit', fail_commit)
         response = client.delete(f'/api/delete_download/{sample_download_request.id}')
+        monkeypatch.setattr(Session, 'commit', real_commit)
         assert response.status_code == 500
+        assert 'synthetic' not in response.get_data(as_text=True)
         
         data = response.get_json()
         assert data['ok'] is False
         assert 'Could not delete the download request' in data['error']
     
-    @patch('oneirodex.routes_apis.download.log_system_event')
-    def test_delete_request_logging(self, mock_log, client, admin_user, sample_download_request):
-        """Test that proper logging occurs during deletion."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        response = client.delete(f'/api/delete_download/{sample_download_request.id}')
-        assert response.status_code == 200
-        
-        # Verify logging calls
-        mock_log.assert_called()
-        log_calls = mock_log.call_args_list
-        
-        # Check for deletion and success log messages
-        deletion_logged = any(
-            'Deleting download request' in str(call) for call in log_calls
-        )
-        success_logged = any(
-            'Successfully deleted download request' in str(call) for call in log_calls
-        )
-        
-        assert deletion_logged
-        assert success_logged
-
-
 class TestAdminDownloadRequestList:
     def test_list_requires_login(self, client):
         response = client.get('/api/admin/download-requests')

@@ -51,25 +51,6 @@ def test_service_worker_is_served_at_the_root_with_root_scope(client, configured
     assert response.headers['Cache-Control'] == 'no-cache'
 
 
-def test_python_shells_link_the_manifest_and_load_the_installer():
-    for name in ('member_spa.py', 'admin_spa.py'):
-        html = (ROOT / 'oneirodex' / 'utils' / name).read_text(encoding='utf-8')
-        assert "rel=\"manifest\"" in html, name
-        assert 'member.app_manifest' in html, name
-        # Count the <script> tags, not the string: the surrounding comments
-        # name the file too, and a duplicated *comment* is not a bug.
-        tags = re.findall(r"<script[^>]*od_pwa_install\.js[^>]*>", html)
-        assert len(tags) == 1, f'{name} loads the installer {len(tags)} times'
-        assert 'name="theme-color"' in html, name
-
-    renderer = (ROOT / 'oneirodex' / 'utils' / 'styleguide_page.py').read_text(encoding='utf-8')
-    # The style guide is a static document renderer; it links the canonical
-    # manifest route directly instead of resolving the Flask endpoint.
-    assert 'href="/manifest.webmanifest"' in renderer
-    assert 'od_pwa_install.js' in renderer
-    assert 'name="theme-color"' in renderer
-
-
 def test_offline_page_carries_no_member_data(client, configured_install):
     response = client.get('/offline')
     assert response.status_code == 200

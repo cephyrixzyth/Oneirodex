@@ -1,210 +1,106 @@
-"""JSON setup state transitions preserve first-run admin/session gates."""
+"""The setup wizard's real path: the screens submit each step to /api/setup/step.
 
-import pytest
+These replace form-POST tests of the retired /setup/<step> pages. The rules
+they hold are the same: the first library must sit inside a declared library
+location and exist, an OIDC issuer must use HTTPS, and invalid account or IGDB
+details never advance the wizard.
+"""
+from sqlalchemy import select
 
-
-@pytest.fixture(autouse=True)
-def _keyring(reusable_secret_keyring):
-    return reusable_secret_keyring
-
-
-def test_first_run_setup_advances_with_existing_session_without_returning_secrets(client, db_session):
-    state = client.get('/api/setup/state')
-    assert state.status_code == 200
-    assert state.headers['cache-control'] == 'no-store'
-    assert state.get_json()['step'] == 1
-    assert state.get_json()['required'] is True
-
-    created = client.post('/api/setup/step', json={
-        'step': 1,
-        'username': 'setup_admin',
-        'email': 'setup_admin@example.com',
-        'password': 'correct horse battery',
-        'confirm_password': 'correct horse battery',
-    })
-    assert created.status_code == 200
-    assert created.get_json()['step'] == 2
-    assert created.get_json()['next_url'] == '/setup/smtp'
-    assert client.get('/api/account/summary').status_code == 200
-
-    saved = client.post('/api/setup/step', json={
-        'step': 2,
-        'smtp_server': 'mail.example.com',
-        'smtp_port': 587,
-        'smtp_username': 'setup@example.com',
-        'smtp_password': 'smtp-secret-never-return',
-        'smtp_default_sender': 'setup@example.com',
-        'smtp_use_tls': True,
-        'smtp_enabled': True,
-    })
-    assert saved.status_code == 200
-    assert saved.get_json()['step'] == 3
-    next_state = client.get('/api/setup/state').get_json()
-    assert next_state['settings']['smtp_password_configured'] is True
-    assert 'smtp-secret-never-return' not in str(next_state)
-    assert next_state['settings']['smtp_server'] == 'mail.example.com'
+from oneirodex.models import GlobalSettings, Library
+from oneirodex.utils.setup import get_current_setup_step
+from tests.test_routes_setup import _park_wizard_at, admin_user  # noqa: F401  (fixture)
 
 
-def test_setup_api_rejects_out_of_order_and_invalid_admin_transitions(client):
-    out_of_order = client.post('/api/setup/step', json={'step': 2, 'skip': True})
-    assert out_of_order.status_code == 409
-    assert out_of_order.get_json()['error_code'] == 'conflict'
-
-    invalid_admin = client.post('/api/setup/step', json={
-        'step': 1,
-        'username': 'bad name',
-        'email': 'invalid',
-        'password': 'short',
-        'confirm_password': 'different',
-    })
-    assert invalid_admin.status_code == 422
-    assert invalid_admin.get_json()['error_code'] == 'unprocessable'
+def _admin_session(client, user):
+    with client.session_transaction() as sess:
+        sess['_user_id'] = str(user.id)
+        sess['_fresh'] = True
 
 
-def test_setup_skip_path_resumes_and_completes_each_ordered_step(client, db_session, monkeypatch):
-    import oneirodex.init_data as init_data
-
-    for name in (
-        'initialize_library_folders', 'initialize_discovery_sections',
-        'insert_default_scanning_filters', 'initialize_default_settings',
-        'initialize_allowed_file_types',
-    ):
-        monkeypatch.setattr(init_data, name, lambda **_kwargs: None)
-
-    created = client.post('/api/setup/step', json={
-        'step': 1, 'username': 'skip_admin', 'email': 'skip@example.com',
-        'password': 'correct horse battery', 'confirm_password': 'correct horse battery',
-    })
-    assert created.status_code == 200
-    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).get_json()['step'] == 3
-    assert client.post('/api/setup/step', json={'step': 3}).get_json()['step'] == 4
-    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).get_json()['step'] == 5
-    assert client.post('/api/setup/step', json={'step': 5, 'skip': True}).get_json()['step'] == 6
-    finished = client.post('/api/setup/step', json={'step': 6, 'skip': True})
-    assert finished.status_code == 200
-    assert finished.get_json()['complete'] is True
-    assert client.get('/api/setup/state').get_json()['complete'] is True
+def _step(client, step, **fields):
+    return client.post('/api/setup/step', json={'step': step, **fields})
 
 
-def test_setup_api_requires_admin_for_wizard_state(client, db_session):
-    from oneirodex.models import User
-    from oneirodex.utils.setup import set_setup_step
-
-    user = User(
-        name='existing_admin', email='existing@example.com', role='admin',
-        password_hash='placeholder', user_id='existing-admin', is_email_verified=True,
-    )
-    user.set_password('correct horse battery')
-    db_session.add(user)
-    db_session.commit()
-    set_setup_step(2)
-    response = client.get('/api/setup/state')
-    assert response.status_code == 401
-    assert response.get_json()['error_code'] == 'unauthorized'
+def _message(response):
+    body = response.get_json() or {}
+    detail = body.get('detail')
+    return ' '.join(str(part) for part in (body.get('error'), body.get('message'), detail) if part)
 
 
-def test_integrations_json_transition_respects_provider_configure_checkboxes(client, db_session):
-    from sqlalchemy import select
+def test_first_library_outside_the_declared_locations_is_refused(client, db_session, admin_user, tmp_path):
+    _park_wizard_at(db_session, 6)
+    _admin_session(client, admin_user)
+    folder = tmp_path / 'outside'
+    folder.mkdir()
 
-    from oneirodex.models import GlobalSettings
-    from oneirodex.utils.secret_store import read_global_secret
+    response = _step(client, 6, library_name='Unsafe library', platform='NES',
+                     folder_path=str(folder), scan_mode='folders', scan_depth=1)
 
-    created = client.post('/api/setup/step', json={
-        'step': 1, 'username': 'provider_admin', 'email': 'provider@example.com',
-        'password': 'correct horse battery', 'confirm_password': 'correct horse battery',
-    })
-    assert created.status_code == 200
-    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).status_code == 200
-    assert client.post('/api/setup/step', json={'step': 3}).status_code == 200
-    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).status_code == 200
-
-    settings = db_session.execute(select(GlobalSettings)).scalars().first()
-    settings.steam_web_api_key = 'existing-steam-key'
-    settings.steamgriddb_api_key = 'existing-grid-key'
-    settings.giantbomb_api_key = 'existing-giantbomb-key'
-    db_session.commit()
-
-    response = client.post('/api/setup/step', json={
-        'step': 5,
-        'steam_web_api_key': 'unchecked-replacement',
-        'configure_steam_web_api_key': False,
-        'steamgriddb_api_key': 'selected-replacement',
-        'configure_steamgriddb_api_key': True,
-        'giantbomb_api_key': '',
-        'configure_giantbomb_api_key': True,
-    })
-
-    assert response.status_code == 200
-    assert response.get_json()['step'] == 6
-    db_session.refresh(settings)
-    assert read_global_secret(settings, 'steam_web_api_key') == 'existing-steam-key'
-    assert read_global_secret(settings, 'steamgriddb_api_key') == 'selected-replacement'
-    assert read_global_secret(settings, 'giantbomb_api_key') == 'existing-giantbomb-key'
+    assert response.status_code == 422, response.get_json()
+    assert 'outside the configured library locations' in _message(response)
+    assert db_session.execute(select(Library).filter_by(name='Unsafe library')).scalars().first() is None
+    assert get_current_setup_step() == 6
 
 
-@pytest.mark.parametrize('key_field', (
-    'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
-    'mobygames_api_key', 'thegamesdb_api_key',
-))
-def test_integrations_reject_provider_key_larger_than_storage_column(client, db_session, key_field):
-    from sqlalchemy import select
+def test_first_library_that_does_not_exist_is_refused(client, db_session, admin_user, tmp_path, monkeypatch):
+    monkeypatch.setattr('oneirodex.utils.security.get_allowed_base_directories', lambda *_a, **_k: [str(tmp_path)])
+    _park_wizard_at(db_session, 6)
+    _admin_session(client, admin_user)
 
-    from oneirodex.models import GlobalSettings
+    response = _step(client, 6, library_name='Missing path library', platform='NES',
+                     folder_path=str(tmp_path / 'not-created'), scan_mode='folders', scan_depth=1)
 
-    created = client.post('/api/setup/step', json={
-        'step': 1, 'username': 'provider_limit_admin',
-        'email': 'provider-limit@example.com',
-        'password': 'correct horse battery',
-        'confirm_password': 'correct horse battery',
-    })
-    assert created.status_code == 200
-    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).status_code == 200
-    assert client.post('/api/setup/step', json={'step': 3}).status_code == 200
-    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).status_code == 200
-
-    response = client.post('/api/setup/step', json={
-        'step': 5,
-        f'configure_{key_field}': True,
-        key_field: 'k' * 256,
-    })
-
-    assert response.status_code == 422
-    assert response.get_json()['error_code'] == 'unprocessable'
-    assert '255 characters' in str(response.get_json()['detail'])
-    settings = db_session.execute(select(GlobalSettings)).scalars().first()
-    assert getattr(settings, key_field) is None
-    assert settings.setup_current_step == 5
+    assert response.status_code == 422, response.get_json()
+    assert 'not available as a directory' in _message(response)
+    assert db_session.execute(select(Library).filter_by(name='Missing path library')).scalars().first() is None
 
 
-@pytest.mark.parametrize('key_field', (
-    'steam_web_api_key', 'steamgriddb_api_key', 'giantbomb_api_key',
-    'mobygames_api_key', 'thegamesdb_api_key',
-))
-def test_integrations_accept_provider_key_at_storage_column_limit(client, db_session, key_field):
-    from sqlalchemy import select
+def test_oidc_issuer_with_a_non_http_scheme_is_refused(client, db_session, admin_user):
+    _park_wizard_at(db_session, 5)
+    _admin_session(client, admin_user)
 
-    from oneirodex.models import GlobalSettings
-    from oneirodex.utils.secret_store import read_global_secret
+    response = _step(client, 5, configure_oidc=True, oidc_issuer_url='file:///etc/passwd',
+                     oidc_client_id='invalid-scheme')
 
-    created = client.post('/api/setup/step', json={
-        'step': 1, 'username': 'provider_boundary_admin',
-        'email': 'provider-boundary@example.com',
-        'password': 'correct horse battery',
-        'confirm_password': 'correct horse battery',
-    })
-    assert created.status_code == 200
-    assert client.post('/api/setup/step', json={'step': 2, 'skip': True}).status_code == 200
-    assert client.post('/api/setup/step', json={'step': 3}).status_code == 200
-    assert client.post('/api/setup/step', json={'step': 4, 'skip': True}).status_code == 200
+    assert response.status_code == 422, response.get_json()
+    assert 'must be an HTTP or HTTPS URL' in _message(response)
+    assert get_current_setup_step() == 5
 
-    key = 'k' * 255
-    response = client.post('/api/setup/step', json={
-        'step': 5,
-        f'configure_{key_field}': True,
-        key_field: key,
-    })
 
-    assert response.status_code == 200
-    settings = db_session.execute(select(GlobalSettings)).scalars().first()
-    assert read_global_secret(settings, key_field) == key
-    assert settings.setup_current_step == 6
+def test_oidc_issuer_over_plain_http_is_refused_and_nothing_is_saved(client, db_session, admin_user):
+    _park_wizard_at(db_session, 5)
+    _admin_session(client, admin_user)
+
+    response = _step(client, 5, configure_oidc=True, oidc_issuer_url='http://idp.example.test',
+                     oidc_client_id='cleartext-risk', oidc_client_secret='must-not-be-saved')
+
+    assert response.status_code == 422, response.get_json()
+    assert 'must use HTTPS' in _message(response)
+    assert get_current_setup_step() == 5
+    db_session.expire_all()
+    settings = db_session.execute(select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()
+    assert settings.oidc_issuer_url in (None, '')
+    assert 'must-not-be-saved' not in str(settings.oidc_client_secret or '')
+
+
+def test_invalid_administrator_details_are_refused(client, db_session):
+    from tests.test_routes_setup import safe_cleanup_users_and_related
+
+    safe_cleanup_users_and_related(db_session)
+    response = _step(client, 1, username='a', email='invalid-email',
+                     password='short', confirm_password='different')
+
+    assert response.status_code == 422, response.get_json()
+    assert response.get_json()['ok'] is False
+
+
+def test_too_short_igdb_credentials_do_not_advance_the_wizard(client, db_session, admin_user):
+    _park_wizard_at(db_session, 4)
+    _admin_session(client, admin_user)
+
+    response = _step(client, 4, igdb_client_id='short', igdb_client_secret='short')
+
+    assert response.status_code == 422, response.get_json()
+    assert set(response.get_json()['detail']) == {'igdb_client_id', 'igdb_client_secret'}
+    assert get_current_setup_step() == 4

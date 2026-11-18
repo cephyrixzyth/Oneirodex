@@ -181,21 +181,8 @@ def test_native_api_contract_and_asgi_imports_do_not_load_flask():
                 'assert "flask" not in sys.modules; '
                 'assert "flask_caching" not in sys.modules; '
                 'assert "jinja2" not in sys.modules; '
-                'assert "oneirodex.routes_apis.account" not in sys.modules; '
-                'assert "oneirodex.routes_apis.acquire" not in sys.modules; '
-                'assert "oneirodex.routes_apis.filters" not in sys.modules; '
-                'assert "oneirodex.routes_admin_ext.features" not in sys.modules; '
-                'assert "oneirodex.routes_apis.social" not in sys.modules; '
-                'assert "oneirodex.routes_apis.setup" not in sys.modules; '
                 'assert "oneirodex.utils.rbac" not in sys.modules; '
-                'assert "oneirodex.routes_admin_ext.settings" not in sys.modules; '
-                'assert "oneirodex.routes_apis.scan_unmatched_rows" not in sys.modules; '
-                'assert "oneirodex.routes_apis.updates" not in sys.modules; '
-                'assert "oneirodex.routes_apis.library" not in sys.modules; '
-                'assert "oneirodex.routes_admin_ext.themes" not in sys.modules; '
-                'assert "oneirodex.routes_apis.assists" not in sys.modules; '
-                'assert "oneirodex.routes_apis.vr" not in sys.modules; '
-                'assert "oneirodex.routes_info" not in sys.modules'
+                'assert "oneirodex.legacy_app" not in sys.modules'
             ),
         ],
         cwd=ROOT,
@@ -290,7 +277,7 @@ from oneirodex.utils import artwork_apply, cover_art_stock, cover_art_studio, st
 from oneirodex.utils import game_details_payload, oidc
 from oneirodex.utils import discover_hubs, game_more_from, discover_projections, email_digest
 from oneirodex.utils import emulator_profiles
-from oneirodex.utils import themes, unmatched
+from oneirodex.utils import themes
 from oneirodex.utils import status, ops_summary
 
 app = NativeRuntimeContext({}, package_root='.')
@@ -299,7 +286,7 @@ app.native_engine = create_engine('sqlite:///:memory:')
 from oneirodex.models.orm import ModelBase
 ModelBase.metadata.create_all(app.native_engine)
 assert not any(name == 'flask' or name.startswith(('flask.', 'flask_')) for name in sys.modules)
-assert 'oneirodex.routes_discover' not in sys.modules
+assert 'oneirodex.legacy_app' not in sys.modules
 started = []
 for module, name, symbol in (
     (scan_scheduler, 'scan', 'start_scan_scheduler'),

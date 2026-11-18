@@ -78,58 +78,6 @@ def test_resolve_rejects_rar(tmp_path):
     assert exc.value.status_code == 415
 
 
-def test_emulator_save_roundtrip(client, app, db_session, member, tmp_path, monkeypatch):
-    lib = Library(name=f'SaveLib_{uuid4().hex[:6]}', platform=LibraryPlatform.NES)
-    db_session.add(lib)
-    db_session.flush()
-    game = Game(
-        uuid=str(uuid4()),
-        name=f'SaveGame_{uuid4().hex[:6]}',
-        library_uuid=lib.uuid,
-        full_disk_path=str(tmp_path / 'g.nes'),
-    )
-    db_session.add(game)
-    db_session.commit()
-
-    monkeypatch.setitem(app.config, 'EMULATOR_SAVES_PATH', str(tmp_path / 'saves'))
-    monkeypatch.setitem(app.config, 'ENABLE_EMULATOR_SAVE_SYNC', True)
-    _login(client, app, member)
-
-    data = {
-        'slot': 'slot1',
-        'file': (io.BytesIO(b'SAVEDATA'), 'slot1.state'),
-    }
-    resp = client.post(
-        f'/api/games/{game.uuid}/saves',
-        data=data,
-        content_type='multipart/form-data',
-    )
-    assert resp.status_code == 201, resp.get_json()
-    body = resp.get_json()
-    assert body['slot_name'] == 'slot1'
-    assert body['size_bytes'] == 8
-
-    listed = client.get(f'/api/games/{game.uuid}/saves')
-    assert listed.status_code == 200
-    assert len(listed.get_json()['saves']) == 1
-
-    downloaded = client.get(f'/api/games/{game.uuid}/saves/slot1')
-    assert downloaded.status_code == 200
-    assert downloaded.data == b'SAVEDATA'
-
-    deleted = client.delete(f'/api/games/{game.uuid}/saves/slot1')
-    assert deleted.status_code == 200
-
-
-def test_locale_api(client, app, db_session, member):
-    _login(client, app, member)
-    resp = client.post('/api/locale', json={'locale': 'es'})
-    assert resp.status_code == 200
-    assert resp.get_json()['locale'] == 'es'
-    get_resp = client.get('/api/locale')
-    assert get_resp.get_json()['locale'] == 'es'
-
-
 def test_playnite_import_matches(app, db_session, member):
     unique = f'Celeste Import Target {uuid4().hex[:8]}'
     lib = Library(name=f'PLib_{uuid4().hex[:6]}', platform=LibraryPlatform.PCWIN)

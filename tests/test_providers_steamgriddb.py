@@ -340,7 +340,7 @@ def test_apply_artwork_does_not_return_raw_unexpected_exception(
     def fail(*_args, **_kwargs):
         raise OSError(f'https://provider.invalid/image?token={secret}')
 
-    monkeypatch.setattr('oneirodex.routes_apis.providers.apply_cover_from_url', fail)
+    monkeypatch.setattr('oneirodex.utils.artwork_apply.apply_cover_from_url', fail)
     response = client.post(
         f'/api/games/{game.uuid}/artwork/steamgriddb',
         json={'url': 'https://cdn.example/x.png'},
@@ -372,7 +372,7 @@ def test_apply_artwork_does_not_return_raw_provider_runtime_error(
     def fail(*_args, **_kwargs):
         raise RuntimeError(f'upstream URL leaked?token={secret}')
 
-    monkeypatch.setattr('oneirodex.routes_apis.providers.apply_cover_from_url', fail)
+    monkeypatch.setattr('oneirodex.utils.artwork_apply.apply_cover_from_url', fail)
     response = client.post(
         f'/api/games/{game.uuid}/artwork/steamgriddb',
         json={'url': 'https://cdn.example/x.png'},
@@ -402,7 +402,7 @@ def test_provider_search_does_not_return_raw_runtime_error(
         raise RuntimeError(f'upstream response?key={secret}')
 
     monkeypatch.setattr(
-        'oneirodex.routes_apis.providers.get_provider',
+        'oneirodex.utils.providers.registry.get_provider',
         lambda _provider_id: SimpleNamespace(
             id='steamgriddb', is_enabled=lambda: True, search_artwork=fail,
         ),

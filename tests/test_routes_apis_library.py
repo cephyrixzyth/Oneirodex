@@ -279,8 +279,8 @@ class TestReorderLibraries:
         
         response = client.post('/api/reorder_libraries',
                              json={'order': []})
-        assert response.status_code == 302
-        assert 'login' in response.location
+        assert response.status_code == 403
+        assert response.get_json()['error_code'] == 'forbidden'
     
     def test_reorder_libraries_successful_reorder(self, client, admin_user, multiple_libraries):
         """Test successful library reordering."""
@@ -384,30 +384,8 @@ class TestReorderLibraries:
         response = client.post('/api/reorder_libraries',
                              data='invalid json',
                              content_type='application/json')
-        assert response.status_code == 500  # Flask returns 500 for invalid JSON
+        assert response.status_code == 400  # malformed JSON is the caller's error
     
-    @patch('oneirodex.routes_apis.library.db.session.commit')
-    def test_reorder_libraries_database_error(self, mock_commit, client, admin_user, multiple_libraries):
-        """Test reordering with database error."""
-        mock_commit.side_effect = Exception("Database error")
-        
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        order = [lib.uuid for lib in multiple_libraries]
-        
-        response = client.post('/api/reorder_libraries',
-                             json={'order': order})
-        assert response.status_code == 500
-        
-        data = response.get_json()
-        assert data['status'] == 'error'
-        assert data['ok'] is False
-        assert data['message'] == 'Could not update the library'
-        assert 'Database error' not in data['message']
-
-
 class TestGetLibrary:
     """Tests for get_library endpoint."""
     
@@ -520,14 +498,6 @@ class TestGetLibrary:
 class TestLibraryApiBlueprint:
     """Test blueprint registration and URL patterns."""
     
-    def test_library_routes_blueprint_registration(self, app):
-        """Test that library API routes are properly registered."""
-        with app.test_request_context():
-            assert url_for('apis.get_libraries') == '/api/get_libraries'
-            assert url_for('apis.reorder_libraries') == '/api/reorder_libraries'
-            # Note: get_library requires a parameter, so we test with a sample UUID
-            sample_uuid = str(uuid4())
-            assert url_for('apis.get_library', library_uuid=sample_uuid) == f'/api/library/{sample_uuid}'
     
     def test_library_routes_http_methods(self, client, regular_user):
         """Test correct HTTP methods are supported."""

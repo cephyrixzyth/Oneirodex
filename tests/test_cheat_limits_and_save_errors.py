@@ -423,28 +423,3 @@ def test_members_can_mutate_cheats(client, app, db_session, tmp_path, monkeypatc
 # --------------------------------------------------------------------------
 # save read errors
 # --------------------------------------------------------------------------
-
-def test_unreadable_save_does_not_leak_the_storage_path(client, app, db_session, tmp_path, monkeypatch):
-    game = _game(db_session, tmp_path)
-    user = _user(db_session)
-    now = datetime.now(timezone.utc)
-    db_session.add(EmulatorSave(
-        user_id=user.id, game_uuid=game.uuid, slot_name='slot1', filename='s.state',
-        size_bytes=3, storage_path='/srv/oneirodex/saves/secret/path/s.state', encrypted=False,
-        created_at=now, updated_at=now,
-    ))
-    db_session.commit()
-    _login(client, user)
-
-    def boom(row):
-        raise PermissionError(13, 'Permission denied', '/srv/oneirodex/saves/secret/path/s.state')
-
-    monkeypatch.setattr('oneirodex.routes_apis.emulator_saves.read_save_bytes', boom)
-    resp = client.get(f'/api/games/{game.uuid}/saves/slot1')
-
-    assert resp.status_code == 500
-    body = resp.get_json()
-    assert body['error'] == 'Failed to read save'
-    assert body['error_code'] == 'internal'
-    assert '/srv' not in resp.get_data(as_text=True)
-    assert 'secret' not in resp.get_data(as_text=True)

@@ -26,7 +26,7 @@ from oneirodex.utils.api_tokens import (
     user_has_scope,
     verify_bearer_token_detailed,
 )
-from oneirodex.utils.auth import safe_next_url
+from oneirodex.utils.safe_redirect import safe_next_url
 
 
 @pytest.fixture
@@ -54,9 +54,8 @@ class TestSafeNextUrl:
         '/library?q=zelda&page=2',
         '/games/abc#screenshots',
     ])
-    def test_same_site_paths_pass_through(self, app, candidate):
-        with app.test_request_context('/'):
-            assert safe_next_url(candidate) == candidate
+    def test_same_site_paths_pass_through(self, candidate):
+        assert safe_next_url(candidate) == candidate
 
     @pytest.mark.parametrize('candidate', [
         'http://evil.com/steal',
@@ -68,19 +67,14 @@ class TestSafeNextUrl:
         '\\\\evil.com/steal',
         'javascript:alert(1)',
         'evil.com',
+        # Browsers strip tabs and newlines, which would leave //evil.com.
+        '/\t/evil.com/steal',
+        '/\n/evil.com/steal',
         '',
         None,
     ])
-    def test_off_site_candidates_fall_back(self, app, candidate):
-        with app.test_request_context('/'):
-            result = safe_next_url(candidate)
-            assert result != candidate
-            assert result.startswith('/')
-            assert not result.startswith('//')
-
-    def test_fallback_is_a_real_route(self, app):
-        with app.test_request_context('/'):
-            assert safe_next_url(None).startswith('/')
+    def test_off_site_candidates_fall_back(self, candidate):
+        assert safe_next_url(candidate) == '/discover'
 
 
 # --- S6: token expiry -----------------------------------------------------
@@ -400,16 +394,14 @@ class TestChildAcquireAndCommands:
     def test_acquire_search_requires_read_library_scope_for_bearer_tokens(
         self, client, member, db_session, monkeypatch,
     ):
-        from oneirodex.routes_apis import acquire
-
         calls = []
-        monkeypatch.setattr(acquire, 'arr_module_on', lambda: True)
+        monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda **_kw: True)
         monkeypatch.setattr(
-            acquire, 'search_indexers',
+            'oneirodex.utils.arr_connectors.search_indexers',
             lambda query: calls.append(query) or [],
         )
         monkeypatch.setattr(
-            acquire, 'indexer_status_summary', lambda: {'warnings': []},
+            'oneirodex.utils.indexer_registry.indexer_status_summary', lambda: {'warnings': []},
         )
 
         _row, limited_token = generate_api_token(
@@ -426,16 +418,14 @@ class TestChildAcquireAndCommands:
     def test_acquire_search_accepts_read_library_scope_for_bearer_tokens(
         self, client, member, db_session, monkeypatch,
     ):
-        from oneirodex.routes_apis import acquire
-
         calls = []
-        monkeypatch.setattr(acquire, 'arr_module_on', lambda: True)
+        monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda **_kw: True)
         monkeypatch.setattr(
-            acquire, 'search_indexers',
+            'oneirodex.utils.arr_connectors.search_indexers',
             lambda query: calls.append(query) or [],
         )
         monkeypatch.setattr(
-            acquire, 'indexer_status_summary', lambda: {'warnings': []},
+            'oneirodex.utils.indexer_registry.indexer_status_summary', lambda: {'warnings': []},
         )
         _row, library_token = generate_api_token(
             member, 'library-read', ['read:library'],
@@ -452,12 +442,10 @@ class TestChildAcquireAndCommands:
     def test_acquire_search_keeps_browser_session_access(
         self, client, app, member, monkeypatch,
     ):
-        from oneirodex.routes_apis import acquire
-
-        monkeypatch.setattr(acquire, 'arr_module_on', lambda: True)
-        monkeypatch.setattr(acquire, 'search_indexers', lambda _query: [])
+        monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda **_kw: True)
+        monkeypatch.setattr('oneirodex.utils.arr_connectors.search_indexers', lambda _query: [])
         monkeypatch.setattr(
-            acquire, 'indexer_status_summary', lambda: {'warnings': []},
+            'oneirodex.utils.indexer_registry.indexer_status_summary', lambda: {'warnings': []},
         )
         _login(client, app, member)
 

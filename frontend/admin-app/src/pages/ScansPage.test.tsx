@@ -437,7 +437,7 @@ describe('ScansPage queued jobs', () => {
   test('confirms clear-completed, posts with CSRF, then refreshes the scan list', async () => {
     const user = userEvent.setup()
     let cleared = false
-    const fetchMock = vi.fn(async (url, init) => {
+    const fetchMock = vi.fn(async (url, _init) => {
       if (String(url).includes('/api/scan_jobs_status')) {
         const currentJobs = cleared
           ? [{ id: 'active-1', library_name: 'Active history', status: 'Running' }]
@@ -490,7 +490,7 @@ describe('ScansPage queued jobs', () => {
   test('clear all confirms terminal-only semantics and posts to the legacy endpoint', async () => {
     const user = userEvent.setup()
     let cleared = false
-    const fetchMock = vi.fn(async (url, init) => {
+    const fetchMock = vi.fn(async (url, _init) => {
       if (String(url).includes('/api/scan_jobs_status')) {
         const currentJobs = cleared
           ? [{ id: 'active-1', library_name: 'Active history', status: 'Running' }]
@@ -557,7 +557,7 @@ describe('ScansPage queued jobs', () => {
   test('Refresh all while busy opens conflict modal and posts queue_policy', async () => {
     const user = userEvent.setup()
     vi.mocked(confirmAction).mockResolvedValue(true)
-    const fetchMock = vi.fn(async (url, opts) => {
+    const fetchMock = vi.fn(async (url, _opts) => {
       if (String(url).includes('/api/scan_jobs_status')) {
         return {
           ok: true,
@@ -628,7 +628,7 @@ describe('LibrariesPage refresh all', () => {
   test('idle Refresh all posts default queue_policy fields', async () => {
     const user = userEvent.setup()
     vi.mocked(confirmAction).mockResolvedValue(true)
-    const fetchMock = vi.fn(async (url, opts) => {
+    const fetchMock = vi.fn(async (url, _opts) => {
       if (String(url).includes('/api/get_libraries')) {
         return {
           ok: true,

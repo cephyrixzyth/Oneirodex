@@ -7,6 +7,7 @@ about that: the account works, and the placeholder is never presented as an
 address anyone could write to.
 """
 
+from tests.fixtures.native_client import served_client
 from uuid import uuid4
 
 import pytest
@@ -93,7 +94,7 @@ class TestCreateWithoutEmail:
         payload, response = _create(client)
         assert response.status_code == 200
 
-        fresh = app.test_client()
+        fresh = served_client(app)
         result = fresh.post('/login', data={
             'username': payload['username'],
             'password': payload['password'],
@@ -116,7 +117,7 @@ class TestCreateWithoutEmail:
         db_session.add(pending)
         db_session.commit()
 
-        result = app.test_client().post('/login', data={
+        result = served_client(app).post('/login', data={
             'username': pending.name,
             'password': 'a good long password',
         })

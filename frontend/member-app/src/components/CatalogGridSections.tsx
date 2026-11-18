@@ -314,7 +314,8 @@ export function CatalogGridSections({
   const [genres, setGenres] = useState<any>(null)
   const [genresFailed, setGenresFailed] = useState(false)
   const [shelves, setShelves] = useState<any>({})
-  const [requested, setRequested] = useState<Set<any>>(() => new Set())
+  /* Genres already asked for; never rendered, so a ref, not state. */
+  const requestedRef = useRef<Set<any>>(new Set())
   const gridRootRef = useRef<any>(null)
 
   useEffect(() => {
@@ -342,7 +343,7 @@ export function CatalogGridSections({
   const filterKey = useMemo(() => JSON.stringify(filters || {}), [filters])
   useEffect(() => {
     setShelves({})
-    setRequested(new Set())
+    requestedRef.current = new Set()
   }, [filterKey])
 
   /* One controller for every in-flight shelf, so a filter change or an unmount
@@ -360,10 +361,9 @@ export function CatalogGridSections({
 
   const loadShelf = useCallback(
     (genre: any) => {
-      setRequested((current) => {
-        if (current.has(genre)) return current
-        const next = new Set(current)
-        next.add(genre)
+      if (requestedRef.current.has(genre)) return
+      requestedRef.current.add(genre)
+      const fetchOnce = () => {
         fetchShelfGames(filters || {}, genre, { signal: inFlightRef.current?.signal })
           .then((payload) => {
             setShelves((rows: any) => ({ ...rows, [genre]: payload }))
@@ -372,26 +372,19 @@ export function CatalogGridSections({
             if (error?.name === 'AbortError') return
             /* Retry once, then give up quietly.
                Writing `{ total: 0 }` on the first failure would hide the
-               shelf, and the route 500s intermittently under the fan-out, so
+               shelf, and the route fails intermittently under the fan-out, so
                one unlucky request would delete a genre from Grid for the rest
-               of the session. Dropping it from `requested` lets the observer
-               ask again — but only while a retry is left: the observer
-               re-arms on every render, so an endpoint that fails every time
-               would otherwise spin here as fast as React can re-render. */
+               of the session. */
             const attempts = (attemptsRef.current.get(genre) || 0) + 1
             attemptsRef.current.set(genre, attempts)
             if (attempts >= MAX_SHELF_ATTEMPTS) {
               setShelves((rows: any) => ({ ...rows, [genre]: { games: [], total: 0 } }))
               return
             }
-            setRequested((pending) => {
-              const retry = new Set(pending)
-              retry.delete(genre)
-              return retry
-            })
+            fetchOnce()
           })
-        return next
-      })
+      }
+      fetchOnce()
     },
     [filters],
   )

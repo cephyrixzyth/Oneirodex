@@ -385,7 +385,7 @@ class TestGetCoverThumbnail:
         data = response.get_json()
         assert data['error'] == 'Invalid input. The ID must be numeric.'
     
-    @patch('oneirodex.routes_apis.igdb.get_cover_thumbnail_url')
+    @patch('oneirodex.utils.igdb_api.get_cover_thumbnail_url')
     def test_get_cover_thumbnail_successful(self, mock_get_cover, client, admin_user, mock_cover_response):
         """Test successful get_cover_thumbnail."""
         mock_get_cover.return_value = mock_cover_response
@@ -402,7 +402,7 @@ class TestGetCoverThumbnail:
         
         mock_get_cover.assert_called_once_with(12345)
     
-    @patch('oneirodex.routes_apis.igdb.get_cover_thumbnail_url')
+    @patch('oneirodex.utils.igdb_api.get_cover_thumbnail_url')
     def test_get_cover_thumbnail_not_found(self, mock_get_cover, client, admin_user):
         """Test get_cover_thumbnail when cover URL cannot be retrieved."""
         mock_get_cover.return_value = None
@@ -643,7 +643,7 @@ class TestCheckIgdbId:
         assert data['message'] == 'Invalid request'
         assert data['available'] is False
     
-    @patch('oneirodex.routes_apis.igdb.check_existing_game_by_igdb_id')
+    @patch('oneirodex.utils.services.game_lookup.check_existing_game_by_igdb_id')
     def test_check_igdb_id_available(self, mock_check_existing, client, admin_user):
         """Test check_igdb_id when IGDB ID is available."""
         mock_check_existing.return_value = None  # Game doesn't exist
@@ -660,7 +660,7 @@ class TestCheckIgdbId:
         
         mock_check_existing.assert_called_once_with(12345)
     
-    @patch('oneirodex.routes_apis.igdb.check_existing_game_by_igdb_id')
+    @patch('oneirodex.utils.services.game_lookup.check_existing_game_by_igdb_id')
     def test_check_igdb_id_not_available(self, mock_check_existing, client, sample_game, db_session):
         """Test check_igdb_id when IGDB ID is not available."""
         mock_check_existing.return_value = sample_game  # Game exists
@@ -766,7 +766,7 @@ class TestIgdbApiIntegration:
             assert 'error' in data or 'message' in data
     
     @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
-    @patch('oneirodex.routes_apis.igdb.get_cover_thumbnail_url')
+    @patch('oneirodex.utils.igdb_api.get_cover_thumbnail_url')
     def test_igdb_cover_integration(self, mock_get_cover, mock_api_request, client, admin_user, mock_game_data, mock_cover_response):
         """Test integration between game search and cover retrieval."""
         mock_api_request.return_value = [mock_game_data]

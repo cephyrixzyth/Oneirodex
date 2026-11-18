@@ -61,72 +61,6 @@ def test_defaults_rotate_null_id(app, db_session):
     assert len(BUILTIN_LOADING_ICONS) >= 1
 
 
-def test_public_get_no_auth(client, app, db_session):
-    row = db_session.query(GlobalSettings).order_by(GlobalSettings.id).first()
-    if row is None:
-        row = GlobalSettings()
-        db_session.add(row)
-    row.loading_icon_mode = 'rotate'
-    row.loading_icon_id = None
-    db_session.commit()
-
-    resp = client.get('/api/loading-icon')
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data['loading_icon_mode'] == 'rotate'
-    assert data['loading_icon_id'] is None
-    assert data['resolved_id'] is None
-    assert isinstance(data['catalogue'], list)
-    # Catalogue is consoles/controllers now (GT-B23), not abstract shapes.
-    assert any(c['id'] == 'dpad' for c in data['catalogue'])
-
-
-def test_admin_put_lock_and_get(client, app, db_session):
-    row = global_settings_row_or_create()
-    db_session.commit()
-    _login(client, db_session, role='admin')
-
-    resp = client.put(
-        '/api/admin/loading-icon/config',
-        json={'loading_icon_mode': 'lock', 'loading_icon_id': 'crt'},
-    )
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data['status'] == 'saved'
-    assert data['loading_icon_mode'] == 'lock'
-    assert data['loading_icon_id'] == 'crt'
-    assert data['resolved_id'] == 'crt'
-
-    public = client.get('/api/loading-icon')
-    assert public.status_code == 200
-    body = public.get_json()
-    assert body['loading_icon_mode'] == 'lock'
-    assert body['loading_icon_id'] == 'crt'
-    assert body['resolved_id'] == 'crt'
-
-    got = client.get('/api/admin/loading-icon/config')
-    assert got.status_code == 200
-    assert got.get_json()['loading_icon_id'] == 'crt'
-
-
-def test_admin_put_rotate_clears_id(client, app, db_session):
-    row = global_settings_row_or_create()
-    row.loading_icon_mode = 'lock'
-    row.loading_icon_id = 'disc'
-    db_session.commit()
-    _login(client, db_session, role='admin')
-
-    resp = client.put(
-        '/api/admin/loading-icon/config',
-        json={'loading_icon_mode': 'rotate'},
-    )
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data['loading_icon_mode'] == 'rotate'
-    assert data['loading_icon_id'] is None
-    assert data['resolved_id'] is None
-
-
 def test_lock_requires_id(app, db_session):
     row = global_settings_row_or_create()
     # Cleared explicitly: save_loading_icon_settings falls back to the *stored*
@@ -148,17 +82,6 @@ def test_unknown_icon_id_rejected(app, db_session):
                 'loading_icon_mode': 'lock',
                 'loading_icon_id': 'not-a-real-icon',
             })
-
-
-def test_admin_config_requires_admin(client, app, db_session):
-    _login(client, db_session, role='member')
-    resp = client.get('/api/admin/loading-icon/config')
-    assert resp.status_code in (403, 302)
-    resp2 = client.put(
-        '/api/admin/loading-icon/config',
-        json={'loading_icon_mode': 'rotate'},
-    )
-    assert resp2.status_code in (403, 302)
 
 
 def test_retired_motif_ids_resolve_instead_of_raising():

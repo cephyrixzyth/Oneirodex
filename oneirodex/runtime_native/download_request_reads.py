@@ -105,6 +105,12 @@ class DownloadRequestReadData:
             select(DownloadRequest).filter_by(id=request_id, user_id=user.id)
         ).scalars().first()
         if row is None:
+            # Missing or someone else's: refused either way, and recorded so
+            # an operator can see repeated probing.
+            log_system_event(
+                f'Unauthorized download deletion attempt: user {user.id} tried to delete download {request_id}',
+                event_type='security', event_level='warning',
+            )
             return False
         db.session.delete(row)
         db.session.commit()

@@ -70,10 +70,10 @@ export function ThemesPage() {
     } finally {
       setPageLoading(false)
     }
-  }, [reload])
+  }, [])
   useEffect(() => {
     void load()
-  }, [load])
+  }, [load, reload])
 
   const grouped = useMemo(() => {
     const groups = new Map<string, Motif[]>()
@@ -166,9 +166,6 @@ export function ThemesPage() {
   }
 
   const activeTheme = inventory?.themes.find((theme) => theme.folder === inventory.active_theme)
-  const customThemes = (inventory?.themes || []).filter(
-    (theme) => theme.folder.toLowerCase() !== 'default',
-  )
   const selectedMotif = loadingConfig?.catalogue.find((motif) => motif.id === iconId)
 
   useEffect(() => {

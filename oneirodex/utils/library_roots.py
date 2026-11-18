@@ -99,7 +99,9 @@ def parse_library_roots(raw: str | None) -> list[dict]:
         if not path or len(path) > MAX_PATH_LENGTH or '\x00' in path:
             continue
         if not label:
-            label = os.path.basename(path.rstrip('\\/')) or path
+            # Split on either separator so a Windows-style root configured on a
+            # Linux host still gets its folder name as the label.
+            label = re.split(r'[\\/]', path.rstrip('\\/'))[-1] or path
 
         if any(same_path(path, existing['path']) for existing in roots):
             continue

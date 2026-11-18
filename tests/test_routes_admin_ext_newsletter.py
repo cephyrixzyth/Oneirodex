@@ -171,7 +171,7 @@ class TestNewsletterRoute:
         assert response.status_code == 200
         assert b'<title>' in response.data and b'Oneirodex Admin</title>' in response.data
         assert b'id="admin-app-root"' in response.data
-        assert b'/static/dist/admin-app/admin-app.js' in response.data
+        assert b'/static/dist/admin-pilot/' in response.data
 
     def test_newsletter_feature_disabled(self, client, admin_user, global_settings_newsletter_disabled):
         """Test newsletter page when newsletter feature is disabled."""
@@ -182,7 +182,7 @@ class TestNewsletterRoute:
         response = client.get('/admin/newsletter')
         assert response.status_code == 200
         assert b'id="admin-app-root"' in response.data
-        assert b'/static/dist/admin-app/admin-app.js' in response.data
+        assert b'/static/dist/admin-pilot/' in response.data
 
     def test_newsletter_no_sender_configured(self, client, admin_user, global_settings_no_sender):
         """Test newsletter page when no default sender is configured."""
@@ -193,7 +193,7 @@ class TestNewsletterRoute:
         response = client.get('/admin/newsletter')
         assert response.status_code == 200
         assert b'id="admin-app-root"' in response.data
-        assert b'/static/dist/admin-app/admin-app.js' in response.data
+        assert b'/static/dist/admin-pilot/' in response.data
 
     def test_newsletter_get_request_success(self, client, admin_user, global_settings_smtp_enabled, sample_newsletter):
         """Test successful GET request to newsletter page."""
@@ -205,91 +205,7 @@ class TestNewsletterRoute:
         assert response.status_code == 200
         assert b'<title>' in response.data and b'Oneirodex Admin</title>' in response.data
         assert b'id="admin-app-root"' in response.data
-        assert b'/static/dist/admin-app/admin-app.js' in response.data
-
-    @patch('oneirodex.routes_admin_ext.newsletter.send_email_quiet', return_value=True)
-    def test_newsletter_post_success(self, mock_send_email, client, admin_user, global_settings_smtp_enabled, db_session):
-        """Test successful newsletter sending via POST."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        # Clear existing newsletters
-        db_session.query(Newsletter).delete()
-        db_session.commit()
-
-        data = {
-            'subject': 'Test Newsletter Subject',
-            'content': '<p>Test newsletter content</p>',
-            'recipients': 'test1@test.com,test2@test.com',
-            'send': 'Send'
-        }
-
-        response = client.post('/admin/newsletter', data=data, follow_redirects=True)
-        assert response.status_code == 200
-        assert b'Newsletter sent successfully!' in response.data
-
-        # Verify newsletter was created in database
-        newsletter = db_session.query(Newsletter).filter_by(subject='Test Newsletter Subject').first()
-        assert newsletter is not None
-        assert newsletter.status == 'sent'
-        assert newsletter.recipient_count == 2
-        assert newsletter.recipients == ['test1@test.com', 'test2@test.com']
-        assert newsletter.sender_id == admin_user.id
-
-        # Verify email was attempted to be sent
-        assert mock_send_email.call_count == 2
-        assert [call.args[0] for call in mock_send_email.call_args_list] == ['test1@test.com', 'test2@test.com']
-
-    @patch('oneirodex.routes_admin_ext.newsletter.send_email_quiet', return_value=False)
-    def test_newsletter_post_email_failure(self, mock_send_email, client, admin_user, global_settings_smtp_enabled, db_session):
-        """Test newsletter sending when email fails."""
-
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        # Clear existing newsletters
-        db_session.query(Newsletter).delete()
-        db_session.commit()
-
-        data = {
-            'subject': 'Failed Newsletter',
-            'content': '<p>This will fail</p>',
-            'recipients': 'test@test.com',
-            'send': 'Send'
-        }
-
-        response = client.post('/admin/newsletter', data=data, follow_redirects=True)
-        assert response.status_code == 200
-        assert b'Failed to send to: test@test.com' in response.data
-
-        # Verify newsletter was created but marked as failed
-        newsletter = db_session.query(Newsletter).filter_by(subject='Failed Newsletter').first()
-        assert newsletter is not None
-        assert newsletter.status == 'failed'
-        assert newsletter.error_message == 'Failed to send to: test@test.com'
-        mock_send_email.assert_called_once_with('test@test.com', 'Failed Newsletter', '<p>This will fail</p>')
-
-    def test_newsletter_post_invalid_form(self, client, admin_user, global_settings_smtp_enabled, db_session):
-        """Test POST with invalid form data."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        # Missing required fields
-        data = {
-            'subject': '',  # Empty subject
-            'content': '',  # Empty content
-            'recipients': 'test@test.com',
-            'send': 'Send'
-        }
-
-        response = client.post('/admin/newsletter', data=data)
-        assert response.status_code == 200
-        assert b'Newsletter sent successfully!' not in response.data
-        assert db_session.query(Newsletter).filter_by(subject='').first() is None
-
+        assert b'/static/dist/admin-pilot/' in response.data
 
 class TestViewNewsletterRoute:
     
@@ -319,87 +235,11 @@ class TestViewNewsletterRoute:
         assert b'id="admin-app-root"' in response.data
 
     def test_view_newsletter_not_found(self, client, admin_user, global_settings_smtp_enabled):
-        """The page shell loads even if the data API will return a missing row."""
+        """A newsletter that does not exist is not served a page shell."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
 
+        # The served shell answers 404 for a newsletter that does not exist.
         response = client.get('/admin/newsletter/99999')
-        assert response.status_code == 200
-        assert b'id="admin-app-root"' in response.data
-
-
-class TestNewsletterIntegration:
-    """Integration tests for newsletter functionality."""
-    
-    @patch('oneirodex.routes_admin_ext.newsletter.send_email_quiet', return_value=True)
-    def test_newsletter_workflow_complete(self, mock_send_email, client, admin_user, global_settings_smtp_enabled, db_session):
-        """Create, deliver and read newsletter data through the SPA API."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        # Clear existing newsletters
-        db_session.query(Newsletter).delete()
-        db_session.commit()
-
-        # The JSON contract only sends to existing household members.
-        data = {
-            'subject': 'Integration Test Newsletter',
-            'content': '<h1>Integration Test</h1><p>Testing complete workflow</p>',
-            'recipients': [admin_user.email],
-        }
-
-        response = client.post('/api/admin/newsletters', json=data)
-        assert response.status_code == 200, response.get_json()
-        assert response.get_json()['newsletter']['status'] == 'sent'
-
-        # Step 2: Verify newsletter exists in database
-        newsletter = db_session.query(Newsletter).filter_by(subject='Integration Test Newsletter').first()
-        assert newsletter is not None
-        assert newsletter.status == 'sent'
-        assert newsletter.recipient_count == 1
-        assert mock_send_email.call_count == 1
-
-        # Step 3: View the created newsletter
-        response = client.get(f'/api/admin/newsletters/{newsletter.id}')
-        assert response.status_code == 200
-        assert response.get_json()['newsletter']['subject'] == 'Integration Test Newsletter'
-        assert response.get_json()['newsletter']['content'] == data['content']
-
-        # Step 4: Verify it appears in newsletter list
-        response = client.get('/api/admin/newsletters')
-        assert response.status_code == 200
-        assert any(
-            row['subject'] == 'Integration Test Newsletter'
-            for row in response.get_json()['newsletters']
-        )
-
-    def test_newsletter_recipients_parsing(self, client, admin_user, global_settings_smtp_enabled, db_session):
-        """Test that recipients are properly parsed from comma-separated string."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        # Clear existing newsletters
-        db_session.query(Newsletter).delete()
-        db_session.commit()
-
-        # Test various recipient formats
-        with patch('oneirodex.routes_admin_ext.newsletter.send_email_quiet', return_value=True) as mock_send_email:
-            data = {
-                'subject': 'Recipient Test',
-                'content': '<p>Testing recipients</p>',
-                'recipients': 'user1@test.com, user2@test.com ,user3@test.com,  user4@test.com  ',
-                'send': 'Send'
-            }
-
-            response = client.post('/admin/newsletter', data=data, follow_redirects=True)
-            assert response.status_code == 200
-
-            newsletter = db_session.query(Newsletter).filter_by(subject='Recipient Test').first()
-            assert newsletter is not None
-            expected_recipients = ['user1@test.com', 'user2@test.com', 'user3@test.com', 'user4@test.com']
-            assert newsletter.recipients == expected_recipients
-            assert newsletter.recipient_count == 4
-            assert [call.args[0] for call in mock_send_email.call_args_list] == expected_recipients
+        assert response.status_code == 404

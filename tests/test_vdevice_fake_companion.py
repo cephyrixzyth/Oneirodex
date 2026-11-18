@@ -15,7 +15,7 @@ from oneirodex.platform import LibraryPlatform
 from oneirodex.utils import client_commands as cc
 from oneirodex.utils import client_lifecycle
 from oneirodex.utils.api_tokens import generate_api_token
-from oneirodex.routes_apis.tokens import TOKEN_SCOPE_PRESETS
+from oneirodex.utils.api_tokens import TOKEN_SCOPE_PRESETS
 
 pytestmark = pytest.mark.integration
 

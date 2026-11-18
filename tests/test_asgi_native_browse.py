@@ -8930,96 +8930,6 @@ def test_lazy_asgi_dispatches_scan_job_status_with_filters_and_timing(monkeypatc
     ] * 2
 
 
-def test_native_scan_job_status_projects_scheduled_active_and_terminal_states(monkeypatch):
-    now = datetime.now(timezone.utc)
-    from oneirodex.utils import scan_job_timing
-    from oneirodex.routes_apis import scan as legacy_scan
-
-    compute_timing = scan_job_timing.compute_scan_job_timing
-
-    def fixed_timing(job):
-        return compute_timing(job, now=now)
-
-    monkeypatch.setattr(scan_job_timing, 'compute_scan_job_timing', fixed_timing)
-    monkeypatch.setattr(legacy_scan, 'compute_scan_job_timing', fixed_timing)
-    active_start = now - timedelta(seconds=30)
-    progress_time = now - timedelta(seconds=3)
-    terminal_start = now - timedelta(seconds=60)
-    terminal_end = now - timedelta(seconds=5)
-    statuses = (
-        'Scheduled', 'Running', 'Stopping', 'Completed', 'Failed', 'Cancelled',
-    )
-    jobs = [
-        SimpleNamespace(
-            id=f'scan-{status.lower()}', library=None, library_uuid=None,
-            folders=['A', 'B'], status=status, total_folders=10,
-            folders_success=2, folders_failed=1, removed_count=0,
-            scan_folder='/safe/root', setting_remove=False,
-            setting_filefolder=True, setting_download_missing_images=False,
-            current_processing=None, error_message=None,
-            last_run=(terminal_start if status in {'Completed', 'Failed', 'Cancelled'} else active_start),
-            last_progress_update=(terminal_end if status in {'Completed', 'Failed', 'Cancelled'} else progress_time),
-            next_run=None,
-        )
-        for status in statuses
-    ]
-    jobs.append(SimpleNamespace(
-        id='scan-running-stalled', library=None, library_uuid=None,
-        folders=['A', 'B'], status='Running', total_folders=10,
-        folders_success=2, folders_failed=1, removed_count=0,
-        scan_folder='/safe/root', setting_remove=False,
-        setting_filefolder=True, setting_download_missing_images=False,
-        current_processing=None, error_message=None,
-        last_run=now - timedelta(minutes=5),
-        last_progress_update=now - timedelta(seconds=121), next_run=None,
-    ))
-    calls = []
-    data = SimpleNamespace(
-        drain_if_idle=lambda *_args, **_kwargs: None,
-        list_jobs=lambda filters: calls.append(filters) or jobs,
-        queue_position=lambda job_id: (_ for _ in ()).throw(
-            AssertionError(f'queue position queried for non-queued {job_id}')
-        ),
-    )
-    monkeypatch.setattr(native_scan_job_reads, 'ScanJobReadData', lambda: data)
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-
-    response = _run(runtime, '/api/scan_jobs_status', cookie=_signed_session())
-
-    assert response.status_code == 200
-    rows = response.json()
-    _scan_job_status_row = legacy_scan._scan_job_status_row
-    native_by_id = {row['id']: row for row in rows}
-    for job in jobs:
-        legacy_row = _scan_job_status_row(job)
-        assert native_by_id[job.id] == legacy_row, {
-            key: (native_by_id[job.id].get(key), legacy_row.get(key))
-            for key in native_by_id[job.id].keys() | legacy_row.keys()
-            if native_by_id[job.id].get(key) != legacy_row.get(key)
-        }
-    state_rows = {row['status']: row for row in rows if row['id'] != 'scan-running-stalled'}
-    assert set(state_rows) == set(statuses)
-    assert len(rows) == len(statuses) + 1
-    assert calls == [{'statuses': [], 'library_uuid': '', 'q': ''}]
-    for status, row in state_rows.items():
-        assert row['folders_processed'] == 3
-        assert row['progress_percentage'] == 30.0
-        assert row['created_at'] is None
-        assert row['library_name'] == 'No Library Assigned'
-        assert 'queue_position' not in row
-        assert row['stalled'] is False
-    for status in ('Scheduled', 'Completed', 'Failed', 'Cancelled'):
-        assert state_rows[status]['eta_seconds'] is None
-    assert state_rows['Running']['eta_seconds'] is not None
-    assert state_rows['Stopping']['eta_seconds'] is not None
-    assert state_rows['Completed']['elapsed_seconds'] == 55
-    assert state_rows['Failed']['elapsed_seconds'] == 55
-    assert state_rows['Cancelled']['elapsed_seconds'] == 55
-    stalled = next(row for row in rows if row['id'] == 'scan-running-stalled')
-    assert stalled['stalled'] is True
-    assert stalled['eta_seconds'] is None
-
-
 def test_native_scan_job_status_denies_member_before_reading_jobs(monkeypatch):
     calls = []
     data = SimpleNamespace(
@@ -11316,27 +11226,6 @@ def test_lazy_asgi_dispatches_admin_ops_reads_with_bounds_and_head(monkeypatch, 
     ]
 
 
-def test_ops_system_log_projection_serializes_latest_event(monkeypatch):
-    from oneirodex import routes_info
-
-    timestamp = datetime(2026, 10, 14, tzinfo=timezone.utc)
-    latest = SimpleNamespace(
-        id=12, timestamp=timestamp, event_level='ERROR',
-        event_type='test', event_text='snapshot marker',
-    )
-    monkeypatch.setattr(
-        routes_info, 'get_log_info', lambda: {'count': 1, 'latest': latest},
-    )
-
-    assert routes_info._log_summary() == {
-        'count': 1,
-        'latest': {
-            'id': 12, 'timestamp': timestamp.isoformat(), 'level': 'ERROR',
-            'type': 'test', 'text': 'snapshot marker',
-        },
-    }
-
-
 def test_lazy_asgi_dispatches_support_ticket_reads_natively(monkeypatch):
     calls = []
     ticket = SimpleNamespace(
@@ -12180,28 +12069,6 @@ def test_lazy_asgi_dispatches_legacy_attract_mode_post_alias(monkeypatch):
     assert calls == [(7, {**body, 'filters': {'library_uuid': None, 'genres': [], 'themes': [], 'date_from': None, 'date_to': None}})]
 
 
-def test_lazy_asgi_dispatches_legacy_scan_filter_add_form(monkeypatch):
-    from oneirodex.runtime_native import admin_scan_filters as native_scan_filters
-
-    calls = []
-    data = SimpleNamespace(
-        add=lambda pattern, case_sensitive: calls.append((pattern, case_sensitive)),
-        rollback=lambda: None,
-    )
-    monkeypatch.setattr(native_scan_filters, 'AdminScanFiltersData', lambda: data)
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-    cookie, csrf = _signed_session_with_csrf()
-    response = _run(
-        runtime, '/admin/edit_filters', cookie=cookie, method='POST',
-        headers={'X-CSRFToken': csrf},
-        form_body={'filter_pattern': 'Scene Release', 'case_sensitive': 'yes', 'csrf_token': csrf},
-    )
-
-    assert response.status_code == 302
-    assert response.headers['location'] == '/admin/edit_filters'
-    assert calls == [('Scene Release', True)]
-
-
 def test_lazy_asgi_dispatches_legacy_manage_downloads_post_to_pilot(monkeypatch):
     _flask_app, runtime = _runtime(monkeypatch, admin=True)
     _flask_app.static_folder = str(asgi.Path(__file__).resolve().parents[1] / 'oneirodex' / 'static')
@@ -12326,37 +12193,6 @@ def test_lazy_asgi_dispatches_legacy_library_create_and_edit_forms(monkeypatch):
     assert edited.status_code == 302
     assert edited.headers['location'] == '/libraries'
     assert [call[0] for call in calls] == ['create', 'update']
-
-
-def test_lazy_asgi_dispatches_legacy_link_existing_game_form(monkeypatch):
-    from oneirodex.runtime_native import library_tools_mutations as native_tools
-
-    calls = []
-    fake = SimpleNamespace(
-        allowed_bases=lambda _app: ['/safe'],
-        safe_path=lambda _app, path: (path.startswith('/safe'), 'outside allowed roots'),
-        game_path_readable=lambda path: path == '/safe/Game',
-        link_existing_game=lambda _app, game_uuid, path, actor, actor_id: (
-            calls.append((game_uuid, path, actor, actor_id)) or {
-                'game_uuid': game_uuid, 'game_name': 'Game', 'full_disk_path': path,
-                'removed_from_unmatched': True,
-            }, None,
-        ),
-    )
-    monkeypatch.setattr(native_tools, 'LibraryToolsMutationData', lambda: fake)
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-    cookie, csrf = _signed_session_with_csrf()
-    response = _run(
-        runtime, '/link_existing_game', cookie=cookie, method='POST',
-        headers={'X-CSRFToken': csrf},
-        form_body={'game_uuid': 'game-1', 'full_disk_path': '/safe/Game',
-                   'library_uuid': 'library-1', 'from_unmatched': 'true',
-                   'csrf_token': csrf},
-    )
-
-    assert response.status_code == 302
-    assert response.headers['location'] == '/scan_management?active_tab=unmatched'
-    assert calls == [('game-1', '/safe/Game', 'administrator', 7)]
 
 
 def test_lazy_asgi_local_game_image_uses_vetted_descriptor_and_ranges(monkeypatch, tmp_path):
@@ -12546,93 +12382,6 @@ def test_lazy_asgi_dispatches_legacy_single_game_image_upload(monkeypatch):
     assert accepted.status_code == 200
     assert accepted.json()['image_id'] == 11
     assert calls == [('game-1', 'cover.jpg', 'cover', b'fixture-image')]
-
-
-def test_lazy_asgi_dispatches_legacy_manual_scan_folder_form(monkeypatch):
-    from oneirodex.runtime_native import legacy_scan_forms as native_scan_forms
-
-    calls = []
-    fake = SimpleNamespace(
-        library_exists=lambda library_uuid: (
-            calls.append(('library_exists', library_uuid)) or
-            library_uuid == 'library-1'
-        ),
-        resolve_path=lambda _app, folder_path, library_root: ('/safe/ROMs', None),
-        allowed_bases=lambda _app: ['/safe'],
-        safe_path=lambda path, _bases: (calls.append(('safe', path)) or True, None),
-        readable_directory=lambda path: path == '/safe/ROMs',
-        scan_patterns=lambda: (['ignored'], ['CaseSensitive']),
-        list_games=lambda path, insensitive, sensitive: (
-            calls.append(('list', path, insensitive, sensitive)) or
-            [{'name': 'Example Game', 'full_path': '/safe/ROMs/Example Game'}]
-        ),
-    )
-    monkeypatch.setattr(native_scan_forms, 'LegacyScanFormData', lambda: fake)
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-    cookie, csrf = _signed_session_with_csrf()
-    response = _run(
-        runtime, '/scan_manual_folder', cookie=cookie, method='POST',
-        headers={'X-CSRFToken': csrf},
-        form_body={'csrf_token': csrf, 'folder_path': '/safe/ROMs',
-                   'library_uuid': 'library-1'},
-    )
-
-    assert response.status_code == 302
-    assert response.headers['location'] == '/scan_management?active_tab=manual'
-    assert calls == [
-        ('library_exists', 'library-1'),
-        ('safe', '/safe/ROMs'),
-        ('list', '/safe/ROMs', ['ignored'], ['CaseSensitive']),
-    ]
-
-
-def test_lazy_asgi_dispatches_legacy_scan_management_filter_form(monkeypatch):
-    from oneirodex.runtime_native import legacy_scan_management as native_scan_management
-
-    added = []
-    fake = SimpleNamespace(
-        add_filter=lambda pattern, case_sensitive: added.append((pattern, case_sensitive)),
-    )
-    monkeypatch.setattr(
-        native_scan_management, 'LegacyScanManagementData', lambda: fake,
-    )
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-    cookie, csrf = _signed_session_with_csrf()
-    response = _run(
-        runtime, '/scan_management', cookie=cookie, method='POST',
-        headers={'X-CSRFToken': csrf},
-        form_body={'submit': 'AddReleaseGroup', 'filter_pattern': ' Scene ',
-                   'case_sensitive': 'yes', 'csrf_token': csrf},
-    )
-
-    assert response.status_code == 302
-    assert response.headers['location'] == '/scan_management?active_tab=scan_filters'
-    assert added == [('Scene', True)]
-
-
-def test_lazy_asgi_dispatches_legacy_manual_identify_form(monkeypatch):
-    from oneirodex.runtime_native import legacy_manual_identify_forms as native_manual_forms
-
-    saved = []
-    fake = SimpleNamespace(
-        create=lambda app, body, actor, *, from_unmatched: (
-            saved.append((body.name, body.igdb_id, from_unmatched)) or
-            {'game_uuid': 'game-new', 'redirect_url': '/libraries'}
-        ),
-    )
-    monkeypatch.setattr(native_manual_forms, 'ManualIdentifyMutationData', lambda: fake)
-    _flask_app, runtime = _runtime(monkeypatch, admin=True)
-    cookie, csrf = _signed_session_with_csrf()
-    response = _run(
-        runtime, '/add_game_manual?from_unmatched=true', cookie=cookie, method='POST',
-        headers={'X-CSRFToken': csrf},
-        form_body={'igdb_id': '101', 'name': 'Game', 'full_disk_path': '/safe/Game',
-                   'library_uuid': 'lib-1', 'csrf_token': csrf},
-    )
-
-    assert response.status_code == 303
-    assert response.headers['location'] == '/scan_management?active_tab=unmatched'
-    assert saved == [('Game', 101, True)]
 
 
 def test_lazy_asgi_dispatches_native_oidc_start_and_callback(monkeypatch):

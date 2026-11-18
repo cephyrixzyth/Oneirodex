@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react
 
 import { useParams } from 'react-router-dom'
 import { Button, PageStatus, confirmAction } from '@oneirodex/ui'
-import { deleteJson, getJson, postForm, postJson } from '../api/adminApi'
+import { getJson, postForm, postJson } from '../api/adminApi'
 import { ArtworkPicker } from '../components/ArtworkPicker'
 import { Page } from '../components/Page'
 import { errorText } from '../utils/errorText'

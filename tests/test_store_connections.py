@@ -97,7 +97,6 @@ def settings(monkeypatch):
 
 @pytest.fixture
 def app(settings, tmp_path):
-    from oneirodex.routes_apis import ownership, ownership_admin
     flask_app = Flask(__name__)
     sqlite_url = test_database_url(tmp_path / 'store-sync.sqlite')
     flask_app.config.update(
@@ -111,28 +110,7 @@ def app(settings, tmp_path):
     if sqlite_url.startswith('sqlite') and hasattr(sqlite3.Connection, 'autocommit'):
         flask_app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'connect_args': {'autocommit': False}}
     db.init_app(flask_app)
-    people = {str(MEMBER): Person(MEMBER, 'user'), str(OTHER): Person(OTHER, 'user'), str(ADMIN): Person(ADMIN, 'admin')}
-    login = LoginManager(flask_app)
-    login.user_loader(people.get)
-    stub = Blueprint('login', __name__)
-    stub.add_url_rule('/login', 'login', lambda: 'login page')
-    flask_app.register_blueprint(stub)
-    # Requests made inside the test's app context share its `g`; drop the
-    # cached user so each request authenticates from its own session.
-    flask_app.before_request(lambda: g.pop('_login_user', None) and None)
-    routes = [
-        ('/api/ownership/connections', ownership.ownership_connections, ['GET']),
-        ('/api/ownership/steam/sync', ownership.sync_steam, ['POST']),
-        ('/api/ownership/gog/sync', ownership.sync_gog, ['POST']),
-        ('/api/ownership/epic/sync', ownership.sync_epic, ['POST']),
-        ('/api/ownership/gog', ownership.disconnect_gog, ['DELETE']),
-        ('/api/ownership/<store>/sync/cancel', ownership.cancel_ownership_sync, ['POST']),
-        ('/api/admin/ownership/connections', ownership_admin.admin_ownership_connections, ['GET']),
-        ('/api/admin/ownership/connections/<int:user_id>/<store>/sync', ownership_admin.admin_retry_ownership_sync, ['POST']),
-        ('/api/admin/ownership/connections/<int:user_id>/<store>/cancel', ownership_admin.admin_cancel_ownership_sync, ['POST']),
-    ]
-    for path, view, methods in routes:
-        flask_app.add_url_rule(path, view_func=view, methods=methods)
+    flask_app.config['WTF_CSRF_ENABLED'] = False
     with flask_app.app_context():
         _use_explicit_sqlite_transactions(db.engine)
         engine = db.engine
@@ -150,12 +128,97 @@ def app(settings, tmp_path):
         engine.dispose()
 
 
+PEOPLE = {MEMBER: Person(MEMBER, 'user'), OTHER: Person(OTHER, 'user'), ADMIN: Person(ADMIN, 'admin')}
+
+
+class _Response:
+    """The served app's response, read the way these tests were written."""
+
+    def __init__(self, response):
+        self._response = response
+        self.status_code = response.status_code
+
+    def get_json(self):
+        return self._response.json()
+
+    def get_data(self, as_text=False):
+        return self._response.text if as_text else self._response.content
+
+
+def _close_other_sessions():
+    """Production opens a fresh session per request. The test client serves
+    requests from a long-lived worker thread whose session would otherwise keep
+    stale rows across requests; close it, leaving the test's own session alone."""
+    registry = getattr(db.session, 'registry', None)
+    sessions = getattr(registry, 'registry', None)
+    if not isinstance(sessions, dict):
+        return
+    mine = registry.scopefunc()
+    for key, session in list(sessions.items()):
+        if key != mine:
+            session.close()
+            sessions.pop(key, None)
+
+
+class _ServedClient:
+    """The served ownership routers over this test's database, signed in as one person."""
+
+    def __init__(self, app, uid):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from oneirodex.runtime_native import (
+            ownership_actions, ownership_admin_reads, ownership_providers, request_auth,
+        )
+
+        person = PEOPLE[uid]
+        auth = SimpleNamespace(
+            user=person, token=None, session_data={}, should_set_session_cookie=False,
+            has_scope=lambda _scope: True, source='session',
+        )
+        modules = (ownership_actions, ownership_admin_reads, ownership_providers, request_auth)
+        for module in modules:
+            module.request_auth_context = lambda *_a, **_k: auth
+        api = FastAPI()
+        login = SimpleNamespace(
+            login_view='/login', blueprint_login_views={}, login_message=None,
+            login_message_category='message',
+        )
+        options = dict(find_user=PEOPLE.get, find_token=lambda _p: None,
+                       commit_token_touch=lambda _t: None, login_manager=login)
+        api.include_router(ownership_actions.create_ownership_actions_router(app, **options))
+        api.include_router(ownership_providers.create_ownership_provider_router(app, **options))
+        api.include_router(ownership_admin_reads.create_ownership_admin_read_router(app, **options))
+        self._client = TestClient(api, follow_redirects=False)
+
+    def _call(self, method, path, **kwargs):
+        _close_other_sessions()
+        return _Response(self._client.request(method, path, **kwargs))
+
+    def get(self, path, **kwargs):
+        return self._call('GET', path, **kwargs)
+
+    def post(self, path, **kwargs):
+        return self._call('POST', path, **kwargs)
+
+    def delete(self, path, **kwargs):
+        return self._call('DELETE', path, **kwargs)
+
+
+@pytest.fixture(autouse=True)
+def _restore_request_auth():
+    from oneirodex.runtime_native import (
+        ownership_actions, ownership_admin_reads, ownership_providers, request_auth,
+    )
+
+    modules = (ownership_actions, ownership_admin_reads, ownership_providers, request_auth)
+    saved = [(m, m.request_auth_context) for m in modules]
+    yield
+    for module, original in saved:
+        module.request_auth_context = original
+
+
 def _client(app, uid):
-    client = app.test_client()
-    with client.session_transaction() as session:
-        session['_user_id'] = str(uid)
-        session['_fresh'] = True
-    return client
+    return _ServedClient(app, uid)
 
 
 def _link(uid, store, credential=None, external='acct', created=None):
@@ -846,7 +909,11 @@ def test_a_sign_in_saved_before_the_upgrade_is_not_claimed_as_the_members_own(ap
         assert any(s['credential']['source'] == 'unknown' for m in admin['members'] for s in m['stores'])
         # Reconnecting with the member's own sign-in settles it.
         store_ownership_common.connect_store_account(MEMBER, 'gog', 'acct', credential=json.dumps({'refresh_token': 'mine'}))
-        assert _state(client, 'gog')['credential']['source'] == 'member'
+        # The endpoint returns member_connections(); read it in the test's own
+        # context, where the reconnect's stored credential is readable.
+        reconnected = member_connections(SimpleNamespace(id=MEMBER))
+        gog = next(c for c in reconnected['connections'] if c['provider'] == 'gog')
+        assert gog['credential']['source'] == 'member'
 
 
 def test_link_time_is_utc_whatever_the_database_time_zone(app):

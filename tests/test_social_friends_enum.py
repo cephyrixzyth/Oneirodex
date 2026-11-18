@@ -83,18 +83,21 @@ def test_friend_request_real_user_still_sends(client, social_users):
 def test_friend_request_persistence_failure_uses_safe_api_error_and_writes_nothing(
     app, client, db_session, social_users, monkeypatch,
 ):
-    from oneirodex import db
+    from sqlalchemy.orm import Session
 
     alice, bob = social_users
     _login(client, alice)
+    real_commit = Session.commit
 
-    def fail_commit():
-        raise RuntimeError('synthetic persistence failure')
+    def fail_commit(session):
+        # Fail only the request's own commit, while the friendship is pending.
+        if any(isinstance(obj, UserFriendship) for obj in session.new):
+            raise RuntimeError('synthetic persistence failure')
+        return real_commit(session)
 
-    monkeypatch.setattr(db.session, 'commit', fail_commit)
-
-    with client:
-        response = client.post('/api/social/friends', json={'username': bob.name})
+    monkeypatch.setattr(Session, 'commit', fail_commit)
+    response = client.post('/api/social/friends', json={'username': bob.name})
+    monkeypatch.setattr(Session, 'commit', real_commit)
 
     assert response.status_code == 500
     assert response.content_type.startswith('application/json')

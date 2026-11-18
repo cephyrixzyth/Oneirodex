@@ -11,7 +11,6 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
-from starlette.responses import JSONResponse
 
 from oneirodex.schemas.library_tools import ManualScanListBody
 from oneirodex.utils.validation import format_validation_errors

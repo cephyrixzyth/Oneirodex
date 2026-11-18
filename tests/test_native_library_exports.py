@@ -145,10 +145,6 @@ def test_exports_include_all_authorized_games_and_filter_platform_before_iterati
     assert len(all_xml.findall('game')) == 502
     assert [node.findtext('id') for node in psx_xml.findall('game')] == [only_psx.uuid]
 
-    from oneirodex.routes_apis import wave8_11
-    monkeypatch.setattr(wave8_11, 'current_user', user)
-    assert len(list(wave8_11._games_for_platform(None))) == 502
-    assert [game.uuid for game in wave8_11._games_for_platform('PSX')] == [only_psx.uuid]
 
     child = User(
         name=f'child-{uuid4().hex[:8]}', email=f'{uuid4().hex}@example.test',

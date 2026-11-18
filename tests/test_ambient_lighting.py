@@ -236,32 +236,6 @@ def test_explicit_connector_policy_uses_the_captured_lan_setting():
     )[0] is False
 
 
-def test_ambient_lighting_status_api(client, app, db_session, monkeypatch):
-    _disable_ambient(app, db_session, monkeypatch)
-    from uuid import uuid4
-
-    from oneirodex.models import User
-
-    admin = User(
-        user_id=str(uuid4()),
-        name=f'aladmin_{uuid4().hex[:8]}',
-        email=f'aladmin_{uuid4().hex[:8]}@test.local',
-        role='admin',
-        is_email_verified=True,
-    )
-    admin.set_password('testpass123')
-    db_session.add(admin)
-    db_session.commit()
-    with client.session_transaction() as sess:
-        sess['_user_id'] = str(admin.id)
-        sess['_fresh'] = True
-    resp = client.get('/api/admin/ambient-lighting/status')
-    assert resp.status_code == 200
-    data = resp.get_json()
-    assert data['enabled'] is False
-    assert data['provider'] == 'off'
-
-
 def test_ambient_lighting_test_probe_mocked(app, db_session, monkeypatch):
     from sqlalchemy.orm.attributes import flag_modified
 

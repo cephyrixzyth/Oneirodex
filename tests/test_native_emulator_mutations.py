@@ -168,126 +168,6 @@ def _request(app, method, path, *, cookie=None, csrf=None, **kwargs):
     return asyncio.run(perform())
 
 
-@pytest.mark.parametrize('surface', ['pc_wand', 'retroarch'])
-def test_pc_cheat_list_matches_legacy_handler_empty_and_wrong_surface(native, monkeypatch, surface):
-    from oneirodex.routes_apis import emulator_cheats as legacy_routes
-    from oneirodex.utils.api_response import api_error
-
-    app, api, data, user = native
-    cookie, _csrf = _cookie(app)
-    data.surface = surface
-
-    class Scalars:
-        def all(self):
-            return []
-
-    class Result:
-        def scalars(self):
-            return Scalars()
-
-    class LegacySession:
-        def execute(self, _statement):
-            return Result()
-
-    monkeypatch.setattr(legacy_routes.db, 'session', LegacySession())
-    monkeypatch.setattr(legacy_routes, '_accessible_game', lambda _uuid: (object(), None))
-    if surface == 'pc_wand':
-        monkeypatch.setattr(legacy_routes, '_pc_surface_or_error', lambda _game: ('pc_wand', None))
-    else:
-        with app.app_context():
-            refusal = api_error(
-                'PC cheats apply to PC titles. This platform uses the RetroArch cheat surface.',
-                code='bad_request', cheat_surface='retroarch',
-            )
-        monkeypatch.setattr(legacy_routes, '_pc_surface_or_error', lambda _game: (None, refusal))
-    legacy_list = legacy_routes.pc_cheats_list.__wrapped__.__wrapped__
-    with app.test_request_context('/api/games/game-1/pc_cheats', method='GET'):
-        legacy_response = app.make_response(legacy_list('game-1'))
-
-    current_response = _request(
-        api, 'GET', '/api/games/game-1/pc_cheats', cookie=cookie,
-    )
-
-    assert legacy_response.status_code == current_response.status_code
-    assert legacy_response.mimetype == current_response.headers['content-type'].split(';', 1)[0]
-    assert legacy_response.get_json() == current_response.json()
-
-
-def test_pc_cheat_list_populated_rows_match_legacy_handler(native, monkeypatch):
-    from oneirodex.routes_apis import emulator_cheats as legacy_routes
-
-    app, api, data, user = native
-    cookie, _csrf = _cookie(app)
-    data.surface = 'pc_wand'
-    row = PcCheat(
-        id=9, game_uuid='game-1', method='note', label='Checkpoint',
-        payload=None, notes='Synthetic evidence row', single_player_only=True,
-        created_by_user_id=7, created_at=datetime(2026, 10, 22, 12, 34, 56, tzinfo=timezone.utc),
-    )
-    data.pc_cheat_list = [row]
-
-    class Scalars:
-        def all(self):
-            return [row]
-
-    class Result:
-        def scalars(self):
-            return Scalars()
-
-    class LegacySession:
-        def execute(self, _statement):
-            return Result()
-
-    monkeypatch.setattr(legacy_routes.db, 'session', LegacySession())
-    monkeypatch.setattr(legacy_routes, '_accessible_game', lambda _uuid: (object(), None))
-    monkeypatch.setattr(legacy_routes, '_pc_surface_or_error', lambda _game: ('pc_wand', None))
-    legacy_list = legacy_routes.pc_cheats_list.__wrapped__.__wrapped__
-    with app.test_request_context('/api/games/game-1/pc_cheats', method='GET'):
-        legacy_response = app.make_response(legacy_list('game-1'))
-
-    current_response = _request(api, 'GET', '/api/games/game-1/pc_cheats', cookie=cookie)
-
-    assert legacy_response.status_code == current_response.status_code == 200
-    assert legacy_response.mimetype == current_response.headers['content-type'].split(';', 1)[0]
-    assert legacy_response.get_json() == current_response.json()
-
-
-def test_pc_cheat_list_auth_and_game_access_match_legacy_wrappers(native, monkeypatch):
-    from flask import session as flask_session
-    from oneirodex.routes_apis import emulator_cheats as legacy_routes
-    from oneirodex.utils.api_response import api_error
-
-    app, api, data, user = native
-    app.login_manager.login_view = 'login.login'
-    cookie, _csrf = _cookie(app)
-    monkeypatch.setattr(legacy_routes, '_accessible_game', lambda _uuid: (
-        None, api_error('You do not have access to that game', code='forbidden')
-    ))
-
-    def legacy_request(authenticated):
-        with app.test_request_context('/api/games/game-1/pc_cheats', method='GET'):
-            if authenticated:
-                flask_session['_user_id'] = '7:fp'
-                flask_session['_fresh'] = True
-            return app.make_response(legacy_routes.pc_cheats_list('game-1'))
-
-    legacy_anonymous = legacy_request(False)
-    current_anonymous = _request(api, 'GET', '/api/games/game-1/pc_cheats')
-    assert legacy_anonymous.status_code == current_anonymous.status_code == 302
-    assert legacy_anonymous.headers['Location'] == current_anonymous.headers['location']
-    assert legacy_anonymous.mimetype == current_anonymous.headers['content-type'].split(';', 1)[0]
-    assert legacy_anonymous.get_data() == current_anonymous.content
-
-    data.allowed = False
-    legacy_denied = legacy_request(True)
-    current_denied = _request(
-        api, 'GET', '/api/games/game-1/pc_cheats', cookie=cookie,
-    )
-    assert legacy_denied.status_code == current_denied.status_code == 403
-    assert legacy_denied.mimetype == current_denied.headers['content-type'].split(';', 1)[0]
-    assert legacy_denied.get_json() == current_denied.json()
-
-
 def test_cheat_list_download_and_create_keep_legacy_shapes(native):
     app, api, data, _ = native
     cookie, csrf = _cookie(app, csrf=True)
@@ -407,6 +287,41 @@ def test_save_upload_list_download_and_delete_keep_user_scoping(native):
     assert download.headers['content-length'] == str(len(download.content))
     assert deleted.status_code == 404
     assert ('store_save', 7, 'game-1', 'qs-one', 'save.state', b'bytes', None) in data.calls
+
+
+def test_unreadable_save_does_not_leak_the_storage_path(native, monkeypatch):
+    app, api, data, _ = native
+    cookie, csrf = _cookie(app, csrf=True)
+    _request(api, 'POST', '/api/games/game-1/saves?slot=slot1', cookie=cookie, csrf=csrf,
+             files={'file': ('s.state', b'abc')})
+
+    def boom(_row):
+        raise PermissionError(13, 'Permission denied', '/srv/oneirodex/saves/secret/path/s.state')
+
+    monkeypatch.setattr(data, 'read_save', boom)
+    response = _request(api, 'GET', '/api/games/game-1/saves/slot1', cookie=cookie)
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body['error'] == 'Failed to read save'
+    assert body['error_code'] == 'internal'
+    assert '/srv' not in response.text and 'secret' not in response.text
+
+
+def test_missing_save_file_reads_as_not_found(native, monkeypatch):
+    app, api, data, _ = native
+    cookie, csrf = _cookie(app, csrf=True)
+    _request(api, 'POST', '/api/games/game-1/saves?slot=slot1', cookie=cookie, csrf=csrf,
+             files={'file': ('s.state', b'abc')})
+
+    def gone(_row):
+        raise FileNotFoundError(2, 'No such file', '/srv/oneirodex/saves/secret/path/s.state')
+
+    monkeypatch.setattr(data, 'read_save', gone)
+    response = _request(api, 'GET', '/api/games/game-1/saves/slot1', cookie=cookie)
+
+    assert response.status_code == 404
+    assert '/srv' not in response.text
 
 
 def test_child_can_save_own_progress_in_accessible_game(native):
@@ -565,52 +480,6 @@ def test_pc_cheat_json_array_keeps_legacy_root_validation_error(native):
         '__root__': 'Input should be a valid dictionary or instance of CreatePcCheatBody'
     }
 
-
-def test_pc_cheat_delete_success_then_repeat_matches_legacy_handler(native, monkeypatch):
-    from oneirodex.routes_apis import emulator_cheats as legacy_routes
-
-    app, api, data, user = native
-    user.role = 'admin'
-    cookie, csrf = _cookie(app, csrf=True)
-
-    class LegacySession:
-        def __init__(self):
-            self.rows = {42: SimpleNamespace(game_uuid='game-1')}
-
-        def get(self, _model, cheat_id):
-            return self.rows.get(cheat_id)
-
-        def delete(self, row):
-            self.rows.pop(42, None)
-
-        def commit(self):
-            pass
-
-    legacy_session = LegacySession()
-    monkeypatch.setattr(legacy_routes.db, 'session', legacy_session)
-    legacy_delete = legacy_routes.pc_cheats_delete.__wrapped__.__wrapped__
-
-    def legacy_request():
-        with app.test_request_context(
-            '/api/games/game-1/pc_cheats/42', method='DELETE',
-        ):
-            return app.make_response(legacy_delete('game-1', 42))
-
-    legacy_deleted = legacy_request()
-    current_deleted = _request(
-        api, 'DELETE', '/api/games/game-1/pc_cheats/42', cookie=cookie, csrf=csrf,
-    )
-    assert legacy_deleted.status_code == current_deleted.status_code == 200
-    assert legacy_deleted.get_json() == current_deleted.json()
-
-    legacy_repeated = legacy_request()
-    current_repeated = _request(
-        api, 'DELETE', '/api/games/game-1/pc_cheats/42', cookie=cookie, csrf=csrf,
-    )
-    assert legacy_repeated.status_code == current_repeated.status_code == 404
-    assert legacy_repeated.get_json() == current_repeated.json()
-    assert data.pc_cheat_rows['game-1'] == set()
-    assert not any(call[0] == 'game' for call in data.calls)
 
 def test_pc_cheat_delete_uses_cheat_game_binding_without_game_lookup(native):
     app, api, data, user = native

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ChatPanel } from './ChatPanel'
 import {
   CLOSE_CHAT_EVENT,
@@ -39,6 +39,9 @@ export function ChatSlideOut({
     onOpenChange?.(value)
     if (!value) setExpanded(false)
   }
+  // Window listeners below are registered once; they call the latest setOpen.
+  const setOpenRef = useRef(setOpen)
+  setOpenRef.current = setOpen
 
   useEffect(() => {
     if (controlled) return undefined
@@ -50,10 +53,10 @@ export function ChatSlideOut({
       const detail = event?.detail || {}
       if (detail.channelId != null) setChannelId(detail.channelId)
       if (detail.expanded) setExpanded(true)
-      setOpen(true)
+      setOpenRef.current(true)
     }
     function onCloseRequest() {
-      setOpen(false)
+      setOpenRef.current(false)
     }
     window.addEventListener(OPEN_CHAT_EVENT, onOpenRequest)
     window.addEventListener(CLOSE_CHAT_EVENT, onCloseRequest)
@@ -69,7 +72,7 @@ export function ChatSlideOut({
       if (event.key === 'Escape') {
         if (event.target?.closest?.('input, textarea, select, [contenteditable]')) return
         event.preventDefault()
-        setOpen(false)
+        setOpenRef.current(false)
         requestCloseChatPanel()
       }
     }

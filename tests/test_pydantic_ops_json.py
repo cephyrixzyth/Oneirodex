@@ -101,13 +101,11 @@ def test_malware_scan_requires_path(client, app, admin_user):
 def test_malware_scan_rejects_path_when_safety_check_returns_false_tuple(
     client, app, admin_user, monkeypatch
 ):
-    from oneirodex.routes_apis import malware_scan
-
     _login(client, app, admin_user)
-    monkeypatch.setattr(malware_scan, 'is_safe_path', lambda *_args: (False, 'outside'))
+    monkeypatch.setattr('oneirodex.utils.security.is_safe_path', lambda *_args, **_kw: (False, 'outside'))
     monkeypatch.setattr(
-        malware_scan, 'scan_path',
-        lambda *_args: pytest.fail('scanner must not receive an unsafe path'),
+        'oneirodex.utils.malware_scan.scan_path',
+        lambda *_args, **_kw: pytest.fail('scanner must not receive an unsafe path'),
     )
 
     response = client.post('/api/admin/malware-scan', json={'path': '/etc/passwd'})

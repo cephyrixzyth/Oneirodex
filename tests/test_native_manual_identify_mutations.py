@@ -213,3 +213,23 @@ def test_filesystem_helpers_accept_explicit_roots_without_flask_context(tmp_path
     assert get_folder_size_in_bytes_updates(str(outside), allowed_bases=[str(root)]) == 0
     assert write_local_metadata(str(game), 17, game_title='Fixture', allowed_bases=[str(root)]) is True
     assert write_local_metadata(str(outside), 17, game_title='Outside', allowed_bases=[str(root)]) is False
+
+
+def test_manual_identify_writes_are_refused_for_members_and_anonymous_callers(monkeypatch):
+    member = SimpleNamespace(
+        user=SimpleNamespace(id=18, name='Member', role='user', is_authenticated=True),
+        token=None, session_data={}, should_set_session_cookie=False,
+        has_scope=lambda _scope: True,
+    )
+    anonymous = SimpleNamespace(
+        user=None, token=None, session_data={}, should_set_session_cookie=False,
+        has_scope=lambda _scope: False,
+    )
+    for auth in (member, anonymous):
+        app, data = _build(monkeypatch, auth=auth)
+        created = _request(app, 'POST', '/api/admin/manual-identify', json=_valid_payload())
+        updated = _request(app, 'PUT', '/api/admin/manual-identify/game-42', json=_valid_payload())
+
+        assert created.status_code in (302, 401, 403)
+        assert updated.status_code in (302, 401, 403)
+        assert data.calls == []

@@ -16,7 +16,6 @@ from __future__ import annotations
 import os
 import re
 
-import requests
 from sqlalchemy import select
 
 from oneirodex.runtime_native.db_session import native_db as db

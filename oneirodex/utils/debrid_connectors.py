@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urljoin
 
-import requests
 from oneirodex.utils.runtime_config import get_runtime_config
 from sqlalchemy import select
 

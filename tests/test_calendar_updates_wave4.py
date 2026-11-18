@@ -64,7 +64,7 @@ def test_calendar_empty_when_igdb_off(client, admin_user, monkeypatch):
         return []
 
     monkeypatch.setattr(
-        'oneirodex.routes_apis.calendar.fetch_release_calendar',
+        'oneirodex.utils.release_calendar.fetch_release_calendar',
         boom,
     )
     resp = client.get('/api/calendar?days_ahead=30&days_behind=7&limit=10')

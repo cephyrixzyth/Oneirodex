@@ -44,10 +44,8 @@
   var CLICK_ACTIONS = allowlist([
     'changePage',
     'clearEntry',
-    'deleteFileType',
     'deleteSingle',
     'downloadSingle',
-    'editFileType',
     'toggleIgnoreStatus'
   ]);
 

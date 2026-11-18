@@ -54,11 +54,11 @@ def test_activity_limit_is_robust_and_bounded(
 ):
     calls = []
     monkeypatch.setattr(
-        'oneirodex.routes_apis.wave8_11.list_recent_activity',
+        'oneirodex.utils.activity_feed.list_recent_activity',
         lambda *, limit, **_kwargs: calls.append(limit) or [],
     )
     monkeypatch.setattr(
-        'oneirodex.routes_apis.wave8_11.list_now_playing',
+        'oneirodex.utils.activity_feed.list_now_playing',
         lambda **_kwargs: [],
     )
     _login(client, app, member)

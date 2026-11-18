@@ -219,6 +219,11 @@ function DayArt({ releases }: LooseProps) {
   )
 }
 
+/** Whether a date key falls inside the calendar's coverage window. */
+function inWindow(dateKey: string | null, start: string | null, end: string | null) {
+  return Boolean(dateKey && start && end && dateKey >= start && dateKey <= end)
+}
+
 function MonthView({
   releases,
   focusYear,
@@ -243,15 +248,14 @@ function MonthView({
   const todayKey = toDateKey(new Date())
   const coverageStart = shiftDateKey(todayKey, -Number(daysBehind || 0))
   const coverageEnd = shiftDateKey(todayKey, Number(daysAhead || 0))
-  const isInWindow = (dateKey: string | null) =>
-    Boolean(
-      dateKey && coverageStart && coverageEnd && dateKey >= coverageStart && dateKey <= coverageEnd,
-    )
+  const isInWindow = (dateKey: string | null) => inWindow(dateKey, coverageStart, coverageEnd)
 
   useEffect(() => {
     const withReleases = cells.filter((c) => c.inMonth && c.releases.length > 0)
     const preferToday = withReleases.find((c) => c.dateKey === todayKey)
-    const firstCovered = cells.find((c) => c.inMonth && c.dateKey && isInWindow(c.dateKey))
+    const firstCovered = cells.find(
+      (c) => c.inMonth && c.dateKey && inWindow(c.dateKey, coverageStart, coverageEnd),
+    )
     setSelectedKey(
       preferToday?.dateKey ||
         withReleases[0]?.dateKey ||

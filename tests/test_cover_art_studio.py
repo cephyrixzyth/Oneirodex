@@ -208,7 +208,7 @@ def test_art_studio_generate_surfaces_permission_error(client, db_session, admin
         sess['_fresh'] = True
 
     with patch(
-        'oneirodex.routes_admin_ext.art_studio.save_pack',
+        'oneirodex.utils.cover_art_studio.save_pack',
         side_effect=PermissionError('Permission denied'),
     ):
         response = client.post(
@@ -228,7 +228,7 @@ def test_art_studio_apply_fallback_surfaces_disk_error(client, db_session, admin
         sess['_fresh'] = True
 
     with patch(
-        'oneirodex.routes_admin_ext.art_studio.apply_pack_as_fallback',
+        'oneirodex.utils.cover_art_studio.apply_pack_as_fallback',
         side_effect=OSError('Disk full'),
     ):
         response = client.post(
@@ -247,9 +247,9 @@ def test_art_studio_download_surfaces_disk_error(client, db_session, admin_user)
         sess['_user_id'] = str(admin_user.id)
         sess['_fresh'] = True
 
-    with patch('oneirodex.routes_admin_ext.art_studio.safe_pack_dir', return_value=Path('/fake')):
+    with patch('oneirodex.utils.cover_art_studio.safe_pack_dir', return_value=Path('/fake')):
         with patch(
-            'oneirodex.routes_admin_ext.art_studio.build_zip_bytes',
+            'oneirodex.utils.cover_art_studio.build_zip_bytes',
             side_effect=PermissionError('Permission denied'),
         ):
             response = client.get('/admin/api/art-studio/download/some-pack')
@@ -364,7 +364,7 @@ def test_generate_route_forwards_the_overrides(client, db_session, admin_user):
         sess['_user_id'] = str(admin_user.id)
         sess['_fresh'] = True
 
-    with patch('oneirodex.routes_admin_ext.art_studio.save_pack') as fake:
+    with patch('oneirodex.utils.cover_art_studio.save_pack') as fake:
         fake.return_value = {'pack_id': 'p1', 'files': [], 'title': 'T', 'system': '', 'format': 'webp'}
         client.post(
             '/admin/api/art-studio/generate',

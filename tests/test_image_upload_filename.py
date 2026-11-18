@@ -7,7 +7,7 @@ from pathlib import PureWindowsPath
 
 import pytest
 
-from oneirodex.routes_admin_ext.game_images import _game_filename_key
+from oneirodex.utils.image_files import game_filename_key as _game_filename_key
 
 
 @pytest.mark.parametrize(

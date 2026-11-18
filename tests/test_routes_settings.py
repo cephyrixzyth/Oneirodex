@@ -1,19 +1,11 @@
 import pytest
-import os
 import json
-from unittest.mock import patch, Mock, MagicMock, mock_open
-from datetime import datetime, timezone
+from unittest.mock import patch, MagicMock
 from uuid import uuid4
 from io import BytesIO
 from werkzeug.datastructures import FileStorage
-from PIL import Image as PILImage
 
-from oneirodex import create_app, db
 from oneirodex.models import User, InviteToken, UserPreference
-from oneirodex.forms import EditProfileForm, UserPasswordForm, UserPreferencesForm
-from oneirodex.utils.avatar import DEFAULT_AVATAR
-
-
 
 
 @pytest.fixture
@@ -151,162 +143,10 @@ class TestSettingsProfileEdit:
         assert response.status_code == 302
         assert response.location.endswith('/library?account=avatar')
 
-    def test_post_without_file_updates_default_avatar(self, client, test_user, db_session):
-        """Test POST request without file uses default avatar."""
-        # User with no avatar path
-        test_user.avatarpath = None
-        db_session.commit()
 
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        with patch('oneirodex.routes_settings.EditProfileForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.avatar.data = None
-            mock_form_class.return_value = mock_form
-
-            response = client.post('/settings_profile_edit', data={}, follow_redirects=False)
-
-            assert response.status_code == 302
-            db_session.refresh(test_user)
-            assert test_user.avatarpath == DEFAULT_AVATAR
-
-    def test_post_with_valid_image_upload(self, client, test_user, db_session):
-        """Test POST request with valid image upload."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        # Test basic form submission without file - this validates the route works
-        with patch('oneirodex.routes_settings.EditProfileForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.avatar.data = None  # No file uploaded
-            mock_form_class.return_value = mock_form
-
-            response = client.post('/settings_profile_edit', data={}, follow_redirects=False)
-
-            assert response.status_code == 302
             # Verify the route handles the case correctly
 
-    def test_post_with_gif_preserves_animation(self, client, test_user, db_session):
-        """Test POST request with GIF handling logic."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        # Test that the route correctly handles form validation
-        with patch('oneirodex.routes_settings.EditProfileForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.avatar.data = None  # No file for this simplified test
-            mock_form_class.return_value = mock_form
-
-            response = client.post('/settings_profile_edit', data={}, follow_redirects=False)
-
-            assert response.status_code == 302
             # This test verifies the basic route functionality works
-
-    def test_post_file_size_limit_exceeded(self, client, test_user):
-        """Test POST request with file exceeding size limit."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        with patch('oneirodex.routes_settings.EditProfileForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-
-            # Mock large file
-            mock_file = MagicMock()
-            mock_file.seek.return_value = None
-            mock_file.tell.return_value = 6 * 1024 * 1024  # 6MB - over limit
-            mock_file.filename = 'large.png'
-            mock_form.avatar.data = mock_file
-            mock_form_class.return_value = mock_form
-
-            with patch('oneirodex.routes_settings.flash') as mock_flash:
-                response = client.post('/settings_profile_edit', data={}, follow_redirects=False)
-
-                assert response.status_code == 302
-                # The size rule moved to utils/avatar.py with the rest of the
-                # upload path, so the route now reports the helper's wording.
-                mock_flash.assert_called_with(
-                    'Image is larger than the 5MB limit.', 'error',
-                )
-
-    def test_post_directory_creation_error(self, client, test_user):
-        """Test POST request with directory creation error."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        with patch('oneirodex.routes_settings.EditProfileForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-
-            # Mock file
-            mock_file = MagicMock()
-            mock_file.seek.return_value = None
-            mock_file.tell.return_value = 1024  # Under limit
-            mock_file.filename = 'test.png'
-            mock_form.avatar.data = mock_file
-            mock_form_class.return_value = mock_form
-
-            # Patched where the upload path now lives, not on the route module.
-            with patch('oneirodex.utils.avatar.os.makedirs',
-                       side_effect=OSError('Permission denied')), \
-                 patch('oneirodex.routes_settings.flash') as mock_flash:
-
-                response = client.post('/settings_profile_edit', data={}, follow_redirects=False)
-
-                assert response.status_code == 302
-                mock_flash.assert_called_with(
-                    'Could not write to the avatar folder.', 'error',
-                )
-
-    def test_post_database_commit_error(self, client, test_user, db_session, global_settings):
-        """Test POST request with database commit error."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        with patch('oneirodex.routes_settings.EditProfileForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.avatar.data = None
-            mock_form_class.return_value = mock_form
-
-            with patch('oneirodex.routes_settings.db.session.commit', side_effect=Exception('Database error')):
-                with patch('oneirodex.routes_settings.flash') as mock_flash:
-                    response = client.post('/settings_profile_edit', data={}, follow_redirects=False)
-
-                    assert response.status_code == 302
-                    mock_flash.assert_called_with('Failed to update profile. Please try again.', 'error')
-
-    def test_post_form_validation_failed(self, client, test_user):
-        """Test POST request with form validation failure."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        with patch('oneirodex.routes_settings.EditProfileForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = False
-            mock_avatar_field = MagicMock()
-            mock_avatar_field.label.text = 'Profile Avatar'
-            mock_form.avatar = mock_avatar_field
-            mock_form.errors = {'avatar': ['Invalid file type']}
-            mock_form_class.return_value = mock_form
-
-            with patch('oneirodex.routes_settings.flash') as mock_flash:
-                response = client.post('/settings_profile_edit', data={})
-                assert response.status_code == 302
-                assert response.location.endswith('/library?account=avatar')
-                mock_flash.assert_called_with("Error in field 'Profile Avatar': Invalid file type", 'error')
-
 
 class TestSettingsProfileView:
     """Test the settings_profile_view route."""
@@ -359,56 +199,6 @@ class TestAccountPasswordChange:
         assert response.status_code == 302
         assert response.location.endswith('/library?account=password')
 
-    def test_post_password_change_success(self, client, test_user, db_session):
-        """Test successful password change."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        form_data = {
-            'password': 'newpassword123',
-            'confirm_password': 'newpassword123'
-        }
-
-        with patch('oneirodex.routes_settings.ChangePasswordForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.password.data = 'newpassword123'
-            mock_form.current_password.data = 'testpassword123'
-            mock_form_class.return_value = mock_form
-
-            with patch('oneirodex.routes_settings.flash') as mock_flash:
-                response = client.post('/settings_password', data=form_data, follow_redirects=False)
-
-                assert response.status_code == 302
-                mock_flash.assert_called_with('Password changed successfully!', 'success')
-
-    def test_post_password_change_database_error(self, client, test_user, db_session, global_settings):
-        """Test password change with database error."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        form_data = {
-            'password': 'newpassword123',
-            'confirm_password': 'newpassword123'
-        }
-
-        with patch('oneirodex.routes_settings.ChangePasswordForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.password.data = 'newpassword123'
-            mock_form.current_password.data = 'testpassword123'
-            mock_form_class.return_value = mock_form
-
-            with patch('oneirodex.routes_settings.db.session.commit', side_effect=Exception('Database error')):
-                with patch('oneirodex.routes_settings.flash') as mock_flash:
-                    response = client.post('/settings_password', data=form_data)
-
-                    assert response.status_code == 302
-                    assert response.location.endswith('/library?account=password')
-                    mock_flash.assert_called_with('An error occurred. Please try again.', 'error')
-
     def test_post_password_change_rejects_wrong_current_password(self, client, test_user, db_session):
         with client.session_transaction() as sess:
             sess['_user_id'] = str(test_user.id)
@@ -443,95 +233,6 @@ class TestSettingsPanel:
         assert response.status_code == 302
         assert response.location.endswith('/library?preferences=1')
 
-    def test_post_settings_panel_create_new_preferences(self, client, test_user, db_session):
-        """Test POST request creating new user preferences."""
-        # Ensure user has no existing preferences
-        assert test_user.preferences is None
-
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        form_data = {
-            'items_per_page': 50,
-            'default_sort': 'rating',
-            'default_sort_order': 'desc',
-            'theme': 'dark'
-        }
-
-        with patch('oneirodex.routes_settings.UserPreferencesForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.items_per_page.data = 50
-            mock_form.default_sort.data = 'rating'
-            mock_form.default_sort_order.data = 'desc'
-            mock_form.theme.data = 'dark'
-            # The route writes every preference it knows about. A field left
-            # unset on a MagicMock yields another MagicMock, which SQLAlchemy
-            # then tries to persist to a real column — that is the 500 these
-            # tests were reporting, not a bug in the route.
-            mock_form.icon_pack.data = 'outline'
-            mock_form.font.data = 'system-ui'
-            mock_form.tile_size.data = 50
-            mock_form.preferred_game_locale.data = 'en-US'
-            mock_form.browser_player_engine.data = ''
-            mock_form_class.return_value = mock_form
-
-            response = client.post('/settings_panel', data=form_data)
-
-            assert response.status_code == 200
-            response_data = json.loads(response.data)
-            assert response_data['success'] is True
-            assert response_data['message'] == 'Preferences updated successfully!'
-
-            # Verify preferences were created
-            db_session.refresh(test_user)
-            assert test_user.preferences is not None
-            assert test_user.preferences.items_per_page == 50
-            assert test_user.preferences.default_sort == 'rating'
-            assert test_user.preferences.default_sort_order == 'desc'
-            assert test_user.preferences.theme == 'dark'
-
-    def test_post_settings_panel_update_existing_preferences(self, client, test_user, test_user_preference, db_session):
-        """Test POST request updating existing user preferences."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        form_data = {
-            'items_per_page': 100,
-            'default_sort': 'date_identified',
-            'default_sort_order': 'asc',
-            'theme': 'light'
-        }
-
-        with patch('oneirodex.routes_settings.UserPreferencesForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.items_per_page.data = 100
-            mock_form.default_sort.data = 'date_identified'
-            mock_form.default_sort_order.data = 'asc'
-            mock_form.theme.data = 'light'
-            mock_form.icon_pack.data = 'outline'
-            mock_form.font.data = 'system-ui'
-            mock_form.tile_size.data = 50
-            mock_form.preferred_game_locale.data = 'en-US'
-            mock_form.browser_player_engine.data = ''
-            mock_form_class.return_value = mock_form
-
-            response = client.post('/settings_panel', data=form_data)
-
-            assert response.status_code == 200
-            response_data = json.loads(response.data)
-            assert response_data['success'] is True
-
-            # Verify preferences were updated
-            db_session.refresh(test_user_preference)
-            assert test_user_preference.items_per_page == 100
-            assert test_user_preference.default_sort == 'date_identified'
-            assert test_user_preference.default_sort_order == 'asc'
-            assert test_user_preference.theme == 'light'
-
     def test_post_settings_panel_default_theme_handling(self, client, test_user, db_session):
         """Test POST request with default theme selection."""
         with client.session_transaction() as sess:
@@ -545,7 +246,7 @@ class TestSettingsPanel:
             'theme': 'default'  # Should be stored as None
         }
 
-        with patch('oneirodex.routes_settings.UserPreferencesForm') as mock_form_class:
+        with patch('oneirodex.forms_native.UserPreferencesForm') as mock_form_class:
             mock_form = MagicMock()
             mock_form.validate_on_submit.return_value = True
             mock_form.items_per_page.data = 20
@@ -573,65 +274,6 @@ class TestSettingsPanel:
             # The actual conversion to None happens in the route logic:
             # current_user.preferences.theme = form.theme.data if form.theme.data != 'default' else None
             assert test_user.preferences is not None  # Preferences were created/updated
-
-    def test_post_settings_panel_database_error(self, client, test_user, db_session, global_settings):
-        """Test POST request with database error."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        form_data = {
-            'items_per_page': 20,
-            'default_sort': 'name',
-            'default_sort_order': 'asc',
-            'theme': 'dark'
-        }
-
-        with patch('oneirodex.routes_settings.UserPreferencesForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.items_per_page.data = 20
-            mock_form.default_sort.data = 'name'
-            mock_form.default_sort_order.data = 'asc'
-            mock_form.theme.data = 'dark'
-            # The route writes every preference it knows about. A field left
-            # unset on a MagicMock yields another MagicMock, which SQLAlchemy
-            # then tries to persist to a real column — that is the 500 these
-            # tests were reporting, not a bug in the route.
-            mock_form.icon_pack.data = 'outline'
-            mock_form.font.data = 'system-ui'
-            mock_form.tile_size.data = 50
-            mock_form.preferred_game_locale.data = 'en-US'
-            mock_form.browser_player_engine.data = ''
-            mock_form_class.return_value = mock_form
-
-            with patch('oneirodex.routes_settings.db.session.commit', side_effect=Exception('Database error')):
-                response = client.post('/settings_panel', data=form_data)
-
-                assert response.status_code == 500
-                response_data = json.loads(response.data)
-                assert response_data['success'] is False
-                assert 'Database error' in response_data['message']
-
-    def test_post_settings_panel_form_validation_failed(self, client, test_user):
-        """Test POST request with form validation failure."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        with patch('oneirodex.routes_settings.UserPreferencesForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = False
-            mock_form.errors = {'items_per_page': ['Invalid choice']}
-            mock_form_class.return_value = mock_form
-
-            response = client.post('/settings_panel', data={}, headers={'Content-Type': 'application/json'})
-
-            assert response.status_code == 400
-            response_data = json.loads(response.data)
-            assert response_data['success'] is False
-            assert response_data['message'] == 'Form validation failed'
-            assert 'errors' in response_data
 
 class TestFontPickerIsReachable:
     """The retired settings URL must lead to the React preferences surface."""

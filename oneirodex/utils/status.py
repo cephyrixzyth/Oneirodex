@@ -3,7 +3,7 @@ import socket
 import os
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
-from oneirodex.models import User, SystemEvents, GlobalSettings
+from oneirodex.models import User, SystemEvents
 from oneirodex.runtime_native.db_session import current_native_engine, native_db as db
 from oneirodex.utils.global_settings import global_settings_row
 from config import Config

@@ -5,7 +5,6 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import Response
 
 from .acquire_status import _login_redirect
 from .request_auth import request_auth_context

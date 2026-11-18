@@ -131,9 +131,11 @@ def test_only_preferences_writes_a_theme_preference():
     `preferences.theme` that Preferences writes, so two surfaces could disagree
     about what was selected with no way to tell which had won. Retired at every
     layer — grid, fetch, and the POST handler behind it."""
-    themes_py = (ROOT / 'oneirodex' / 'routes_admin_ext' / 'themes.py').read_text(encoding='utf-8')
-    assert 'def apply_theme' not in themes_py
-    assert "'/admin/themes/apply'" not in themes_py
+    served = ''.join(
+        path.read_text(encoding='utf-8')
+        for path in (ROOT / 'oneirodex' / 'runtime_native').glob('admin_theme*.py')
+    )
+    assert "'/admin/themes/apply'" not in served
 
     page = (ROOT / 'frontend' / 'admin-app' / 'src' / 'pages' / 'ThemesPage.tsx').read_text(
         encoding='utf-8'
@@ -155,5 +157,5 @@ def test_the_orphaned_settings_panel_template_is_gone():
 def test_preferences_still_offers_uploaded_themes():
     """The reason retiring the admin grid loses nothing: Preferences builds its
     choices from installed themes, not from a preset list."""
-    forms = (ROOT / 'oneirodex' / 'forms.py').read_text(encoding='utf-8')
+    forms = (ROOT / 'oneirodex' / 'forms_native.py').read_text(encoding='utf-8')
     assert 'get_installed_themes()' in forms

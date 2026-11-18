@@ -12,7 +12,6 @@ from flask import Flask
 
 from tests.fixtures.native_auth import persistent_login_store
 from oneirodex.utils.persistent_sessions import issue_login_identity
-from flask_login import LoginManager
 from starlette.requests import Request
 from werkzeug.exceptions import MethodNotAllowed
 from werkzeug.utils import redirect as werkzeug_redirect
@@ -23,7 +22,6 @@ from oneirodex.runtime_native.response_compat import flask_redirect_response
 from oneirodex.runtime_native.response_compat import flask_http_exception_response
 from oneirodex.runtime_native.runtime_context import NativeRuntimeContext
 from oneirodex.runtime_native.site_redirects import create_site_redirect_router
-from oneirodex.routes_site import site_bp
 
 
 @dataclass
@@ -157,125 +155,6 @@ def test_entry_redirects_to_current_setup_step_before_auth(monkeypatch):
 
 
 @pytest.mark.parametrize('path', ['/', '/index'])
-def test_authenticated_permanent_entry_refresh_matches_flask_session_cookie(monkeypatch, path):
-    from oneirodex.utils import setup
-
-    user = User()
-    user_id = issue_login_identity(user)
-    secret = 'site-redirect-secret'
-    session_data = {
-        '_user_id': user_id,
-        '_fresh': True,
-        '_permanent': True,
-    }
-    monkeypatch.setattr(setup, 'is_setup_required', lambda: False)
-    monkeypatch.setattr(setup, 'is_setup_in_progress', lambda: False)
-
-    native, _ = _client(monkeypatch, user=user)
-    native_response = _request(
-        native, 'GET', path, dump_session_cookie(session_data, secret),
-    )
-
-    class FlaskUser(User):
-        @property
-        def is_authenticated(self):
-            return True
-
-        def get_id(self):
-            return user_id
-
-    legacy_user = FlaskUser()
-    legacy = Flask('legacy-site-entry-test')
-    legacy.config.update(
-        SECRET_KEY=secret,
-        SESSION_COOKIE_NAME='session',
-        PERMANENT_SESSION_LIFETIME=3600,
-        SESSION_PROTECTION='none',
-        SESSION_REFRESH_EACH_REQUEST=True,
-        SESSION_COOKIE_SECURE=False,
-        SESSION_COOKIE_SAMESITE='Lax',
-    )
-    login_manager = LoginManager(legacy)
-    login_manager.login_view = '/login'
-    login_manager.user_loader(
-        lambda identity: legacy_user if identity == legacy_user.get_id() else None
-    )
-    legacy.add_url_rule(
-        '/discover', endpoint='discover.discover', view_func=lambda: 'discover',
-    )
-    legacy.register_blueprint(site_bp)
-    with legacy.test_client() as client:
-        with client.session_transaction() as session:
-            session.update(session_data)
-        legacy_response = client.get('/')
-
-    assert native_response.status_code == legacy_response.status_code == 302
-    assert native_response.headers['location'] == legacy_response.headers['Location'] == '/discover'
-    assert native_response.headers['content-type'] == legacy_response.headers['Content-Type']
-    assert native_response.headers['content-length'] == legacy_response.headers['Content-Length']
-    assert native_response.content == legacy_response.get_data()
-    native_set_cookie = native_response.headers.get('set-cookie')
-    legacy_set_cookie = legacy_response.headers.get('Set-Cookie')
-    assert native_set_cookie and legacy_set_cookie
-    for attribute in ('HttpOnly', 'Path=/', 'SameSite=Lax'):
-        assert attribute.lower() in native_set_cookie.lower()
-        assert attribute.lower() in legacy_set_cookie.lower()
-    native_cookie_value = native_set_cookie.split(';', 1)[0].split('=', 1)[1]
-    legacy_cookie_value = legacy_set_cookie.split(';', 1)[0].split('=', 1)[1]
-    assert load_session_cookie(native_cookie_value, secret, max_age=3600) == (
-        load_session_cookie(legacy_cookie_value, secret, max_age=3600)
-    )
-
-
-@pytest.mark.parametrize('path', ['/', '/index'])
-@pytest.mark.parametrize(
-    ('setup_required', 'setup_in_progress'),
-    [(False, False), (False, True), (True, False)],
-)
-def test_entry_options_matches_flask_setup_gate_and_allow_header(
-    monkeypatch, path, setup_required, setup_in_progress,
-):
-    from flask import redirect
-    from oneirodex.utils import setup
-
-    native, _ = _client(
-        monkeypatch,
-        setup_required=setup_required,
-        setup_in_progress=setup_in_progress,
-    )
-    legacy = Flask('legacy-site-options-test')
-    legacy.config.update(SECRET_KEY='site-redirect-secret')
-    legacy.register_blueprint(site_bp)
-
-    @legacy.before_request
-    def setup_gate():
-        if setup_required or setup_in_progress:
-            return redirect('/setup/features')
-        return None
-
-    monkeypatch.setattr(setup, 'is_setup_required', lambda: setup_required)
-    monkeypatch.setattr(setup, 'is_setup_in_progress', lambda: setup_in_progress)
-    monkeypatch.setattr(setup, 'get_setup_redirect_url', lambda: '/setup/features')
-    native_response = _request(native, 'OPTIONS', path)
-    legacy_response = legacy.test_client().options(path)
-
-    assert native_response.status_code == legacy_response.status_code
-    assert native_response.headers.get('location') == legacy_response.headers.get('Location')
-    assert native_response.headers.get('content-type') == legacy_response.headers.get('Content-Type')
-    assert native_response.headers.get('content-length') == legacy_response.headers.get('Content-Length')
-    assert native_response.content == legacy_response.get_data()
-    native_allow = native_response.headers.get('allow')
-    legacy_allow = legacy_response.headers.get('Allow')
-    assert (native_allow is None) == (legacy_allow is None)
-    if native_allow and legacy_allow:
-        if not setup_required:
-            assert native_allow == 'GET, HEAD, OPTIONS, POST'
-        assert {method.strip() for method in native_allow.split(',')} == {
-            method.strip() for method in legacy_allow.split(',')
-        }
-
-
-@pytest.mark.parametrize('path', ['/', '/index'])
 def test_entry_405_allow_header_matches_legacy_method_set(monkeypatch, path):
     app, _ = _client(monkeypatch)
     scope = {
@@ -323,59 +202,6 @@ def test_restricted_redirect_preserves_login_next_and_authenticated_landing(monk
     response = _request(authenticated, 'GET', '/restricted', cookie)
     assert response.status_code == 302
     assert response.headers['location'] == '/discover'
-
-
-def test_authenticated_restricted_target_is_intentional_migration_improvement(monkeypatch):
-    user = User()
-    user_id = issue_login_identity(user)
-    secret = 'site-redirect-secret'
-    cookie = dump_session_cookie(
-        {'_user_id': user_id, '_fresh': True}, secret,
-    )
-    native, _ = _client(monkeypatch, user=user)
-
-    class FlaskUser(User):
-        @property
-        def is_authenticated(self):
-            return True
-
-        def get_id(self):
-            return user_id
-
-    legacy_user = FlaskUser()
-    legacy = Flask('legacy-restricted-target-test')
-    legacy.config.update(
-        SECRET_KEY=secret,
-        SESSION_COOKIE_NAME='session',
-        SESSION_PROTECTION='none',
-    )
-    login_manager = LoginManager(legacy)
-    login_manager.login_view = '/login'
-    login_manager.user_loader(
-        lambda identity: legacy_user if identity == user_id else None
-    )
-    legacy.add_url_rule(
-        '/welcome', endpoint='member.welcome_page', view_func=lambda: 'welcome',
-    )
-    legacy.register_blueprint(site_bp)
-
-    native_response = _request(native, 'GET', '/restricted', cookie)
-    with legacy.test_client() as client:
-        with client.session_transaction() as session:
-            session.update({'_user_id': user_id, '_fresh': True})
-        legacy_response = client.get('/restricted')
-
-    assert native_response.status_code == legacy_response.status_code == 302
-    assert legacy_response.headers['Location'] == '/welcome'
-    assert native_response.headers['location'] == '/discover'
-    assert native_response.headers['cache-control'] == 'no-store'
-    assert native_response.headers['content-type'] == werkzeug_redirect(
-        '/discover',
-    ).headers['Content-Type']
-    assert native_response.headers['content-length'] == str(
-        len(werkzeug_redirect('/discover').get_data())
-    )
-    assert native_response.content == werkzeug_redirect('/discover').get_data()
 
 
 @pytest.mark.parametrize(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import threading
 from datetime import datetime, timezone
 from typing import Any
@@ -11,15 +10,7 @@ from sqlalchemy import func, select
 
 from product_env import getenv_product
 from oneirodex.runtime_native.db_session import native_db as db
-from oneirodex.models import (
-    Game,
-    GlobalSettings,
-    Library,
-    ScanJob,
-    User,
-    UserNotification,
-    UserPreference,
-)
+from oneirodex.models import Game, Library, ScanJob, User, UserNotification, UserPreference
 from oneirodex.utils.email_rendering import render_social_notification
 from oneirodex.utils.role_catalog import role_at_least
 from oneirodex.utils.smtp import send_email_quiet

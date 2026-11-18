@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { PageStatus } from '@oneirodex/ui'
 import { getJson } from '../api/adminApi'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
@@ -133,210 +133,206 @@ export function DashboardPage() {
 
   const hasErrors = (summary?.recent_errors || []).length > 0
 
-  // Keep the widget map stable between polls, while allowing the health banner
-  // to reflect the initial loading and failure states before any summary exists.
-  const widgets = useMemo(
-    () => ({
-      status: (
-        <OpsStatusBanner
-          severity={severity}
-          loading={bootLoading && !summary}
-          unavailable={!summary && !bootLoading && Boolean(error)}
-          items={issues?.items}
-          ariaLabel="Health"
-        />
-      ),
-      'm-build': <BuildTile build={summary?.build} />,
-      'm-libraries': (
-        <MetricTile
-          label="Libraries"
-          value={na(library?.libraries)}
-          hint="folders"
-          tone={library?.libraries != null ? 'info' : 'na'}
-        />
-      ),
-      'm-games': (
-        <MetricTile
-          label="Games"
-          value={na(library?.games)}
-          hint={
-            library?.unmatched_folders != null
-              ? `${library.unmatched_folders} unmatched`
-              : 'catalogue'
-          }
-          tone={gamesTone}
-        />
-      ),
-      'm-health': (
-        <MetricTile
-          label="Library health"
-          value={formatLibraryHealthValue(library?.health)}
-          hint={formatLibraryHealthHint(library?.health)}
-          tone={libraryHealthTone(library?.health)}
-        />
-      ),
-      'm-scans': (
-        <MetricTile
-          label="Scans"
-          value={na(scans?.active_count)}
-          hint={
-            (scans?.jobs || [])[0]
-              ? `${scans.jobs[0].library || 'job'} · ${scans.jobs[0].progress}%`
-              : 'active'
-          }
-          tone={scansActiveTone(scans?.active_count)}
-        />
-      ),
-      'm-disk': (
-        <MetricTile
-          label="Disk"
-          value={disk?.percent != null ? `${disk.percent}%` : 'n/a'}
-          hint="games volume"
-          tone={percentHealthTone(disk?.percent)}
-        />
-      ),
-      'm-load': (
-        <MetricTile
-          label="Load 1/5/15"
-          value={formatLoadAvg(host?.load_avg)}
-          tone={host?.load_avg ? 'info' : 'na'}
-        />
-      ),
-      'm-rss': (
-        <MetricTile
-          label="Process RSS"
-          value={formatBytes(host?.process?.rss_bytes)}
-          hint={host?.process?.pid != null ? `pid ${host.process.pid}` : 'n/a'}
-          tone={host?.process?.rss_bytes != null ? 'info' : 'na'}
-        />
-      ),
-      'm-db': (
-        <MetricTile
-          label="DB ping"
-          value={host?.db_ping_ms != null ? `${host.db_ping_ms} ms` : 'n/a'}
-          tone={dbPingTone(host?.db_ping_ms)}
-        />
-      ),
-      'm-awake': (
-        <MetricTile
-          label="Readyz"
-          value={formatReadyz(services?.awake)}
-          tone={awakeTone(services?.awake)}
-        />
-      ),
-      'm-companions': (
-        <MetricTile
-          label="Companions"
-          value={`${companions?.online ?? 0} / ${companions?.registered ?? 0}`}
-          hint={
-            kindRows.length
-              ? kindRows.map((r) => `${r.kind} ${r.online}/${r.registered}`).join(' · ')
-              : 'by kind n/a'
-          }
-          tone={companionsTone(companions)}
-        />
-      ),
-      // Optional widgets: hidden until added from "Add widget".
-      'm-cpu': (
-        <MetricTile
-          label="CPU"
-          value={host?.cpu?.percent != null ? `${host.cpu.percent}%` : 'n/a'}
-          hint="host"
-          tone={percentHealthTone(host?.cpu?.percent)}
-        />
-      ),
-      'm-memory': (
-        <MetricTile
-          label="Memory"
-          value={host?.memory?.percent != null ? `${host.memory.percent}%` : 'n/a'}
-          hint={
-            host?.memory
-              ? `${formatBytes(host.memory.used)} / ${formatBytes(host.memory.total)}`
-              : 'host'
-          }
-          tone={percentHealthTone(host?.memory?.percent)}
-        />
-      ),
-      'm-unmatched': (
-        <MetricTile
-          label="Unmatched folders"
-          value={na(library?.unmatched_folders)}
-          hint="need a match"
-          tone={gamesTone}
-        />
-      ),
-      'scan-jobs': (
-        <section className="od-ops-panel od-ops-panel--embedded">
-          <h2>Active scan jobs</h2>
-          {(scans?.jobs || []).length === 0 ? (
-            <p className="od-admin-lede">No scans running.</p>
-          ) : (
-            <DataTable
-              columns={DASHBOARD_SCAN_COLUMNS}
-              rows={(scans?.jobs || []).slice(0, 6)}
-              getRowKey={(job: { id?: string; library?: string }, index?: number) =>
-                String(job.id ?? job.library ?? index)
-              }
-              toolbar={false}
-            />
-          )}
-        </section>
-      ),
-      host: (
-        <section className="od-ops-panel od-ops-panel--embedded">
-          <h2>Host meters</h2>
-          {!host ? (
-            <p className="od-admin-lede">Host data unavailable.</p>
-          ) : (
-            <div className="od-ops-meters">
-              <MeterBar label="CPU" percent={host.cpu?.percent} />
-              <MeterBar
-                label="Memory"
-                percent={host.memory?.percent}
-                detail={
-                  host.memory
-                    ? `${formatBytes(host.memory.used)} / ${formatBytes(host.memory.total)}`
-                    : null
-                }
-              />
-              <MeterBar label="Games disk" percent={disk?.percent} />
-            </div>
-          )}
-        </section>
-      ),
-      companions: (
-        <section className="od-ops-panel od-ops-panel--embedded">
-          <h2>Companions by kind</h2>
-          {kindRows.length === 0 ? (
-            <p className="od-admin-lede">
-              {companions
-                ? `Online ${companions.online ?? 0} / ${companions.registered ?? 0} · last seen 1h ${companions.last_seen?.within_1h ?? 0}`
-                : 'n/a'}
-            </p>
-          ) : (
-            <DataTable
-              columns={DASHBOARD_COMPANION_COLUMNS}
-              rows={kindRows}
-              getRowKey={(row) => row.kind}
-              toolbar={false}
-            />
-          )}
-        </section>
-      ),
-      errors: hasErrors ? (
-        <section className="od-ops-panel od-ops-panel--embedded">
-          <h2>Recent errors</h2>
+  // Every widget is derived from the latest summary, so it is rebuilt each render.
+  const widgets = {
+    status: (
+      <OpsStatusBanner
+        severity={severity}
+        loading={bootLoading && !summary}
+        unavailable={!summary && !bootLoading && Boolean(error)}
+        items={issues?.items}
+        ariaLabel="Health"
+      />
+    ),
+    'm-build': <BuildTile build={summary?.build} />,
+    'm-libraries': (
+      <MetricTile
+        label="Libraries"
+        value={na(library?.libraries)}
+        hint="folders"
+        tone={library?.libraries != null ? 'info' : 'na'}
+      />
+    ),
+    'm-games': (
+      <MetricTile
+        label="Games"
+        value={na(library?.games)}
+        hint={
+          library?.unmatched_folders != null
+            ? `${library.unmatched_folders} unmatched`
+            : 'catalogue'
+        }
+        tone={gamesTone}
+      />
+    ),
+    'm-health': (
+      <MetricTile
+        label="Library health"
+        value={formatLibraryHealthValue(library?.health)}
+        hint={formatLibraryHealthHint(library?.health)}
+        tone={libraryHealthTone(library?.health)}
+      />
+    ),
+    'm-scans': (
+      <MetricTile
+        label="Scans"
+        value={na(scans?.active_count)}
+        hint={
+          (scans?.jobs || [])[0]
+            ? `${scans.jobs[0].library || 'job'} · ${scans.jobs[0].progress}%`
+            : 'active'
+        }
+        tone={scansActiveTone(scans?.active_count)}
+      />
+    ),
+    'm-disk': (
+      <MetricTile
+        label="Disk"
+        value={disk?.percent != null ? `${disk.percent}%` : 'n/a'}
+        hint="games volume"
+        tone={percentHealthTone(disk?.percent)}
+      />
+    ),
+    'm-load': (
+      <MetricTile
+        label="Load 1/5/15"
+        value={formatLoadAvg(host?.load_avg)}
+        tone={host?.load_avg ? 'info' : 'na'}
+      />
+    ),
+    'm-rss': (
+      <MetricTile
+        label="Process RSS"
+        value={formatBytes(host?.process?.rss_bytes)}
+        hint={host?.process?.pid != null ? `pid ${host.process.pid}` : 'n/a'}
+        tone={host?.process?.rss_bytes != null ? 'info' : 'na'}
+      />
+    ),
+    'm-db': (
+      <MetricTile
+        label="DB ping"
+        value={host?.db_ping_ms != null ? `${host.db_ping_ms} ms` : 'n/a'}
+        tone={dbPingTone(host?.db_ping_ms)}
+      />
+    ),
+    'm-awake': (
+      <MetricTile
+        label="Readyz"
+        value={formatReadyz(services?.awake)}
+        tone={awakeTone(services?.awake)}
+      />
+    ),
+    'm-companions': (
+      <MetricTile
+        label="Companions"
+        value={`${companions?.online ?? 0} / ${companions?.registered ?? 0}`}
+        hint={
+          kindRows.length
+            ? kindRows.map((r) => `${r.kind} ${r.online}/${r.registered}`).join(' · ')
+            : 'by kind n/a'
+        }
+        tone={companionsTone(companions)}
+      />
+    ),
+    // Optional widgets: hidden until added from "Add widget".
+    'm-cpu': (
+      <MetricTile
+        label="CPU"
+        value={host?.cpu?.percent != null ? `${host.cpu.percent}%` : 'n/a'}
+        hint="host"
+        tone={percentHealthTone(host?.cpu?.percent)}
+      />
+    ),
+    'm-memory': (
+      <MetricTile
+        label="Memory"
+        value={host?.memory?.percent != null ? `${host.memory.percent}%` : 'n/a'}
+        hint={
+          host?.memory
+            ? `${formatBytes(host.memory.used)} / ${formatBytes(host.memory.total)}`
+            : 'host'
+        }
+        tone={percentHealthTone(host?.memory?.percent)}
+      />
+    ),
+    'm-unmatched': (
+      <MetricTile
+        label="Unmatched folders"
+        value={na(library?.unmatched_folders)}
+        hint="need a match"
+        tone={gamesTone}
+      />
+    ),
+    'scan-jobs': (
+      <section className="od-ops-panel od-ops-panel--embedded">
+        <h2>Active scan jobs</h2>
+        {(scans?.jobs || []).length === 0 ? (
+          <p className="od-admin-lede">No scans running.</p>
+        ) : (
           <DataTable
-            columns={DASHBOARD_ERROR_COLUMNS}
-            rows={summary.recent_errors.slice(0, 4)}
-            getRowKey={(event) => event.id}
+            columns={DASHBOARD_SCAN_COLUMNS}
+            rows={(scans?.jobs || []).slice(0, 6)}
+            getRowKey={(job: { id?: string; library?: string }, index?: number) =>
+              String(job.id ?? job.library ?? index)
+            }
             toolbar={false}
           />
-        </section>
-      ) : null,
-    }),
-    [summary, bootLoading, error],
-  )
+        )}
+      </section>
+    ),
+    host: (
+      <section className="od-ops-panel od-ops-panel--embedded">
+        <h2>Host meters</h2>
+        {!host ? (
+          <p className="od-admin-lede">Host data unavailable.</p>
+        ) : (
+          <div className="od-ops-meters">
+            <MeterBar label="CPU" percent={host.cpu?.percent} />
+            <MeterBar
+              label="Memory"
+              percent={host.memory?.percent}
+              detail={
+                host.memory
+                  ? `${formatBytes(host.memory.used)} / ${formatBytes(host.memory.total)}`
+                  : null
+              }
+            />
+            <MeterBar label="Games disk" percent={disk?.percent} />
+          </div>
+        )}
+      </section>
+    ),
+    companions: (
+      <section className="od-ops-panel od-ops-panel--embedded">
+        <h2>Companions by kind</h2>
+        {kindRows.length === 0 ? (
+          <p className="od-admin-lede">
+            {companions
+              ? `Online ${companions.online ?? 0} / ${companions.registered ?? 0} · last seen 1h ${companions.last_seen?.within_1h ?? 0}`
+              : 'n/a'}
+          </p>
+        ) : (
+          <DataTable
+            columns={DASHBOARD_COMPANION_COLUMNS}
+            rows={kindRows}
+            getRowKey={(row) => row.kind}
+            toolbar={false}
+          />
+        )}
+      </section>
+    ),
+    errors: hasErrors ? (
+      <section className="od-ops-panel od-ops-panel--embedded">
+        <h2>Recent errors</h2>
+        <DataTable
+          columns={DASHBOARD_ERROR_COLUMNS}
+          rows={summary.recent_errors.slice(0, 4)}
+          getRowKey={(event) => event.id}
+          toolbar={false}
+        />
+      </section>
+    ) : null,
+  }
 
   return (
     <Page

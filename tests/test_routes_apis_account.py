@@ -78,7 +78,7 @@ class TestPasswordChange:
     def test_oversized_password_body_is_refused_before_json_parse(
         self, client, member, without_content_length
     ):
-        from oneirodex.routes_apis.account import PASSWORD_CHANGE_BODY_MAX_BYTES
+        from oneirodex.runtime_native.account_password import _PASSWORD_JSON_MAX_BYTES as PASSWORD_CHANGE_BODY_MAX_BYTES
 
         login(client, member)
         body = b'{"padding":"' + b'x' * PASSWORD_CHANGE_BODY_MAX_BYTES + b'"}'
@@ -86,15 +86,13 @@ class TestPasswordChange:
             '/api/account/password', data=body, content_type='application/json',
         ) if not without_content_length else None
         if without_content_length:
-            from werkzeug.test import EnvironBuilder
+            async def streamed():
+                # A streamed body declares no Content-Length.
+                yield body
 
-            environ = EnvironBuilder(
-                method='POST', path='/api/account/password',
-                input_stream=io.BytesIO(body), content_type='application/json',
-            ).get_environ()
-            environ.pop('CONTENT_LENGTH', None)
-            environ['wsgi.input_terminated'] = True
-            response = client.open(environ)
+            response = client.post(
+                '/api/account/password', data=streamed(), content_type='application/json',
+            )
 
         assert response.status_code == 413
         assert response.get_json()['error_code'] == 'payload_too_large'
@@ -108,8 +106,10 @@ class TestPasswordChange:
             'confirm_password': 'a brand new one',
         })
 
-        assert response.status_code == 401
-        assert response.get_json()['error_code'] == 'unauthorized'
+        # Not 401: the member app treats any 401 from its API as a lost
+        # session and sends the user to sign-in.
+        assert response.status_code == 422
+        assert response.get_json()['error_code'] == 'unprocessable'
         # And the old password still works.
         assert member.check_password('correct horse battery')
 

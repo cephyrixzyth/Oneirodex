@@ -165,7 +165,7 @@ def test_scan_and_install_routes(client, app, db_session, configured_install, tm
     app.config['BIOS_IMPORT_SOURCE'] = str(pack)
 
     monkeypatch.setattr(
-        'oneirodex.routes_apis.emulator_cheats.firmware_import_allowed_bases',
+        'oneirodex.utils.bios_install.firmware_import_allowed_bases',
         lambda _app: [str(tmp_path)],
     )
 
@@ -201,7 +201,7 @@ def test_scan_refuses_a_folder_outside_the_allowlist(
     pack.mkdir()
     allowed.mkdir()
     monkeypatch.setattr(
-        'oneirodex.routes_apis.emulator_cheats.firmware_import_allowed_bases',
+        'oneirodex.utils.bios_install.firmware_import_allowed_bases',
         lambda _app: [str(allowed)],
     )
 

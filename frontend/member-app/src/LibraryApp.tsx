@@ -6,18 +6,14 @@ import { fetchBrowseGames } from './api/browse'
 import { applyPlatformSkin, clearPlatformSkin } from './chrome/platformSkins'
 import { SystemBackdrop } from './chrome/SystemBackdrop'
 import { usesNewChrome } from './chrome/usesNewChrome'
-import { BADGE_FILTER_PARAMS, badgeFiltersFromSearchParams } from './components/BadgeFilterChips'
+import { BADGE_FILTER_PARAMS } from './components/BadgeFilterChips'
 import {
   filtersFromSearchParams,
   OWNERSHIP_FILTER_KEYS,
   searchParamsHaveLibraryFilters,
   withLibraryParams,
 } from './libraryQueryParams'
-import {
-  ITEM_KIND_FILTER_CHIPS,
-  itemKindFromSearchParams,
-  parseItemKindFilter,
-} from './components/ItemKindFilterChips'
+import { ITEM_KIND_FILTER_CHIPS, parseItemKindFilter } from './components/ItemKindFilterChips'
 import { ContextBar } from './chrome/ContextBar'
 import { cleanFilters, FilterBar } from './components/FilterBar'
 import './components/libraryFilters.css'

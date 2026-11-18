@@ -45,7 +45,7 @@ def signed_in(client, librarian):
 @pytest.fixture
 def sabnzbd_down(monkeypatch):
     """SABnzbd configured on a hostname, and every connection to it failing the way urllib3 words it."""
-    monkeypatch.setattr('oneirodex.routes_apis.acquire.arr_module_on', lambda: True)
+    monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda *a, **k: True)
     monkeypatch.setattr(
         'oneirodex.utils.arr_connectors.get_arr_config',
         lambda: {'sabnzbd_url': 'http://sab.lan:8080', 'sabnzbd_api_key': SAB_KEY},
@@ -102,22 +102,22 @@ def test_a_blocked_destination_keeps_its_reason(signed_in, monkeypatch):
     """Validator reasons are fixed strings and useful to the operator; they pass through."""
     from oneirodex.utils.http_safe import BlockedOutboundUrl
 
-    monkeypatch.setattr('oneirodex.routes_apis.acquire.arr_module_on', lambda: True)
+    monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda *a, **k: True)
 
     def blocked(*_a, **_k):
         raise BlockedOutboundUrl('http://169.254.169.254/?apikey=zzz', 'URL host is not allowed')
 
-    monkeypatch.setattr('oneirodex.routes_apis.acquire.send_to_download_client', blocked)
+    monkeypatch.setattr('oneirodex.utils.arr_connectors.send_to_download_client', blocked)
     body = signed_in.post('/api/acquire/download', json={'url': 'magnet:?xt=urn:btih:abc', 'provider': 'qbittorrent'}).get_json()
     assert body['error'] == 'Blocked outbound URL: URL host is not allowed'
     assert 'zzz' not in str(body) and '169.254' not in str(body)
 
 
 def test_acquire_strips_magnet_network_targets_before_sending(signed_in, monkeypatch):
-    monkeypatch.setattr('oneirodex.routes_apis.acquire.arr_module_on', lambda: True)
+    monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda *a, **k: True)
     sent = []
     monkeypatch.setattr(
-        'oneirodex.routes_apis.acquire.send_to_download_client',
+        'oneirodex.utils.arr_connectors.send_to_download_client',
         lambda url, *, provider: sent.append((url, provider)) or {'queued': True},
     )
     magnet = (
@@ -135,7 +135,7 @@ def test_acquire_strips_magnet_network_targets_before_sending(signed_in, monkeyp
 
 
 def test_a_debrid_http_error_does_not_leak_the_query_string_key(signed_in, monkeypatch):
-    monkeypatch.setattr('oneirodex.routes_apis.acquire.debrid_enabled', lambda: True)
+    monkeypatch.setattr('oneirodex.utils.debrid_connectors.debrid_enabled', lambda: True)
     response = requests.Response()
     response.status_code = 401
 
@@ -145,7 +145,7 @@ def test_a_debrid_http_error_does_not_leak_the_query_string_key(signed_in, monke
             response=response,
         )
 
-    monkeypatch.setattr('oneirodex.routes_apis.acquire.alldebrid_upload_magnet', rejected)
+    monkeypatch.setattr('oneirodex.utils.debrid_connectors.alldebrid_upload_magnet', rejected)
     reply = signed_in.post('/api/acquire/download', json={'magnet': 'magnet:?xt=urn:btih:abc', 'provider': 'alldebrid'})
     assert reply.status_code == 502
     assert DEBRID_KEY not in reply.get_data(as_text=True)
@@ -153,12 +153,12 @@ def test_a_debrid_http_error_does_not_leak_the_query_string_key(signed_in, monke
 
 
 def test_acquire_search_failures_do_not_echo_exception_text(signed_in, monkeypatch):
-    monkeypatch.setattr('oneirodex.routes_apis.acquire.arr_module_on', lambda: True)
+    monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda *a, **k: True)
 
     def boom(_query):
         raise RuntimeError(f'Jackett query failed: ?apikey={SAB_KEY}&Query=x')
 
-    monkeypatch.setattr('oneirodex.routes_apis.acquire.search_indexers', boom)
+    monkeypatch.setattr('oneirodex.utils.arr_connectors.search_indexers', boom)
     reply = signed_in.get('/api/acquire/search?q=halo')
     assert reply.status_code == 502
     assert SAB_KEY not in reply.get_data(as_text=True)
@@ -166,12 +166,12 @@ def test_acquire_search_failures_do_not_echo_exception_text(signed_in, monkeypat
 
 def test_the_admin_download_route_no_longer_500s_or_leaks(signed_in, monkeypatch):
     """``/api/arr/download`` caught only RuntimeError; a ConnectionError escaped as a 500."""
-    monkeypatch.setattr('oneirodex.routes_arr.arr_module_on', lambda: True)
+    monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda *a, **k: True)
 
     def down(_url):
         raise requests.ConnectionError(f"HTTPConnectionPool(host='{INTERNAL_IP}', port=8080): Max retries exceeded")
 
-    monkeypatch.setattr('oneirodex.routes_arr.qbittorrent_add_url', down)
+    monkeypatch.setattr('oneirodex.utils.arr_connectors.qbittorrent_add_url', down)
     reply = signed_in.post('/api/arr/download', json={'download_url': 'magnet:?xt=urn:btih:abc'})
     assert reply.status_code == 502
     body = reply.get_json()
@@ -180,10 +180,10 @@ def test_the_admin_download_route_no_longer_500s_or_leaks(signed_in, monkeypatch
 
 
 def test_admin_arr_download_rejects_unrelated_schemes_but_keeps_magnets(signed_in, monkeypatch):
-    monkeypatch.setattr('oneirodex.routes_arr.arr_module_on', lambda: True)
+    monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda *a, **k: True)
     sent = []
     monkeypatch.setattr(
-        'oneirodex.routes_arr.qbittorrent_add_url',
+        'oneirodex.utils.arr_connectors.qbittorrent_add_url',
         lambda url: sent.append(url) or {'status': 'queued', 'download_url': url},
     )
     magnet = 'magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567'
@@ -207,12 +207,12 @@ def test_admin_arr_download_rejects_unrelated_schemes_but_keeps_magnets(signed_i
 ])
 def test_requests_value_errors_are_not_echoed_by_the_admin_download_route(signed_in, monkeypatch, exc):
     """These subclass ValueError too, and ``except ValueError: api_error(str(exc))`` ran first."""
-    monkeypatch.setattr('oneirodex.routes_arr.arr_module_on', lambda: True)
+    monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda *a, **k: True)
 
     def boom(_url):
         raise exc
 
-    monkeypatch.setattr('oneirodex.routes_arr.qbittorrent_add_url', boom)
+    monkeypatch.setattr('oneirodex.utils.arr_connectors.qbittorrent_add_url', boom)
     reply = signed_in.post('/api/arr/download', json={'download_url': 'magnet:?xt=urn:btih:abc'})
     assert reply.status_code == 502
     assert reply.get_json()['error_code'] == 'bad_gateway'
@@ -220,12 +220,12 @@ def test_requests_value_errors_are_not_echoed_by_the_admin_download_route(signed
 
 
 def test_a_plain_value_error_is_still_a_bad_request_with_credential_parameters_scrubbed(signed_in, monkeypatch):
-    monkeypatch.setattr('oneirodex.routes_arr.arr_module_on', lambda: True)
+    monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda *a, **k: True)
 
     def invalid(_url):
         raise ValueError(f'download_url is required (apikey={SAB_KEY})')
 
-    monkeypatch.setattr('oneirodex.routes_arr.qbittorrent_add_url', invalid)
+    monkeypatch.setattr('oneirodex.utils.arr_connectors.qbittorrent_add_url', invalid)
     reply = signed_in.post('/api/arr/download', json={'download_url': 'magnet:?xt=urn:btih:abc'})
     assert reply.status_code == 400
     assert reply.get_json()['error_code'] == 'bad_request'
@@ -235,7 +235,7 @@ def test_a_plain_value_error_is_still_a_bad_request_with_credential_parameters_s
 
 def test_a_redirect_to_an_impossible_port_is_a_gateway_error_not_a_bad_request(signed_in, monkeypatch):
     """The origin check raised a bare ValueError for ``:99999``, which the route answered as a 400."""
-    monkeypatch.setattr('oneirodex.routes_arr.arr_module_on', lambda: True)
+    monkeypatch.setattr('oneirodex.utils.module_status.arr_module_on', lambda *a, **k: True)
     monkeypatch.setattr(
         'oneirodex.utils.arr_connectors.get_arr_config',
         lambda: {'qbittorrent_url': 'http://qbit.lan:8080', 'qbittorrent_username': 'admin', 'qbittorrent_password': 'pw'},

@@ -15,7 +15,6 @@ export function LibraryFreshnessPanel() {
   const [onlyStale, setOnlyStale] = useState(true)
   const [updated, setUpdated] = useState<UpdatedRow[] | null>(null)
   const [errors, setErrors] = useState<ErrorRow[]>([])
-  const [skipped, setSkipped] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>(null)
   const [status, setStatus] = useState('')
@@ -54,7 +53,6 @@ export function LibraryFreshnessPanel() {
     setStatus('')
     setUpdated(null)
     setErrors([])
-    setSkipped(0)
     try {
       const result = await postJson('/api/admin/freshness/refresh', {
         limit: batchSize,
@@ -67,7 +65,6 @@ export function LibraryFreshnessPanel() {
       const skippedFresh = Number(result?.skipped_fresh) || 0
       setUpdated(changed)
       setErrors(failures)
-      setSkipped(skippedFresh)
       setStatus(
         `Done: ${changed.length} updated, ${skippedFresh} skipped as fresh, ${failures.length} errors.`,
       )

@@ -171,7 +171,7 @@ def request_auth_context(
         touch_bearer=touch_bearer,
         allow_remember=allow_remember,
     )
-    return RequestAuthContext(
+    context = RequestAuthContext(
         session_data=session_data,
         original_session=original_session,
         resolution=resolution,
@@ -180,6 +180,11 @@ def request_auth_context(
         session_refresh_each_request=bool(config.get("SESSION_REFRESH_EACH_REQUEST", True)),
         allow_bearer=allow_bearer,
     )
+    # Audit events written during this request name the signed-in user.
+    from oneirodex.utils.event_logging import set_acting_user
+
+    set_acting_user(getattr(context.user, "id", None))
+    return context
 
 
 def touch_resolved_bearer(

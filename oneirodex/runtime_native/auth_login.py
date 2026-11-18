@@ -196,15 +196,9 @@ def _client_ip(request, config):
 
 
 def _safe_next(candidate):
-    if not isinstance(candidate, str) or not candidate.strip().startswith('/'):
-        return '/discover'
-    value = candidate.strip()
-    if value[1:2] in ('/', '\\'):
-        return '/discover'
-    from urllib.parse import urlparse
+    from oneirodex.utils.safe_redirect import safe_next_url
 
-    parsed = urlparse(value)
-    return '/discover' if parsed.scheme or parsed.netloc else value
+    return safe_next_url(candidate)
 
 
 def _session_data(request, config):

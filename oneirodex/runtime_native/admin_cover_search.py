@@ -63,7 +63,6 @@ def create_admin_cover_search_router(
             return _finish(response, flask_app, auth, scope)
         try:
             from oneirodex.schemas.admin_images import CoverSearchBody
-            from oneirodex.utils.validation import format_validation_errors
             model = CoverSearchBody.model_validate(body)
         except ValidationError as exc:
             response = _validation_error(exc)

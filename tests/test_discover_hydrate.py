@@ -114,7 +114,7 @@ class TestHydrationDoesNotScaleWithTiles:
         exactly the dimension under test and holds the shelf count still.
         """
         import oneirodex.utils.discover_builder as discover_builder
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
 
         def build_at_depth(limit):
             # The feed assembly lives in discover_builder; patch its imported
@@ -156,7 +156,7 @@ class TestHydrationDoesNotScaleWithTiles:
     def test_feed_ships_a_window_not_the_whole_row(
         self, app, db_session, hydrate_user, hydrate_library, seed_shelves
     ):
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
         from oneirodex.utils.discover_providers import ROW_MAX, ROW_WINDOW
 
         _add_games(db_session, hydrate_library, ROW_MAX * 2)

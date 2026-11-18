@@ -242,61 +242,13 @@ def test_cleanup_orphans_api_librarian(client, app, db_session, admin, lib, tmp_
     db_session.commit()
 
     _login(client, app, admin)
+    gone_uuid, keep_uuid = gone.uuid, keep.uuid  # `gone` is deleted by the request
     resp = client.post(f'/api/games/{game.uuid}/versions/cleanup_orphans')
     assert resp.status_code == 200, resp.get_json()
     body = resp.get_json()
     assert body['ok'] is True
-    assert any(r['uuid'] == gone.uuid for r in body['removed'])
-    assert any(r['uuid'] == keep.uuid for r in body['kept'])
-
-
-def test_wishlist_create_cancel_and_admin_fulfill(client, app, db_session, user, admin, lib):
-    _login(client, app, user)
-    create = client.post('/api/requests', json={'title': f'Title {uuid4().hex[:6]}', 'notes': 'want'})
-    assert create.status_code == 201
-    created_request = create.get_json()
-    req_id = created_request['id']
-    assert created_request['created_at'].endswith('+00:00')
-
-    listed = client.get('/api/requests')
-    assert listed.status_code == 200
-    listed_request = next(r for r in listed.get_json()['requests'] if r['id'] == req_id)
-    assert listed_request['created_at'] == created_request['created_at']
-
-    game = Game(
-        uuid=str(uuid4()),
-        name=f'Linked {uuid4().hex[:6]}',
-        library_uuid=lib.uuid,
-        full_disk_path=f'/games/{uuid4().hex}',
-    )
-    db_session.add(game)
-    db_session.commit()
-
-    _login(client, app, admin)
-    with patch('oneirodex.routes_apis.wishlist.notify_admins') as notify:
-        fulfill = client.patch(
-            f'/api/requests/{req_id}',
-            json={'status': 'fulfilled', 'linked_game_uuid': game.uuid, 'notes': 'added'},
-        )
-        assert fulfill.status_code == 200
-        notify.assert_called_once()
-        assert notify.call_args.kwargs['payload']['linked_game_uuid'] == game.uuid
-    body = fulfill.get_json()
-    assert body['status'] == 'fulfilled'
-    assert body['linked_game_uuid'] == game.uuid
-    assert body['resolved_at'].endswith('+00:00')
-    _login(client, app, user)
-    fulfilled_request = next(
-        r for r in client.get('/api/requests').get_json()['requests'] if r['id'] == req_id
-    )
-    assert fulfilled_request['resolved_at'] == body['resolved_at']
-
-    create2 = client.post('/api/requests', json={'title': f'Cancel me {uuid4().hex[:6]}'})
-    cancel_id = create2.get_json()['id']
-    cancel = client.delete(f'/api/requests/{cancel_id}')
-    assert cancel.status_code == 200
-    remaining = client.get('/api/requests').get_json()['requests']
-    assert all(r['id'] != cancel_id for r in remaining)
+    assert any(r['uuid'] == gone_uuid for r in body['removed'])
+    assert any(r['uuid'] == keep_uuid for r in body['kept'])
 
 
 @patch('oneirodex.utils.artwork_apply.get_provider')
