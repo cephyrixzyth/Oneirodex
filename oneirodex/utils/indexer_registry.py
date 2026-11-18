@@ -75,10 +75,6 @@ def load_indexer_presets() -> list[dict[str, Any]]:
     return out
 
 
-def presets_path() -> Path:
-    return _PRESETS_PATH
-
-
 def _new_id() -> str:
     return uuid.uuid4().hex[:12]
 

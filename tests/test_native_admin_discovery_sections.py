@@ -201,6 +201,6 @@ def test_discovery_section_validation_and_member_gate_do_not_mutate():
 
     member, member_data, _member_csrf = _client(role='user')
     response = member.get('/admin/api/discovery_sections', follow_redirects=False)
-    assert response.status_code == 302
-    assert response.headers['location'].startswith('/login')
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert member_data.calls == []

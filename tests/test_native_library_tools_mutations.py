@@ -270,7 +270,7 @@ def test_rename_preview_is_admin_only_read_only_and_preserves_shape(runtime):
     assert data.calls[0][0] == 'preview'
     denied = request(app, '/api/library_tools/rename/preview', cookie=cookies['member'],
                      json={'game_uuid': 'g1'})
-    assert denied.status_code == 302
+    assert denied.status_code == 403
 
 
 def test_proposal_approval_rejects_unsafe_and_delegates_deletion(runtime):

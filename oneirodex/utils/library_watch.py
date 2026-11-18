@@ -84,14 +84,6 @@ def normalize_fs_path(path: str | None) -> str:
 
 
 @dataclass
-class WatchEvent:
-    kind: str  # add | change | delete
-    library_uuid: str
-    library_root: str
-    game_path: str
-
-
-@dataclass
 class PendingLibraryBatch:
     library_uuid: str
     library_root: str

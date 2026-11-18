@@ -87,10 +87,6 @@ def _npsso_source(account: StoreAccount) -> tuple[str, str | None]:
     return household, ('household' if household else None)
 
 
-def _npsso_for(account: StoreAccount) -> str:
-    return _npsso_source(account)[0]
-
-
 def credential_source(account: StoreAccount) -> str:
     """member | household | none, by the same selection the sync makes."""
     token, origin = _npsso_source(account)

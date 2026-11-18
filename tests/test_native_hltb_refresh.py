@@ -110,7 +110,7 @@ def test_hltb_refresh_requires_admin():
         '/api/hltb/refresh/game-1', headers={'X-CSRFToken': client.csrf_token},
         follow_redirects=False,
     )
-    assert response.status_code == 302
+    assert response.status_code == 403
 
 
 def test_hltb_bulk_refresh_checks_csrf_clamps_limit_and_keeps_counts():

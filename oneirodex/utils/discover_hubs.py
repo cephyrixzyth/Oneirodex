@@ -31,10 +31,6 @@ def catalog_href_for_genre(genre) -> str:
     return f'/library?{urlencode({"genre": genre.name})}'
 
 
-def hub_path_for_genre(genre) -> str:
-    return f'/discover/hub/genre/{quote(genre.name, safe="")}'
-
-
 def _in_genre(genre):
     return Game.genres.any(Genre.id == genre.id)
 

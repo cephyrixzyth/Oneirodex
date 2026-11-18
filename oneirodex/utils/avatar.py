@@ -387,22 +387,6 @@ def save_avatar(file, user, app) -> tuple[str | None, str | None]:
     return user.avatarpath, None
 
 
-def thumbnail_for(path: str | None) -> str:
-    """The small variant of an avatar, or the avatar itself when there is none.
-
-    Uploads get a real `_thumbnail` file written beside them. The shipped
-    avatars do not and do not need one — they are SVGs, which scale — so
-    deriving the name for them produced a request for a file that was never
-    written and a broken image beside "Thumbnail preview".
-    """
-    if not path:
-        return DEFAULT_AVATAR
-    if is_shipped_avatar(path):
-        return path
-    stem, extension = os.path.splitext(path)
-    return f'{stem}_thumbnail{extension}'
-
-
 def set_stock_avatar(avatar_id: str, user, app) -> tuple[str | None, str | None]:
     """Point ``user`` at one of the shipped avatars.
 

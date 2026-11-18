@@ -97,13 +97,9 @@ def test_non_admin_redirects_with_admin_flash_without_next_and_skips_readiness()
     response = make_client(role='user', data=data).get(
         '/api/oidc/status', follow_redirects=False
     )
-    assert response.status_code == 302
-    assert response.headers['location'] == '/login'
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert response.headers['X-Content-Type-Options'] == 'nosniff'
-    session = load_session_cookie(
-        response.cookies['session'], 'native-oidc-secret', max_age=31_536_000
-    )
-    assert session['_flashes'] == [('danger', 'You must be an admin to access this page.')]
     assert data.calls == 0
 
 

@@ -85,5 +85,5 @@ def test_art_studio_system_marks_reads_keep_envelope_and_validate_lab_query():
 
 def test_art_studio_read_routes_require_admin():
     response = _client(role='user').get('/admin/api/art-studio/stock', follow_redirects=False)
-    assert response.status_code == 302
-    assert response.headers['location'].startswith('/login')
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'

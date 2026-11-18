@@ -77,5 +77,5 @@ def test_hltb_stats_keeps_payload_and_head_contract():
 
 def test_hltb_stats_requires_admin():
     response = _client(role='user').get('/api/hltb/stats', follow_redirects=False)
-    assert response.status_code == 302
-    assert response.headers['location'].startswith('/login')
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'

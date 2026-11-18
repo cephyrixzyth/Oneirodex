@@ -7,7 +7,6 @@ deletion functionality, security, and error handling.
 
 from sqlalchemy import text
 import pytest
-from unittest.mock import patch
 from uuid import uuid4
 
 from oneirodex.models import User, DownloadRequest, Game, Library, LibraryPlatform
@@ -123,7 +122,7 @@ class TestDeleteDownloadRequest:
             sess['_fresh'] = True
         
         response = client.delete('/api/delete_download/1')
-        assert response.status_code == 302  # Redirect due to admin_required decorator
+        assert response.status_code == 403  # Redirect due to admin_required decorator
     
     def test_delete_invalid_request_id_negative(self, client, admin_user):
         """Test deletion with negative request ID - Flask routing returns 404."""
@@ -251,7 +250,7 @@ class TestAdminDownloadRequestList:
             sess['_user_id'] = str(regular_user.id)
             sess['_fresh'] = True
         response = client.get('/api/admin/download-requests')
-        assert response.status_code == 302
+        assert response.status_code == 403
 
     def test_list_redacts_full_paths_and_keeps_job_details(self, client, admin_user, regular_user, sample_download_request):
         sample_download_request.zip_file_path = r'C:\private\archives\game.zip'

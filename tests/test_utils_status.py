@@ -1,16 +1,9 @@
-import pytest
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
-from oneirodex.models import User, SystemEvents, GlobalSettings
-from oneirodex.utils.status import (
-    get_system_info,
-    get_config_values,
-    get_active_users,
-    get_log_info,
-    check_server_settings
-)
+from oneirodex.models import User, SystemEvents
+from oneirodex.utils.status import get_system_info, get_config_values, get_active_users, get_log_info
 
 
 class TestGetSystemInfo:
@@ -291,93 +284,3 @@ class TestGetLogInfo:
         assert result['count'] >= 0
 
 
-class TestCheckServerSettings:
-    """Tests for check_server_settings function."""
-
-    def test_check_server_settings_enabled(self, db_session):
-        """Test server settings check when feature is enabled."""
-        # Get existing GlobalSettings (as per testing guide)
-        from sqlalchemy import select
-        settings = db_session.execute(select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()
-        if not settings:
-            settings = GlobalSettings()
-            db_session.add(settings)
-            db_session.flush()
-        
-        # Store original value to restore later
-        original_settings = settings.settings.copy() if settings.settings else {}
-        
-        # Enable the server status feature
-        if not settings.settings:
-            settings.settings = {}
-        settings.settings['enableServerStatusFeature'] = True
-        db_session.flush()
-        
-        try:
-            enabled, message = check_server_settings()
-            
-            assert enabled is True
-            assert message is None
-        finally:
-            # Restore original settings
-            settings.settings = original_settings
-            db_session.flush()
-
-    def test_check_server_settings_disabled(self, db_session):
-        """Test server settings check when feature is disabled."""
-        # Get existing GlobalSettings (as per testing guide)
-        from sqlalchemy import select
-        settings = db_session.execute(select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()
-        if not settings:
-            settings = GlobalSettings()
-            db_session.add(settings)
-            db_session.flush()
-        
-        # Store original value to restore later
-        original_settings = settings.settings.copy() if settings.settings else {}
-        
-        # Disable the server status feature
-        if not settings.settings:
-            settings.settings = {}
-        settings.settings['enableServerStatusFeature'] = False
-        db_session.flush()
-        
-        try:
-            enabled, message = check_server_settings()
-            
-            assert enabled is False
-            assert message == "Server Status feature is disabled."
-        finally:
-            # Restore original settings
-            settings.settings = original_settings
-            db_session.flush()
-
-    def test_check_server_settings_no_settings_record(self, db_session):
-        """Test server settings check with no GlobalSettings record."""
-        # Clear any existing GlobalSettings
-        from sqlalchemy import select, delete
-        db_session.execute(delete(GlobalSettings))
-        db_session.commit()
-        
-        enabled, message = check_server_settings()
-        
-        assert enabled is False
-        assert message == "Server settings not configured."
-
-    def test_check_server_settings_no_settings_dict(self, db_session):
-        """Test server settings check with null settings dictionary."""
-        # Get or create GlobalSettings
-        from sqlalchemy import select
-        settings = db_session.execute(select(GlobalSettings).order_by(GlobalSettings.id).limit(1)).scalars().first()
-        if not settings:
-            settings = GlobalSettings()
-            db_session.add(settings)
-        
-        # Set settings to None
-        settings.settings = None
-        db_session.commit()
-        
-        enabled, message = check_server_settings()
-        
-        assert enabled is False
-        assert message == "Server settings not configured."

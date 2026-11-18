@@ -80,8 +80,8 @@ def test_manual_identify_session_preview_is_admin_only_and_never_caches_paths(mo
     denied_member = member_client.get(
         '/api/admin/scan/manual-identify/session-preview', follow_redirects=False,
     )
-    assert denied_member.status_code == 302
-    assert denied_member.headers['location'] == '/login'
+    assert denied_member.status_code == 403
+    assert denied_member.json()['error_code'] == 'forbidden'
     assert path not in denied_member.text
 
     token_context = SimpleNamespace(

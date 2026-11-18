@@ -112,8 +112,8 @@ def test_admin_ops_member_denial_redirects_instead_of_raising():
 
     response = client.get('/admin/api/ops/logs')
 
-    assert response.status_code == 302
-    assert response.headers['location'] == '/login'
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
 
 
 def test_ops_limit_uses_first_value_when_query_parameter_is_repeated():

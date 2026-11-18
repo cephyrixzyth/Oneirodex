@@ -55,17 +55,6 @@ def rate_limit_enabled() -> bool:
     )
 
 
-def client_ip_from_request(request) -> str:
-    """The client IP the rate limit keys on.
-
-    ``remote_addr`` only. Behind a reverse proxy, configure both
-    ``TRUSTED_PROXIES`` and ``TRUSTED_PROXY_CIDRS``. ProxyFix only rewrites
-    ``remote_addr`` when the immediate peer matches the configured proxy CIDR.
-    """
-    _warn_if_behind_an_untrusted_proxy(request)
-    return (request.remote_addr or 'unknown')[:64]
-
-
 _PROXY_WARNED = False
 
 

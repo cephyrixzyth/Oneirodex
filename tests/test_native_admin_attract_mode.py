@@ -87,7 +87,7 @@ def test_admin_attract_settings_save_validates_typed_payload():
 def test_admin_attract_settings_require_admin():
     response = make_client(role='user').get('/api/admin/attract-mode/settings', follow_redirects=False)
 
-    assert response.status_code == 302
+    assert response.status_code == 403
 
 
 def test_legacy_attract_mode_post_alias_uses_validated_native_adapter():

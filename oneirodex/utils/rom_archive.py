@@ -449,24 +449,6 @@ def _drop_member_files(cache_dir: str, member: str) -> None:
         _unlink_in_cache(cache_dir, path)
 
 
-def _bsdtar_damaged_member(stderr: str, wanted: list[str]) -> str | None:
-    """Which member bsdtar died on, when it named one.
-
-    A CD rip with one bad audio track stops the whole run, so a cue sitting at
-    member 34 of 34 never lands even though every other track decoded. bsdtar
-    prints the member it choked on; the caller drops that one and asks again.
-    """
-    text = stderr or ''
-    hits = []
-    for member in wanted:
-        for needle in (member, Path(member).name):
-            at = text.find(needle)
-            if at >= 0:
-                hits.append((at, member))
-                break
-    return min(hits)[1] if hits else None
-
-
 def _extract_members_via_bsdtar(
     archive_path: str,
     cache_dir: str,
@@ -613,10 +595,6 @@ def _extract_archive_via_cli(
             hint='Prefer re-packing as .zip with a single known ROM extension.',
         )
     return dest
-
-
-def list_roms_in_zip(zip_path: str) -> list[str]:
-    return [name for name, _ in _list_roms_with_sizes_in_zip(zip_path)]
 
 
 def path_is_supported_archive(path: str | Path | None) -> bool:

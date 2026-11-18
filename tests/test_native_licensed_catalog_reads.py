@@ -91,7 +91,7 @@ def test_catalog_validation_and_admin_gate_precede_data_reads():
 
     assert missing_platform.status_code == 400
     assert missing_platform.json()['error_code'] == 'bad_request'
-    assert non_admin.status_code == 302
+    assert non_admin.status_code == 403
     assert admin_data.statuses == []
     assert data.statuses == []
 

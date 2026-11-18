@@ -30,14 +30,6 @@ class ImportResult:
         }
 
 
-def _match_game_by_name(name: str) -> Game | None:
-    if not name:
-        return None
-    return db.session.execute(
-        select(Game).filter(func.lower(Game.name) == func.lower(name.strip())).limit(1),
-    ).scalars().first()
-
-
 def import_playnite_json(user_id: int, payload: str | bytes | dict | list) -> ImportResult:
     """
     Import Playnite library export JSON.

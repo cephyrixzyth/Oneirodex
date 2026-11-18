@@ -188,26 +188,6 @@ def _matched_game_payload(game: Game | None, cover_by_uuid: dict | None = None,
     }
 
 
-def _prefetch_matched_game_maps(folders: list) -> tuple[dict, dict]:
-    """Batch-load games + cover images for list/export (no N+1)."""
-    uuids = list({
-        getattr(f, 'matched_game_uuid', None)
-        for f in folders
-        if getattr(f, 'matched_game_uuid', None)
-    })
-    games_by_uuid: dict = {}
-    cover_by_uuid: dict = {}
-    if not uuids:
-        return games_by_uuid, cover_by_uuid
-    for game in db.session.execute(select(Game).filter(Game.uuid.in_(uuids))).scalars().all():
-        games_by_uuid[game.uuid] = game
-    for image in db.session.execute(
-        select(Image).filter(Image.game_uuid.in_(uuids), Image.image_type == 'cover')
-    ).scalars().all():
-        cover_by_uuid.setdefault(image.game_uuid, image)
-    return games_by_uuid, cover_by_uuid
-
-
 def _unmatched_list_row(
     folder: UnmatchedFolder,
     library_name,

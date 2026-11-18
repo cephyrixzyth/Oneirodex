@@ -95,8 +95,6 @@ def test_native_api_contract_and_asgi_imports_do_not_load_flask():
                 'from oneirodex import app_start_time, app_version; '
                 'assert app_version and app_start_time is not None; '
                 'assert "flask" not in sys.modules and "jinja2" not in sys.modules; '
-                'from oneirodex.utils.health_probes import build_liveness; '
-                'assert build_liveness()["version"] == app_version; '
                 'assert "flask" not in sys.modules and "jinja2" not in sys.modules; '
                 'from oneirodex import cache; '
                 'cache.set("boundary", {"value": 7}, timeout=60); '

@@ -99,16 +99,3 @@ def theme_freshness(app_root: str | Path, theme: str = 'default') -> dict[str, A
     }
 
 
-def theme_freshness_summary(app_root: str | Path, theme: str = 'default') -> str:
-    """One line for an Ops tile."""
-    data = theme_freshness(app_root, theme)
-    if data.get('reason'):
-        return data['reason']
-    if not data['stale']:
-        return 'Up to date'
-    parts = []
-    if data['outdated_count']:
-        parts.append(f"{data['outdated_count']} behind")
-    if data['missing_count']:
-        parts.append(f"{data['missing_count']} missing")
-    return ' · '.join(parts) + ' — run Reset Themes'

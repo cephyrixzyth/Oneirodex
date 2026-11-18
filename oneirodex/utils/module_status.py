@@ -59,11 +59,6 @@ def arr_module_on(*, config=None) -> bool:
     return env_flag('ENABLE_ARR_MODULE', config=config) or arr_db_enabled()
 
 
-def ai_db_enabled() -> bool:
-    settings = _global_settings()
-    return bool(getattr(settings, 'enable_ai_assist', False)) if settings else False
-
-
 def ai_module_on(*, config=None) -> bool:
     from oneirodex.utils.ai_assist import ai_enabled
 

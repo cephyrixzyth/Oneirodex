@@ -90,7 +90,7 @@ def test_metadata_search_validation_and_admin_gate_precede_provider_call():
     assert missing_name.json()['error_code'] == 'bad_request'
     assert unsupported.status_code == 400
     assert len(unsupported.json()['sources']) == 9
-    assert denied.status_code == 302
+    assert denied.status_code == 403
     assert data.calls == []
     assert member_data.calls == []
 

@@ -105,12 +105,8 @@ def test_non_admin_gets_admin_flash_redirect_without_next_or_data_access():
     response = make_client(role='user', data=data).get(
         '/api/settings/module-status?from=hub', follow_redirects=False
     )
-    assert response.status_code == 302
-    assert response.headers['location'] == '/login'
-    session = load_session_cookie(
-        response.cookies['session'], 'native-settings-status-secret', max_age=31_536_000
-    )
-    assert session['_flashes'] == [('danger', 'You must be an admin to access this page.')]
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert data.calls == 0
 
 

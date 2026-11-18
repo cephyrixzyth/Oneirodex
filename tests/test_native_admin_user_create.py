@@ -95,7 +95,7 @@ def test_create_user_validation_and_admin_gate_do_not_create():
         '/admin/api/user/0', json={'username': 'living-room'},
         headers={'X-CSRFToken': member_csrf}, follow_redirects=False,
     )
-    assert denied.status_code == 302 and member_data.calls == []
+    assert denied.status_code == 403 and member_data.calls == []
 
 
 def test_create_user_rejects_oversized_json_before_create():

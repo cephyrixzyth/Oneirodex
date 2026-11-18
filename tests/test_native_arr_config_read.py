@@ -79,7 +79,7 @@ def test_arr_config_read_keeps_disabled_and_admin_gates():
     forbidden = _client(role='user').get('/api/arr/config', follow_redirects=False)
     assert disabled.status_code == 403
     assert disabled.json()['error'] == 'Arr module is disabled'
-    assert forbidden.status_code == 302
+    assert forbidden.status_code == 403
 
 
 def test_public_arr_config_only_exposes_credential_presence():

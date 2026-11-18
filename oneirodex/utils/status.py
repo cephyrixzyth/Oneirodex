@@ -148,14 +148,3 @@ def get_database_info(engine=None):
             'connection_info': f'Error: {str(e)}'
         }
 
-def check_server_settings():
-    """Check if server settings are properly configured."""
-    settings_record = global_settings_row()
-    if not settings_record or not settings_record.settings:
-        return False, "Server settings not configured."
-    
-    enable_server_status = settings_record.settings.get('enableServerStatusFeature', False)
-    if not enable_server_status:
-        return False, "Server Status feature is disabled."
-    
-    return True, None

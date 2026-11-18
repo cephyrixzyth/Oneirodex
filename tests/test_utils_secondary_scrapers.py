@@ -4,15 +4,7 @@ import logging
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from oneirodex.utils.secondary_scrapers import (
-    VR_PERSPECTIVE_NAME,
-    apply_steam_enrichment_to_game,
-    categories_indicate_vr,
-    game_indicates_vr,
-    normalize_perspective_name,
-    perspectives_indicate_vr,
-    steam_perspective_names,
-)
+from oneirodex.utils.secondary_scrapers import VR_PERSPECTIVE_NAME, categories_indicate_vr, game_indicates_vr, normalize_perspective_name, perspectives_indicate_vr, steam_perspective_names
 
 
 def test_categories_indicate_vr_vr_only():
@@ -76,65 +68,6 @@ def test_game_card_flags_include_is_vr():
         assert 'content_kind' in flags
         assert 'path_missing' in flags
         assert 'path_status' in flags
-
-
-def test_apply_steam_enrichment_adds_vr_perspective():
-    existing = SimpleNamespace(name='First person')
-    game = SimpleNamespace(
-        name='Archery Kings VR',
-        summary='Already has summary',
-        player_perspectives=[existing],
-        developer=None,
-        publisher=None,
-    )
-    created = []
-
-    def fake_get_or_create(name):
-        entity = SimpleNamespace(name=name)
-        created.append(entity)
-        return entity
-
-    steam_payload = {
-        'summary': 'Steam summary ignored when present',
-        'player_perspectives': ['VR / Virtual Reality'],
-        'is_vr': True,
-        'developer': 'Some Dev',
-        'publisher': 'Some Pub',
-    }
-
-    with patch(
-        'oneirodex.utils.secondary_scrapers.fetch_steam_data',
-        return_value=steam_payload,
-    ):
-        result = apply_steam_enrichment_to_game(
-            game,
-            game.name,
-            get_or_create_entity=fake_get_or_create,
-        )
-
-    assert result['applied'] is True
-    assert result['is_vr'] is True
-    assert any(p.name == VR_PERSPECTIVE_NAME for p in game.player_perspectives)
-    assert any(p.name == VR_PERSPECTIVE_NAME for p in created)
-
-
-def test_apply_steam_enrichment_no_steam_data():
-    game = SimpleNamespace(name='Unknown', player_perspectives=[], summary=None)
-
-    def unused_factory(*args, **kwargs):
-        raise AssertionError('should not create entities without steam data')
-
-    with patch(
-        'oneirodex.utils.secondary_scrapers.fetch_steam_data',
-        return_value=None,
-    ):
-        result = apply_steam_enrichment_to_game(
-            game,
-            game.name,
-            get_or_create_entity=unused_factory,
-        )
-    assert result['applied'] is False
-    assert result['is_vr'] is False
 
 
 @patch('oneirodex.utils.services.game_enrich.apply_enriched_metadata')

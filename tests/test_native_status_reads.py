@@ -104,12 +104,8 @@ def test_admin_status_routes_redirect_non_admin_with_danger_flash():
         ('/api/admin/malware-scan/status', 'malware'),
     ):
         response = client.get(path + '?from=settings', follow_redirects=False)
-        assert response.status_code == 302
-        assert response.headers['location'] == '/login'
-        session = load_session_cookie(
-            response.cookies['session'], 'native-status-reads-secret', max_age=31_536_000
-        )
-        assert session['_flashes'][-1] == ('danger', 'You must be an admin to access this page.')
+        assert response.status_code == 403
+        assert response.json()['error_code'] == 'forbidden'
         assert data[name].calls == 0
 
 

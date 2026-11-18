@@ -86,8 +86,10 @@ def test_admin_user_roster_rejects_member_and_unauthenticated_requests():
     anonymous_client = _client()
     anonymous_client.cookies.clear()
     anonymous = anonymous_client.get('/admin/api/users', follow_redirects=False)
-    assert member.status_code == anonymous.status_code == 302
-    assert member.headers['location'].startswith('/login')
+    # A signed-in member is refused; a signed-out caller is sent to sign in.
+    assert member.status_code == 403
+    assert member.json()['error_code'] == 'forbidden'
+    assert anonymous.status_code == 302
     assert anonymous.headers['location'].startswith('/login')
     assert anonymous.headers['content-type'] == 'text/html; charset=utf-8'
     assert len(anonymous.headers.get_list('set-cookie')) == 1

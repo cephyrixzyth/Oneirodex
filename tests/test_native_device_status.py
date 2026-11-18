@@ -144,12 +144,8 @@ def test_non_admins_redirect_with_danger_flash_and_no_probe():
         ('/api/admin/ambient-lighting/status', 'ambient'),
     ):
         response = client.get(path + '?probe=yes', follow_redirects=False)
-        assert response.status_code == 302
-        assert response.headers['location'] == '/login'
-        session = load_session_cookie(
-            response.cookies['session'], 'native-device-status-secret', max_age=31_536_000
-        )
-        assert session['_flashes'][-1] == ('danger', 'You must be an admin to access this page.')
+        assert response.status_code == 403
+        assert response.json()['error_code'] == 'forbidden'
         assert data[name].probes == []
 
 

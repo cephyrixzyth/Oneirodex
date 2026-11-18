@@ -288,17 +288,6 @@ def generate_pkce_pair() -> tuple[str, str]:
     return code_verifier, code_challenge
 
 
-def store_oidc_session(flask_session, state: str, code_verifier: str) -> None:
-    flask_session[OIDC_SESSION_STATE_KEY] = state
-    flask_session[OIDC_SESSION_VERIFIER_KEY] = code_verifier
-
-
-def pop_oidc_session(flask_session) -> tuple[str | None, str | None]:
-    state = flask_session.pop(OIDC_SESSION_STATE_KEY, None)
-    verifier = flask_session.pop(OIDC_SESSION_VERIFIER_KEY, None)
-    return state, verifier
-
-
 def format_oidc_idp_error(error: str, description: str | None = None) -> str:
     """Return a user-safe flash message for IdP error query params on the callback."""
     code = (error or '').strip().lower()
@@ -356,11 +345,6 @@ def format_oidc_callback_error(exc: Exception) -> str:
     return 'SSO login failed. Please try again or use local login.'
 
 
-def get_oauth_client():
-    global _oauth
-    return _oauth
-
-
 def init_oauth(app) -> Any | None:
     """Register the OIDC client with Flask. Returns OAuth instance or None."""
     global _oauth
@@ -372,49 +356,6 @@ def init_oauth(app) -> Any | None:
         _oauth = OAuth()
     _oauth.init_app(app)
     return _oauth
-
-
-def register_oidc_provider(app, config: OidcConfig) -> None:
-    global _oidc_registered_key
-    if not is_secure_oidc_issuer(config.issuer_url):
-        raise ValueError('OIDC issuer URL must use HTTPS.')
-    oauth = init_oauth(app)
-    if oauth is None:
-        return
-
-    secret_digest = hashlib.sha256(config.client_secret.encode('utf-8')).hexdigest()
-    registration_key = (
-        config.issuer_url,
-        config.client_id,
-        secret_digest,
-        config.scopes,
-    )
-    if _oidc_registered_key == registration_key:
-        return
-
-    # Authlib keeps registered clients on each OAuth instance. Replacing the
-    # instance avoids stale config without depending on its private _clients.
-    global _oauth
-    _oauth = OAuth()
-    oauth = init_oauth(app)
-    if oauth is None:
-        return
-
-    metadata_url = urljoin(config.issuer_url + '/', '.well-known/openid-configuration')
-    client_kwargs: dict[str, Any] = {'scope': config.scopes}
-    if config.client_secret:
-        client_kwargs['token_endpoint_auth_method'] = 'client_secret_basic'
-    else:
-        client_kwargs['token_endpoint_auth_method'] = 'none'
-
-    oauth.register(
-        name='oidc',
-        client_id=config.client_id,
-        client_secret=config.client_secret or None,
-        server_metadata_url=metadata_url,
-        client_kwargs=client_kwargs,
-    )
-    _oidc_registered_key = registration_key
 
 
 def provision_or_update_user(

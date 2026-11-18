@@ -13,118 +13,7 @@ from flask import Flask
 from flask_login import LoginManager
 
 import asgi
-from oneirodex.runtime_native import (
-    acquire_status,
-    acquire_actions,
-    social_reads,
-    game_reads,
-    filter_reads,
-    playtime,
-    related_media,
-    saved_filters,
-    batch_favorite,
-    batch_status,
-    batch_wishlist,
-    batch_refresh,
-    member_game_state,
-    favorites,
-    member_meta,
-    vr_reads,
-    social_writes,
-    admin_pilot,
-    browse,
-    oidc_status,
-    auth_demo,
-    remote_play_status,
-    settings_module_status,
-    library_health,
-    game_health,
-    quality_profiles,
-    status_reads,
-    device_status,
-    ai_status,
-    library_platforms,
-    library_reads,
-    arr_status,
-    discover_reads,
-    account_summary,
-    account_preferences,
-    locale as locale_routes,
-    account_stock_avatar,
-    account_tokens,
-    account_avatar_upload,
-    account_password,
-    loading_icon_admin,
-    client_reads,
-    announcements,
-    news_feeds,
-    collection_reads,
-    wishlist,
-    notifications,
-    chat_emoji_read,
-    chat_reads,
-    layouts,
-    wanted_updates,
-    updates_reads,
-    updates_scan,
-    release_calendar,
-    ownership_providers,
-    ownership_actions,
-    game_servers as game_server_routes,
-    emulator_mutations as emulator_mutation_routes,
-    game_mods as game_mod_routes,
-    scan_unmatched_reads as unmatched_reads,
-    scan_unmatched_mutations as unmatched_mutations,
-    scan_unmatched_feedback as unmatched_feedback,
-    library_tools as native_library_tools,
-    library_tools_mutations as native_library_tools_mutations,
-    library_admin_mutations as native_library_admin_mutations,
-    game_delete_mutations as native_game_delete_mutations,
-    scan_job_reads as native_scan_job_reads,
-    admin_newsletters as native_admin_newsletters,
-    igdb_availability as native_igdb_availability,
-    igdb_company_role as native_igdb_company_role,
-    storage_hardlinks as native_storage_hardlinks,
-    malware_scan_mutation as native_malware_scan_mutation,
-    auth_confirmation as native_auth_confirmation,
-    auth_login as native_auth_login,
-    auth_form_posts as native_auth_form_posts,
-    auth_logout as native_auth_logout,
-    auth_pages as native_auth_pages,
-    setup_pages as native_setup_pages,
-    setup_transition as native_setup_transition,
-    auth_registration as native_auth_registration,
-    password_reset_confirm as native_password_reset_confirm,
-    admin_server_settings as native_admin_server_settings,
-    admin_ops_reads as native_admin_ops_reads,
-    scan_job_mutations as native_scan_job_mutations,
-    support_reads as native_support_reads,
-    theme_fonts_read as native_theme_fonts_read,
-    provider_catalog_reads as native_provider_catalog_reads,
-    integration_settings as native_integration_settings,
-    ownership_admin_reads as native_ownership_admin_reads,
-    artwork_provider_search as native_artwork_provider_search,
-    artwork_apply_mutation as native_artwork_apply_mutation,
-    patch_catalog_routes as native_patch_catalog,
-    download_request_reads as native_download_request_reads,
-    manual_identify_reads as native_manual_identify_reads,
-    manual_identify_mutations as native_manual_identify_mutations,
-    retroachievements_settings as native_retroachievements_settings,
-    admin_policy_settings as native_admin_policy_settings,
-    launcher_import_reads as native_launcher_import_reads,
-    download_mutations as native_download_mutations,
-    support_mutations as native_support_mutations,
-    launcher_import_mutations as native_launcher_import_mutations,
-    admin_attract_mode as native_admin_attract_mode,
-    admin_features as native_admin_features,
-    admin_scan_filters as native_admin_scan_filters,
-    admin_plugins_read as native_admin_plugins_read,
-    integrations_inventory as native_integrations_inventory,
-    library_tools_manual_identify as native_manual_identify,
-    emulator_reads,
-    system_path_check,
-    system_file_types,
-)
+from oneirodex.runtime_native import acquire_status, acquire_actions, social_reads, game_reads, filter_reads, playtime, related_media, saved_filters, batch_favorite, batch_status, batch_wishlist, batch_refresh, member_game_state, favorites, member_meta, vr_reads, social_writes, admin_pilot, browse, oidc_status, auth_demo, remote_play_status, settings_module_status, library_health, game_health, quality_profiles, status_reads, device_status, ai_status, library_platforms, library_reads, arr_status, discover_reads, account_summary, account_preferences, locale as locale_routes, account_stock_avatar, account_tokens, account_avatar_upload, account_password, loading_icon_admin, client_reads, announcements, news_feeds, collection_reads, wishlist, notifications, chat_emoji_read, chat_reads, layouts, wanted_updates, updates_reads, updates_scan, ownership_providers, ownership_actions, game_servers as game_server_routes, emulator_mutations as emulator_mutation_routes, game_mods as game_mod_routes, scan_unmatched_reads as unmatched_reads, scan_unmatched_mutations as unmatched_mutations, scan_unmatched_feedback as unmatched_feedback, library_tools as native_library_tools, library_tools_mutations as native_library_tools_mutations, library_admin_mutations as native_library_admin_mutations, game_delete_mutations as native_game_delete_mutations, scan_job_reads as native_scan_job_reads, admin_newsletters as native_admin_newsletters, igdb_availability as native_igdb_availability, igdb_company_role as native_igdb_company_role, storage_hardlinks as native_storage_hardlinks, malware_scan_mutation as native_malware_scan_mutation, auth_confirmation as native_auth_confirmation, auth_login as native_auth_login, auth_pages as native_auth_pages, setup_pages as native_setup_pages, setup_transition as native_setup_transition, auth_registration as native_auth_registration, password_reset_confirm as native_password_reset_confirm, admin_server_settings as native_admin_server_settings, admin_ops_reads as native_admin_ops_reads, scan_job_mutations as native_scan_job_mutations, support_reads as native_support_reads, theme_fonts_read as native_theme_fonts_read, provider_catalog_reads as native_provider_catalog_reads, integration_settings as native_integration_settings, ownership_admin_reads as native_ownership_admin_reads, artwork_provider_search as native_artwork_provider_search, artwork_apply_mutation as native_artwork_apply_mutation, patch_catalog_routes as native_patch_catalog, download_request_reads as native_download_request_reads, manual_identify_reads as native_manual_identify_reads, manual_identify_mutations as native_manual_identify_mutations, retroachievements_settings as native_retroachievements_settings, admin_policy_settings as native_admin_policy_settings, launcher_import_reads as native_launcher_import_reads, download_mutations as native_download_mutations, support_mutations as native_support_mutations, launcher_import_mutations as native_launcher_import_mutations, admin_attract_mode as native_admin_attract_mode, admin_features as native_admin_features, admin_scan_filters as native_admin_scan_filters, admin_plugins_read as native_admin_plugins_read, integrations_inventory as native_integrations_inventory, library_tools_manual_identify as native_manual_identify, emulator_reads, system_path_check, system_file_types
 from oneirodex.runtime_native.session_compat import (
     dump_session_cookie, generate_csrf_token, load_session_cookie,
 )
@@ -6375,7 +6264,7 @@ def test_native_file_type_crud_preserves_admin_csrf_and_validation(monkeypatch):
         headers=headers, json_body={'id': 1},
     )
 
-    assert denied.status_code == 302
+    assert denied.status_code == 403
     assert listed.status_code == 200
     assert listed.json() == [{'id': 1, 'value': 'exe'}]
     assert no_csrf.status_code == 400
@@ -6487,7 +6376,7 @@ def test_native_emulator_profile_admin_read_and_save_require_admin_and_csrf(monk
         headers=headers, json_body={'NES': 'nestopia'},
     )
 
-    assert denied.status_code == 302
+    assert denied.status_code == 403
     assert profiles.status_code == 200
     assert profiles.json()['profiles']['NES'] == 'nestopia'
     assert no_csrf.status_code == 400
@@ -6520,7 +6409,7 @@ def test_native_browser_player_settings_preserve_admin_csrf_and_validation(monke
         headers=headers, json_body={'engine': 'webretro'},
     )
 
-    assert denied.status_code == 302
+    assert denied.status_code == 403
     assert settings.status_code == 200 and settings.json()['engine'] == 'webretro'
     assert settings_head.status_code == 200 and settings_head.content == b''
     assert invalid.status_code == 400 and invalid.json()['error'] == 'JSON object required'
@@ -7199,7 +7088,7 @@ def test_native_chat_space_invites_read_requires_admin(monkeypatch):
     denied = _run(
         member_runtime, '/api/chat/spaces/4/invites', cookie=_signed_session(),
     )
-    assert denied.status_code == 302
+    assert denied.status_code == 403
     assert calls == [4]
 
 

@@ -15,7 +15,7 @@ from flask_login import LoginManager
 
 from oneirodex.runtime_native.game_mods import create_game_mods_router
 from oneirodex.runtime_native.session_compat import dump_session_cookie
-from oneirodex.utils.game_mods import mod_config_scope, mods_enabled, mods_root
+from oneirodex.utils.game_mods import mod_config_scope, mods_root
 
 
 def test_mod_settings_scope_works_without_a_flask_app_context(tmp_path):
@@ -24,7 +24,6 @@ def test_mod_settings_scope_works_without_a_flask_app_context(tmp_path):
         'GAME_MODS_PATH': str(tmp_path),
     }
     with mod_config_scope(settings):
-        assert mods_enabled() is False
         assert mods_root() == str(tmp_path)
 
 

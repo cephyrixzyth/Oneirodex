@@ -155,5 +155,3 @@ def build_pegasus_metadata(
     return '\n'.join(lines)
 
 
-def preview_export_counts(games: list[dict[str, Any]]) -> dict[str, int]:
-    return {'games': len(games)}

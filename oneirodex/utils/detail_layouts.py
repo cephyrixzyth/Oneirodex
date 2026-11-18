@@ -227,13 +227,3 @@ def delete_layout_preset(user_id: int, preset_id: int) -> bool:
     return True
 
 
-def layout_helpers(layout: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Template helpers: order index and visibility map."""
-    data = layout or get_detail_layout()
-    order: dict[str, int] = {}
-    visible: dict[str, bool] = {}
-    for index, item in enumerate(data.get('sections') or []):
-        sid = item['id']
-        order[sid] = index
-        visible[sid] = bool(item.get('visible', True))
-    return {'layout_order': order, 'layout_visible': visible, 'detail_layout': data}

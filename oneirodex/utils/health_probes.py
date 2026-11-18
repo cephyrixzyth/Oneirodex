@@ -12,11 +12,6 @@ from oneirodex import app_version
 from oneirodex.runtime_native.health import liveness_payload
 
 
-def build_liveness() -> dict[str, Any]:
-    """Process is up — no dependency checks."""
-    return liveness_payload(app_version)
-
-
 def check_database(database=None) -> tuple[bool, str | None]:
     """Return (ok, error_message)."""
     try:

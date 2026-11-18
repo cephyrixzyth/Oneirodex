@@ -1,79 +1,8 @@
 import pytest
-import json
-from unittest.mock import patch, mock_open, MagicMock
 from sqlalchemy import delete
-from oneirodex import create_app, db
 from oneirodex.models import GlobalSettings
-from oneirodex.utils.processors import get_loc, get_global_settings
+from oneirodex.utils.processors import get_global_settings
 from oneirodex import app_version
-
-
-class TestGetLoc:
-    """Tests for get_loc function."""
-    
-    def test_get_loc_success(self):
-        """Test successful loading of localization file."""
-        mock_data = {
-            "heading": "Test Heading",
-            "label": "Test Label",
-            "section": {
-                "title": "Test Title",
-                "message": "Test Message"
-            }
-        }
-        
-        with patch('builtins.open', mock_open(read_data=json.dumps(mock_data))):
-            result = get_loc('discover')
-        
-        assert result == mock_data
-        assert result['heading'] == 'Test Heading'
-        assert result['section']['title'] == 'Test Title'
-    
-    def test_get_loc_with_utf8_content(self):
-        """Test loading localization file with UTF-8 characters."""
-        mock_data = {
-            "heading": "Découvrir",
-            "message": "Café résumé naïve"
-        }
-        
-        with patch('builtins.open', mock_open(read_data=json.dumps(mock_data, ensure_ascii=False))):
-            result = get_loc('french_page')
-        
-        assert result == mock_data
-        assert result['heading'] == 'Découvrir'
-        assert result['message'] == 'Café résumé naïve'
-    
-    def test_get_loc_file_not_found(self):
-        """Test handling when localization file doesn't exist."""
-        with patch('builtins.open', side_effect=FileNotFoundError("No such file")):
-            with pytest.raises(FileNotFoundError):
-                get_loc('nonexistent_page')
-    
-    def test_get_loc_invalid_json(self):
-        """Test handling of invalid JSON in localization file."""
-        invalid_json = '{"heading": "Test", "invalid": json}'
-        
-        with patch('builtins.open', mock_open(read_data=invalid_json)):
-            with pytest.raises(json.JSONDecodeError):
-                get_loc('invalid_json_page')
-    
-    def test_get_loc_empty_file(self):
-        """Test handling of empty localization file."""
-        with patch('builtins.open', mock_open(read_data='')):
-            with pytest.raises(json.JSONDecodeError):
-                get_loc('empty_page')
-    
-    def test_get_loc_correct_file_path(self):
-        """Test that correct file path is used."""
-        mock_data = {"test": "data"}
-        
-        with patch('builtins.open', mock_open(read_data=json.dumps(mock_data))) as mock_file:
-            get_loc('test_page')
-            mock_file.assert_called_once_with(
-                'oneirodex/static/localization/en/test_page.json', 
-                'r', 
-                encoding='utf8'
-            )
 
 
 class TestGetGlobalSettings:

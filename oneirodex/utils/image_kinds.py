@@ -67,10 +67,6 @@ def normalize_image_kind(raw: str | None, *, default: str | None = None) -> str 
     return kind
 
 
-def is_valid_image_kind(kind: str | None) -> bool:
-    return bool(kind) and kind in IMAGE_KINDS
-
-
 def parse_image_kind(
     raw: str | None,
     *,

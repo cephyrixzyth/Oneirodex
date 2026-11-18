@@ -7,9 +7,9 @@ import os
 import asyncio
 import time
 import zipfile
-from typing import AsyncGenerator, Iterator, Tuple, Optional, Dict, Any
+from typing import AsyncGenerator, Iterator, Tuple, Optional, Dict
 import zipstream
-from oneirodex.utils.security import is_plain_file_within, is_safe_path, open_plain_file_within
+from oneirodex.utils.security import is_plain_file_within, open_plain_file_within
 from oneirodex.utils.event_logging import log_system_event
 
 
@@ -213,52 +213,6 @@ async def async_generate_zipstream_chunks(
         raise
 
 
-def should_use_zipstream(source_path: str) -> bool:
-    """
-    Determine if zipstream should be used for the given source path.
-    
-    Args:
-        source_path: Path to check
-        
-    Returns:
-        bool: True if zipstream should be used, False for direct download
-    """
-    
-    if not os.path.exists(source_path):
-        return False
-    
-    # Use direct download for single files
-    if os.path.isfile(source_path):
-        return False
-    
-    # Use zipstream for directories (multi-file games)
-    if os.path.isdir(source_path):
-        return True
-    
-    return False
-
-
-def get_zipstream_info(source_path: str, download_filename: str) -> Dict[str, Any]:
-    """
-    Generate metadata for zipstream downloads.
-    
-    Args:
-        source_path: Path to the source files
-        download_filename: Desired filename for the download
-        
-    Returns:
-        dict: Metadata dictionary for the streaming download
-    """
-    
-    return {
-        'source_path': source_path,
-        'download_filename': download_filename,
-        'content_type': 'application/zip',
-        'streaming': True,
-        'estimated_size': estimate_zip_size(source_path)
-    }
-
-
 def estimate_zip_size(source_path: str) -> Optional[int]:
     """
     Estimate the final ZIP file size based on source content.
@@ -301,47 +255,3 @@ def estimate_zip_size(source_path: str) -> Optional[int]:
         return None
 
 
-async def validate_zipstream_path(source_path: str, allowed_bases: list) -> Tuple[bool, str]:
-    """
-    Validate that the source path is safe for zipstream processing.
-    
-    Args:
-        source_path: Path to validate
-        allowed_bases: List of allowed base directories
-        
-    Returns:
-        tuple: (is_valid, error_message)
-    """
-    
-    try:
-        # Use existing security validation
-        is_safe, error_message = is_safe_path(source_path, allowed_bases)
-        if not is_safe:
-            return False, error_message
-        
-        # Additional checks for zipstream
-        if not os.path.exists(source_path):
-            return False, "Source path does not exist"
-        
-        # Check if we have read permissions
-        if not os.access(source_path, os.R_OK):
-            return False, "Insufficient permissions to read source path"
-        
-        return True, ""
-        
-    except Exception as e:
-        return False, f"Path validation error: {str(e)}"
-
-
-def is_streaming_download(download_info: dict) -> bool:
-    """
-    Check if a download uses streaming based on its metadata.
-    
-    Args:
-        download_info: Download metadata dictionary
-        
-    Returns:
-        bool: True if this is a streaming download
-    """
-    
-    return download_info.get('streaming', False)

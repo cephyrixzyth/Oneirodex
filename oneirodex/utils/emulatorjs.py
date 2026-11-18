@@ -90,10 +90,6 @@ def emulatorjs_core_for_platform(platform_key: str | LibraryPlatform | None) -> 
     return EJS_CORE_BY_PLATFORM.get(key.strip().upper())
 
 
-def emulatorjs_supported_platforms() -> frozenset[str]:
-    return frozenset(EJS_CORE_BY_PLATFORM)
-
-
 def emulatorjs_play_href(*, game_uuid: str, platform_key: str, cheat_surface: str | None = None) -> str:
     """Play shell URL for a guid on a supported platform (caller checks support)."""
     core = emulatorjs_core_for_platform(platform_key)

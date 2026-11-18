@@ -149,7 +149,7 @@ def test_artwork_provider_search_validation_and_admin_gate_precede_adapter():
     assert missing.json()['error_code'] == 'bad_request'
     assert invalid_kind.status_code == 400
     assert invalid_kind.json()['error'] == 'image_type must be cover, logo, or hero'
-    assert denied.status_code == 302
+    assert denied.status_code == 403
     assert member_data.providers['igdb'].calls == []
     assert wiki_member.status_code == 200
     assert member_data.pc_calls == ['Doom']

@@ -130,10 +130,6 @@ def register(spec: RowSpec, selector: Selector) -> None:
     _REGISTRY[spec.identifier] = (spec, selector)
 
 
-def registered_identifiers() -> frozenset[str]:
-    return frozenset(_REGISTRY)
-
-
 # ---------------------------------------------------------------------------
 # seed selectors
 # ---------------------------------------------------------------------------

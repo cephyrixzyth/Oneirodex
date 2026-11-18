@@ -36,7 +36,6 @@ def test_explicit_actor_audit_helpers_do_not_require_flask_app_context(monkeypat
 
 def test_place_update_rejects_outside_root_without_flask_app_context(tmp_path, monkeypatch):
     import oneirodex
-    from oneirodex.models import Library, UnmatchedFolder
 
     storage = tmp_path / 'storage'
     root = storage / 'library'
@@ -259,7 +258,7 @@ def test_auth_librarian_admin_and_csrf_order(runtime):
                           method='POST', json={'action': 'keep'})
     assert anon.status_code == 302 and anon.headers['location'].startswith('/login?next=')
     assert member.status_code == 403 and member.json()['error_code'] == 'forbidden'
-    assert admin_only.status_code == 302 and admin_only.headers['location'] == '/login'
+    assert admin_only.status_code == 403
 
     flask_app.config['WTF_CSRF_ENABLED'] = True
     csrf_before_auth = _request(app, '/api/unmatched_folders/batch/clear', method='POST', json={'ids': ['1']})

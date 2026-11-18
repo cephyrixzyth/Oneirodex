@@ -1,6 +1,6 @@
 """The on-box recommender: taste profile, similarity, impressions, rotation."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -288,22 +288,6 @@ class TestImpressionDamping:
 
         assert damping_for(ml_user.id)[ignored.uuid] >= MIN_DAMPING
 
-    def test_opening_a_title_clears_its_damping(
-        self, app, db_session, ml_user, ml_library
-    ):
-        """A tile that got clicked has earned its place."""
-        from oneirodex.utils.discover_ml.impressions import (
-            damping_for,
-            record_click,
-            record_impressions,
-        )
-
-        opened = _game(db_session, ml_library, 'Opened')
-        for _ in range(6):
-            record_impressions(ml_user.id, [opened.uuid])
-        record_click(ml_user.id, opened.uuid)
-
-        assert opened.uuid not in damping_for(ml_user.id)
 
     def test_recording_the_same_feed_twice_counts_twice(
         self, app, db_session, ml_user, ml_library
@@ -340,27 +324,6 @@ class TestImpressionDamping:
             )
         ).scalar_one()
         assert row.shown_count == 1
-
-
-class TestRotation:
-    def test_the_seed_is_stable_within_a_day(self, app):
-        from oneirodex.utils.discover_ml.impressions import rotation_seed
-
-        today = date(2026, 8, 21)
-        assert rotation_seed(7, today=today) == rotation_seed(7, today=today)
-
-    def test_the_seed_changes_tomorrow(self, app):
-        from oneirodex.utils.discover_ml.impressions import rotation_seed
-
-        assert rotation_seed(7, today=date(2026, 8, 21)) != rotation_seed(
-            7, today=date(2026, 8, 22)
-        )
-
-    def test_two_members_get_different_seeds(self, app):
-        from oneirodex.utils.discover_ml.impressions import rotation_seed
-
-        today = date(2026, 8, 21)
-        assert rotation_seed(7, today=today) != rotation_seed(8, today=today)
 
 
 class TestRanking:

@@ -11,10 +11,7 @@ from sqlalchemy import text
 
 from oneirodex import db
 from oneirodex.models import Game, Library, LibraryPlatform, User
-from oneirodex.utils.freshness.service import (
-    check_library_freshness,
-    scan_freshness_enabled,
-)
+from oneirodex.utils.freshness.service import check_library_freshness
 
 pytestmark = pytest.mark.integration  # A3.1: kept out of the fast `-m "not integration"` core -- scan freshness gate over the library.
 
@@ -62,24 +59,6 @@ def _login(client, user):
     with client.session_transaction() as sess:
         sess['_user_id'] = str(user.id)
         sess['_fresh'] = True
-
-
-class TestGate:
-    def test_off_by_default(self, app):
-        """A scan must not start making store calls unasked."""
-        with app.app_context():
-            app.config['SCAN_CHECK_FRESHNESS'] = False
-            assert scan_freshness_enabled() is False
-
-    def test_reads_the_flag(self, app):
-        with app.app_context():
-            app.config['SCAN_CHECK_FRESHNESS'] = True
-            assert scan_freshness_enabled() is True
-
-    def test_accepts_a_settings_object_or_mapping(self, app):
-        with app.app_context():
-            assert scan_freshness_enabled({'scan_check_freshness': True}) is True
-            assert scan_freshness_enabled({'scan_check_freshness': False}) is False
 
 
 class TestLibraryPass:

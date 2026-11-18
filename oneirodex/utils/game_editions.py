@@ -194,15 +194,6 @@ def _edition_games(game, user) -> list:
     return rows[:MAX_EDITIONS]
 
 
-def editions_for_game(game, user) -> list[dict]:
-    """Every copy of *game*'s title the *user* may see, current copy first.
-
-    Always returns at least the game itself, so a caller never has to special
-    case "only one system" — the preview renders the same list either way.
-    """
-    return [_edition_row(other, game) for other in _edition_games(game, user)]
-
-
 def preview_tags(game, *, limit: int = MAX_PREVIEW_TAGS) -> list[dict]:
     """Facet labels already on the title — modes, genres, themes, perspective.
 

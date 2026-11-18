@@ -76,13 +76,6 @@ MEMBER_SETUP_STATIC_ROUTES = (
 MEMBER_AUTH_BOOTSTRAP_ROUTE = '/api/auth/runtime-bootstrap'
 
 
-def is_member_auth_dynamic_route(path):
-    """Match only the single-token confirmation/reset compatibility paths."""
-    import re
-
-    return re.fullmatch(r'/(?:confirm|reset_password)/[^/]+', path) is not None
-
-
 def is_email_confirmation_page_route(path):
     """Match one token segment for the static, read-only confirmation shell."""
     import re

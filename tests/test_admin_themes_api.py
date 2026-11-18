@@ -27,7 +27,7 @@ def test_theme_inventory_requires_admin(client, db_session):
     db_session.add(user)
     db_session.commit()
     _login(client, user)
-    assert client.get('/api/admin/themes').status_code == 302
+    assert client.get('/api/admin/themes').status_code == 403
 
 
 def test_theme_upload_rejects_non_zip_before_manager(client, db_session):

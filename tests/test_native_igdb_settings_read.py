@@ -84,7 +84,7 @@ def test_igdb_settings_read_keeps_secret_free_envelope_and_head():
 
 def test_igdb_settings_requires_admin():
     response = _client(role='user').get('/api/admin/igdb/settings', follow_redirects=False)
-    assert response.status_code == 302
+    assert response.status_code == 403
 
 
 def test_igdb_public_state_never_returns_secret():

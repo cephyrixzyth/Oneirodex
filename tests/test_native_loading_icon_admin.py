@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from flask import Flask
-from werkzeug.utils import redirect as werkzeug_redirect
 
 from oneirodex.runtime_native import loading_icon_admin as native_loading_icon_admin
 from oneirodex.runtime_native.loading_icon_admin import create_loading_icon_admin_router
@@ -149,14 +148,8 @@ def test_auth_and_admin_gates_preserve_redirect_and_flash_behavior():
     assert anon_session['_flashes'][-1] == ('message', 'Please log in to access this page.')
 
     member = make_client(role='user').get(path, follow_redirects=False)
-    assert member.status_code == 302 and member.headers['location'] == '/login'
-    expected_redirect = werkzeug_redirect('/login')
-    assert member.content == expected_redirect.get_data()
-    assert member.headers['content-type'] == expected_redirect.headers['Content-Type']
-    member_session = load_session_cookie(
-        member.cookies['session'], 'native-loading-icon-secret', max_age=31_536_000,
-    )
-    assert member_session['_flashes'][-1] == ('danger', 'You must be an admin to access this page.')
+    assert member.status_code == 403
+    assert member.json()['error_code'] == 'forbidden'
 
     member_client = make_client(role='user')
     denied_put = member_client.put(
@@ -165,8 +158,8 @@ def test_auth_and_admin_gates_preserve_redirect_and_flash_behavior():
         headers={'X-CSRFToken': _csrf(member_client)},
         follow_redirects=False,
     )
-    assert denied_put.status_code == 302 and denied_put.headers['location'] == '/login'
-    assert denied_put.content == expected_redirect.get_data()
+    assert denied_put.status_code == 403
+    assert denied_put.json()['error_code'] == 'forbidden'
     assert member_client.native_data.saved == []
 
 

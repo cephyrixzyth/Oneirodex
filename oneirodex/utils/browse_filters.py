@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 
 from sqlalchemy import false
 
@@ -43,15 +42,6 @@ def _flag(args, name: str) -> bool:
     if raw is None:
         return False
     return str(raw).strip().lower() in _TRUTHY
-
-
-def _preferred_locale_from_user(user: Any | None) -> str:
-    if user is None:
-        return 'en-US'
-    prefs = getattr(user, 'preferences', None)
-    if prefs is None:
-        return 'en-US'
-    return getattr(prefs, 'preferred_game_locale', None) or 'en-US'
 
 
 def _item_kind_raw_from_args(args) -> str | None:
@@ -197,6 +187,3 @@ def apply_filter_tree(query, args, *, user=None, now: datetime | None = None):
     return query.filter(compile_filter_tree(raw, user=user, now=now))
 
 
-def filter_tree_error_detail(exc: FilterTreeError) -> str:
-    """One sentence a builder UI can put next to the offending row."""
-    return str(exc)

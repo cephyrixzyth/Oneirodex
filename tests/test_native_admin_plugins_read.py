@@ -55,4 +55,4 @@ def test_plugin_catalog_filter_detail_and_not_found():
 def test_plugin_catalog_requires_administrator():
     response = make_client(role='user').get('/api/plugins', follow_redirects=False)
 
-    assert response.status_code == 302
+    assert response.status_code == 403

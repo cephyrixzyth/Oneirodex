@@ -7,7 +7,6 @@ import tempfile
 import stat
 from pathlib import Path
 from datetime import datetime, timezone
-from io import BytesIO
 from uuid import uuid4
 
 from oneirodex.utils.runtime_config import get_runtime_config
@@ -398,6 +397,3 @@ def delete_save(user_id: int, game_uuid: str, slot_name: str) -> bool:
     return True
 
 
-def save_as_file_storage(row: EmulatorSave):
-    """Return a BytesIO of decrypted save bytes for send_file."""
-    return BytesIO(read_save_bytes(row))

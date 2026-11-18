@@ -166,7 +166,6 @@ def test_webretro_cores_are_found_in_the_shipped_or_fetched_folder(tmp_path, mov
             (folder / f'{core}{suffix}').write_bytes(b'x' * size)
     assert webretro_core_install.missing_cores() == frozenset()
     assert webretro_cores.discover_webretro_cores() == frozenset({'a', 'b'})
-    assert webretro_cores.wasm_present_on_disk('a') and webretro_cores.wasm_present_on_disk('b')
 
 
 # Ratchet: a new writer that builds <package>/static/library by hand would put

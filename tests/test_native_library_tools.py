@@ -345,7 +345,7 @@ def test_admin_required_and_out_of_root_path_rejected_before_adapter_work(runtim
     unsafe = _request(app, '/api/library_tools/proposals/scan_roots', cookie=cookies['admin'],
                       method='POST', json={'roots': ['/outside']})
 
-    assert denied.status_code == 302
+    assert denied.status_code == 403
     assert unsafe.status_code == 200
     assert unsafe.json()['proposals'] == []
     assert not any(call[0] == 'walk' for call in data.calls)
@@ -397,8 +397,12 @@ def test_library_doctor_refuses_signed_out_and_members(runtime, identity, path):
         json={'roots': ['/safe'], 'rows': []},
     )
 
-    assert native.status_code == 302
-    assert native.headers['location'].startswith('/login')
+    if identity:
+        assert native.status_code == 403
+        assert native.json()['error_code'] == 'forbidden'
+    else:
+        assert native.status_code == 302
+        assert native.headers['location'].startswith('/login')
 
 
 def test_import_preview_json_and_multipart_use_injected_parser(runtime):

@@ -4,8 +4,6 @@ import threading
 
 from oneirodex.utils.event_bus import EventBus, encode_sse
 from oneirodex.utils.api_tokens import VALID_SCOPES, TOKEN_PREFIX, _hash_secret
-from oneirodex.utils.playtime import compute_duration_seconds
-from datetime import datetime, timezone, timedelta
 
 
 def test_event_bus_fanout():
@@ -57,8 +55,3 @@ def test_token_hash_stable():
     assert 'read:library' in VALID_SCOPES
 
 
-def test_compute_duration_seconds():
-    start = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
-    end = start + timedelta(minutes=5, seconds=12)
-    assert compute_duration_seconds(start, end) == 312
-    assert compute_duration_seconds(end, start) == 0

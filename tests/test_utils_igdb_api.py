@@ -3,16 +3,8 @@ import time
 import threading
 from unittest.mock import patch, MagicMock
 
-from oneirodex import create_app, db
 from oneirodex.models import GlobalSettings
-from oneirodex.utils.igdb_api import (
-    make_igdb_api_request,
-    get_access_token,
-    clear_access_token_cache,
-    get_cover_thumbnail_url,
-    get_cover_url,
-    IGDBRateLimiter
-)
+from oneirodex.utils.igdb_api import make_igdb_api_request, get_access_token, clear_access_token_cache, get_cover_thumbnail_url, IGDBRateLimiter
 
 pytestmark = pytest.mark.integration  # A3.1: kept out of the fast `-m "not integration"` core -- IGDB client incl. a real rate-limiter thread + sleep.
 
@@ -279,60 +271,6 @@ class TestGetCoverThumbnailUrl:
         
         assert result is None
         mock_print.assert_called_once_with("No cover URL found for IGDB ID 12345.")
-
-
-class TestGetCoverUrl:
-    """Tests for get_cover_url function."""
-    
-    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
-    def test_successful_cover_url_retrieval(self, mock_api_request, mock_cover_image_id_response):
-        """Test successful cover URL retrieval."""
-        mock_api_request.return_value = mock_cover_image_id_response
-        
-        result = get_cover_url(12345)
-        
-        assert result == 'https://images.igdb.com/igdb/image/upload/t_cover_big_2x/test_image_id_12345.jpg'
-        mock_api_request.assert_called_once_with(
-            'https://api.igdb.com/v4/covers',
-            'fields image_id; where game=12345;'
-        )
-
-    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
-    @patch('builtins.print')
-    def test_api_error_response(self, mock_print, mock_api_request):
-        """Test cover URL retrieval with API error."""
-        mock_api_request.return_value = {'error': 'API Error'}
-        
-        result = get_cover_url(12345)
-        
-        assert result is None
-        mock_print.assert_called_once_with(
-            "Failed to retrieve cover image ID for IGDB ID 12345. Response: {'error': 'API Error'}"
-        )
-
-    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
-    @patch('builtins.print')
-    def test_empty_response(self, mock_print, mock_api_request):
-        """Test cover URL retrieval with empty response."""
-        mock_api_request.return_value = []
-        
-        result = get_cover_url(12345)
-        
-        assert result is None
-        mock_print.assert_called_once_with(
-            "Failed to retrieve cover image ID for IGDB ID 12345. Response: []"
-        )
-
-    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
-    @patch('builtins.print')
-    def test_missing_image_id_in_response(self, mock_print, mock_api_request):
-        """Test cover URL retrieval with missing image_id in response."""
-        mock_api_request.return_value = [{'id': 1}]  # No image_id field
-        
-        result = get_cover_url(12345)
-        
-        assert result is None
-        mock_print.assert_called_once_with("No cover image ID found for IGDB ID 12345.")
 
 
 class TestIGDBRateLimiter:

@@ -135,12 +135,8 @@ def test_non_admin_redirects_with_danger_flash_without_next_or_status_call():
     response = make_client(role='user', data=data).get(
         '/api/ai/status?from=settings', follow_redirects=False
     )
-    assert response.status_code == 302
-    assert response.headers['location'] == '/login'
-    session = load_session_cookie(
-        response.cookies['session'], 'native-ai-status-secret', max_age=31_536_000
-    )
-    assert session['_flashes'] == [('danger', 'You must be an admin to access this page.')]
+    assert response.status_code == 403
+    assert response.json()['error_code'] == 'forbidden'
     assert data.calls == 0
 
 
@@ -255,7 +251,7 @@ def test_ai_config_bearer_requires_admin_role_and_admin_scope(monkeypatch):
 
     assert allowed.status_code == 200
     assert unscoped.status_code == 403
-    assert member.status_code == 302
+    assert member.status_code == 403
     assert data.config_calls == [{'enabled': True}]
 
 
