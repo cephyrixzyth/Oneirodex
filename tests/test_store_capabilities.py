@@ -43,28 +43,3 @@ def test_disabled_policy_and_mutation_isolation():
     assert fresh[0]['aliases'] == []
 
 
-def test_route_authentication_and_policy(monkeypatch):
-    from flask import Flask
-    from flask_login import LoginManager, UserMixin
-    from oneirodex.routes_apis import ownership
-    app = Flask(__name__)
-    app.config.update(TESTING=True, SECRET_KEY='isolated-test-only')
-    login = LoginManager(app)
-    class User(UserMixin):
-        id = 'test-member'
-    login.user_loader(lambda user_id: User() if user_id == 'test-member' else None)
-    monkeypatch.setattr(ownership, 'is_ownership_sync_enabled', lambda: False)
-    monkeypatch.setattr(ownership, 'unofficial_store_opt_in', lambda: frozenset())
-    app.add_url_rule('/api/ownership/providers', view_func=ownership.ownership_providers)
-    client = app.test_client()
-    assert client.get('/api/ownership/providers').status_code == 401
-    with client.session_transaction() as session:
-        session['_user_id'] = 'test-member'
-        session['_fresh'] = True
-    response = client.get('/api/ownership/providers')
-    assert response.status_code == 200
-    body = response.get_json()
-    assert body['ok'] and body['schema_version'] == 1
-    assert len(body['providers']) == 18
-    assert all(not p['policy_enabled'] for p in body['providers'])
-    assert not {'credential','external_account_id','user_id'} & set().union(*(p.keys() for p in body['providers']))

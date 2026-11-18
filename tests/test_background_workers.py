@@ -148,7 +148,7 @@ def test_library_deletion_worker_deletes_metadata_but_preserves_rom(app, no_save
     so this test opts out with `no_savepoint_db` instead.
     """
     from oneirodex.models import Game
-    from oneirodex.routes_admin_ext.library_delete import (
+    from oneirodex.utils.library_deletion import (
         delete_library_background,
         deletion_progress,
     )
@@ -201,10 +201,8 @@ def test_library_deletion_worker_deletes_metadata_but_preserves_rom(app, no_save
 @pytest.mark.parametrize(
     'module_name',
     [
-        'oneirodex.routes_admin_ext.scan_management',
-        'oneirodex.routes_apis.game',
-        'oneirodex.routes_games_ext.add',
-        'oneirodex.routes_games_ext.edit',
+        'oneirodex.utils.library_deletion',
+        'oneirodex.utils.scan_queue',
     ],
 )
 def test_route_modules_no_longer_copy_the_request_context(module_name):

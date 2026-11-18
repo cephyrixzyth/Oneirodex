@@ -145,7 +145,7 @@ class TestStatisticsRoutes:
         assert response.status_code == 200
         assert b'id="admin-app-root"' in response.data
 
-    @patch('oneirodex.routes_downloads_ext.statistics.get_download_statistics')
+    @patch('oneirodex.utils.statistics.get_download_statistics')
     def test_statistics_data_admin_user(self, mock_stats, client, admin_user, sample_statistics_data):
         """Test admin user access to statistics data endpoint."""
         mock_stats.return_value = sample_statistics_data
@@ -166,7 +166,7 @@ class TestStatisticsRoutes:
         assert 'top_games' in data
         assert 'download_trends' in data
 
-    @patch('oneirodex.routes_downloads_ext.statistics.get_download_statistics')
+    @patch('oneirodex.utils.statistics.get_download_statistics')
     def test_statistics_data_structure(self, mock_stats, client, admin_user, sample_statistics_data):
         """Test the structure of statistics data response."""
         mock_stats.return_value = sample_statistics_data

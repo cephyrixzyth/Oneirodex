@@ -83,8 +83,10 @@ model: a model with required fields → 422 naming them; an all-optional model
 ## Adopted so far
 
 53 routes (PRs #80–#96 plus named-field leftovers) on `@validate_body`, plus
-`games_batch_favorite` on `@validate_batch_body`. Prefixes below match the
-Flask blueprints (`/api` for `routes_apis/`).
+`games_batch_favorite` on `@validate_batch_body`. The table records where each
+model was first adopted, in the Flask blueprints deleted in 1.2.1 (`/api` for
+`routes_apis/`); the served handlers in `oneirodex/runtime_native/` validate the
+same paths with the same models.
 
 | File | Route | Model |
 |---|---|---|

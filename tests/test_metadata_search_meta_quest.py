@@ -340,7 +340,7 @@ def admin_user_for_meta(db_session):
     return user
 
 
-@patch('oneirodex.routes_apis.metadata_search.search_meta_quest_games')
+@patch('oneirodex.utils.secondary_scrapers.search_meta_quest_games')
 def test_search_metadata_meta_alias(mock_search, client, db_session, admin_user_for_meta):
     mock_search.return_value = [
         {'source': 'meta_quest', 'id': 1, 'name': 'Quest Game', 'ownership_only': True, 'is_vr': True}
@@ -356,8 +356,8 @@ def test_search_metadata_meta_alias(mock_search, client, db_session, admin_user_
     assert 'api_mode' in data
 
 
-@patch('oneirodex.routes_apis.metadata_search.get_mobygames_api_key', return_value=None)
-@patch('oneirodex.routes_apis.metadata_search.search_mobygames_games', return_value=[])
+@patch('oneirodex.utils.providers.mobygames.get_mobygames_api_key', return_value=None)
+@patch('oneirodex.utils.secondary_scrapers.search_mobygames_games', return_value=[])
 def test_search_metadata_mobygames_honest_without_key(
     mock_search, mock_key, client, db_session, admin_user_for_meta,
 ):
@@ -374,8 +374,8 @@ def test_search_metadata_mobygames_honest_without_key(
     assert 'MOBYGAMES_API_KEY' in data['note']
 
 
-@patch('oneirodex.routes_apis.metadata_search.get_thegamesdb_api_key', return_value=None)
-@patch('oneirodex.routes_apis.metadata_search.search_thegamesdb_games', return_value=[])
+@patch('oneirodex.utils.providers.thegamesdb.get_thegamesdb_api_key', return_value=None)
+@patch('oneirodex.utils.secondary_scrapers.search_thegamesdb_games', return_value=[])
 def test_search_metadata_thegamesdb_honest_without_key(
     mock_search, mock_key, client, db_session, admin_user_for_meta,
 ):

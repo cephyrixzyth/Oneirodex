@@ -369,8 +369,3 @@ class TestFiltersIntegration:
         patterns = {row['filter_pattern'] for row in response.get_json()['filters']}
         assert f'Persist_{unique_suffix}' in patterns
     
-    def test_filters_routes_blueprint_registration(self, app):
-        """Test that filter routes are properly registered."""
-        with app.test_request_context():
-            assert url_for('admin2.edit_filters') == '/admin/edit_filters'
-            assert url_for('admin2.delete_filter', id=1) == '/delete_filter/1'

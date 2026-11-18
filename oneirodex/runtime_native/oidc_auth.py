@@ -255,14 +255,9 @@ def _make_oidc_client(config):
 
 
 def _safe_next(value):
-    from urllib.parse import urlsplit
+    from oneirodex.utils.safe_redirect import safe_next_url
 
-    if isinstance(value, str):
-        candidate = value.strip()
-        parsed = urlsplit(candidate)
-        if candidate.startswith('/') and candidate[1:2] not in {'/', '\\'} and not parsed.scheme and not parsed.netloc:
-            return candidate
-    return '/discover'
+    return safe_next_url(value)
 
 
 def _flash(auth, category, message):

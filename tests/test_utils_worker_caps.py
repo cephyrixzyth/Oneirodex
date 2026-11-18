@@ -1,13 +1,7 @@
 # tests/test_utils_worker_caps.py
-import os
 
 from oneirodex.models import GlobalSettings
-from oneirodex.routes_admin_ext.settings import (
-    DEFAULT_BATCH_SIZE,
-    DEFAULT_DOWNLOAD_THREADS,
-    DEFAULT_SETTINGS,
-    MAX_SCAN_THREADS,
-)
+from oneirodex.utils.server_settings import MAX_SCAN_THREADS, SERVER_DEFAULTS as DEFAULT_SETTINGS
 from oneirodex.utils.worker_caps import (
     clamp_image_download_batch,
     clamp_image_download_threads,
@@ -54,8 +48,6 @@ def test_unraid_safe_stored_defaults():
     assert GlobalSettings.turbo_download_threads.default.arg == 4
     assert GlobalSettings.turbo_download_batch_size.default.arg == 100
     assert DEFAULT_SETTINGS['scanThreadCount'] == 1
-    assert DEFAULT_DOWNLOAD_THREADS == 4
-    assert DEFAULT_BATCH_SIZE == 100
     assert DEFAULT_SETTINGS['turboDownloadThreads'] == 4
     assert DEFAULT_SETTINGS['turboDownloadBatchSize'] == 100
     assert MAX_SCAN_THREADS == 4

@@ -179,7 +179,7 @@ async def _handle_action(
 
 
 async def _dispatch_action(request, flask_app, data, auth, action, store):
-    from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
+    from oneirodex.utils.api_contract import api_ok_payload
 
     user_id = auth.user.id
     if action in ('connect', 'disconnect') and store not in _LIVE_STORES:

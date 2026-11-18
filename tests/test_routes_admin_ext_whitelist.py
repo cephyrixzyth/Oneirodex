@@ -130,7 +130,7 @@ class TestWhitelistRoutes:
             sess['_fresh'] = True
         assert client.get('/admin/api/whitelist').status_code == 302
 
-    @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
+    @patch('oneirodex.utils.event_logging.log_system_event')
     def test_whitelist_post_normalizes_email(self, mock_log, client, db_session, admin_user):
         """Test POST /admin/whitelist normalizes email (strips whitespace, lowercases)."""
         with client.session_transaction() as sess:
@@ -167,7 +167,7 @@ class TestWhitelistRoutes:
             # This is actually acceptable behavior - the form should reject malformed input
             assert 'successfully added' not in response.get_data(as_text=True)
 
-    @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
+    @patch('oneirodex.utils.event_logging.log_system_event')
     def test_whitelist_post_rejects_long_email(self, mock_log, client, db_session, admin_user):
         """Test POST /admin/whitelist rejects email longer than 120 characters."""
         with client.session_transaction() as sess:
@@ -194,7 +194,7 @@ class TestWhitelistRoutes:
         # so just verify no success message and email wasn't added
         assert 'successfully added' not in response_text
 
-    @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
+    @patch('oneirodex.utils.event_logging.log_system_event')
     def test_whitelist_post_rejects_invalid_email_format(self, mock_log, client, db_session, admin_user):
         """Test POST /admin/whitelist rejects invalid email formats."""
         with client.session_transaction() as sess:
@@ -285,7 +285,7 @@ class TestDeleteWhitelistRoute:
 class TestWhitelistRegistrationStatus:
     """Tests for whitelist registration status checking functionality."""
 
-    @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
+    @patch('oneirodex.utils.event_logging.log_system_event')
     def test_whitelist_api_shows_registration_status(self, mock_log, client, db_session, admin_user,
                                                whitelist_entries, registered_user_for_whitelist):
         """Test that whitelist API correctly shows registration status for entries."""
@@ -301,7 +301,7 @@ class TestWhitelistRegistrationStatus:
         assert by_email[whitelist_entries[1].email]['is_registered'] is False
         assert by_email[whitelist_entries[2].email]['is_registered'] is True
 
-    @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
+    @patch('oneirodex.utils.event_logging.log_system_event')
     def test_whitelist_efficient_registration_check(self, mock_log, client, db_session, admin_user):
         """Test that registration status is checked efficiently (no N+1 queries)."""
         # Use unique email suffix to avoid collisions
@@ -349,7 +349,7 @@ class TestWhitelistRegistrationStatus:
 class TestWhitelistSecurityValidation:
     """Tests for security-related validation in whitelist routes."""
 
-    @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
+    @patch('oneirodex.utils.event_logging.log_system_event')
     def test_whitelist_sanitizes_input(self, mock_log, client, db_session, admin_user):
         """Test that whitelist input is properly sanitized."""
         with client.session_transaction() as sess:
@@ -375,7 +375,7 @@ class TestWhitelistSecurityValidation:
         ).scalars().first()
         assert whitelist_entry is None
 
-    @patch('oneirodex.routes_admin_ext.whitelist.log_system_event')
+    @patch('oneirodex.utils.event_logging.log_system_event')
     def test_whitelist_handles_sql_injection_attempts(self, mock_log, client, db_session, admin_user):
         """Test that whitelist handles SQL injection attempts."""
         with client.session_transaction() as sess:

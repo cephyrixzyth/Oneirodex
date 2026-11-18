@@ -75,8 +75,7 @@ def create_account_password_router(
                 response = _login_redirect(flask_app, request, login_manager, auth)
             elif response is None:
                 from oneirodex.schemas.account import ChangePasswordBody
-                from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
-                from oneirodex.utils.validation import format_validation_errors
+                from oneirodex.utils.api_contract import api_ok_payload
 
                 body, validation_error = await _validated_body(request, ChangePasswordBody)
                 if validation_error:

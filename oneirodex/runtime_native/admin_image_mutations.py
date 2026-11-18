@@ -293,7 +293,6 @@ def create_admin_image_mutation_router(
 
     @router.post('/upload_image/{game_uuid}')
     async def upload_single_image(game_uuid: str, request: Request):
-        from .acquire_status import _login_redirect
         from oneirodex.utils.image_kinds import image_kinds_error_message, parse_image_kind
         from oneirodex.utils.image_upload_limits import ImageWorkBusy
         from oneirodex.utils.scanning import is_scan_job_running

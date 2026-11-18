@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from oneirodex.routes_apis import updates as updates_mod
+from oneirodex.utils.update_projections import dlc_summary
 
 
 def test_dlc_summary_reads_compare_payload_keys():
@@ -16,7 +16,7 @@ def test_dlc_summary_reads_compare_payload_keys():
             }
         }
     )
-    summary = updates_mod._dlc_summary(game)
+    summary = dlc_summary(game)
     assert summary == {
         'store_count': 4,
         'local_hint': 1,
@@ -32,7 +32,7 @@ def test_dlc_summary_falls_back_to_remote_list():
             'remotes': [{'store': 'gog', 'dlc_count': 2, 'ok': True}],
         }
     )
-    summary = updates_mod._dlc_summary(game)
+    summary = dlc_summary(game)
     assert summary['store_count'] == 2
     assert summary['local_hint'] == 0
     assert summary['store'] == 'gog'

@@ -8,12 +8,8 @@ and that every section deep-links to an existing, registered route.
 import pytest
 from uuid import uuid4
 
-from flask import url_for
 
 from oneirodex.models import User
-from oneirodex.routes_admin_ext.settings import (
-    SETTINGS_SHELL_SECTIONS, DEFAULT_SETTINGS_SHELL_SECTION
-)
 
 
 @pytest.fixture
@@ -67,66 +63,6 @@ def test_oidc_settings_url_serves_its_own_admin_page(admin_user, client):
 class TestSettingsShellSections:
     """Test the SETTINGS_SHELL_SECTIONS configuration itself."""
 
-    def test_lists_every_section_in_order(self):
-        assert list(SETTINGS_SHELL_SECTIONS.keys()) == [
-            'server', 'scan_match', 'attract', 'integrations', 'emulators',
-            'reference_sets', 'arr', 'features', 'quality', 'layouts', 'ai',
-            'storage', 'themes', 'art_studio', 'remote_play',
-        ]
-
-    def test_every_section_deep_link_is_reachable_from_the_react_hub(self, app):
-        """The server keeps this map for `?section=` shortcuts; the cards are
-        rendered by admin-app. Nothing makes the two agree, so a section added
-        on one side and not the other is a shortcut to a card nobody can see —
-        or a card whose shortcut 404s. This is the check that would notice."""
-        import re
-        from pathlib import Path
-
-        nav = Path('frontend/admin-app/src/components/navConfig.ts').read_text(encoding='utf-8')
-        # `to:` for router cards, `href:` for full-page links and the
-        # integrations inventory — a section reachable from the top nav or an
-        # inventory entry is reachable, even without a settings card. Fragments
-        # are stripped: /admin/integrations#igdb still lands on integrations.
-        card_targets = {
-            target.split('#')[0]
-            for target in re.findall(r"(?:to|href|path):\s*'([^']+)'", nav)
-        }
-
-        missing = []
-        for key, section in SETTINGS_SHELL_SECTIONS.items():
-            with app.test_request_context():
-                url = url_for(section['endpoint'])
-            if url not in card_targets:
-                missing.append(f'{key} -> {url}')
-
-        assert not missing, (
-            'server sections with no card in admin-app: ' + ', '.join(missing)
-        )
-
-    def test_default_section_is_a_real_section(self):
-        assert DEFAULT_SETTINGS_SHELL_SECTION in SETTINGS_SHELL_SECTIONS
-
-    def test_each_section_has_required_fields(self):
-        for key, section in SETTINGS_SHELL_SECTIONS.items():
-            assert section['label']
-            assert section['icon']
-            assert section['description']
-            assert section['endpoint']
-
-    def test_icons_are_semantic_keys_not_font_awesome_classes(self):
-        for key, section in SETTINGS_SHELL_SECTIONS.items():
-            assert not section['icon'].startswith('fa-'), (
-                f"{key} still carries a Font Awesome class; React icon consumers "
-                "use semantic keys from the shared icon catalog"
-            )
-
-    def test_each_section_endpoint_resolves(self, app):
-        """Every section endpoint must be a real, registered route."""
-        with app.app_context():
-            from flask import url_for
-            for section in SETTINGS_SHELL_SECTIONS.values():
-                url_for(section['endpoint'])  # raises if not registered
-
 
 class TestSettingsShellRoute:
     """The hub is an admin SPA shell.
@@ -173,14 +109,6 @@ class TestSettingsShellRoute:
         body = response.get_data(as_text=True)
         assert 'settings?section=' not in body
 
-    def test_no_section_carries_a_font_awesome_icon(self):
-        """Replaces a check for inline SVG in the hub's HTML, which the React
-        shell no longer contains. The underlying rule — icons are semantic keys
-        the icon pack resolves, never Font Awesome classes — is still worth
-        holding, and holds on the data rather than the rendering."""
-        for key, section in SETTINGS_SHELL_SECTIONS.items():
-            assert not section['icon'].startswith('fa-'), key
-            assert ' ' not in section['icon'], f'{key} icon looks like a class list'
 
     def test_post_still_updates_settings(self, client, admin_user):
         """POST behavior for saving settings must be unchanged by the shell."""

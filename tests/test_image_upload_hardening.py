@@ -28,7 +28,10 @@ from PIL import Image as PILImage
 from sqlalchemy import select, text
 
 from oneirodex.models import Game, Image, Library, LibraryPlatform, User
-from oneirodex.routes_admin_ext.game_images import MAX_IMAGE_PIXELS, MAX_IMAGE_UPLOAD_BYTES
+from oneirodex.utils.image_upload_limits import (
+    GAME_IMAGE_MAX_BYTES as MAX_IMAGE_UPLOAD_BYTES,
+    GAME_IMAGE_MAX_PIXELS as MAX_IMAGE_PIXELS,
+)
 
 
 @pytest.fixture(scope='function', autouse=True)

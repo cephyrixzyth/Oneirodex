@@ -20,7 +20,7 @@ Do **not** block upgrades or smoke sign-off on Prometheus/Grafana.
 ## Application logging
 
 The backend configures stdlib `logging` at startup
-(`oneirodex/utils/logging_setup.py`, called from `create_app()`): one console
+(`oneirodex/utils/logging_setup.py`, called once when `asgi.py` starts): one console
 handler on **stdout**, so `docker logs` / the Unraid container log show it.
 Startup also forces the stdout/stderr streams to UTF-8 (`errors="replace"`) so a
 log line with an emoji does not raise `UnicodeEncodeError` and vanish on a

@@ -12,7 +12,7 @@ import stat
 import sys
 import unicodedata
 from pathlib import Path
-from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from requests.exceptions import RequestException
 from requests.models import PreparedRequest
@@ -470,8 +470,15 @@ def _parse_ip_literal(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Addres
         return None
 
 
+_NEVER_RESOLVING_SUFFIXES = ('.test', '.example', '.invalid')
+
+
 def _resolve_host(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     """Every address *host* currently resolves to. Empty when it does not resolve."""
+    if host.rstrip('.').lower().endswith(_NEVER_RESOLVING_SUFFIXES):
+        # Reserved names (RFC 2606/6761) never resolve publicly; skip a DNS
+        # round trip that can stall for seconds on some resolvers.
+        return []
     try:
         infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
     except (OSError, UnicodeError):
@@ -506,7 +513,7 @@ def is_blocked_outbound_host(hostname: str | None, *, resolve: bool = True) -> b
     if not hostname:
         return True
     host = hostname.strip().lower().rstrip('.')
-    if host in {'localhost', 'metadata.google.internal'} or host.endswith('.local'):
+    if host in {'localhost', 'metadata.google.internal'} or host.endswith(('.local', '.localhost')):
         return True
     if host.startswith('[') and host.endswith(']'):
         host = host[1:-1]

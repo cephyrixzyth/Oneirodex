@@ -503,7 +503,7 @@ def test_only_links_inside_the_folder_are_refused_not_the_folder_itself(tmp_path
 
 def test_nfo_reader_used_by_the_add_game_form_ignores_a_linked_file(app, tmp_path, monkeypatch, secret):
     """The finding's path: info.nfo -> a readable file, then add/edit stores it."""
-    from oneirodex.routes_games_ext.add import read_first_nfo_content as add_reader
+    from oneirodex.utils.helpers.fs import read_first_nfo_content as add_reader
 
     library_root = tmp_path / 'library'
     folder = library_root / 'Linked Nfo'

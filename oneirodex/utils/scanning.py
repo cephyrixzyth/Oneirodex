@@ -6,16 +6,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import select, update
 
 from oneirodex.runtime_native.db_session import native_db as db
-from oneirodex.models import (
-    Game, 
-    Image, 
-    Library, 
-    GameUpdate, 
-    GameExtra, 
-    UnmatchedFolder,
-    GlobalSettings,
-    ScanJob
-)
+from oneirodex.models import Game, Image, Library, GameUpdate, GameExtra, UnmatchedFolder, ScanJob
 from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.utils.helpers.fs import read_first_nfo_content
 from oneirodex.utils.pc_extras import (

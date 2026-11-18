@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
 
 from .oidc_status import _login_redirect
 from .request_auth import request_auth_context
@@ -21,11 +21,7 @@ THEGAMESDB_ALIASES = frozenset({'thegamesdb', 'tgdb'})
 
 class MetadataSearchData:
     def search(self, source: str, name: str, *, limit: int, include_software: bool, config) -> dict:
-        from oneirodex.utils.providers.meta_quest import (
-            get_meta_quest_api_mode,
-            normalize_meta_quest_source,
-            unofficial_graphql_enabled,
-        )
+        from oneirodex.utils.providers.meta_quest import get_meta_quest_api_mode, unofficial_graphql_enabled
         from oneirodex.utils.providers.mobygames import get_mobygames_api_key
         from oneirodex.utils.providers.thegamesdb import get_thegamesdb_api_key
         from oneirodex.utils.secondary_scrapers import (

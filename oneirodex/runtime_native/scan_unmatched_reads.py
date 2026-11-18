@@ -36,7 +36,7 @@ class ScanUnmatchedReadsData:
     """Database and row-projection adapter. Tests replace all methods with fakes."""
 
     def query_unmatched(self, filters, *, paginate=None):
-        from sqlalchemy import or_, select
+        from sqlalchemy import select
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Library, UnmatchedFolder
 

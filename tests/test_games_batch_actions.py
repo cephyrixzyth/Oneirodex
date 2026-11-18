@@ -271,7 +271,7 @@ def test_batch_freshness_rejects_over_limit(client, member_user):
 
 
 def test_batch_freshness_rejects_oversized_json_before_processing(client, member_user):
-    from oneirodex.routes_apis.game_batch import BATCH_FRESHNESS_JSON_MAX_BYTES
+    from oneirodex.runtime_native.batch_refresh import BATCH_FRESHNESS_JSON_MAX_BYTES
 
     _login(client, member_user)
     body = b'{"uuids":[],"padding":"' + b'a' * BATCH_FRESHNESS_JSON_MAX_BYTES + b'"}'

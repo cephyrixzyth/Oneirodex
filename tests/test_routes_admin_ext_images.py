@@ -394,12 +394,7 @@ class TestDownloadImagesAPI:
         db_session.add(pending_image)
         db_session.flush()
 
-        with patch('oneirodex.utils.clients.images.download_image') as mock_download, \
-             patch('os.path.join') as mock_join, \
-             patch('oneirodex.routes_admin_ext.images.current_app') as mock_app:
-            
-            mock_app.config = {'IMAGE_SAVE_PATH': '/test/path'}
-            mock_join.return_value = '/test/path/cover.jpg'
+        with patch('oneirodex.utils.clients.images.download_image') as mock_download:
             mock_download.return_value = (True, None)
             
             response = client.post('/admin/api/download_images', 

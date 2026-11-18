@@ -192,7 +192,7 @@ class TestSeeAllTarget:
 
 class TestBuildDiscoverRow:
     def test_window_pages_forward(self, app, row_user, many_games, latest_shelf):
-        from oneirodex.routes_discover import build_discover_row
+        from oneirodex.utils.discover_builder import build_discover_row
 
         with app.app_context(), app.test_request_context('/'):
             first = build_discover_row(row_user, 'latest_games', offset=0, limit=6)
@@ -208,7 +208,7 @@ class TestBuildDiscoverRow:
 
     def test_limit_is_clamped(self, app, row_user, many_games, latest_shelf):
         """A caller asking for everything should not get to name the page size."""
-        from oneirodex.routes_discover import MAX_ROW_LIMIT, build_discover_row
+        from oneirodex.utils.discover_builder import MAX_ROW_LIMIT, build_discover_row
 
         with app.app_context(), app.test_request_context('/'):
             payload = build_discover_row(row_user, 'latest_games', limit=100_000)
@@ -219,7 +219,7 @@ class TestBuildDiscoverRow:
     def test_negative_offset_is_clamped_to_the_start(
         self, app, row_user, many_games, latest_shelf
     ):
-        from oneirodex.routes_discover import build_discover_row
+        from oneirodex.utils.discover_builder import build_discover_row
 
         with app.app_context(), app.test_request_context('/'):
             payload = build_discover_row(row_user, 'latest_games', offset=-50)
@@ -227,7 +227,7 @@ class TestBuildDiscoverRow:
         assert payload['offset'] == 0
 
     def test_unknown_row_returns_nothing(self, app, row_user):
-        from oneirodex.routes_discover import build_discover_row
+        from oneirodex.utils.discover_builder import build_discover_row
 
         with app.app_context(), app.test_request_context('/'):
             assert build_discover_row(row_user, 'no_such_row') is None
@@ -237,7 +237,7 @@ class TestFeedWindowContract:
     def test_row_reports_more_beyond_its_ceiling(
         self, app, row_user, many_games, latest_shelf
     ):
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
         from oneirodex.utils.discover_providers import ROW_MAX
 
         with app.app_context(), app.test_request_context('/'):
@@ -253,7 +253,7 @@ class TestFeedWindowContract:
 
     def test_short_row_offers_no_see_all(self, app, db_session, row_user, row_library):
         """A row that shows everything it has must not claim there is more."""
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
 
         db_session.add(
             Game(name='Only One', summary='s', library_uuid=row_library.uuid)
@@ -324,7 +324,7 @@ class TestFeedTokenCarriesDedupe:
     """
 
     def test_the_feed_hands_back_a_token(self, app, row_user, many_games, latest_shelf):
-        from oneirodex.routes_discover import build_discover_feed
+        from oneirodex.utils.discover_builder import build_discover_feed
 
         with app.app_context(), app.test_request_context('/'):
             feed = build_discover_feed(row_user)
@@ -336,7 +336,7 @@ class TestFeedTokenCarriesDedupe:
     def test_paging_with_the_token_skips_what_other_rows_showed(
         self, app, row_user, many_games, latest_shelf
     ):
-        from oneirodex.routes_discover import build_discover_feed, build_discover_row
+        from oneirodex.utils.discover_builder import build_discover_feed, build_discover_row
         from oneirodex.utils.discover_feed import excluded_for
         from oneirodex.utils.discover_builder import _load_manifest
 
@@ -359,7 +359,7 @@ class TestFeedTokenCarriesDedupe:
         self, app, row_user, many_games, latest_shelf
     ):
         """An old client, or a cacheless install, still gets its tiles."""
-        from oneirodex.routes_discover import build_discover_row
+        from oneirodex.utils.discover_builder import build_discover_row
 
         with app.app_context(), app.test_request_context('/'):
             paged = build_discover_row(row_user, 'latest_games', offset=0, limit=10)
@@ -370,7 +370,7 @@ class TestFeedTokenCarriesDedupe:
         self, app, row_user, many_games, latest_shelf
     ):
         """Tokens expire. A stale one must degrade, not 500."""
-        from oneirodex.routes_discover import build_discover_row
+        from oneirodex.utils.discover_builder import build_discover_row
 
         with app.app_context(), app.test_request_context('/'):
             paged = build_discover_row(
@@ -398,7 +398,7 @@ class TestFeedRowCap:
     def test_the_page_never_exceeds_the_row_cap(
         self, app, row_user, many_games, latest_shelf
     ):
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
         from oneirodex.utils.discover_feed import FEED_ROW_CAP
 
         with app.app_context(), app.test_request_context('/'):
@@ -416,7 +416,7 @@ class TestDedupeDoesNotHideTheWayOut:
         Reading it from the deduped list would make a row that lost titles to
         its neighbours quietly drop a link that genuinely goes somewhere.
         """
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
         from oneirodex.utils.discover_providers import ROW_MAX
 
         with app.app_context(), app.test_request_context('/'):

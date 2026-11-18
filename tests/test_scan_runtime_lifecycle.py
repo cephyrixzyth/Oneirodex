@@ -99,22 +99,6 @@ def test_scheduler_dispatch_renews_run_state(app, db_session, library, tmp_path,
     dispatch.assert_called_once()
 
 
-def test_restart_route_forwards_queue_choice(app, db_session, library, tmp_path, monkeypatch):
-    from oneirodex.routes_admin_ext.scan_jobs import restart_scan_job
-
-    target = make_job(db_session, library, tmp_path)
-    dispatch = Mock(return_value={'status': 'queued', 'message': 'Queued'})
-    monkeypatch.setattr(scan_queue, 'restart_or_queue_scan', dispatch)
-    # Authentication is covered by route tests; isolate form-to-policy plumbing.
-    handler = restart_scan_job
-    while hasattr(handler, '__wrapped__'):
-        handler = handler.__wrapped__
-    with app.test_request_context(method='POST', data={'queue_policy': 'queue'}):
-        assert handler(target.id).status_code == 302
-    assert dispatch.call_args.kwargs['queue_policy'] == 'queue'
-    assert dispatch.call_args.kwargs['allow_force'] is True
-
-
 @pytest.fixture
 def worker_stubs(monkeypatch, db_session, app, tmp_path):
     for key in ('DATA_FOLDER_GAMES', 'BASE_FOLDER_POSIX', 'BASE_FOLDER_WINDOWS'):

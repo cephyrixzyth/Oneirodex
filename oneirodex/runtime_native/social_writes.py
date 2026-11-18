@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse
 
 from .acquire_status import _login_redirect
 from .csrf_compat import csrf_error_response
-from .oidc_status import _from_flask_response, _set_session_cookie
+from .oidc_status import _set_session_cookie
 from .request_auth import request_auth_context
 
 _MAX_JSON_BODY_BYTES = 64 * 1024

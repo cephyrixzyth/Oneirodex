@@ -43,10 +43,10 @@ def test_native_installers_build_all_spas_with_node_22_and_validate_native_runti
 
 def test_targeted_log_system_event_calls_use_keyword_metadata():
     paths = (
-        'oneirodex/routes_apis/download.py',
-        'oneirodex/routes_apis/filters.py',
-        'oneirodex/routes_downloads_ext/admin.py',
-        'oneirodex/routes_admin_ext/attract_mode.py',
+        'oneirodex/runtime_native/download_mutations.py',
+        'oneirodex/runtime_native/download_request_reads.py',
+        'oneirodex/runtime_native/admin_scan_filters.py',
+        'oneirodex/runtime_native/admin_attract_mode.py',
     )
     snake_case = re.compile(r'^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$')
     offenders = []

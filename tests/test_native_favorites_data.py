@@ -21,7 +21,6 @@ def test_favorites_database_failure_is_a_safe_server_error(
     from fastapi import FastAPI
 
     import asgi
-    from oneirodex.routes_apis import user as user_routes
     from oneirodex.runtime_native.favorites import create_favorites_router
     from oneirodex.runtime_native.session_compat import dump_session_cookie
     from oneirodex import login_manager
@@ -44,7 +43,6 @@ def test_favorites_database_failure_is_a_safe_server_error(
             )
         raise RuntimeError('synthetic-secret-db-detail')
 
-    monkeypatch.setattr(user_routes.db, 'paginate', fail_with_sensitive_database_detail)
 
 
     user = SimpleNamespace(

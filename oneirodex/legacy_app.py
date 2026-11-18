@@ -12,11 +12,9 @@ from urllib.parse import urlparse
 from oneirodex.utils.db import check_postgres_port_open
 from oneirodex.utils.proxy import apply_proxy_fix
 from oneirodex.utils.security_headers import apply_security_headers
-from oneirodex.product import PRODUCT_NAME
 from oneirodex.runtime_native.db_session import current_native_engine, native_session_scope_key
 from flask_sqlalchemy.session import _app_ctx_id
 from oneirodex.utils.cache import cache
-from oneirodex.runtime_info import app_start_time, app_version
 import logging
 
 logger = logging.getLogger(__name__)
@@ -230,56 +228,9 @@ def create_app(config_object=None):
                 return redirect(setup_url)
 
     # Import models
-    from . import models
-    from oneirodex.routes_site import site_bp
-    from oneirodex.routes_member import member_bp
-    from oneirodex.routes_library import library_bp
-    from oneirodex.routes_setup import setup_bp
-    from oneirodex.routes_settings import settings_bp
-    from oneirodex.routes_login import login_bp
-    from oneirodex.routes_discover import discover_bp
-    from oneirodex.routes_downloads_ext import download_bp
-    from oneirodex.routes_games_ext import games_bp
-    from oneirodex.routes_smtp import smtp_bp
-    from oneirodex.routes_info import info_bp
-    from oneirodex.routes_admin_ext import admin2_bp
-    from oneirodex.routes_apis import apis_bp
-    from oneirodex.routes_arr import arr_bp
-
-    # App-level template context processors (moved off the retired 'main'
-    # blueprint in wave A2.1f).
-
-    # Register all blueprints
-    app.register_blueprint(site_bp)
-    app.register_blueprint(member_bp)
-    app.register_blueprint(admin2_bp)
-    app.register_blueprint(library_bp)
-    app.register_blueprint(setup_bp)
-    app.register_blueprint(settings_bp)
-    app.register_blueprint(login_bp)
-    app.register_blueprint(discover_bp)
-    app.register_blueprint(download_bp)
-    app.register_blueprint(games_bp)
-    app.register_blueprint(smtp_bp)
-    app.register_blueprint(info_bp)
-    app.register_blueprint(apis_bp)
-    app.register_blueprint(arr_bp)
-
-    # Companion desktop uses Bearer tokens without a browser CSRF cookie.
-    from oneirodex.routes_apis import client as client_api
-    from oneirodex.routes_apis import wanted as wanted_api
-
-    # These handlers validate CSRF themselves for browser sessions so that a
-    # scoped Bearer token can use the API without a browser token.
-    csrf.exempt(wanted_api.updates_wanted_add)
-    csrf.exempt(wanted_api.updates_wanted_fulfill)
-
-    csrf.exempt(client_api.client_heartbeat)
-    csrf.exempt(client_api.client_lifecycle_get)
-    csrf.exempt(client_api.client_lifecycle_post)
-    csrf.exempt(client_api.client_commands_get)
-    csrf.exempt(client_api.client_commands_ack)
-    csrf.exempt(client_api.client_commands_nack)
+    # Production serves every route from the native ASGI app (asgi.py). This
+    # Flask app only hosts configuration, the database session and login
+    # state for scripts and tests; it registers no routes of its own.
 
     # Background schedulers are no longer started here — that made app
     # construction spawn threads for every script that just wanted a configured

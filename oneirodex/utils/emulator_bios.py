@@ -150,7 +150,7 @@ def bios_status_for_platforms() -> list[dict[str, Any]]:
     nested file here would have this panel call a system ready while the core
     panel called the same file misplaced.
     """
-    from oneirodex.platform import LibraryPlatform, platform_emulator_mapping
+    from oneirodex.platform import platform_emulator_mapping
 
     files = list_bios_files()
     present = {row['name'].lower() for row in files if row['loadable']}

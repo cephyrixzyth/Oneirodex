@@ -546,7 +546,6 @@ def _legacy_other_get_preflight(request, *, flask_app, data, find_user, find_tok
 def _run_legacy_download_game(request, *, flask_app, data, find_user, find_token,
                               commit_token_touch, load_user_id, login_manager,
                               database_scope, game_uuid):
-    from starlette.responses import Response
     from .oidc_status import _login_redirect, _set_session_cookie
     from oneirodex.runtime_native.db_session import native_db as db
     from oneirodex.utils.security_headers import security_header_values

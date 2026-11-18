@@ -70,8 +70,8 @@ def test_css_paints_each_era_from_its_own_theme_folder():
 
 def test_python_shell_builders_include_the_atmosphere_scene_layer():
     partial = '\n'.join(
-        (REPO_ROOT / 'oneirodex' / 'utils' / name).read_text(encoding='utf-8')
-        for name in ('member_spa.py', 'admin_spa.py')
+        (REPO_ROOT / 'oneirodex' / 'runtime_native' / name).read_text(encoding='utf-8')
+        for name in ('member_shell.py', 'admin_pilot.py')
     )
     assert 'od-era-scene' in partial
     # Behind the window/posters/furniture, in front of the wall.

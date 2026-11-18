@@ -274,7 +274,6 @@ def create_admin_discovery_sections_router(
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
                 login_manager=login_manager,
             )
-            from oneirodex.utils.api_contract import api_error_payload, api_ok_payload
             from oneirodex.utils.role_catalog import normalize_role
 
             if request.method not in ('GET', 'HEAD') and auth.token is None:

@@ -371,7 +371,7 @@ class TestGameDetailsErrorHandling:
             sess['_user_id'] = str(test_user.id)
             sess['_fresh'] = True
         
-        with patch('oneirodex.routes_games_ext.details.log_system_event') as mock_log:
+        with patch('oneirodex.utils.event_logging.log_system_event') as mock_log:
             response = client.get(f'/game_details/{nonexistent_uuid}')
         
         assert response.status_code == 404

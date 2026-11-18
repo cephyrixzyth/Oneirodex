@@ -15,7 +15,7 @@ from oneirodex.runtime_native.library_tools_mutations import (
     LibraryToolsMutationData,
     create_library_tools_mutations_router,
 )
-from oneirodex.runtime_native.session_compat import dump_session_cookie, generate_csrf_token
+from oneirodex.runtime_native.session_compat import dump_session_cookie
 
 
 def test_game_path_readability_accepts_a_regular_file(tmp_path):
@@ -28,7 +28,7 @@ def test_game_path_readability_accepts_a_regular_file(tmp_path):
 
 def test_native_library_data_methods_use_scoped_session_without_app_context(monkeypatch):
     import oneirodex
-    from oneirodex.models import Game, Library
+    from oneirodex.models import Game
 
     game = SimpleNamespace(uuid='g1', name='Original', full_disk_path='/safe/Original')
     library = SimpleNamespace(uuid='l1')

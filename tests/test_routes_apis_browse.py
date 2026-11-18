@@ -84,32 +84,4 @@ class TestBrowseFoldersSS:
         response = client.get('/api/browse_folders_ss')
         assert response.status_code == 302  # Redirect due to admin_required decorator
     
-    @patch('oneirodex.routes_apis.browse.os')
-    @patch('oneirodex.routes_apis.browse.current_app', new_callable=MagicMock)
-    def test_nonexistent_directory(self, mock_current_app, mock_os, client, admin_user):
-        """Test handling of nonexistent directories."""
-        # Setup mocks
-        mock_os.name = 'posix'
-        base_dir = '/test/base'
-        
-        mock_current_app.config.get.side_effect = lambda key: {
-            'BASE_FOLDER_POSIX': base_dir,
-            'BASE_FOLDER_WINDOWS': None
-        }.get(key)
-        
-        mock_os.path.abspath.return_value = '/test/base/nonexistent'
-        mock_os.path.join.side_effect = lambda *args: '/'.join(args)
-        mock_os.path.isdir.return_value = False  # Directory doesn't exist
-        
-        # Login as admin
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-        
-        response = client.get('/api/browse_folders_ss', query_string={'path': 'nonexistent'})
-        assert response.status_code == 404
-        
-        data = json.loads(response.data)
-        assert 'error' in data
-        assert 'SS folder browser: Folder not found' in data['error']
     

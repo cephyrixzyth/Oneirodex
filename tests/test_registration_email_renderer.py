@@ -1,4 +1,4 @@
-from oneirodex.routes_login import _registration_confirmation_email
+from oneirodex.runtime_native.auth_registration import _registration_confirmation_email
 
 
 def test_registration_confirmation_email_preserves_copy_and_escapes_url():

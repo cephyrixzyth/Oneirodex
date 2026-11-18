@@ -62,12 +62,8 @@ class TestAdminServerStatusRoute:
         assert response.status_code == 302
         assert '/login' in response.location
 
-    @patch('oneirodex.utils.auth.current_user', new_callable=MagicMock)
-    def test_admin_server_status_requires_admin_role(self, mock_current_user, client, regular_user):
+    def test_admin_server_status_requires_admin_role(self, client, regular_user):
         """Test that admin server status route requires admin role."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'user'
-        mock_current_user.id = regular_user.id
 
         with _signed_in(client, regular_user):
             response = client.get('/admin/server_status_page')
@@ -86,23 +82,7 @@ class TestAdminServerStatusRoute:
 class TestRouteIntegration:
     """Test route integration and blueprint registration."""
 
-    def test_info_blueprint_registration(self, app):
-        """Test that the info blueprint is registered correctly."""
-        with app.app_context():
-            # Check that the route exists
-            rules = [rule.rule for rule in app.url_map.iter_rules()]
-            assert '/admin/server_status_page' in rules
 
-    def test_info_blueprint_has_no_template_context_processor(self, app):
-        """The JSON-only info blueprint no longer injects settings into templates."""
-        with app.app_context():
-            from oneirodex.routes_info import info_bp
-
-            processors = info_bp.template_context_processors.get(None, [])
-            assert all(
-                processor.__name__ == '_default_template_ctx_processor'
-                for processor in processors
-            )
 
 
 class TestUtilityFunctionIntegration:
@@ -110,7 +90,7 @@ class TestUtilityFunctionIntegration:
 
     def test_format_bytes_integration(self, app):
         """Test format_bytes function integration."""
-        from oneirodex.routes_info import format_bytes
+        from oneirodex.utils.system_stats import format_bytes
         
         # Test various byte values
         assert format_bytes(1024) is not None
@@ -119,14 +99,14 @@ class TestUtilityFunctionIntegration:
 
     def test_app_version_import(self, app):
         """Test that app_version is imported correctly."""
-        from oneirodex.routes_info import app_version
+        from oneirodex.runtime_info import app_version
         
         assert app_version is not None
         assert isinstance(app_version, str)
 
     def test_app_start_time_import(self, app):
         """Test that app_start_time is imported correctly."""
-        from oneirodex.routes_info import app_start_time
+        from oneirodex.runtime_info import app_start_time
         
         assert app_start_time is not None
         assert isinstance(app_start_time, datetime)
@@ -158,24 +138,16 @@ class TestOpsLogsApi:
         assert response.status_code == 302
         assert '/login' in response.location
 
-    @patch('oneirodex.utils.auth.current_user', new_callable=MagicMock)
-    def test_requires_admin_role(self, mock_current_user, client, regular_user):
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'user'
-        mock_current_user.id = regular_user.id
+    def test_requires_admin_role(self, client, regular_user):
 
         with _signed_in(client, regular_user):
             response = client.get('/admin/api/ops/logs')
 
             assert response.status_code in [302, 403]
 
-    @patch('oneirodex.utils.auth.current_user', new_callable=MagicMock)
     def test_returns_events_with_the_shape_the_console_renders(
-        self, mock_current_user, client, admin_user
+        self, client, admin_user
     ):
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_current_user.id = admin_user.id
 
         with _signed_in(client, admin_user):
             response = client.get('/admin/api/ops/logs')
@@ -191,12 +163,8 @@ class TestOpsLogsApi:
                     'id', 'timestamp', 'level', 'type', 'text', 'user',
                 }
 
-    @patch('oneirodex.utils.auth.current_user', new_callable=MagicMock)
-    def test_limit_is_clamped(self, mock_current_user, client, admin_user):
+    def test_limit_is_clamped(self, client, admin_user):
         """An unbounded limit would ask the console to render the whole table."""
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_current_user.id = admin_user.id
 
         with _signed_in(client, admin_user):
             response = client.get('/admin/api/ops/logs?limit=99999')
@@ -204,18 +172,14 @@ class TestOpsLogsApi:
             assert response.status_code == 200
             assert len(response.get_json()['events']) <= 200
 
-    @patch('oneirodex.utils.auth.current_user', new_callable=MagicMock)
     def test_retired_server_info_page_is_gone(
-        self, mock_current_user, client, admin_user
+        self, client, admin_user
     ):
         """/admin/new_server_info was folded into Ops (W27-D1).
 
         Asserted here rather than trusted: a retired page that still answers is
         a second copy of the truth, which is what the merge was for.
         """
-        mock_current_user.is_authenticated = True
-        mock_current_user.role = 'admin'
-        mock_current_user.id = admin_user.id
 
         with _signed_in(client, admin_user):
             response = client.get('/admin/new_server_info')

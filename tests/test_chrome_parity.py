@@ -58,20 +58,11 @@ def test_admin_react_pages_retire_their_titles_too():
 
 def test_stylesheet_is_linked_by_each_python_shell_builder():
     """The non-template shells both include shared chrome CSS."""
-    for shell in ('member_spa.py', 'admin_pilot.py'):
-        base = 'runtime_native' if shell == 'admin_pilot.py' else 'utils'
+    for shell in ('member_shell.py', 'admin_pilot.py'):
+        base = 'runtime_native'
         markup = _read(ROOT / 'oneirodex' / base / shell)
         assert 'od-appbar.css' in markup, f'{shell} does not link od-appbar.css'
     assert 'od-appbar.css' in _read(ROOT / 'oneirodex' / 'utils' / 'styleguide_page.py')
-
-
-def test_v2_marker_is_set_by_the_shared_shell_builders():
-    """Page-header retirement remains controlled by the shared feature flag."""
-    member = _read(ROOT / 'oneirodex' / 'utils' / 'member_spa.py')
-    admin = _read(ROOT / 'oneirodex' / 'utils' / 'admin_spa.py')
-    assert 'enable-new-chrome' in member
-    assert 'data-chrome="v2"' in admin
-    assert 'ENABLE_NEW_CHROME' in member and 'ENABLE_NEW_CHROME' in admin
 
 
 def test_the_chrome_stylesheet_stays_syncable_into_every_theme():
@@ -144,14 +135,6 @@ def test_library_tools_and_refresh_all_are_owned_by_react_components():
     assert 'useLibraryRefreshAll' in page
 
 
-def test_scan_document_routes_emit_the_shared_shell_and_defer_content():
-    routes = _read(ROOT / 'oneirodex' / 'routes_admin_ext' / 'scan_management.py')
-    manual = _read(ROOT / 'oneirodex' / 'routes_admin_ext' / 'scan_jobs.py')
-    assert "render_admin_spa(title='Libraries & scans · Oneirodex Admin')" in routes
-    assert "render_admin_spa(title='Libraries & scans · Oneirodex Admin')" in manual
-    assert 'render_template(' not in routes and 'render_template(' not in manual
-
-
 def test_in_page_views_satisfy_what_bootstrap_actually_binds_to():
     """Both of these were checked against the vendored bootstrap 5.3.2 bundle.
 
@@ -218,18 +201,6 @@ def test_libraries_page_has_no_sibling_contextbar():
     """Libraries landing is LHN-only — no duplicate THN strip."""
     markup = _read(LIBRARIES)
     assert 'contextbar' not in markup.lower()
-
-
-def test_libraries_panel_is_not_a_card_inside_the_page_card():
-    """Libraries & scans already has a page shell. A Bootstrap .card around the
-    libraries table was a second frame — the nested-tables complaint."""
-    markup = _read(LIBRARIES)
-    panel = _read(LIBRARIES_PANEL)
-    assert '<LibrariesPanel' in markup
-    assert 'managementActions={' in markup
-    assert 'card' not in panel.lower()
-    route = _read(ROOT / 'oneirodex' / 'routes_library.py')
-    assert "render_admin_spa(title='Libraries & scans - Oneirodex Admin')" in route
 
 
 def test_scan_jobs_and_unmatched_are_not_nested_glass_cards():

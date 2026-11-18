@@ -312,3 +312,14 @@ def build_native_client(app, db_session):
     runtime.config.clear()
     runtime.config.update(pristine)
     return NativeTestClient(asgi_app, runtime.config, source_config=app.config, db_session=db_session, application=app)
+
+
+def served_client(app):
+    """A fresh, signed-out client for the served app, on the test's session.
+
+    Replaces ``app.test_client()`` in tests that need a second client: the
+    Flask app no longer serves any routes.
+    """
+    from oneirodex import db
+
+    return build_native_client(app, db.session)

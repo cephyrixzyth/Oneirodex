@@ -78,7 +78,7 @@ class TestPasswordChange:
     def test_oversized_password_body_is_refused_before_json_parse(
         self, client, member, without_content_length
     ):
-        from oneirodex.routes_apis.account import PASSWORD_CHANGE_BODY_MAX_BYTES
+        from oneirodex.runtime_native.account_password import _PASSWORD_JSON_MAX_BYTES as PASSWORD_CHANGE_BODY_MAX_BYTES
 
         login(client, member)
         body = b'{"padding":"' + b'x' * PASSWORD_CHANGE_BODY_MAX_BYTES + b'"}'

@@ -60,7 +60,7 @@ def test_delete_image_malformed_body_is_422_even_if_scan_running(client, app, ad
     """Validation runs before the in-view scan lock, so `{}` is 422 not 403."""
     _login(client, app, admin_user)
     with patch(
-        'oneirodex.routes_admin_ext.game_images.is_scan_job_running',
+        'oneirodex.utils.scanning.is_scan_job_running',
         return_value=True,
     ):
         response = client.post('/delete_image', json={})

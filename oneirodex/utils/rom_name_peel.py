@@ -15,7 +15,7 @@ from oneirodex.utils.game_name_parse import (
     strip_unbracketed_scene_suffix,
 )
 from oneirodex.utils.rom_archive import ARCHIVE_EXTENSIONS, PLATFORM_DUMP_SUFFIXES
-from oneirodex.utils.rom_language_patterns import LANG_LIST_PAREN_RE, REGION_CAPTURE_RE
+from oneirodex.utils.rom_language_patterns import LANG_LIST_PAREN_RE
 
 # --- Shared peel regex (single source — imported by set_completion + rom_language) ---
 

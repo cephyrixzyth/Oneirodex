@@ -87,7 +87,6 @@ def test_notification_database_failure_is_a_safe_server_error(
     from oneirodex import login_manager
     from oneirodex.runtime_native.notifications import create_notifications_router
     from oneirodex.runtime_native.session_compat import dump_session_cookie
-    from oneirodex.routes_apis import notifications as notification_routes
 
     user_key = str(uuid4())
     flask_user = User(
@@ -106,8 +105,6 @@ def test_notification_database_failure_is_a_safe_server_error(
     def fail_list(*_args, **_kwargs):
         raise failure
 
-    monkeypatch.setattr(notification_routes, 'list_notifications', fail_list)
-    monkeypatch.setattr(notification_routes, 'mark_read', fail_list)
 
     native_user = SimpleNamespace(
         id=flask_user.id,
@@ -204,7 +201,6 @@ def test_notification_preferences_commit_failure_is_a_safe_server_error(
     from oneirodex import login_manager
     from oneirodex.runtime_native.notifications import create_notifications_router
     from oneirodex.runtime_native.session_compat import dump_session_cookie
-    from oneirodex.routes_apis import notifications as notification_routes
 
     user_key = str(uuid4())
     flask_user = User(
@@ -223,7 +219,6 @@ def test_notification_preferences_commit_failure_is_a_safe_server_error(
     def fail_commit(*_args, **_kwargs):
         raise failure
 
-    monkeypatch.setattr(notification_routes.db.session, 'commit', fail_commit)
 
     native_user = SimpleNamespace(
         id=flask_user.id,

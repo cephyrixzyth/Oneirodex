@@ -172,7 +172,7 @@ def test_apply_api_gated_when_apply_off(client, app, admin, tmp_path, monkeypatc
     monkeypatch.setitem(app.config, 'ENABLE_HARDLINK_HELPERS', True)
     monkeypatch.setitem(app.config, 'ALLOW_HARDLINK_APPLY', False)
     monkeypatch.setattr(
-        'oneirodex.routes_apis.storage.get_allowed_base_directories',
+        'oneirodex.utils.security.get_allowed_base_directories',
         lambda _app: [str(tmp_path)],
     )
     resp = client.post(

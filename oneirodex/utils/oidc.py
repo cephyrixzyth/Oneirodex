@@ -137,8 +137,6 @@ def is_oidc_enabled(settings_record=None) -> bool:
     if not get_env_oidc_enabled():
         return False
     if settings_record is None:
-        from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.models import GlobalSettings
 
         settings_record = global_settings_row()
     if not settings_record:
@@ -215,8 +213,6 @@ def oidc_readiness_report(settings_record=None) -> dict[str, Any]:
 
 def build_oidc_config(settings_record=None) -> OidcConfig | None:
     if settings_record is None:
-        from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.models import GlobalSettings
 
         settings_record = global_settings_row()
 

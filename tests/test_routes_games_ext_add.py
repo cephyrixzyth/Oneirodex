@@ -92,63 +92,6 @@ def _login(client, user):
         sess['_fresh'] = True
 
 
-class TestLinkExistingGame:
-    def test_requires_login(self, client):
-        response = client.post('/link_existing_game', data={
-            'game_uuid': str(uuid4()),
-            'full_disk_path': '/allowed/games/new-disk-folder',
-        })
-        assert response.status_code == 302
-
-    def test_requires_admin(self, client, regular_user):
-        _login(client, regular_user)
-        response = client.post('/link_existing_game', data={
-            'game_uuid': str(uuid4()),
-            'full_disk_path': '/allowed/games/new-disk-folder',
-        })
-        assert response.status_code == 302
-
-    def test_missing_fields_redirects_back(self, client, admin_user):
-        _login(client, admin_user)
-        response = client.post('/link_existing_game', data={}, follow_redirects=False)
-        assert response.status_code == 302
-        assert '/add_game_manual' in response.headers['Location']
-
-    def test_unsafe_path_rejected(self, client, admin_user, existing_game):
-        _login(client, admin_user)
-        with patch('oneirodex.routes_games_ext.add.is_safe_path', return_value=(False, 'Access denied')):
-            with patch('oneirodex.routes_games_ext.add.get_allowed_base_directories', return_value=['/allowed']):
-                response = client.post('/link_existing_game', data={
-                    'game_uuid': existing_game.uuid,
-                    'full_disk_path': '/etc/passwd',
-                }, follow_redirects=False)
-
-        assert response.status_code == 302
-        assert '/add_game_manual' in response.headers['Location']
-
-    def test_no_allowed_bases_configured(self, client, admin_user, existing_game):
-        _login(client, admin_user)
-        with patch('oneirodex.routes_games_ext.add.get_allowed_base_directories', return_value=[]):
-            response = client.post('/link_existing_game', data={
-                'game_uuid': existing_game.uuid,
-                'full_disk_path': '/allowed/games/new-disk-folder',
-            }, follow_redirects=False)
-
-        assert response.status_code == 302
-        assert '/add_game_manual' in response.headers['Location']
-
-    def test_nonexistent_game_redirects_back(self, client, admin_user):
-        _login(client, admin_user)
-        with patch('oneirodex.routes_games_ext.add.is_safe_path', return_value=(True, None)):
-            with patch('oneirodex.routes_games_ext.add.get_allowed_base_directories', return_value=['/allowed']):
-                response = client.post('/link_existing_game', data={
-                    'game_uuid': str(uuid4()),
-                    'full_disk_path': '/allowed/games/new-disk-folder',
-                }, follow_redirects=False)
-
-        assert response.status_code == 302
-        assert '/add_game_manual' in response.headers['Location']
-
 class TestAddGameManualIgdbIdPrefill:
     def test_document_title_matches_manual_add_heading(self, client, admin_user, sample_library):
         _login(client, admin_user)

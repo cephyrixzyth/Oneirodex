@@ -450,7 +450,7 @@ class TestArticleRowPayload:
         self, app, db_session, member
     ):
         """`item_kind` says which key to read; sending both would double the payload."""
-        from oneirodex.routes_discover import build_discover_row
+        from oneirodex.utils.discover_builder import build_discover_row
 
         db_session.add(
             Announcement(title='Payload shape', body='b', published=True, created_at=NOW)
@@ -474,7 +474,7 @@ class TestArticleRowPayload:
         assert 'games' not in payload
 
     def test_game_rows_keep_the_games_key(self, app, db_session, member):
-        from oneirodex.routes_discover import build_discover_row
+        from oneirodex.utils.discover_builder import build_discover_row
 
         section = db.session.execute(
             select(DiscoverySection).filter_by(identifier='continue_playing')
@@ -548,7 +548,7 @@ def _seed_extras_missing(db_session):
 
 class TestExtrasMissing:
     def test_hidden_when_empty(self, app, db_session, member):
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
 
         _seed_extras_missing(db_session)
         with app.app_context():
@@ -558,7 +558,7 @@ class TestExtrasMissing:
     def test_shows_engaged_title_with_absent_file(
         self, app, db_session, member, personal_library, global_settings,
     ):
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
 
         _seed_extras_missing(db_session)
         engaged = Game(
@@ -602,7 +602,7 @@ class TestExtrasMissing:
     def test_disc_extras_are_not_acquire_nags(
         self, app, db_session, member, personal_library, global_settings,
     ):
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
 
         _seed_extras_missing(db_session)
         game = Game(

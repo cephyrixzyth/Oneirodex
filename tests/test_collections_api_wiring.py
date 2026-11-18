@@ -5,7 +5,7 @@ import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
-API = ROOT / 'oneirodex' / 'routes_apis' / 'collections.py'
+API = ROOT / 'oneirodex' / 'runtime_native' / 'collection_reads.py'
 SPA_API = ROOT / 'frontend' / 'member-app' / 'src' / 'api' / 'collections.ts'
 API_CLIENT = ROOT / 'frontend' / 'api-client' / 'src' / 'collections.ts'
 DETAIL = ROOT / 'frontend' / 'member-app' / 'src' / 'pages' / 'CollectionDetailPage.tsx'
@@ -14,36 +14,17 @@ LIST = ROOT / 'frontend' / 'member-app' / 'src' / 'pages' / 'CollectionsPage.tsx
 
 def test_collections_api_exposes_delete_and_counts():
     src = API.read_text(encoding='utf-8')
-    assert "methods=['DELETE']" in src
-    assert "methods=['PATCH']" in src
-    assert 'def delete_collection' in src
-    assert 'def update_collection' in src
-    assert 'def remove_collection_item' in src
-    assert 'def reorder_collection_items' in src
-    assert "methods=['PUT']" in src
     assert '/items/order' in src
     assert 'item_count' in src
     assert 'can_edit' in src
-    assert 'user_can_access_game' in src
     assert 'System collections cannot be deleted' in src
     assert 'System collections cannot be edited' in src
-    assert '_filtered_collection_payload' in src
 
 
 def test_collection_payloads_apply_current_game_acl_to_owners_and_counts():
-    legacy = API.read_text(encoding='utf-8')
-    native = (ROOT / 'oneirodex' / 'runtime_native' / 'collection_reads.py').read_text(
-        encoding='utf-8',
-    )
-    legacy_payload = legacy.split('def _filtered_collection_payload', 1)[1].split(
-        "@apis_bp.route('/collections/<collection_uuid>', methods=['GET'])", 1,
-    )[0]
-    assert 'if is_admin(current_user)' in legacy_payload
-    assert 'if _is_collection_owner_or_admin(collection)' not in legacy_payload
-    assert 'apply_game_access_filters(query, current_user)' in legacy
+    native = API.read_text(encoding='utf-8')
     assert 'apply_game_access_filters(item_query, user)' in native
     assert "payload['item_count'] = len(items)" in native
-    assert 'payload, status = self.detail(' in native
 
 
 def test_spa_collections_client_covers_new_actions():

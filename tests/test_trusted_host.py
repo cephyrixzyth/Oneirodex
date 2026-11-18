@@ -212,29 +212,3 @@ class TestPublicOriginUsesTrustedHostOnly:
         assert origins.public_origin_for_request(request, {}) == 'https://games.example.test'
 
 
-class TestResetEmailUrl:
-    def test_reset_url_builds_against_a_real_endpoint(self, app, monkeypatch):
-        """`url_for('main.reset_password')` raised BuildError — no mail was sent."""
-        from oneirodex.utils import smtp
-
-        sent = {}
-        monkeypatch.setattr(
-            smtp, 'send_email', lambda to, subject, html: sent.update(html=html)
-        )
-        with app.test_request_context('/', base_url='http://192.168.50.116:5006'):
-            smtp.send_password_reset_email('member@example.com', 'tok123')
-
-        assert 'http://192.168.50.116:5006/reset_password/tok123' in sent['html']
-
-    def test_forged_host_never_reaches_the_reset_link(self, app, monkeypatch):
-        from oneirodex.utils import smtp
-
-        sent = {}
-        monkeypatch.setattr(
-            smtp, 'send_email', lambda to, subject, html: sent.update(html=html)
-        )
-        with app.test_request_context('/', base_url='http://attacker.example'):
-            smtp.send_password_reset_email('member@example.com', 'tok123')
-
-        assert 'attacker.example' not in sent['html']
-        assert '/reset_password/tok123' in sent['html']

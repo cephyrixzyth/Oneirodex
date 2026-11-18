@@ -138,8 +138,8 @@ _CROPPER_PATH = 'vendor/cropperjs/'
 class TestVendorLoadSites:
     def test_member_and_admin_shells_do_not_load_datatables_or_cropper(self):
         """Shared shells avoid loading table and image-cropper vendors."""
-        for name in ('member_spa.py', 'admin_spa.py'):
-            text = (REPO_ROOT / 'oneirodex' / 'utils' / name).read_text(encoding='utf-8')
+        for name in ('member_shell.py', 'admin_pilot.py'):
+            text = (REPO_ROOT / 'oneirodex' / 'runtime_native' / name).read_text(encoding='utf-8')
             assert _DATATABLES_PATH not in text, name
             assert _CROPPER_PATH not in text, name
 

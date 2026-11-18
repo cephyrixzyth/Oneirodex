@@ -7,7 +7,7 @@ import os
 
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
 
 from .request_auth import request_auth_context
 

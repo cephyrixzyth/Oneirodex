@@ -15,7 +15,6 @@ class ManualIdentifyMutationData:
     """Database and filesystem boundary for manual game identification."""
 
     def update(self, app, game_uuid: str, body, actor):
-        import os
         from datetime import datetime, timezone
 
         from sqlalchemy import select
@@ -134,7 +133,6 @@ class ManualIdentifyMutationData:
         }
 
     def create(self, app, body, actor, *, from_unmatched: bool):
-        import os
         from datetime import datetime, timezone
 
         from sqlalchemy import select

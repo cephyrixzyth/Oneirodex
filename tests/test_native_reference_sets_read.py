@@ -195,40 +195,6 @@ def test_reference_set_delete_checks_csrf_and_keeps_not_found_contract():
     assert calls == [17, 18]
 
 
-def test_reference_set_delete_rejects_paths_flask_integer_converter_does_not_match():
-    from oneirodex.routes_apis.reference_sets import apis_bp
-
-    legacy_app = Flask(__name__)
-    legacy_app.config['SECRET_KEY'] = 'legacy-reference-sets-secret'
-    login_manager = LoginManager()
-    login_manager.init_app(legacy_app)
-    login_manager.login_view = 'login'
-    login_manager.user_loader(lambda _user_id: None)
-    _install_legacy_error_envelope(legacy_app)
-    legacy_app.register_blueprint(apis_bp, url_prefix='/api')
-    legacy_client = legacy_app.test_client()
-    native_client = _client()
-
-    for path in (
-        '/api/reference-sets/not-an-integer',
-        '/api/reference-sets/-1',
-        '/api/admin/reference-sets/not-an-integer',
-        '/api/admin/reference-sets/-1',
-    ):
-        legacy = legacy_client.delete(path)
-        native = native_client.delete(path)
-        assert native.status_code == legacy.status_code == 404
-        if path.startswith('/api/reference-sets/'):
-            # The direct TestClient mounts only this router; the application
-            # 404 handler that supplies Flask's JSON envelope is installed by
-            # the ASGI app and is checked in exact-image parity replays.
-            continue
-        assert native.headers['content-type'].startswith('application/json')
-        assert native.headers['content-type'] == legacy.headers['Content-Type']
-        assert native.json() == legacy.json
-        assert native.headers.get('location') == legacy.headers.get('Location')
-
-
 def test_reference_set_numeric_delete_route_does_not_capture_static_post_actions():
     client = _client()
 
@@ -377,7 +343,6 @@ def test_reference_sets_data_uses_current_catalog_helpers(monkeypatch):
     assert payload['regions'] == ['USA', 'Japan']
     assert payload['sources'] == ['no-intro', 'redump']
     assert payload['max_dat_bytes'] == 33554432
-
 
 
 def test_legacy_reference_sets_form_upload_uses_hidden_csrf_and_redirects():

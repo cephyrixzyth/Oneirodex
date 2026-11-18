@@ -34,7 +34,7 @@ def _styleguide_body() -> str:
 
 def _flash_html(session_data: dict | None = None) -> str:
     if session_data is None:
-        from flask import get_flashed_messages, session
+        from flask import get_flashed_messages
 
         messages = get_flashed_messages(with_categories=True)
     else:

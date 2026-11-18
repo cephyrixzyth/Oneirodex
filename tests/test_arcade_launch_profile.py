@@ -6,6 +6,7 @@ says how the cabinet was driven so the companion can pick a RetroArch remap.
 No ROMs, no MAME sets, no file paths anywhere in this slice.
 """
 from __future__ import annotations
+from tests.fixtures.native_client import served_client
 
 from uuid import uuid4
 
@@ -108,6 +109,6 @@ def test_input_family_is_stored_read_and_validated(client, app, db_session, libr
     assert client.patch(url, json={'rom_path': 'D:/sets/tempest.zip'}).status_code == 422
     assert client.patch(f'/api/games/{uuid4()}/input_family', json={'input_family': 'joystick'}).status_code == 404
 
-    member_client = app.test_client()
+    member_client = served_client(app)
     _login(member_client, app, member)
     assert member_client.patch(url, json={'input_family': 'lightgun'}).status_code in (302, 403)

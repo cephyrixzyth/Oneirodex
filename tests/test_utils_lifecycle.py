@@ -61,7 +61,7 @@ def test_updates_count_zero_does_not_trigger_without_freshness():
 
 
 def test_serialize_discover_game_includes_lifecycle_fields(app):
-    from oneirodex.routes_discover import serialize_discover_game
+    from oneirodex.utils.discover_projections import serialize_discover_game
 
     game = SimpleNamespace(
         id=1,

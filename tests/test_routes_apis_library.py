@@ -498,14 +498,6 @@ class TestGetLibrary:
 class TestLibraryApiBlueprint:
     """Test blueprint registration and URL patterns."""
     
-    def test_library_routes_blueprint_registration(self, app):
-        """Test that library API routes are properly registered."""
-        with app.test_request_context():
-            assert url_for('apis.get_libraries') == '/api/get_libraries'
-            assert url_for('apis.reorder_libraries') == '/api/reorder_libraries'
-            # Note: get_library requires a parameter, so we test with a sample UUID
-            sample_uuid = str(uuid4())
-            assert url_for('apis.get_library', library_uuid=sample_uuid) == f'/api/library/{sample_uuid}'
     
     def test_library_routes_http_methods(self, client, regular_user):
         """Test correct HTTP methods are supported."""

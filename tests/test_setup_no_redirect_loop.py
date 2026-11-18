@@ -100,29 +100,3 @@ class TestStrandedSetupRecovers:
         assert stranded_install.setup_current_step != 1
 
 
-class TestSetupSubmitIsAtomic:
-    def test_user_and_step_advance_share_one_transaction(self):
-        """Guards the shape of the fix, not just its outcome.
-
-        A future edit that reintroduces a commit between adding the user and
-        advancing the step would restore the bricking window while every
-        behavioural test above still passed, because the happy path never
-        exercises the gap.
-        """
-        import inspect
-
-        from oneirodex import routes_setup
-
-        source = inspect.getsource(routes_setup.setup_submit)
-        body = source[source.index('db.session.add(user)'):]
-        advance = body.index('_stage_setup_step(2)')
-        commit = body.index('db.session.commit()')
-
-        assert advance < commit, (
-            'the step advance must be staged before the single commit, not '
-            'committed separately after it'
-        )
-        assert 'set_setup_step(2)' not in body, (
-            'set_setup_step commits on its own — use stage_setup_step inside '
-            'the transaction'
-        )

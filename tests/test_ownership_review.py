@@ -1,13 +1,14 @@
-"""Isolated route/model and migration verification; never load the app factory."""
+"""Ownership review through the served routes, plus model and migration checks; never load the app factory."""
 import importlib.util
 import os
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from flask import Flask
-from flask_login import LoginManager, UserMixin
+from flask_login import UserMixin
 import pytest
 from sqlalchemy import create_engine, inspect, select, text
 
@@ -32,20 +33,80 @@ def test_database_url():
 test_database_url.__test__ = False
 
 
+class _Member(UserMixin):
+    id = 1
+    role = 'user'
+
+
+# The test paths predate the served API; map them onto it.
+_PATHS = [
+    (r'^/match/(\d+)$', r'/api/ownership/titles/\1/match'),
+    (r'^/undo/(\d+)$', r'/api/ownership/titles/\1/match/undo'),
+    (r'^/candidates/(\d+)$', r'/api/ownership/titles/\1/candidates'),
+    (r'^/titles', r'/api/ownership/titles'),
+]
+
+
+class _ServedResponse:
+    def __init__(self, response):
+        self.status_code = response.status_code
+        self._response = response
+
+    @property
+    def json(self):
+        return self._response.json()
+
+
+class _ServedReviewClient:
+    """The served ownership router over this test's database, signed in as member 1."""
+
+    def __init__(self, app, monkeypatch):
+        from contextlib import contextmanager
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from oneirodex.runtime_native import ownership_providers, request_auth
+
+        self.session = {'_user_id': '1'}
+
+        def auth(*_args, **_kwargs):
+            user = _Member() if self.session.get('_user_id') == '1' else None
+            return SimpleNamespace(user=user, token=None, session_data={}, should_set_session_cookie=False,
+                                   has_scope=lambda _scope: True, source='session')
+
+        for module in (ownership_providers, request_auth):
+            monkeypatch.setattr(module, 'request_auth_context', auth)
+        api = FastAPI()
+        api.include_router(ownership_providers.create_ownership_provider_router(
+            app, find_user=lambda _id: _Member(), find_token=lambda _p: None,
+            commit_token_touch=lambda _t: None,
+        ))
+        self._client = TestClient(api, follow_redirects=False)
+
+        @contextmanager
+        def session_transaction():
+            yield self.session
+        self.session_transaction = session_transaction
+
+    def _path(self, path):
+        for pattern, replacement in _PATHS:
+            path, count = re.subn(pattern, replacement, path)
+            if count:
+                break
+        return path
+
+    def get(self, path, **kwargs):
+        return _ServedResponse(self._client.get(self._path(path), **kwargs))
+
+    def post(self, path, **kwargs):
+        return _ServedResponse(self._client.post(self._path(path), **kwargs))
+
+
 @pytest.fixture
 def client(monkeypatch):
-    from oneirodex.routes_apis import ownership
     app = Flask(__name__)
-    app.config.update(TESTING=True, SECRET_KEY='test-only', SQLALCHEMY_DATABASE_URI=test_database_url())
+    app.config.update(TESTING=True, SECRET_KEY='test-only', SQLALCHEMY_DATABASE_URI=test_database_url(),
+                      WTF_CSRF_ENABLED=False)
     db.init_app(app)
-    class Member(UserMixin):
-        id = 1
-    login = LoginManager(app)
-    login.user_loader(lambda uid: Member() if uid == '1' else None)
-    app.add_url_rule('/match/<int:title_id>', view_func=ownership.review_ownership_match, methods=['POST'])
-    app.add_url_rule('/undo/<int:title_id>', view_func=ownership.undo_ownership_match, methods=['POST'])
-    app.add_url_rule('/titles', view_func=ownership.ownership_review_titles)
-    app.add_url_rule('/candidates/<int:title_id>', view_func=ownership.ownership_match_candidates)
     monkeypatch.setattr(ownership_review, 'apply_game_access_filters', lambda q, user: q.where(Game.uuid != HIDDEN))
     with app.app_context():
         with db.engine.begin() as conn:
@@ -62,10 +123,7 @@ def client(monkeypatch):
             UserOwnedTitle(id=2,user_id=2,store='steam',external_app_id='1',matched_game_uuid=A),
         ])
         db.session.commit()
-        client = app.test_client()
-        with client.session_transaction() as session:
-            session['_user_id'] = '1'
-            session['_fresh'] = True
+        client = _ServedReviewClient(app, monkeypatch)
         yield client
         db.session.remove()
         with db.engine.begin() as conn:

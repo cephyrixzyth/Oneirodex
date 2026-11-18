@@ -7,13 +7,12 @@ def _keyring(reusable_secret_keyring):
 import json
 import re
 from html import unescape
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import patch
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from oneirodex import create_app, db
+from oneirodex import db
 from oneirodex.models import User, GlobalSettings, InviteToken, SystemEvents, DownloadRequest, Newsletter, Library
-from oneirodex.forms import SetupForm, IGDBSetupForm
 from sqlalchemy import select, delete
 
 
@@ -76,7 +75,7 @@ def global_settings(db_session):
 @pytest.fixture
 def client(client, request):
     """Signed in as the wizard's admin whenever a test uses ``admin_user``:
-    steps 2-4 belong to the admin created in step 1 (routes_setup._require_setup_admin)."""
+    steps 2-4 belong to the admin created in step 1."""
     if 'admin_user' in request.fixturenames:
         admin = request.getfixturevalue('admin_user')
         with client.session_transaction() as sess:
@@ -103,7 +102,9 @@ def test_a_signed_out_visitor_cannot_change_mail_settings_mid_wizard(app, db_ses
     settings = _park_wizard_at(db_session, 2)
     settings.smtp_server = 'mail.household.lan'
     db_session.commit()
-    visitor = app.test_client()
+    from tests.fixtures.native_client import build_native_client
+
+    visitor = build_native_client(app, db_session)  # signed out
     resp = visitor.post('/setup/smtp', data={'smtp_server': 'evil.example', 'smtp_enabled': 'true'})
     assert resp.status_code == 302 and '/login' in resp.location
     db_session.expire_all()

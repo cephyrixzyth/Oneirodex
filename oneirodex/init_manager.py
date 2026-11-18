@@ -145,7 +145,6 @@ class InitializationManager:
 
             try:
                 # Import models to register them with SQLAlchemy
-                from oneirodex import models
 
                 # Create all tables (idempotent operation)
                 from oneirodex.models.orm import ModelBase

@@ -161,6 +161,3 @@ class TestExtensionsRoute:
             assert test_types[0].value == f'.q1{unique_suffix}'
             assert test_types[2].value == f'.q3{unique_suffix}'
     
-    def test_extensions_route_blueprint_registration(self, app):
-        with app.test_request_context():
-            assert url_for('admin2.extensions') == '/admin/extensions'

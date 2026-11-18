@@ -1,8 +1,5 @@
-import smtplib, socket, traceback
+import smtplib, socket
 from email.message import EmailMessage
-from oneirodex.runtime_native.db_session import native_db as db
-from oneirodex.models import GlobalSettings
-from sqlalchemy import select
 from oneirodex.utils.event_logging import log_system_event
 from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.utils.email_rendering import render_invite_email
@@ -104,103 +101,6 @@ def is_server_reachable(server, port):
         print(f"Error connecting to {server}:{port}: {e}")
         return False
 
-def send_email(to, subject, template):
-    """
-    Send an email with robust error logging and pre-send checks.
-    """
-    from flask import flash
-
-    print("\n=== Starting Email Send Process ===")
-    smtp_settings = get_smtp_settings()
-    
-    if not smtp_settings:
-        print("SMTP settings not configured. Email not sent.")
-        flash("SMTP settings not configured. Email not sent.", "error")
-        return False
-
-    if not smtp_settings.get('SMTP_ENABLED'):
-        print("SMTP is not enabled. Email not sent.")
-        flash("SMTP is not enabled. Email not sent.", "error")
-        return False
-
-    is_valid, error_message = is_smtp_config_valid()
-    if not is_valid:
-        print(f"Invalid SMTP configuration: {error_message}")
-        flash(f"Invalid SMTP configuration: {error_message}", "error")
-        return False
-
-    mail_server = smtp_settings['MAIL_SERVER']
-    mail_port = smtp_settings['MAIL_PORT']
-    
-    print(f"Attempting connection to {mail_server}:{mail_port}")
-    print(f"Using username: {smtp_settings['MAIL_USERNAME']}")
-    print(f"From address: {smtp_settings['MAIL_DEFAULT_SENDER']}")
-    print(f"To address: {to}")
-    print(f"Subject: {subject}")
-
-    if not is_server_reachable(mail_server, mail_port):
-        print(f"Mail server {mail_server}:{mail_port} is unreachable. Email not sent.")
-        flash(f"Mail server {mail_server}:{mail_port} is unreachable. Email not sent.", "error")
-        log_system_event(f"Failed to send email to {to}: Mail server unreachable", event_type='email', event_level='error')
-        return False
-
-    try:
-        print("Creating message object...")
-        msg = EmailMessage()
-        msg.set_content(template, subtype='html')  # Set HTML content
-        msg['Subject'] = subject
-        msg['From'] = smtp_settings['MAIL_DEFAULT_SENDER']
-        msg['To'] = to
-        
-        print("Attempting to send email...")
-        print("=== SMTP Transaction Start ===")
-        with open_smtp_connection(
-            mail_server, mail_port, use_tls=smtp_settings['MAIL_USE_TLS'], timeout=30
-        ) as server:
-            print("1. Server connection established")
-            # No smtplib debug output: it prints the AUTH exchange, which
-            # carries the base64 username and password.
-            
-            if smtp_settings['MAIL_USE_TLS'] and int(mail_port) != 465:
-                print("2. Starting TLS handshake")
-                upgrade_smtp_connection(server, mail_port, use_tls=True)
-                print("3. TLS handshake completed")
-            
-            print("4. Attempting login")
-            server.login(smtp_settings['MAIL_USERNAME'], smtp_settings['MAIL_PASSWORD'])
-            print("5. Login successful")
-            
-            print("6. Sending message")
-            server.send_message(msg)
-            print("7. Message sent successfully")
-            
-        print("=== SMTP Transaction Complete ===")
-        print(f"Email sent successfully to {to}")
-        flash(f"Email sent successfully to {to}", "success")
-        log_system_event(f"Email sent to {to} with subject: {subject}", event_type='email', event_level='information')
-        return True
-        
-    except smtplib.SMTPAuthenticationError as e:
-        print(f"SMTP Authentication failed: {e}")
-        flash(f"SMTP Authentication failed: {e}", "error")
-    except smtplib.SMTPException as e:
-        print(f"SMTP error occurred: {str(e)}")
-        flash(f"SMTP error occurred: {str(e)}", "error")
-    except socket.timeout as e:
-        print(f"Connection timed out: {str(e)}")
-        flash("Connection timed out while sending email", "error")
-    except socket.gaierror as e:
-        print(f"DNS lookup failed: {str(e)}")
-        flash("DNS lookup failed for SMTP server", "error")
-    except Exception as e:
-        print(f"Unexpected error occurred while sending email: {str(e)}")
-        print(f"Error type: {type(e)}")
-        print(f"Error details: {traceback.format_exc()}")
-        flash("An unexpected error occurred while sending the email", "error")
-        log_system_event(f"Failed to send email to {to}: {traceback.format_exc()}", event_type='email', event_level='error')
-    print("=== Email Send Process Failed ===\n")
-    return False
-
 
 def send_email_quiet(to, subject, html_body, *, preflight=False, audit_user=None):
     """
@@ -263,39 +163,8 @@ def send_email_quiet(to, subject, html_body, *, preflight=False, audit_user=None
         return False
 
 
-def send_password_reset_email(user_email, token):
-    # Two fixes in one line. The endpoint is `login.reset_password` — there has
-    # never been a reset_password rule on the old `main` blueprint, so the
-    # earlier build against that name raised BuildError and no reset mail was
-    # ever sent. And `_external=True`
-    # took the origin from the request's Host header, which an unauthenticated
-    # caller controls; `public_origin()` prefers Site URL and only falls back to
-    # a *trusted* request host. See oneirodex/utils/trusted_host.py.
-    from oneirodex.utils.public_origin import public_origin
-    from flask import url_for
-
-    reset_path = url_for('login.reset_password', token=token)
-    reset_url = f"{public_origin()}{reset_path}"
-    html = f'''<p>You requested a password reset for your Oneirodex account.</p>
-
-<p>Use the link below to choose a new password:</p>
-
-<p><a href="{reset_url}">Password Reset Link</a></p>
-
-<p>If you did not request this, you can ignore this message.</p>
-
-<p>Oneirodex</p>'''
-
-    from oneirodex.product import PRODUCT_NAME
-
-    subject = f'{PRODUCT_NAME} password reset request'
-    send_email(user_email, subject, html)
     
     
-def send_invite_email(email, invite_url):
-    subject = "You're Invited!"
-    html_content = render_invite_email(invite_url)
-    send_email(email, subject, html_content)
 
 
 def send_invite_email_quiet(email, invite_url, *, audit_user=None):

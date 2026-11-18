@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from werkzeug.datastructures import FileStorage
 
-from oneirodex.routes_apis.emulator_cheats import _game_cheat_surface, _refuse_non_retroarch
+from oneirodex.runtime_native.emulator_mutations import EmulatorMutationData
 from oneirodex.utils.emulator_cheats import (
     build_cht_text,
     create_cheat_file,
@@ -200,20 +200,14 @@ def test_create_path_acl_uuid_and_traversal(app, tmp_path, monkeypatch):
             read_cheat_file(game_uuid, '../../../outside.cht')
 
 
-def test_cheat_surface_pc_refuses_cht_mutations(app):
-    """Wave 19 GM: NATIVE_PC → pc_wand; mutating .cht returns 403."""
+def test_cheat_surface_is_pc_wand_for_native_pc_and_retroarch_otherwise(app):
+    """Wave 19 GM: NATIVE_PC games use the PC trainer surface, not .cht files."""
     pc_game = SimpleNamespace(
         library=SimpleNamespace(platform=SimpleNamespace(name='PCWIN')),
     )
     nes_game = SimpleNamespace(
         library=SimpleNamespace(platform=SimpleNamespace(name='NES')),
     )
-    with app.app_context():
-        assert _game_cheat_surface(pc_game) == 'pc_wand'
-        assert _game_cheat_surface(nes_game) == 'retroarch'
-        refused = _refuse_non_retroarch(pc_game)
-        assert refused is not None
-        body, status = refused
-        assert status == 403
-        assert body.get_json()['cheat_surface'] == 'pc_wand'
-        assert _refuse_non_retroarch(nes_game) is None
+    data = EmulatorMutationData()
+    assert data.cheat_surface(pc_game) == 'pc_wand'
+    assert data.cheat_surface(nes_game) == 'retroarch'

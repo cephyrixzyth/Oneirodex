@@ -1,4 +1,4 @@
-﻿"""Tests for GET /api/my_downloads."""
+"""Tests for GET /api/my_downloads."""
 
 from uuid import uuid4
 
@@ -77,9 +77,6 @@ def test_my_downloads_requires_login(client):
     assert client.get('/api/my_downloads').status_code in (401, 302)
 
 
-def test_my_downloads_route_registered(app):
-    rules = {rule.rule for rule in app.url_map.iter_rules()}
-    assert '/api/my_downloads' in rules
 
 
 def test_my_downloads_lists_current_user_requests(auth_client, download_request_factory):

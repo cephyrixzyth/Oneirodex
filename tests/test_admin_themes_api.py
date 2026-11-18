@@ -33,7 +33,7 @@ def test_theme_inventory_requires_admin(client, db_session):
 def test_theme_upload_rejects_non_zip_before_manager(client, db_session):
     _login(client, _admin(db_session))
     manager = MagicMock()
-    with patch('oneirodex.routes_apis.admin_themes.ThemeManager', return_value=manager):
+    with patch('oneirodex.utils.themes.ThemeManager', return_value=manager):
         response = client.post('/api/admin/themes', data={'theme_zip': (BytesIO(b'not a zip'), 'theme.zip')}, content_type='multipart/form-data')
     assert response.status_code == 400
     assert response.get_json()['error_code'] == 'bad_request'
@@ -42,7 +42,7 @@ def test_theme_upload_rejects_non_zip_before_manager(client, db_session):
 
 def test_loading_icon_inventory_requires_admin(client, db_session):
     _login(client, _admin(db_session))
-    with patch('oneirodex.routes_apis.admin_themes.get_loading_icon_settings', return_value={'catalogue': [{'id': 'dpad'}], 'loading_icon_mode': 'rotate'}):
+    with patch('oneirodex.utils.loading_icons.get_loading_icon_settings', return_value={'catalogue': [{'id': 'dpad'}], 'loading_icon_mode': 'rotate'}):
         response = client.get('/api/admin/themes/loading-icons')
     assert response.status_code == 200
     assert response.get_json()['ok'] is True
@@ -51,7 +51,7 @@ def test_loading_icon_inventory_requires_admin(client, db_session):
 
 def test_json_theme_reset_uses_shared_reset_and_returns_status(client, db_session):
     _login(client, _admin(db_session))
-    with patch('oneirodex.routes_admin_ext.themes.perform_default_theme_reset', return_value=(True, 'Defaults reset.')):
+    with patch('oneirodex.utils.theme_reset.reset_default_theme_assets', return_value=(True, 'Defaults reset.')):
         response = client.post('/admin/themes/reset', json={})
     assert response.status_code == 200
     assert response.get_json()['ok'] is True

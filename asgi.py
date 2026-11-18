@@ -5798,4 +5798,22 @@ class LazyASGIApp:
                 return
 
 
+def _configure_process_logging():
+    """Install the app's logging config for the served process.
+
+    ``create_app()`` used to do this, but the served runtime never builds the
+    Flask app, so ONEIRODEX_LOG_LEVEL / ONEIRODEX_LOG_JSON had no effect and
+    INFO records went nowhere. Skipped under pytest, whose log capture owns
+    the root logger there.
+    """
+    import sys
+
+    if 'pytest' in sys.modules:
+        return
+    from oneirodex.utils.logging_setup import configure_logging
+
+    configure_logging()
+
+
+_configure_process_logging()
 asgi_app = LazyASGIApp()

@@ -1,6 +1,7 @@
 """Wave 16 — chat message file/image attachments."""
 
 from __future__ import annotations
+from tests.fixtures.native_client import served_client
 
 from io import BytesIO
 from uuid import uuid4
@@ -248,7 +249,7 @@ class _As:
     the cache is dropped before each request made as a different user."""
 
     def __init__(self, app, user=None):
-        self.client = app.test_client()
+        self.client = served_client(app)
         if user is not None:
             with self.client.session_transaction() as sess:
                 sess['_user_id'] = user.get_id()

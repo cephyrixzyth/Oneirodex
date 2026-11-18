@@ -5,14 +5,6 @@ from datetime import datetime, timedelta
 from oneirodex.models import User, SystemEvents, DiscoverySection, Game, Library
 from oneirodex.platform import LibraryPlatform
 from oneirodex import db
-from oneirodex.routes_admin_ext.system import (
-    validate_pagination_params, 
-    parse_date_filter, 
-    validate_json_request,
-    DEFAULT_PER_PAGE,
-    MAX_PER_PAGE,
-    DATE_FORMAT
-)
 from uuid import uuid4
 import json
 
@@ -138,94 +130,6 @@ def test_games_for_zones(db_session, test_libraries_for_zones):
         db_session.add(game)
     db_session.commit()
     return games
-
-
-class TestHelperFunctions:
-    """Test helper functions in the system module."""
-    
-    def test_validate_pagination_params_normal_values(self):
-        """Test pagination validation with normal values."""
-        page, per_page = validate_pagination_params(5, 25)
-        assert page == 5
-        assert per_page == 25
-    
-    def test_validate_pagination_params_negative_page(self):
-        """Test pagination validation with negative page."""
-        page, per_page = validate_pagination_params(-1, 25)
-        assert page == 1
-        assert per_page == 25
-    
-    def test_validate_pagination_params_zero_page(self):
-        """Test pagination validation with zero page."""
-        page, per_page = validate_pagination_params(0, 25)
-        assert page == 1
-        assert per_page == 25
-    
-    def test_validate_pagination_params_excessive_per_page(self):
-        """Test pagination validation with excessive per_page."""
-        page, per_page = validate_pagination_params(1, 500)
-        assert page == 1
-        assert per_page == MAX_PER_PAGE
-    
-    def test_validate_pagination_params_zero_per_page(self):
-        """Test pagination validation with zero per_page."""
-        page, per_page = validate_pagination_params(1, 0)
-        assert page == 1
-        assert per_page == 1
-    
-    def test_parse_date_filter_valid_date(self):
-        """Test date parsing with valid date."""
-        result = parse_date_filter('2024-01-15')
-        assert result is not None
-        assert result.year == 2024
-        assert result.month == 1
-        assert result.day == 15
-    
-    def test_parse_date_filter_invalid_date(self):
-        """Test date parsing with invalid date."""
-        result = parse_date_filter('invalid-date')
-        assert result is None
-    
-    def test_parse_date_filter_empty_string(self):
-        """Test date parsing with empty string."""
-        result = parse_date_filter('')
-        assert result is None
-    
-    def test_parse_date_filter_none(self):
-        """Test date parsing with None."""
-        result = parse_date_filter(None)
-        assert result is None
-    
-    def test_parse_date_filter_wrong_format(self):
-        """Test date parsing with wrong format."""
-        result = parse_date_filter('15-01-2024')
-        assert result is None
-    
-    def test_validate_json_request_valid_data(self):
-        """Test JSON validation with valid data."""
-        data = {'section_id': 1, 'is_visible': True}
-        is_valid, error_msg = validate_json_request(data, ['section_id', 'is_visible'])
-        assert is_valid is True
-        assert error_msg is None
-    
-    def test_validate_json_request_missing_field(self):
-        """Test JSON validation with missing field."""
-        data = {'section_id': 1}
-        is_valid, error_msg = validate_json_request(data, ['section_id', 'is_visible'])
-        assert is_valid is False
-        assert error_msg == 'Missing required field: is_visible'
-    
-    def test_validate_json_request_no_data(self):
-        """Test JSON validation with no data."""
-        is_valid, error_msg = validate_json_request(None, ['section_id'])
-        assert is_valid is False
-        assert error_msg == 'No JSON data provided'
-    
-    def test_validate_json_request_empty_dict(self):
-        """Test JSON validation with empty dict."""
-        is_valid, error_msg = validate_json_request({}, ['section_id'])
-        assert is_valid is False
-        assert error_msg == 'Missing required field: section_id'
 
 
 class TestSystemLogsRoute:
@@ -766,31 +670,4 @@ class TestClearSystemLogsAPI:
         assert 'System logs cleared by admin user' in remaining_log.event_text
 
 
-class TestSystemIntegrationExtended:
-    """Additional integration tests for system functionality."""
-    
-    def test_system_logs_redirects_to_ops_full_log(self, client, admin_user, sample_system_events):
-        """The browse UI moved to Ops (UID-034); the old path is a bookmark redirect.
-
-        This test asserted 200 with filters applied until 2026-09-06 — it had been
-        failing since the page was retired on 2026-09-01, describing a screen that
-        no longer exists. Filtering is exercised where it now lives, on Ops.
-        """
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin_user.id)
-            sess['_fresh'] = True
-
-        yesterday = (datetime.now() - timedelta(days=1)).strftime(DATE_FORMAT)
-        params = {
-            'event_type': 'admin_action',
-            'event_level': 'information',
-            'date_from': yesterday,
-            'per_page': 10
-        }
-
-        query_string = '&'.join([f'{k}={v}' for k, v in params.items()])
-        response = client.get(f'/admin/system_logs?{query_string}')
-
-        assert response.status_code == 302
-        assert '/admin/ops' in response.headers['Location']
     

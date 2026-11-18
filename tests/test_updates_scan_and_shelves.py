@@ -87,7 +87,7 @@ class TestUpdatesScanRoute:
         assert response.status_code in (302, 401)
 
     def test_sweeps_unprobed_titles_oldest_first_and_reports_what_is_left(
-        self, app, db_session, scan_user, scan_library, monkeypatch
+        self, app, client, db_session, scan_user, scan_library, monkeypatch
     ):
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         # Three never probed, one probed an hour ago. `only_stale` defaults on,
@@ -104,7 +104,7 @@ class TestUpdatesScanRoute:
 
         probed = []
 
-        def fake_check(game, *, commit=False, db_session=None):
+        def fake_check(game, *, commit=False, db_session=None, **_kwargs):
             probed.append(game.name)
             return {'status': 'behind'}
 
@@ -116,16 +116,11 @@ class TestUpdatesScanRoute:
         # fresh uuid, so this pins the sweep to the four games above — without
         # it the batch is every due game in `oneirodextest`, which nothing ever
         # cleans up, and `remaining` counts years of other test files' fixtures.
-        with app.test_request_context(
-            '/api/updates/scan',
-            json={'limit': 2, 'library_uuid': scan_library.uuid},
-        ):
-            from flask_login import login_user
-
-            login_user(scan_user)
-            from oneirodex.routes_apis.updates import updates_scan
-
-            body = _body(updates_scan())
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(scan_user.id)
+            sess['_fresh'] = True
+        response = client.post('/api/updates/scan', json={'limit': 2, 'library_uuid': scan_library.uuid})
+        body = response.get_json()
         assert body['ok'] is True
         assert body['checked'] == 2
         assert body['behind_count'] == 2
@@ -136,13 +131,13 @@ class TestUpdatesScanRoute:
         assert recent.name not in probed
 
     def test_a_failing_title_does_not_end_the_sweep(
-        self, app, db_session, scan_user, scan_library, monkeypatch, caplog
+        self, app, client, db_session, scan_user, scan_library, monkeypatch, caplog
     ):
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         _game(db_session, scan_library, 'Aaa breaks', created=now)
         _game(db_session, scan_library, 'Bbb works', created=now)
 
-        def fake_check(game, *, commit=False, db_session=None):
+        def fake_check(game, *, commit=False, db_session=None, **_kwargs):
             if 'breaks' in game.name:
                 raise RuntimeError('store timed out')
             return {'status': 'current'}
@@ -153,17 +148,11 @@ class TestUpdatesScanRoute:
 
         # Scoped for the same reason as above: an unscoped sweep checks every
         # due game in the shared test database, not the two created here.
-        with app.test_request_context(
-            '/api/updates/scan', json={'library_uuid': scan_library.uuid}
-        ):
-            from flask_login import login_user
-
-            login_user(scan_user)
-            from oneirodex.routes_apis.updates import updates_scan
-
-            response = updates_scan()
-
-        body = _body(response)
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(scan_user.id)
+            sess['_fresh'] = True
+        response = client.post('/api/updates/scan', json={'library_uuid': scan_library.uuid})
+        body = response.get_json()
         # One error, one success — a single unreachable store must not cost the
         # member the rest of the batch.
         assert body['checked'] == 1
@@ -172,18 +161,18 @@ class TestUpdatesScanRoute:
         assert 'store timed out' not in body['errors'][0]['error']
         assert any('store timed out' in record.message for record in caplog.records)
 
-    def test_limit_is_clamped(self, app, db_session, scan_user, scan_library, monkeypatch):
+    def test_limit_is_clamped(self, app, client, db_session, scan_user, scan_library, monkeypatch):
         monkeypatch.setattr(
             'oneirodex.utils.freshness.check_and_store_freshness',
             lambda game, **kwargs: {'status': 'current'},
         )
-        with app.test_request_context('/api/updates/scan', json={'limit': 5000}):
-            from flask_login import login_user
+        from oneirodex.runtime_native.updates_scan import UPDATES_SCAN_MAX
 
-            login_user(scan_user)
-            from oneirodex.routes_apis.updates import UPDATES_SCAN_MAX, updates_scan
-
-            body = _body(updates_scan())
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(scan_user.id)
+            sess['_fresh'] = True
+        response = client.post('/api/updates/scan', json={'limit': 5000, 'library_uuid': scan_library.uuid})
+        body = response.get_json()
         # Each title is a live store probe, so an unbounded sweep would sit on a
         # request thread for minutes and rate-limit the caller out of the stores.
         assert body['limit'] == UPDATES_SCAN_MAX
@@ -276,7 +265,7 @@ class TestLatestGamesIsNewestReleased:
     def test_latest_orders_by_release_and_excludes_the_unreleased(
         self, app, db_session, scan_user, scan_library
     ):
-        from oneirodex.routes_discover import build_discover_sections
+        from oneirodex.utils.discover_builder import build_discover_sections
 
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         # The release dates are minutes apart rather than years, because the

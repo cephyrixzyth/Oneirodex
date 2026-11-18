@@ -23,8 +23,18 @@ def _user(db_session, *, role='user', prefix='sweep', **extra) -> User:
     return user
 
 
+def _served(app, db_session=None):
+    """A client for the app production serves, on this test's database."""
+    from sqlalchemy.orm import object_session  # noqa: F401
+    from tests.fixtures.native_client import build_native_client
+
+    return build_native_client(app, db_session)
+
+
 def _as(app, user):
-    client = app.test_client()
+    from sqlalchemy.orm import object_session
+
+    client = _served(app, object_session(user))
     with client.session_transaction() as sess:
         sess['_user_id'] = user.get_id()
         sess['_fresh'] = True
@@ -40,8 +50,14 @@ def _fresh_g():
 
 # -- sessions end when the account is disabled or the password changes ------
 
+def _loader(db_session):
+    from oneirodex.runtime_native.auth_resolver import load_active_user_id
+
+    return lambda identity, **kw: load_active_user_id(identity, lambda i: db_session.get(User, i), **kw)
+
+
 def test_a_session_ends_when_the_password_changes(app, db_session):
-    from oneirodex.utils.auth import load_user
+    load_user = _loader(db_session)
 
     user = _user(db_session)
     old_session = user.get_id()
@@ -53,7 +69,7 @@ def test_a_session_ends_when_the_password_changes(app, db_session):
 
 
 def test_a_disabled_account_keeps_no_session(app, db_session):
-    from oneirodex.utils.auth import load_user
+    load_user = _loader(db_session)
 
     user = _user(db_session)
     session_id = user.get_id()
@@ -63,13 +79,12 @@ def test_a_disabled_account_keeps_no_session(app, db_session):
     assert not user.is_active
 
 
-def test_a_bare_id_session_is_refused_outside_tests(app, db_session, monkeypatch):
-    from oneirodex.utils.auth import load_user
+def test_a_bare_id_session_is_refused(app, db_session):
+    load_user = _loader(db_session)
 
     user = _user(db_session)
-    assert load_user(str(user.id)) is user  # tests fake logins this way
-    monkeypatch.setattr(app, 'testing', False)
     assert load_user(str(user.id)) is None, 'sessions made before fingerprints existed'
+    assert load_user(str(user.id), allow_legacy_id=True) is user
 
 
 def test_changing_your_own_password_keeps_you_signed_in(app, db_session):
@@ -100,7 +115,7 @@ def test_a_companion_token_owned_by_an_admin_cannot_reach_admin_routes(app, db_s
     admin = _user(db_session, role='admin', prefix='sweep_admin')
     _row, companion = generate_api_token(admin, 'desktop', ['read:library', 'write:download'])
     _row, full = generate_api_token(admin, 'ops', ['admin'])
-    client = app.test_client()
+    client = _served(app, db_session)
     resp = client.get('/api/admin/ownership/connections', headers={'Authorization': f'Bearer {companion}'})
     assert resp.status_code == 403
     _fresh_g()
@@ -225,9 +240,8 @@ def test_an_invite_registers_exactly_one_account(app, db_session, monkeypatch):
     """The claim used to run before the user row existed (used_by references
     users.user_id), so every invite registration failed with an IntegrityError."""
     from oneirodex.models import InviteToken
-    import oneirodex.routes_login as routes_login
 
-    monkeypatch.setattr(routes_login, 'send_email', lambda *a, **k: None)
+    monkeypatch.setattr('oneirodex.utils.smtp.send_email_quiet', lambda *a, **k: True)
     inviter = _user(db_session, prefix='inviter')
     invite = InviteToken(token=f'inv-{uuid4().hex}', creator_user_id=inviter.user_id)
     db_session.add(invite)
@@ -235,7 +249,7 @@ def test_an_invite_registers_exactly_one_account(app, db_session, monkeypatch):
     token = invite.token
 
     def register(name):
-        return app.test_client().post(f'/register?token={token}', data={
+        return _served(app, db_session).post(f'/api/auth/register?token={token}', json={
             'username': name, 'email': f'{name}@example.com', 'password': 'long-enough-1'})
 
     first, second = f'guest{uuid4().hex[:6]}', f'guest{uuid4().hex[:6]}'
@@ -253,10 +267,9 @@ def test_an_invite_registers_exactly_one_account(app, db_session, monkeypatch):
 def test_mixed_case_registration_email_confirms_successfully(app, db_session, monkeypatch):
     """Stored email is normalized, and confirmation must use the same identity."""
     from oneirodex.models import InviteToken
-    import oneirodex.routes_login as routes_login
 
     sent = []
-    monkeypatch.setattr(routes_login, 'send_email', lambda *a, **k: sent.append(a))
+    monkeypatch.setattr('oneirodex.utils.smtp.send_email_quiet', lambda *a, **k: sent.append(a) or True)
     inviter = _user(db_session, prefix='mixed_case_inviter')
     invite = InviteToken(token=f'inv-{uuid4().hex}', creator_user_id=inviter.user_id)
     db_session.add(invite)
@@ -264,10 +277,10 @@ def test_mixed_case_registration_email_confirms_successfully(app, db_session, mo
     email = f'Alice.{uuid4().hex[:6]}@Example.com'
     username = f'mixedcase{uuid4().hex[:8]}'
 
-    response = app.test_client().post(f'/register?token={invite.token}', data={
+    response = _served(app, db_session).post(f'/api/auth/register?token={invite.token}', json={
         'username': username, 'email': email, 'password': 'long-enough-1',
     })
-    assert response.status_code == 302
+    assert response.status_code == 202
     db_session.expire_all()
     user = db_session.query(User).filter_by(name=username).one()
     assert user.email == email.lower()
@@ -282,7 +295,7 @@ def test_mixed_case_registration_email_confirms_successfully(app, db_session, mo
 
     # /confirm/<token> now serves the static React shell. The API owns the
     # one-time state transition; Flask's test client does not execute the SPA.
-    client = app.test_client()
+    client = _served(app, db_session)
     inspected = client.get(f'/api/auth/confirm/{verification_token}')
     assert inspected.status_code == 200
     assert inspected.get_json()['confirmed'] is False
@@ -301,20 +314,22 @@ def test_mixed_case_registration_email_confirms_successfully(app, db_session, mo
 
 def test_registration_confirmation_link_ignores_host_header(app, db_session, monkeypatch):
     from oneirodex.models import InviteToken
-    import oneirodex.routes_login as routes_login
+    from oneirodex.utils.global_settings import global_settings_row_or_create
 
     sent = []
-    monkeypatch.setattr(routes_login, 'send_email', lambda *args, **kwargs: sent.append(args))
-    monkeypatch.setattr(routes_login, 'public_origin', lambda: 'https://library.example')
+    monkeypatch.setattr('oneirodex.utils.smtp.send_email_quiet', lambda *args, **kwargs: sent.append(args) or True)
+    settings = global_settings_row_or_create()
+    settings.site_url = 'https://library.example'
+    db_session.commit()
     inviter = _user(db_session, prefix='host_header_inviter')
     invite = InviteToken(token=f'inv-{uuid4().hex}', creator_user_id=inviter.user_id)
     db_session.add(invite)
     db_session.commit()
 
-    app.test_client().post(
-        f'/register?token={invite.token}',
-        base_url='http://attacker.example',
-        data={
+    _served(app, db_session).post(
+        f'/api/auth/register?token={invite.token}',
+        headers={'Host': 'attacker.example'},
+        json={
             'username': f'hostguard{uuid4().hex[:8]}',
             'email': f'{uuid4().hex}@example.com',
             'password': 'long-enough-1',
@@ -333,7 +348,7 @@ def test_a_token_cannot_mint_a_broader_token(app, db_session):
     admin = _user(db_session, role='admin', prefix='mint_admin')
     _row, companion = generate_api_token(admin, 'desktop', ['read:library', 'write:download'])
     bearer = {'Authorization': f'Bearer {companion}'}
-    client = app.test_client()
+    client = _served(app, db_session)
     resp = client.post('/api/tokens', json={'name': 'x', 'scopes': ['admin']}, headers=bearer)
     assert resp.status_code == 403
     _fresh_g()

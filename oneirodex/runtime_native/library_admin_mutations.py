@@ -637,7 +637,6 @@ async def _handle(request, flask_app, data, *, action, find_user, find_token,
         )
         from .csrf_compat import csrf_error_response
         from .csrf_compat import csrf_html_error_response
-        from .acquire_status import _login_redirect
 
         csrf_token = None
         delete_payload = None
@@ -819,7 +818,7 @@ async def _create(request, app, data, user):
         _, content = image
         if len(content) > LIBRARY_IMAGE_MAX_BYTES:
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
-        from PIL import Image as PILImage, UnidentifiedImageError
+        from PIL import UnidentifiedImageError
         try:
             from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 
@@ -869,7 +868,7 @@ async def _update(request, app, data, user, library_uuid):
         _, content = image
         if len(content) > LIBRARY_IMAGE_MAX_BYTES:
             return _error('Library image must be 10 MB or smaller.', 'bad_request', 400)
-        from PIL import Image as PILImage, UnidentifiedImageError
+        from PIL import UnidentifiedImageError
         try:
             from oneirodex.utils.image_upload_limits import run_image_work_in_threadpool
 

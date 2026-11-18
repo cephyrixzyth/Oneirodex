@@ -103,7 +103,7 @@ def test_interactive_sender_uses_implicit_tls_for_port_465():
         patch('oneirodex.utils.smtp_transport.smtplib.SMTP_SSL', return_value=connection) as ssl_smtp,
         patch('oneirodex.utils.smtp_transport.smtplib.SMTP') as plain_smtp,
     ):
-        assert smtp.send_email('to@example.com', 'Subject', '<p>Body</p>') is True
+        assert smtp.send_email_quiet("to@example.com", "Subject", "<p>Body</p>", preflight=True) is True
 
     ssl_smtp.assert_called_once()
     plain_smtp.assert_not_called()

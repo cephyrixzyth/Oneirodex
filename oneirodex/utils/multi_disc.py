@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import select
 
 from oneirodex.runtime_native.db_session import native_db as db
-from oneirodex.models import Game, GameExtra
+from oneirodex.models import GameExtra
 from oneirodex.utils.rom_name_peel import (
     capture_disc_index,
     parse_console_rom_label,

@@ -348,6 +348,22 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker('slow')
 
 
+@pytest.fixture(autouse=True)
+def _no_background_image_refresh():
+    """Requests in tests never start the real image-refresh worker.
+
+    It calls IGDB and writes files from a daemon thread that outlives the test,
+    on the test's shared connection; one left running aborted a later test's
+    transaction in CI. Tests of the worker import it directly and are unaffected.
+    Uses its own patch rather than ``monkeypatch``: requesting ``monkeypatch``
+    from an autouse fixture would change every test's teardown order.
+    """
+    from unittest.mock import patch
+
+    with patch('oneirodex.utils.scanning.refresh_images_in_background', lambda *_a, **_k: None):
+        yield
+
+
 @pytest.fixture(scope='function')
 def client(app, db_session):
     """A client for the app production serves (the native ASGI runtime).

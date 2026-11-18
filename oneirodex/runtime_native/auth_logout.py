@@ -59,6 +59,15 @@ def create_auth_logout_router(flask_app: FastAPI, *, database_scope=None):
         session_data.pop(str(config.get('WTF_CSRF_FIELD_NAME') or 'csrf_token'), None)
         original = dict(session_data)
         identity = session_data.get('_user_id')
+        if not identity:
+            # Signed in only by the remember cookie: revoke that login too, or
+            # a copy of the cookie would keep working after sign-out.
+            from oneirodex.runtime_native.auth_resolver import decode_remember_cookie
+
+            identity = decode_remember_cookie(
+                request.cookies.get(config.get('REMEMBER_COOKIE_NAME', 'remember_token')),
+                config.get('SECRET_KEY') or '',
+            )
         if (
             identity
             and config.get('PERSISTENT_SESSIONS_ENABLED', not config.get('TESTING'))

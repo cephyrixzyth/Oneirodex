@@ -14,7 +14,6 @@ from uuid import uuid4
 from oneirodex import db
 from oneirodex.models import Game, Library, User, user_game_status
 from oneirodex.platform import LibraryPlatform
-from oneirodex.routes_apis.game_batch import BATCH_STATUS_VALUES
 from oneirodex.utils.discover_ml.scoring import already_engaged
 from oneirodex.utils.play_status import PLAY_STATUS_VALUES, WONT_PLAY
 
@@ -92,12 +91,6 @@ def test_another_members_no_does_not_narrow_your_shelves(db_session):
 
     assert game.uuid not in already_engaged(mine.id)
     assert game.uuid in already_engaged(theirs.id)
-
-
-def test_the_batch_bar_can_set_every_status_the_tile_menu_offers(db_session):
-    """It could set four of five; the fifth was refused with no explanation."""
-    assert WONT_PLAY in BATCH_STATUS_VALUES
-    assert BATCH_STATUS_VALUES == PLAY_STATUS_VALUES
 
 
 def test_the_vocabulary_has_one_definition():

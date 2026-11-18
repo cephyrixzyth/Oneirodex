@@ -1164,27 +1164,6 @@ def test_local_cover_honours_a_range_request(client, cover_game):
     assert response.headers['Content-Range'] == f'bytes 2-5/{len(b"""\xff\xd8REAL-COVER""")}'
 
 
-@pytest.mark.skipif(os.name == 'nt', reason='Windows denies unlinking a file held by an open descriptor')
-def test_local_cover_serves_what_was_vetted_when_the_file_is_swapped_while_logging(client, cover_game, secret, monkeypatch):
-    from oneirodex.routes_games_ext import details
-
-    real_log = details.log_system_event
-
-    def log_then_swap(text, *args, **kwargs):
-        if text.startswith('Serving local'):
-            _swap_for_link(cover_game.folder / 'cover.jpg', secret)  # after the old is_plain_file_within check
-        return real_log(text, *args, **kwargs)
-
-    monkeypatch.setattr(details, 'log_system_event', log_then_swap)
-    response = client.get(f'/game/{cover_game.game.uuid}/local_image/cover')
-    data = response.data
-    response.close()
-
-    assert response.status_code == 200
-    assert SECRET not in data
-    assert data == b'\xff\xd8REAL-COVER'
-
-
 def test_local_cover_of_a_game_folder_swapped_after_the_path_check_is_not_served(client, cover_game, secret, monkeypatch):
     from oneirodex.utils import security
 

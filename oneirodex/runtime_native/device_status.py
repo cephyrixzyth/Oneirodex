@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
 from werkzeug.datastructures import MultiDict
 
 from .oidc_status import _login_redirect

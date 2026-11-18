@@ -53,7 +53,7 @@ def _login(client, app, account):
 
 def test_support_ticket_title_only_optional_symptom_logs(client, app, db_session, member_user):
     _login(client, app, member_user)
-    with patch('oneirodex.routes_apis.support.create_github_issue', return_value={'ok': False, 'skipped': True}):
+    with patch('oneirodex.utils.github_issues.create_github_issue', return_value={'ok': False, 'skipped': True}):
         created = client.post(
             '/api/support/tickets',
             json={'title': 'Launcher flicker', 'area': 'companion', 'severity': 'P2'},
@@ -81,7 +81,7 @@ def test_support_ticket_truncates_huge_logs_and_list_is_compact(client, app, db_
     _login(client, app, member_user)
     huge = 'L' * 9000
     long_body = 'B' * 3000
-    with patch('oneirodex.routes_apis.support.create_github_issue', return_value={'ok': False, 'skipped': True}):
+    with patch('oneirodex.utils.github_issues.create_github_issue', return_value={'ok': False, 'skipped': True}):
         created = client.post(
             '/api/support/tickets',
             json={

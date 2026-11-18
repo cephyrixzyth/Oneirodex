@@ -1,19 +1,11 @@
 import pytest
-import os
 import json
-from unittest.mock import patch, Mock, MagicMock, mock_open
-from datetime import datetime, timezone
+from unittest.mock import patch, MagicMock
 from uuid import uuid4
 from io import BytesIO
 from werkzeug.datastructures import FileStorage
-from PIL import Image as PILImage
 
-from oneirodex import create_app, db
 from oneirodex.models import User, InviteToken, UserPreference
-from oneirodex.forms import EditProfileForm, UserPasswordForm, UserPreferencesForm
-from oneirodex.utils.avatar import DEFAULT_AVATAR
-
-
 
 
 @pytest.fixture
@@ -151,62 +143,9 @@ class TestSettingsProfileEdit:
         assert response.status_code == 302
         assert response.location.endswith('/library?account=avatar')
 
-    def test_post_without_file_updates_default_avatar(self, client, test_user, db_session):
-        """Test POST request without file uses default avatar."""
-        # User with no avatar path
-        test_user.avatarpath = None
-        db_session.commit()
 
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        with patch('oneirodex.routes_settings.EditProfileForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.avatar.data = None
-            mock_form_class.return_value = mock_form
-
-            response = client.post('/settings_profile_edit', data={}, follow_redirects=False)
-
-            assert response.status_code == 302
-            db_session.refresh(test_user)
-            assert test_user.avatarpath == DEFAULT_AVATAR
-
-    def test_post_with_valid_image_upload(self, client, test_user, db_session):
-        """Test POST request with valid image upload."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        # Test basic form submission without file - this validates the route works
-        with patch('oneirodex.routes_settings.EditProfileForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.avatar.data = None  # No file uploaded
-            mock_form_class.return_value = mock_form
-
-            response = client.post('/settings_profile_edit', data={}, follow_redirects=False)
-
-            assert response.status_code == 302
             # Verify the route handles the case correctly
 
-    def test_post_with_gif_preserves_animation(self, client, test_user, db_session):
-        """Test POST request with GIF handling logic."""
-        with client.session_transaction() as sess:
-            sess['_user_id'] = str(test_user.id)
-            sess['_fresh'] = True
-
-        # Test that the route correctly handles form validation
-        with patch('oneirodex.routes_settings.EditProfileForm') as mock_form_class:
-            mock_form = MagicMock()
-            mock_form.validate_on_submit.return_value = True
-            mock_form.avatar.data = None  # No file for this simplified test
-            mock_form_class.return_value = mock_form
-
-            response = client.post('/settings_profile_edit', data={}, follow_redirects=False)
-
-            assert response.status_code == 302
             # This test verifies the basic route functionality works
 
 class TestSettingsProfileView:
@@ -307,7 +246,7 @@ class TestSettingsPanel:
             'theme': 'default'  # Should be stored as None
         }
 
-        with patch('oneirodex.routes_settings.UserPreferencesForm') as mock_form_class:
+        with patch('oneirodex.forms_native.UserPreferencesForm') as mock_form_class:
             mock_form = MagicMock()
             mock_form.validate_on_submit.return_value = True
             mock_form.items_per_page.data = 20

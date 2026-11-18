@@ -11,7 +11,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
 from starlette.responses import JSONResponse, PlainTextResponse
 
 from .request_auth import request_auth_context

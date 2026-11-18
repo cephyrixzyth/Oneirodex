@@ -24,7 +24,7 @@ def test_gt_toast_is_dismissible_and_bridges_notify():
 def test_member_and_admin_shells_load_gt_toast_after_notify():
     needle = "js/od_toast.js"
     notify = 'vendor/notify/0.4.2/notify.min.js'
-    for folder, name in (('utils', 'member_spa.py'), ('runtime_native', 'admin_pilot.py')):
+    for folder, name in (('runtime_native', 'member_shell.py'), ('runtime_native', 'admin_pilot.py')):
         text = (ROOT / 'oneirodex' / folder / name).read_text(encoding='utf-8')
         assert needle in text, name
         assert notify in text, name

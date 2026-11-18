@@ -6,6 +6,7 @@ rather than a trainer, and nothing here touches a game binary.
 """
 
 from __future__ import annotations
+from tests.fixtures.native_client import served_client
 
 from uuid import uuid4
 
@@ -84,7 +85,7 @@ class TestSurfaceSeparation:
             reader, 'narrow pc cheat reader', ['write:presence'],
         )
         assert narrow_row.scopes == ['write:presence']
-        with app.test_client() as narrow_client:
+        with served_client(app) as narrow_client:
             denied = narrow_client.get(
                 f'/api/games/{pc_game.uuid}/pc_cheats',
                 headers={'Authorization': f'Bearer {narrow_token}'},
