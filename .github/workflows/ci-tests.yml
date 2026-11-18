@@ -127,18 +127,14 @@ jobs:
       - name: Run get_json() ratchet
         run: python scripts/get_json_lint.py
 
-      - name: Run pytest (marker set, deselect by exception)
-        # Gate = every test not marked `integration`, minus a named exception
-        # list. Flipped from a hand-enumerated file list on 2026-09-17 after
-        # the timing job measured the marker set at 3,792 tests / 11m24s on
-        # this runner (docs/dev/ci-gates.md). A new test file is now gated by
-        # default; the only way to keep one out is a line below, with its ID.
+      - name: Run pytest (marker set)
+        # Gate = every test not marked `integration`. Flipped from a
+        # hand-enumerated file list on 2026-09-17 (docs/dev/ci-gates.md), so a
+        # new test file is gated by default.
         #
-        # The --deselect list is docs/dev/archive/test-suite-failures-2026-09-16.md's
-        # known failures as they reproduce on the runner (two are runner-
-        # only: a Windows drive-letter
-        # case, the font catalogue). Remove a line when its test is fixed;
-        # never add one to get a red PR green.
+        # The known-failure --deselect list was emptied on 2026-11-17 when the
+        # suite moved onto the served app. Keep it empty: fix a failing test
+        # or remove an obsolete one, never deselect it to get a red PR green.
         #
         # Keep this bare: `run: >` is a folded scalar, so a `#` line here
         # becomes an argument to pytest rather than a comment.
@@ -146,19 +142,6 @@ jobs:
           python -m pytest tests/ -q -m "not integration"
           --cov=oneirodex --cov-report=term-missing
           --cov-fail-under=65
-          --deselect tests/test_collections_api_wiring.py::test_newsletter_ckeditor_targets_content_field
-          --deselect tests/test_collections_api_wiring.py::test_spa_collections_client_covers_new_actions
-          --deselect tests/test_library_roots.py::TestParseLibraryRoots::test_windows_drive_letter_is_not_mistaken_for_a_label
-          --deselect tests/test_routes_admin_ext_settings_shell.py::TestSettingsShellSections::test_every_section_deep_link_is_reachable_from_the_react_hub
-          --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_invalid_request_id_zero
-          --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_database_error
-          --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_with_zip_file_success
-          --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_without_zip_file
-          --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_zip_deletion_error
-          --deselect tests/test_routes_apis_download.py::TestDeleteDownloadRequest::test_delete_request_zip_outside_save_path
-          --deselect tests/test_theme_fonts.py::TestCatalogue::test_reports_installed_honestly
-          --deselect tests/test_wave2c_module_ux.py::test_settings_shell_renders_module_status_badges
-          --deselect tests/test_wave2c_module_ux.py::test_storage_page_surfaces_env_gates
 
   alembic-check:
     name: Alembic (upgrade + check)
