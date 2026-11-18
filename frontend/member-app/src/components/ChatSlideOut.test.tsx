@@ -227,7 +227,7 @@ test('archive posts to archive API and refreshes room list', async () => {
 
 test('archive surfaces 403 error honestly', async () => {
   const user = userEvent.setup()
-  const fetchMock = stubFetch(
+  stubFetch(
     mockChatFetch({
       onArchive: async () => ({
         ok: false,

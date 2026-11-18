@@ -83,7 +83,7 @@ test('asks for titles needing review and never picks a candidate for the member'
 
 test('confirming sends the revision, then the latest decision can be undone', async () => {
   const user = userEvent.setup()
-  const fetchMock = stubFetch((url: string, init: any) => {
+  const fetchMock = stubFetch((url: string, _init: any) => {
     if (url.includes('/candidates')) return jsonResponse(candidates)
     if (url.endsWith('/match/undo'))
       return jsonResponse({

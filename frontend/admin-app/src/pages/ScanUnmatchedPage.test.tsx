@@ -4,6 +4,10 @@ import { MemoryRouter } from 'react-router-dom'
 import { getJson, postJson } from '../api/adminApi'
 import { ScanUnmatchedPage } from './ScanUnmatchedPage'
 
+// Several tests query roles across a 50-row table, which is slow in jsdom
+// (about 13 s alone); the default 30 s limit fails them on a loaded machine.
+vi.setConfig({ testTimeout: 90_000 })
+
 vi.mock('../api/adminApi', () => ({
   csrfHeaders: vi.fn(() => ({ 'X-CSRFToken': 'test-csrf' })),
   getJson: vi.fn(),

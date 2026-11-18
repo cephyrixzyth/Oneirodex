@@ -1,4 +1,4 @@
-import type { ImageRow, MissingCoverGame } from './imagesModel'
+import type { MissingCoverGame } from './imagesModel'
 import { Button, PageStatus } from '@oneirodex/ui'
 
 /** Games with no usable cover, from the health check. */

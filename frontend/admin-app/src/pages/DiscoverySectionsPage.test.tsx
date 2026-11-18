@@ -279,7 +279,8 @@ test('confirmation keeps the delete opener enabled for cancel and Escape focus r
   render(<DiscoverySectionsPage />)
   const row = await openShelfActions('Review shelf')
   const opener = within(row).getByRole('button', { name: 'Delete Review shelf' })
-  for (const dismiss of ['cancel', 'Escape']) {
+  // confirmAction is mocked, so both dismissals resolve the same way here.
+  for (const _dismissal of ['cancel', 'Escape']) {
     opener.focus()
     fireEvent.click(opener)
     await waitFor(() => expect(confirmAction).toHaveBeenCalled())

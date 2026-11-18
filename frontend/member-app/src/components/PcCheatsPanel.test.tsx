@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { PcCheatsPanel } from './PcCheatsPanel'
 import { stubFetch } from '../testJsonResponse'
 

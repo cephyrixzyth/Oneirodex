@@ -125,7 +125,7 @@ export function useManualIdentify() {
     return () => {
       live = false
     }
-  }, [])
+  }, [editing])
 
   useEffect(() => {
     if (!gameUuid) return

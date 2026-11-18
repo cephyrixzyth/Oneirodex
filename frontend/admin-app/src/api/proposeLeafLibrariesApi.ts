@@ -1,6 +1,6 @@
 /** Propose / import leaf libraries API helpers (preview-only; never auto-create). */
 
-import { csrfHeaders, getJson, postForm, postJsonResult } from './adminApi'
+import { csrfHeaders, postForm, postJsonResult } from './adminApi'
 
 export const PROPOSE_LEAF_URL = '/api/library_tools/propose_leaf_libraries'
 export const IMPORT_LEAF_PREVIEW_URL = '/api/library_tools/import_leaf_libraries/preview'

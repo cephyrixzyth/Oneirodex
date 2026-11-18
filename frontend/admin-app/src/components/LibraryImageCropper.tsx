@@ -143,6 +143,7 @@ export function LibraryImageCropper({
   useEffect(() => {
     let cancelled = false
     let imageLoadHandler: (() => void) | undefined
+    let listenedImage: HTMLImageElement | undefined
     setCropReady(false)
     void loadCropper()
       .then((Cropper) => {
@@ -160,6 +161,7 @@ export function LibraryImageCropper({
           else setError('This image could not be opened.')
         } else {
           imageLoadHandler = initialize
+          listenedImage = image
           image.addEventListener('load', initialize, { once: true })
           image.addEventListener('error', () => setError('This image could not be opened.'), {
             once: true,
@@ -171,8 +173,8 @@ export function LibraryImageCropper({
       })
     return () => {
       cancelled = true
-      const image = imageRef.current
-      if (image && imageLoadHandler) image.removeEventListener('load', imageLoadHandler)
+      if (listenedImage && imageLoadHandler)
+        listenedImage.removeEventListener('load', imageLoadHandler)
       cropperRef.current?.destroy()
       cropperRef.current = null
     }

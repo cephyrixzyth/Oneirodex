@@ -149,9 +149,6 @@ export const SETTINGS_GROUPS: SubSection[] = [
   },
 ]
 
-/** Flat view — kept so existing links/tests that expect one list keep working. */
-export const SETTINGS_CARDS = SETTINGS_GROUPS.flatMap((group) => group.items)
-
 /**
  * Integrations, shaped exactly like Settings: four LHN sub-sections, children
  * as top-bar buttons. Each destination has one home — Arr moved here from

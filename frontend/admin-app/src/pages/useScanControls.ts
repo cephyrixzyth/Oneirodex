@@ -116,7 +116,7 @@ export function useScanControls() {
   }, [preferredLibraryUuid, revision])
 
   useEffect(() => {
-    if (query.get('active_tab') !== 'manual') return
+    if (new URLSearchParams(search).get('active_tab') !== 'manual') return
     let cancelled = false
     getJson('/api/admin/scan/manual-identify/session-preview')
       .then((payload) => {

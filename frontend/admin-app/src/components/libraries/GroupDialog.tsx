@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { DataTable } from '../DataTable'
 import { groupLabel } from './librariesModel'
 import type { LibraryRow } from './librariesModel'
 

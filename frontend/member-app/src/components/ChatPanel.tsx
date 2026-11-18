@@ -173,9 +173,13 @@ export function ChatPanel({
     }
   }
 
+  // Load once on mount; the ref keeps that one call on the latest loadChannels.
+  const loadChannelsRef = useRef(loadChannels)
+  loadChannelsRef.current = loadChannels
   useEffect(() => {
     setChannelsLoading(true)
-    loadChannels()
+    loadChannelsRef
+      .current()
       .catch(() => setError(true))
       .finally(() => setChannelsLoading(false))
     void loadEmoji()

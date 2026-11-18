@@ -256,7 +256,7 @@ test('linking sends only filled fields, uses a password input for tokens and exp
 
 test('csv import reports imported, matched and skipped rows', async () => {
   const user = userEvent.setup()
-  stubFetch((url: string, init: any) => {
+  stubFetch((url: string, _init: any) => {
     if (url === '/api/ownership/meta_quest/csv')
       return jsonResponse({ ok: true, imported: 2, matched: 1, skipped: 1 })
     return jsonResponse(

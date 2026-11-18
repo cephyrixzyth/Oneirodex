@@ -20,7 +20,7 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 test('loads artwork into the shared admin page and uploads a selected kind through the multipart API', async () => {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = String(input)
     if (url.endsWith('/api/admin/manual-identify/game-1'))
       return jsonResponse({ ok: true, game: { name: 'Fixture Game' } }) as any
