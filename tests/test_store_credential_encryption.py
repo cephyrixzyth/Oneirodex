@@ -139,7 +139,10 @@ def test_embedded_database_url_matches_single_container_defaults(tmp_path):
     })
 
     assert isinstance(url, URL)
-    assert url.drivername == 'postgresql'
+    # Explicit: SQLAlchemy 2.1 maps a bare ``postgresql`` URL to psycopg (v3),
+    # which the image does not ship. The suite registers psycopg2 globally via
+    # config.py, so only the driver name proves the scripts work standalone.
+    assert url.drivername == 'postgresql+psycopg2'
     assert url.username == 'oneirodex'
     assert url.password == password
     assert url.host == '127.0.0.1'
@@ -163,8 +166,15 @@ def test_auto_and_explicit_external_database_resolution(tmp_path):
     })
 
     assert isinstance(embedded, URL)
-    assert external == 'postgresql://user:password@db/example'
+    assert external.render_as_string(hide_password=False) == (
+        'postgresql+psycopg2://user:password@db/example'
+    )
     assert forced_external == external
+    explicit = resolve_database_url({
+        'ONEIRODEX_EMBEDDED_DB': 'false',
+        'DATABASE_URL': 'postgresql+psycopg://user:password@db/example',
+    })
+    assert explicit.drivername == 'postgresql+psycopg'
 
 
 def test_external_mode_never_falls_back_to_embedded_or_test_database():
