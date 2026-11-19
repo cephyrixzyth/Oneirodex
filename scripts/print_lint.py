@@ -64,6 +64,7 @@ EXEMPT = {
     "scripts/migrate_emulator_save_keys.py",
     "scripts/migrate_reusable_secrets.py",
     "scripts/migrate_store_credentials.py",
+    "scripts/reset_admin_password.py",
     "scripts/upgrade_test_schema.py",
     "scripts/validate-native-install.py",
     "scripts/generate_icon_adapters.py",

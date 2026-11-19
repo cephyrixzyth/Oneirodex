@@ -21,6 +21,7 @@ OPERATOR_SCRIPTS = [
     ['scripts/migrate_store_credentials.py'],
     ['scripts/migrate_emulator_save_keys.py', '--migrate', '--root', '.'],
     ['scripts/audit_emulator_saves.py', '--root', '.'],
+    ['scripts/reset_admin_password.py', '--list'],
 ]
 
 

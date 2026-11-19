@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] — 2026-11-18
+
+### Added
+- `scripts/reset_admin_password.py`: an administrator locked out with no working email can reset their password on the server from a hidden prompt (`docker exec -it Oneirodex python scripts/reset_admin_password.py`). It clears any pending reset link and signs out remembered browser sessions. See [Locked out of the admin account](docs/admin/troubleshooting.md#locked-out-of-the-admin-account).
+
 ## [1.2.2] — 2026-11-18
 
 ### Fixed
