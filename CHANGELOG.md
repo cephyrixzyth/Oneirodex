@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-11-18
+
 ### Fixed
 - The operator credential commands (`scripts/migrate_reusable_secrets.py`, `scripts/migrate_store_credentials.py`) failed inside the image with `No module named 'oneirodex'`, and every operator database script (including the save-key migration and save audit) failed on 1.2.1 with `No module named 'psycopg'`. SQLAlchemy 2.1 picks the psycopg 3 driver for a plain `postgresql://` URL; the scripts now name the installed psycopg2 driver and find the app package on their own.
 
