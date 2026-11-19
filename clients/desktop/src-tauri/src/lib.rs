@@ -174,6 +174,7 @@ impl ManagedProcessRegistry {
         Ok(ManagedLaunchIdentity { pid, launch_id })
     }
 
+    #[cfg(any(test, not(target_os = "macos")))]
     fn is_running(&self, pid: u32, launch_id: Option<&str>) -> Result<bool, String> {
         let processes = self
             .0

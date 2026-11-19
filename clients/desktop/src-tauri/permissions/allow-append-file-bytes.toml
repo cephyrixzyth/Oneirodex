@@ -1,4 +1,4 @@
 [[permission]]
 identifier = "allow-append-file-bytes"
-description = "Allows appending download stream chunks to archive files."
-commands.allow = ["append_file_bytes", "archive_checkpoint"]
+description = "Allows the full companion to append, inspect and publish archive checkpoints."
+commands.allow = ["append_file_bytes", "archive_checkpoint", "publish_archive_checkpoint"]
