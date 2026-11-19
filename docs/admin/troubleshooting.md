@@ -19,6 +19,27 @@ See [container-wont-start.md](../runbooks/container-wont-start.md) for SECRET_KE
 | Schema errors | Startup Phase 2 creates missing tables, runs the legacy schema pass, adopts pre-Alembic databases at the baseline, then upgrades to the declared head. Missing migration configuration or a failed upgrade stops initialization. Existing save revisions/history are preserved; incompatible save-history columns, keys or index require schema repair. Back up the database and save files before repair; do not stamp head to bypass failed DDL. See [Alembic notes](../dev/alembic-baseline-notes.md) and [isolated test setup](../runbooks/local-postgres-pytest.md). |
 | App loops waiting for DB: `no pg_hba … no encryption` | Postgres rejects non-SSL from Docker bridge — [container-wont-start §3b](../runbooks/container-wont-start.md#3b-postgres-up-but-pg_hba-rejects-app-no-encryption); recreate `db` with current Compose `pg_hba` mount |
 
+## Locked out of the admin account
+
+Sign-in uses the **username, not the email address, and it is case-sensitive**. Check that first: the login page answers both a wrong username and a wrong password with the same message.
+
+If the password is lost and email is not set up (or the reset mail cannot arrive), reset it on the server itself. The command prompts twice for the new password without echoing it:
+
+```bash
+# Unraid / single container (container name as shown on the Docker page)
+docker exec -it Oneirodex python scripts/reset_admin_password.py
+# Compose stack
+docker compose exec app python scripts/reset_admin_password.py
+# Native install, from the install directory with its environment loaded
+python scripts/reset_admin_password.py
+```
+
+- With one administrator it picks that account; otherwise add `--user <name>`. `--list` prints the administrator usernames.
+- The password must be at least 8 characters. It is stored the same way as a password changed in the app, any pending reset link is cleared, and remembered browser sign-ins are signed out. API tokens keep working.
+- For automation without a terminal, pipe one line into `--password-stdin`; keep it out of shell history.
+- It only resets administrators. Members are reset from **Admin → Users**.
+- Like the other operator scripts it never reads `.env`. An external database needs `DATABASE_URL` in the process environment; the single container finds its embedded database by itself.
+
 ## Frontend dist missing
 
 Rebuild so `oneirodex/static/dist/member-app` and `admin-app` exist:

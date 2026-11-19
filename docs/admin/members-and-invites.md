@@ -81,7 +81,9 @@ Consequences worth knowing:
   "activate your account" check knows to skip these accounts, so they sign in
   immediately regardless.
 - **Password reset by email does not work for them.** An admin resets the
-  password from **Admin → Users**.
+  password from **Admin → Users**. An administrator who is locked out resets
+  their own password on the server — see
+  [Locked out of the admin account](troubleshooting.md#locked-out-of-the-admin-account).
 - Clearing the email field on an existing user in the editor converts them to a
   local account the same way; it does not error and does not silently keep the
   old address.
