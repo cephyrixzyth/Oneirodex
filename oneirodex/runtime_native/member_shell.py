@@ -222,9 +222,9 @@ def _member_root(user, settings: dict, app_config, extra: dict, static_url_path:
 
 def _app_version(package_root: str) -> str:
     try:
-        return (Path(package_root).resolve().parent / 'VERSION').read_text(encoding='utf-8').strip() or '1.2.1'
+        return (Path(package_root).resolve().parent / 'VERSION').read_text(encoding='utf-8').strip() or '1.2.2'
     except OSError:
-        return '1.2.1'
+        return '1.2.2'
 
 
 def render_member_shell(user, app_config, settings, session_data, csrf_token, *, path, extra=None):

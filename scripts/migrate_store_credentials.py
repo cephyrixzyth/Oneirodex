@@ -16,8 +16,12 @@ import re
 import stat
 import sys
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from sqlalchemy import create_engine
-from sqlalchemy.engine import URL
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import Session
 
 from oneirodex.utils.store_credentials import (
@@ -50,7 +54,11 @@ def resolve_database_url(env: dict[str, str] | None = None):
         database_url = (env.get('DATABASE_URL') or '').strip()
         if not database_url:
             raise ValueError('DATABASE_URL is required for external database mode')
-        return database_url
+        url = make_url(database_url)
+        if url.drivername in {'postgres', 'postgresql'}:
+            # SQLAlchemy 2.1 maps a plain URL to psycopg (v3); the image ships psycopg2.
+            url = url.set(drivername='postgresql+psycopg2')
+        return url
 
     config_dir = Path(env.get('ONEIRODEX_CONFIG_DIR') or '/config')
     data_dir = config_dir / 'pgdata'
@@ -91,7 +99,7 @@ def resolve_database_url(env: dict[str, str] | None = None):
     if not database or '\x00' in database:
         raise ValueError('Embedded database name is invalid')
     return URL.create(
-        'postgresql',
+        'postgresql+psycopg2',
         username='oneirodex',
         password=password,
         host='127.0.0.1',
