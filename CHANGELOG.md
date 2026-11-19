@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-11-19
+
+### Added
+- Browse the household library in responsive rows or visit the collection room. Use the room's desk, cover wall and lounge to explore the catalog and manage favorites. Seated mode and large reading text are saved between visits.
+- Choose from ten illustrated profile portraits. Themes include coordinated artwork and controls. Art Studio can preview different compositions and reuse a completed image pack for an identical recipe.
+- Review unmatched folders against ranked catalog candidates in Administration. Library search supports reordered words and common accented characters. Duplicate matching distinguishes editions, discs and revisions. Administrators can find tools by name from the rebuilt navigation.
+- Check play readiness and setup details for a game before launching it.
+
+### Fixed
+- The full desktop companion can recover interrupted archive transfers and publish a completed checkpoint. Downloads validate the remote archive before reusing partial data.
+- Improved keyboard focus, small-screen layouts and loading feedback across library and administration screens.
+
 ## [1.2.3] — 2026-11-18
 
 ### Added
