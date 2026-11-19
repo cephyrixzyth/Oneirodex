@@ -39,7 +39,7 @@ peer settings form as an unframed exception.
 ## Source of truth and package boundary
 
 `frontend/shared` is the private npm workspace package `@oneirodex/ui` (currently
-version 1.2.2). Its public entry point is `frontend/shared/src/index.ts`; React
+version 1.2.3). Its public entry point is `frontend/shared/src/index.ts`; React
 and React DOM are peer dependencies. Member, admin and Ops Glance apps consume
 this package. Extend it when behavior is genuinely common; do not create a
 second Oneirodex component package or copy an app's source into another app.
