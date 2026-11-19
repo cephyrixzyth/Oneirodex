@@ -43,6 +43,19 @@ class CompanionCORSContracts(unittest.TestCase):
                 self.assertEqual(headers[b'access-control-allow-origin'],origin.encode())
                 self.assertNotIn(b'access-control-allow-credentials',headers)
 
+    def test_native_archive_resume_headers(self):
+        headers = b'authorization,range,if-range,x-oneirodex-resume'
+        events, calls, _ = self.exchange(method='OPTIONS', extra=(
+            (b'access-control-request-method', b'GET'),
+            (b'access-control-request-headers', headers),
+        ))
+        self.assertEqual(events[0]['status'], 200)
+        self.assertEqual(calls, [])
+        _, _, response = self.exchange(status=206)
+        visible = response[b'access-control-expose-headers'].lower().split(b', ')
+        for field in (b'etag', b'content-range', b'accept-ranges'):
+            self.assertIn(field, visible)
+
     def test_external_null_lookalike_and_port_origins_are_not_allowed(self):
         for origin in ('https://example.test','null','tauri://localhost.evil.test','http://tauri.localhost:3000'):
             with self.subTest(origin=origin):

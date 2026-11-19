@@ -1,17 +1,9 @@
 #!/usr/bin/env python
 """Generate the per-system loading-motif catalogue from LibraryPlatform.
 
-GT-B24. One motif per system Oneirodex serves — 117 of them — rather than six
-abstract shapes. Generated rather than hand-written for two reasons:
-
-  * `LibraryPlatform` is the only authoritative list of what we support. A
-    hand-maintained catalogue drifts the moment a platform is added, and a
-    motif id with no platform (or a platform with no motif) is exactly the kind
-    of gap that leaves a member's picker showing a blank tile.
-  * 117 hand-drawn SVGs would be 117 chances to typo a path. Each platform maps
-    to a drawing *archetype* (pad, console, handheld, cabinet, computer, disc)
-    plus a small variant, so related systems stay recognisably related and the
-    geometry is written once.
+The platform enum supplies the supported system IDs. Each platform maps to
+a hardware silhouette and a stable variant, used by both the member and
+admin renderers. Generate the backend and frontend catalogues together.
 
 Archetypes are deliberately coarse. At 18-28px a Master System and a Mega Drive
 cannot be told apart no matter how they are drawn, so the variant carries what
@@ -31,14 +23,11 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PLATFORM_PY = REPO / 'oneirodex' / 'platform.py'
 OUT_JSON = REPO / 'oneirodex' / 'data' / 'loading_motifs.json'
-# Emitted into the app tree rather than imported across it: frontend/shared had
-# to be staged explicitly in the Dockerfile and broke the image build once
-# (see dockerStagedImports.test.js). A generated file inside member-app/src is
-# picked up by the normal `COPY frontend/member-app/` with no special casing.
-OUT_JS = REPO / 'frontend' / 'member-app' / 'src' / 'components' / 'systemMotifCatalogue.ts'
+# Both native shells draw from this generated catalogue.
+OUT_JS = REPO / 'frontend' / 'shared' / 'src' / 'loadingMotifs' / 'systemMotifCatalogue.ts'
 
 # Family → the vendor grouping a member actually thinks in. Drives the grouped
-# picker; a flat 117-row list is unusable.
+# picker; the picker groups the catalogue by family.
 FAMILY_RULES: list[tuple[str, str, str]] = [
     # (regex over the enum name, family, archetype)
     (r'^(AMIGA_CD32|JAGUAR_CD|CD_I)$', 'Disc era', 'disc'),
@@ -163,7 +152,7 @@ def js_module(payload: dict) -> str:
         "export const SYSTEM_MOTIF_FAMILIES = SYSTEM_MOTIFS.reduce((acc, motif) => {",
         "  ;(acc[motif.family] ||= []).push(motif)",
         "  return acc",
-        "}, {} as Record<string, any[]>)",
+        "}, {} as Record<string, typeof SYSTEM_MOTIFS>)",
         "",
         "export const SYSTEM_MOTIF_IDS = SYSTEM_MOTIFS.map((m) => m.id)",
         "",

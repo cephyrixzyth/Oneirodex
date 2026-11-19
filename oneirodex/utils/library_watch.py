@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import threading
+from time import monotonic
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable
@@ -277,6 +278,7 @@ class LibraryWatchController:
         self._lock = threading.RLock()
         self._pending: dict[str, PendingLibraryBatch] = {}
         self._debounce_timer: threading.Timer | None = None
+        self._active_flushes: set[threading.Thread] = set()
         self._observer = None
         self._root_meta: dict[str, dict] = {}  # normalized root → lib meta
         self._running = False
@@ -320,22 +322,40 @@ class LibraryWatchController:
                 f'roots={len(self._root_meta)})'
             )
 
+    def request_stop(self) -> None:
+        self._refresh_stop.set()
+
     def stop(self) -> None:
+        global _watch_started, _controller
+        self.request_stop()
+        deadline = monotonic() + 5
+        if not self._lock.acquire(timeout=5):
+            raise TimeoutError('Library watcher is still updating its roots')
+        try:
+            timer, observer = self._debounce_timer, self._observer
+            if timer is not None:
+                timer.cancel()
+            workers = set(self._active_flushes)
+            workers.update(t for t in (timer, self._refresh_thread, observer) if t is not None)
+        finally:
+            self._lock.release()
+        # Observer callbacks acquire the controller lock. Joining with it
+        # held would make even an idle watcher wait out the stop deadline.
+        if observer is not None:
+            observer.stop()
+        for worker in workers:
+            if worker.is_alive():
+                worker.join(timeout=max(0, deadline - monotonic()))
+                if worker.is_alive():
+                    raise TimeoutError('Library watcher is still processing its last event')
         with self._lock:
-            self._refresh_stop.set()
-            if self._debounce_timer is not None:
-                self._debounce_timer.cancel()
-                self._debounce_timer = None
-            if self._observer is not None:
-                try:
-                    self._observer.stop()
-                    self._observer.join(timeout=5)
-                except Exception:
-                    pass
-                self._observer = None
+            self._debounce_timer = self._observer = self._refresh_thread = None
             self._root_meta.clear()
             self._pending.clear()
             self._running = False
+            if _controller is self:
+                _controller = None
+                _watch_started = False
 
     def _ensure_observer(self) -> None:
         if self._observer_factory is not None:
@@ -352,6 +372,8 @@ class LibraryWatchController:
             try:
                 with self.app.app_context():
                     with self._lock:
+                        if self._refresh_stop.is_set():
+                            break
                         self._sync_watched_roots(start_observer=False)
             except Exception as exc:
                 print(f'[LIBRARY WATCH] Root refresh error: {exc}')
@@ -438,6 +460,8 @@ class LibraryWatchController:
         game_path: str,
     ) -> None:
         with self._lock:
+            if self._refresh_stop.is_set():
+                return
             batch = self._pending.get(library_uuid)
             if batch is None:
                 batch = PendingLibraryBatch(
@@ -458,23 +482,32 @@ class LibraryWatchController:
             self._debounce_timer.start()
 
     def _flush_pending(self) -> None:
+        worker = threading.current_thread()
         with self._lock:
+            if self._refresh_stop.is_set():
+                return
             batches = list(self._pending.values())
             self._pending.clear()
             self._debounce_timer = None
+            if not batches:
+                return
+            self._active_flushes.add(worker)
 
-        if not batches:
-            return
-
-        with self.app.app_context():
-            for batch in batches:
-                try:
-                    self._enqueue_batch(batch)
-                except Exception as exc:
-                    print(
-                        f'[LIBRARY WATCH] Enqueue failed for '
-                        f'{batch.library_uuid}: {exc}'
-                    )
+        try:
+            with self.app.app_context():
+                for batch in batches:
+                    if self._refresh_stop.is_set():
+                        break
+                    try:
+                        self._enqueue_batch(batch)
+                    except Exception as exc:
+                        print(
+                            f'[LIBRARY WATCH] Enqueue failed for '
+                            f'{batch.library_uuid}: {exc}'
+                        )
+        finally:
+            with self._lock:
+                self._active_flushes.discard(worker)
 
     def _clear_restored_path_status(self, batch: PendingLibraryBatch) -> None:
         """On add/change, clear path_status missing→ok for restored game folders."""
@@ -601,7 +634,7 @@ def start_library_watch(app) -> LibraryWatchController | None:
 
     _controller = LibraryWatchController(app)
     _controller.start()
-    _watch_started = True
+    _watch_started = _controller._running
     return _controller
 
 

@@ -144,7 +144,7 @@ def _parse_dt(value: Any) -> datetime | None:
 
 def _stable_id(*parts: str) -> str:
     raw = '|'.join(p.strip().lower() for p in parts if p)
-    return hashlib.sha1(raw.encode('utf-8')).hexdigest()[:24]
+    return hashlib.sha1(raw.encode('utf-8'), usedforsecurity=False).hexdigest()[:24]
 
 
 def normalize_store(label: str | None) -> str:

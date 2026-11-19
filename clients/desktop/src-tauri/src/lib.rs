@@ -20,6 +20,8 @@ mod app_bundle;
 mod install_recovery;
 mod launch_supervisor;
 mod launch_tracking;
+mod mod_profile;
+mod patch_inputs;
 mod trusted_shares;
 
 /// Fallback service name for OS credential store entries when the bundle
@@ -634,8 +636,22 @@ fn retain_install_files(app: tauri::AppHandle, from: String, to: String) -> Resu
     if source.starts_with(&destination) || destination.starts_with(&source) {
         return Err("Update directories must be separate".into());
     }
-    let summary = install_recovery::retain_missing(&source, &destination)
-        .map_err(|error| error.to_string())?;
+    // Acquire both generation locks in a consistent order across separate companion processes.
+    let mut generations = [&source, &destination];
+    generations.sort();
+    let mut locks = Vec::new();
+    for dir in generations {
+        let name = dir
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or("Invalid install name")?;
+        locks.push(game_install_lock(
+            dir.parent().ok_or("Missing install parent")?,
+            name,
+        )?);
+    }
+    let state = mod_profile::state_path(&app_data_dir(&app)?, &source);
+    let summary = mod_profile::retain_for_update(&source, &destination, &state)?;
     log_skipped_links("update", &summary);
     Ok(())
 }
@@ -754,14 +770,106 @@ fn write_file_bytes(app: tauri::AppHandle, path: String, bytes: Vec<u8>) -> Resu
     file.write_all(&bytes).map_err(|error| error.to_string())
 }
 
+#[derive(serde::Serialize)]
+struct ArchiveCheckpoint {
+    size: u64,
+    sha256: Option<String>,
+}
+
+#[tauri::command]
+async fn archive_checkpoint(
+    app: tauri::AppHandle,
+    path: String,
+    verify: bool,
+) -> Result<ArchiveCheckpoint, String> {
+    let downloads = resolve_subdir(&app, "downloads")?;
+    let path = PathBuf::from(path);
+    ensure_path_under_any_root(&path, &[&downloads])?;
+    tauri::async_runtime::spawn_blocking(move || {
+        use sha2::{Digest, Sha256};
+        let mut file = match File::open(&path) {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(ArchiveCheckpoint {
+                    size: 0,
+                    sha256: None,
+                })
+            }
+            Err(err) => return Err(err.to_string()),
+        };
+        let size = file.metadata().map_err(|err| err.to_string())?.len();
+        let sha256 = if verify {
+            let mut digest = Sha256::new();
+            let mut buf = [0u8; 65536];
+            loop {
+                let n = std::io::Read::read(&mut file, &mut buf).map_err(|err| err.to_string())?;
+                if n == 0 {
+                    break;
+                }
+                digest.update(&buf[..n]);
+            }
+            Some(
+                digest
+                    .finalize()
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>(),
+            )
+        } else {
+            None
+        };
+        Ok(ArchiveCheckpoint { size, sha256 })
+    })
+    .await
+    .map_err(|err| err.to_string())?
+}
+
+/// Promote the account-specific sibling file after the download has been checked.
+fn publish_archive_in(downloads: &Path, archive: &Path, scope: &str) -> Result<(), String> {
+    if scope.len() != 64
+        || !scope
+            .bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    {
+        return Err("Invalid archive checkpoint".into());
+    }
+    if archive.extension().and_then(|ext| ext.to_str()) != Some("zip") {
+        return Err("Invalid archive destination".into());
+    }
+    ensure_path_strictly_under_root(archive, downloads)?;
+    let name = archive.file_name().ok_or("Missing archive filename")?;
+    let mut staged_name = name.to_os_string();
+    staged_name.push(format!(".{scope}.part"));
+    let staged = archive.with_file_name(staged_name);
+    ensure_path_strictly_under_root(&staged, downloads)?;
+    if !fs::symlink_metadata(&staged)
+        .map_err(|err| err.to_string())?
+        .is_file()
+    {
+        return Err("Expected a staged archive file".into());
+    }
+    fs::rename(staged, archive).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn publish_archive_checkpoint(
+    app: tauri::AppHandle,
+    path: String,
+    scope: String,
+) -> Result<(), String> {
+    let downloads = resolve_subdir(&app, "downloads")?;
+    publish_archive_in(&downloads, Path::new(&path), &scope)
+}
+
 #[tauri::command]
 fn append_file_bytes(app: tauri::AppHandle, path: String, bytes: Vec<u8>) -> Result<(), String> {
     use std::fs::OpenOptions;
 
     let downloads = resolve_subdir(&app, "downloads")?;
     let mods = resolve_subdir(&app, "mods")?;
+    let staged_patches = resolve_subdir(&app, "patches")?.join(".staging");
     let file_path = PathBuf::from(&path);
-    ensure_path_under_any_root(&file_path, &[&downloads, &mods])?;
+    ensure_path_under_any_root(&file_path, &[&downloads, &mods, &staged_patches])?;
     if let Some(parent) = file_path.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
@@ -1530,7 +1638,17 @@ async fn launch_game(
     tauri::async_runtime::spawn_blocking(move || {
         let installs = installs_root(&app)?;
         let extract = PathBuf::from(&extract_path);
-        ensure_path_under_root(&extract, &installs)?;
+        ensure_path_strictly_under_root(&extract, &installs)?;
+        let root = extract.canonicalize().map_err(|e| e.to_string())?;
+        let name = root
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or("Invalid install name")?;
+        let _lock = game_install_lock(root.parent().ok_or("Missing install parent")?, name)?;
+        mod_profile::recover_before_launch(
+            &root,
+            &mod_profile::state_path(&app_data_dir(&app)?, &root),
+        )?;
 
         let had_exe_path = exe_path.is_some();
         let resolved = if let Some(exe) = exe_path {
@@ -1742,13 +1860,6 @@ fn remove_path_within_roots(target: &Path, roots: &[&Path]) -> Result<(), String
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FlipsApplyResult {
     pub output_path: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ApplyStagedModResult {
-    pub applied: u32,
-    pub expanded_bytes: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1968,48 +2079,39 @@ fn inspect_staged_mod(
     staged_mod_stats(&source)
 }
 
-/// Copy a staged mod file or extract a zip into the game install directory (path-safe).
+/// Apply one enabled profile as a recoverable transaction.
 #[tauri::command]
-fn apply_staged_mod(
+fn apply_staged_mod_pack(
     app: tauri::AppHandle,
-    source_path: String,
+    source_paths: Vec<String>,
     install_root: String,
-) -> Result<ApplyStagedModResult, String> {
+) -> Result<u32, String> {
     let mods = resolve_subdir(&app, "mods")?;
     let installs = resolve_subdir(&app, "installs")?;
-    let source = PathBuf::from(&source_path);
-    let destination_root = PathBuf::from(&install_root);
-    ensure_path_under_root(&source, &mods)?;
-    // Mods land inside one game's folder, never in the installs root itself.
-    ensure_path_strictly_under_root(&destination_root, &installs)?;
-    if !source.is_file() {
-        return Err(format!("Staged mod not found: {source_path}"));
+    let root = PathBuf::from(install_root)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    ensure_path_strictly_under_root(&root, &installs)?;
+    let name = root
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or("Invalid install name")?;
+    let _lock = game_install_lock(root.parent().ok_or("Missing install parent")?, name)?;
+    let sources: Vec<PathBuf> = source_paths.into_iter().map(PathBuf::from).collect();
+    if sources.len() > MAX_MOD_ARCHIVE_ENTRIES as usize {
+        return Err("Too many mod files".into());
     }
-
-    let stats = staged_mod_stats(&source)?;
-    let (applied, expanded_bytes) = if is_mod_zip_path(&source) {
-        let file = File::open(&source).map_err(|error| error.to_string())?;
-        let mut zip = ZipArchive::new(file).map_err(|error| error.to_string())?;
-        extract_staged_mod_zip(&mut zip, &destination_root)?
-    } else {
-        let file_name = source
-            .file_name()
-            .and_then(|n| n.to_str())
-            .map(sanitize_mod_filename)
-            .unwrap_or_else(|| "mod.bin".to_string());
-        let target = destination_root.join(file_name);
-        ensure_path_under_root(&target, &installs)?;
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    for source in &sources {
+        ensure_path_strictly_under_root(source, &mods)?;
+        if !source.is_file() {
+            return Err("Staged mod not found".into());
         }
-        fs::copy(&source, &target).map_err(|error| error.to_string())?;
-        (1, stats.expanded_bytes)
-    };
-
-    Ok(ApplyStagedModResult {
-        applied,
-        expanded_bytes,
-    })
+    }
+    mod_profile::apply(
+        &root,
+        &mod_profile::state_path(&app_data_dir(&app)?, &root),
+        &sources,
+    )
 }
 
 #[tauri::command]
@@ -2052,51 +2154,29 @@ fn run_flips_apply(
                 .to_string()
         })?;
 
+    let work = patches.join(format!(".apply-{}", uuid::Uuid::new_v4()));
+    fs::create_dir(&work).map_err(|error| error.to_string())?;
+    let _cleanup = DirectoryCleanup(work.clone());
+    let rom = patch_inputs::prepare(&rom, &work, patch_inputs::Input::Rom)?;
+    let patch = patch_inputs::prepare(&patch, &work, patch_inputs::Input::Patch)?;
     let out = if let Some(explicit) = output_path.filter(|v| !v.trim().is_empty()) {
         PathBuf::from(explicit)
     } else {
-        let safe_uuid = game_uuid
-            .chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect::<String>();
-        let rom_name = rom
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("rom.bin");
-        let stem = Path::new(rom_name)
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("rom");
-        let ext = Path::new(rom_name)
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("bin");
+        let game = sanitize_mod_filename(&game_uuid);
+        let stem = rom.file_stem().and_then(|s| s.to_str()).unwrap_or("rom");
+        let ext = rom.extension().and_then(|e| e.to_str()).unwrap_or("rom");
         patches
-            .join(safe_uuid)
-            .join(format!("{stem}.patched.{ext}"))
+            .join(game)
+            .join(format!("{stem}.patched-{}.{ext}", uuid::Uuid::new_v4()))
     };
-    ensure_path_under_root(&out, &patches)?;
+    ensure_path_strictly_under_root(&out, &patches)?;
     if let Some(parent) = out.parent() {
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
-
-    let patch_s = patch.to_string_lossy().into_owned();
-    let rom_s = rom.to_string_lossy().into_owned();
-    let out_s = out.to_string_lossy().into_owned();
-    let status = std::process::Command::new(&flips)
-        .args(["--apply", &patch_s, &rom_s, &out_s])
-        .status()
-        .map_err(|error| format!("Failed to start Flips: {error}"))?;
-    if !status.success() {
-        return Err(format!("Flips exited with status {status}"));
-    }
-    Ok(FlipsApplyResult { output_path: out_s })
+    patch_inputs::invoke_flips(Path::new(&flips), &patch, &rom, &work, &out)?;
+    Ok(FlipsApplyResult {
+        output_path: out.to_string_lossy().into_owned(),
+    })
 }
 
 #[tauri::command]
@@ -2454,6 +2534,8 @@ pub fn run() {
             get_app_subdir,
             write_file_bytes,
             append_file_bytes,
+            archive_checkpoint,
+            publish_archive_checkpoint,
             extract_zip_archive,
             cancel_game_archive_install,
             launch_game,
@@ -2472,7 +2554,7 @@ pub fn run() {
             get_flips_path,
             run_flips_apply,
             inspect_staged_mod,
-            apply_staged_mod,
+            apply_staged_mod_pack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -2537,6 +2619,25 @@ mod tests {
         if std::env::var_os("ONEIRODEX_CHILD_REAP_TEST").is_some() {
             std::thread::sleep(Duration::from_millis(100));
         }
+    }
+
+    #[test]
+    fn publishes_verified_download_sibling_and_preserves_previous_on_failure() {
+        let dir = tempdir().unwrap();
+        let downloads = dir.path().join("downloads");
+        fs::create_dir(&downloads).unwrap();
+        let target = downloads.join("game.zip");
+        let scope = "a".repeat(64);
+        let partial = downloads.join(format!("game.zip.{scope}.part"));
+        fs::write(&target, b"previous").unwrap();
+        assert!(publish_archive_in(&downloads, &target, &scope).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"previous");
+        fs::write(&partial, b"verified game").unwrap();
+        assert!(publish_archive_in(&downloads, &dir.path().join("other.zip"), &scope).is_err());
+        assert!(publish_archive_in(&downloads, &target, "invalid").is_err());
+        publish_archive_in(&downloads, &target, &scope).unwrap();
+        assert_eq!(fs::read(target).unwrap(), b"verified game");
+        assert!(!partial.exists());
     }
 
     #[test]

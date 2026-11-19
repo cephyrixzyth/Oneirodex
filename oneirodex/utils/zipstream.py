@@ -26,7 +26,7 @@ def _iter_folder_files(source_path: str, excluded_folders, real_root: Optional[s
     swapped for a link afterwards fails the per-file checks instead of moving
     the boundary to the link's target; without it the folder is resolved once.
     """
-    excluded = {name.lower() for name in excluded_folders}
+    excluded = {name.casefold() for name in excluded_folders}
     if real_root is None:
         real_root = os.path.realpath(source_path)
     for root, dirs, files in os.walk(source_path):
@@ -34,10 +34,10 @@ def _iter_folder_files(source_path: str, excluded_folders, real_root: Optional[s
         # not descend into them, but they should not look like content either.
         dirs[:] = [
             d for d in dirs
-            if d.lower() not in excluded and not os.path.islink(os.path.join(root, d))
+            if (root != source_path or d.casefold() not in excluded) and not os.path.islink(os.path.join(root, d))
         ]
         for file in files:
-            if file.lower() in ('oneirodex.json', 'oneirodex.json'):
+            if file.lower() == 'oneirodex.json':
                 continue
             file_path = os.path.join(root, file)
             if not is_plain_file_within(real_root, file_path, base_is_resolved=True):

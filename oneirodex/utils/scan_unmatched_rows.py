@@ -237,6 +237,11 @@ def _unmatched_list_row(
         # UX-C5 feedback state. Without these the triage UI cannot show that a
         # row is already flagged, so an operator has no way to see their own
         # earlier judgement — or to clear one set by mistake.
+        'review': {
+            'revision': (getattr(folder, 'review_decision', None) or {}).get('revision', 0),
+            'current': (getattr(folder, 'review_decision', None) or {}).get('current'),
+            'can_undo': bool((getattr(folder, 'review_decision', None) or {}).get('history')),
+        },
         'bad_match_reason': getattr(folder, 'bad_match_reason', None),
         'bad_match_note': getattr(folder, 'bad_match_note', None),
     }

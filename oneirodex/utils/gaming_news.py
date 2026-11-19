@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as safe_xml
+from defusedxml.common import DefusedXmlException
 from typing import Any
 
 import requests
@@ -108,8 +110,8 @@ def _item_image(node: ET.Element | None) -> str | None:
 def _parse_feed(xml_bytes: bytes, source: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     try:
-        root = ET.fromstring(xml_bytes)
-    except ET.ParseError:
+        root = safe_xml.fromstring(xml_bytes)
+    except (ET.ParseError, DefusedXmlException):
         return items
 
     # RSS 2.0

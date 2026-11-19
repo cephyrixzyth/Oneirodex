@@ -31,7 +31,7 @@ def test_browse_play_fields_requires_bundled_core(monkeypatch):
 
 def test_browse_play_url_includes_platform(monkeypatch):
     library = SimpleNamespace(platform=SimpleNamespace(name='NES'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
 
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',

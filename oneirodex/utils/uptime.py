@@ -1,13 +1,21 @@
 import platform
+import time
 from datetime import datetime
 
 def get_system_uptime():
     """Get system uptime in a cross-platform way"""
     try:
-        if platform.system() == 'Windows':
+        system = platform.system()
+        if system == 'Darwin':
+            import psutil
+            return max(0.0, time.time() - psutil.boot_time())
+        if system == 'Windows':
             # Windows uptime calculation using GetTickCount64
             from ctypes import windll
-            return windll.kernel32.GetTickCount64() / 1000.0
+            from ctypes import c_ulonglong
+            ticks = windll.kernel32.GetTickCount64
+            ticks.restype = c_ulonglong
+            return ticks() / 1000.0
         else:
             # Unix-like systems uptime calculation using /proc/uptime
             with open('/proc/uptime', 'r') as f:

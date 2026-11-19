@@ -3,6 +3,8 @@ Graceful shutdown handling for Oneirodex.
 Provides signal handlers and shutdown state management for clean application exit.
 """
 
+from contextvars import ContextVar
+from functools import wraps
 import threading
 from typing import Optional
 
@@ -40,6 +42,30 @@ class ShutdownManager:
 shutdown_manager = ShutdownManager()
 
 
+_worker_owner = ContextVar('oneirodex_shutdown_owner', default=None)
+
+
+def begin_lifespan() -> None:
+    """A restarted server accepts work under a fresh shutdown event."""
+    global shutdown_manager
+    if shutdown_manager.is_shutdown_requested():
+        shutdown_manager = ShutdownManager()
+
+
+def bind_shutdown_owner(target):
+    """Capture the caller's lifespan before a worker is dispatched to a thread."""
+    manager = _worker_owner.get() or shutdown_manager
+
+    @wraps(target)
+    def run(*args, **kwargs):
+        token = _worker_owner.set(manager)
+        try:
+            return target(*args, **kwargs)
+        finally:
+            _worker_owner.reset(token)
+    return run
+
+
 def should_continue_processing() -> bool:
     """
     Check if background processing should continue.
@@ -48,7 +74,7 @@ def should_continue_processing() -> bool:
     Returns:
         True if processing should continue, False if shutdown requested
     """
-    return not shutdown_manager.is_shutdown_requested()
+    return not (_worker_owner.get() or shutdown_manager).is_shutdown_requested()
 
 
 def request_shutdown():
@@ -71,4 +97,4 @@ def sleep_interruptible(duration: float) -> bool:
     Returns:
         True if sleep completed normally, False if interrupted by shutdown
     """
-    return not shutdown_manager.wait_for_shutdown(duration)
+    return not (_worker_owner.get() or shutdown_manager).wait_for_shutdown(duration)

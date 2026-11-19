@@ -47,15 +47,16 @@ describe('download kickoff helper', () => {
     const initiate = vi.fn().mockResolvedValue({
       download_id: 7,
       status: 'available',
+      representation: 'companion_zip',
       stream_url: '/download_zip/7',
     })
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
       headers: new Headers({ 'content-length': '4' }),
-      arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+      arrayBuffer: async () => new Uint8Array([80, 75, 3, 4]).buffer,
       body: new ReadableStream<Uint8Array>({
         start(controller) {
-          controller.enqueue(new Uint8Array([1, 2, 3, 4]))
+          controller.enqueue(new Uint8Array([80, 75, 3, 4]))
           controller.close()
         },
       }),
@@ -68,6 +69,7 @@ describe('download kickoff helper', () => {
     const next = await kickoffDownload(api as never, auth, registry, 'game-42', { fetchImpl })
 
     expect(initiate).toHaveBeenCalledWith('game-42', {
+      representation: 'companion_zip',
       kind: undefined,
       versionUuid: undefined,
     })
@@ -101,15 +103,16 @@ describe('download kickoff helper', () => {
     const initiate = vi.fn().mockResolvedValue({
       download_id: 8,
       status: 'available',
+      representation: 'companion_zip',
       stream_url: '/download_zip/8',
     })
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
-      headers: new Headers({ 'content-length': '2' }),
-      arrayBuffer: async () => new Uint8Array([9, 9]).buffer,
+      headers: new Headers({ 'content-length': '4' }),
+      arrayBuffer: async () => new Uint8Array([80, 75, 3, 4]).buffer,
       body: new ReadableStream<Uint8Array>({
         start(controller) {
-          controller.enqueue(new Uint8Array([9, 9]))
+          controller.enqueue(new Uint8Array([80, 75, 3, 4]))
           controller.close()
         },
       }),
@@ -125,6 +128,7 @@ describe('download kickoff helper', () => {
     })
 
     expect(initiate).toHaveBeenCalledWith('game-99', {
+      representation: 'companion_zip',
       kind: 'update',
       versionUuid: 'upd-1',
     })
@@ -196,6 +200,7 @@ describe('download kickoff helper', () => {
         initiateGameDownload: vi.fn().mockResolvedValue({
           download_id: 9,
           status: 'available',
+          representation: 'companion_zip',
           stream_url: '/download_zip/9',
         }),
       },
@@ -203,10 +208,10 @@ describe('download kickoff helper', () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
       headers: new Headers(),
-      arrayBuffer: async () => new Uint8Array([1]).buffer,
+      arrayBuffer: async () => new Uint8Array([80, 75, 3, 4]).buffer,
       body: new ReadableStream<Uint8Array>({
         start(controller) {
-          controller.enqueue(new Uint8Array([1]))
+          controller.enqueue(new Uint8Array([80, 75, 3, 4]))
           controller.close()
         },
       }),
@@ -247,7 +252,7 @@ describe('archive download redirects', () => {
     // stream is still cancellable (a closed one ignores `cancel`).
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(new Uint8Array([1, 2, 3, 4]))
+        controller.enqueue(new Uint8Array([80, 75, 3, 4]))
       },
       pull(controller) {
         controller.close()
@@ -258,7 +263,7 @@ describe('archive download redirects', () => {
       ok: true,
       url: redirectedTo,
       headers: new Headers({ 'content-length': '4' }),
-      arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+      arrayBuffer: async () => new Uint8Array([80, 75, 3, 4]).buffer,
       text,
       body,
       ...extra,
@@ -268,6 +273,7 @@ describe('archive download redirects', () => {
         initiateGameDownload: vi.fn().mockResolvedValue({
           download_id: 7,
           status: 'available',
+          representation: 'companion_zip',
           stream_url: '/download_zip/7',
         }),
       },
@@ -299,6 +305,27 @@ describe('archive download redirects', () => {
     expect(onChunk).toHaveBeenCalledTimes(1)
     expect(cancel).toHaveBeenCalled()
   })
+
+  it.each([undefined, 'companion_zip'])(
+    'refuses non-ZIP payloads before registration (%s)',
+    async (representation) => {
+      const { auth, api, fetchImpl } = setup(undefined, {
+        body: new Response('single raw file').body,
+      })
+      api.downloads.initiateGameDownload.mockResolvedValue({
+        download_id: 7,
+        representation,
+        stream_url: '/download_zip/7',
+      })
+      const registry = createLifecycleRegistry()
+      await expect(
+        kickoffDownload(api as never, auth, registry, 'game-7', { fetchImpl }),
+      ).rejects.toThrow(/ZIP/)
+      expect(registry.get('game-7')).toBe('not_downloaded')
+      expect(invoke).toHaveBeenCalledWith('remove_path', { path: '/appdata/downloads/game-7.zip' })
+      expect(invoke).not.toHaveBeenCalledWith('save_installs', expect.anything())
+    },
+  )
 
   it('rejects an oversized declared archive before truncating or writing a file', async () => {
     const { auth, api, fetchImpl, cancel } = setup(undefined, {

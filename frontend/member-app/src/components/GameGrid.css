@@ -174,7 +174,7 @@ html.is-tile-resizing .game-library-row {
   align-items: stretch;
   height: var(--od-row-h);
   min-height: var(--od-row-h);
-  overflow: hidden;
+  overflow: visible;
   border: none;
   border-radius: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--od-border) 70%, transparent);
@@ -206,13 +206,12 @@ html.is-tile-resizing .game-library-row {
 }
 
 .game-library-container[data-layout='rows'] .game-card__row-meta {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.2rem;
-  padding: 0.4rem 6.5rem 0.4rem 0.85rem;
+  align-items: center;
+  gap: clamp(0.4rem, 2vw, 1.5rem);
+  padding-inline: clamp(0.4rem, 1.5vw, 1.2rem);
   color: inherit;
   text-decoration: none;
 }
@@ -235,9 +234,7 @@ html.is-tile-resizing .game-library-row {
 }
 
 .game-library-container[data-layout='rows'] .od-platform-chip,
-.game-library-container[data-layout='rows'] .od-badge-stack,
-.game-library-container[data-layout='rows'] .od-tile-preview-hint,
-.game-library-container[data-layout='rows'] .od-tile-play {
+.game-library-container[data-layout='rows'] .od-badge-stack {
   display: none;
 }
 
@@ -246,5 +243,188 @@ html.is-tile-resizing .game-library-row {
   .game-library-container[data-layout='rows'] .game-card:focus-visible,
   .game-library-container[data-layout='rows'] .game-card:has(:focus-visible) {
     transform: none;
+  }
+}
+
+.game-card__row-identity {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 0.15rem;
+}
+.game-card__row-platform,
+.game-card__row-status {
+  min-width: 0;
+  max-width: 20%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm);
+}
+.game-card__row-platform {
+  color: var(--od-accent);
+}
+.game-library-container[data-layout='rows'] .game-card-container {
+  container-type: inline-size;
+}
+.game-library-container[data-layout='rows']
+  .game-card
+  :is(
+    .favorite-btn,
+    .game-status-btn,
+    .button-glass-hamburger,
+    .od-tile-preview-hint,
+    .od-tile-play
+  ) {
+  position: static;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  margin-inline-end: 0.25rem;
+  border-radius: var(--od-radius-sm);
+  order: 4;
+}
+.game-library-container[data-layout='rows'] .game-card .button-glass-hamburger {
+  order: 5;
+}
+.game-library-container[data-layout='rows'] .game-card .od-tile-play {
+  order: 2;
+}
+.game-library-container[data-layout='rows'] .game-card .od-tile-preview-hint {
+  order: 3;
+}
+.game-library-container[data-layout='rows'] .game-card :focus-visible {
+  outline: 2px solid var(--od-accent);
+  outline-offset: -2px;
+}
+.game-library-container[data-layout='rows'] .game-card-container:has([data-overlay-open='true']) {
+  z-index: 12;
+}
+@container (max-width: 660px) {
+  .game-card__row-status {
+    display: none;
+  }
+  .game-library-container[data-layout='rows'] .game-card__row-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+  }
+  .game-card__row-platform {
+    max-width: 100%;
+  }
+  .game-card__row-identity {
+    flex: 0 1 auto;
+    max-width: 100%;
+  }
+  .game-library-container[data-layout='rows'] .game-card .od-tile-preview-hint {
+    display: none;
+  }
+}
+@container (max-width: 460px) {
+  .game-card__row-identity .game-card__row-detail {
+    display: none;
+  }
+  .game-library-container[data-layout='rows'] .game-card .od-tile-preview-hint {
+    display: none;
+  }
+  .game-library-container[data-layout='rows']
+    .game-card
+    :is(.favorite-btn, .game-status-btn, .button-glass-hamburger, .od-tile-play) {
+    min-width: 1.9rem;
+    margin-inline-end: 0.1rem;
+  }
+}
+
+@container (min-width: 661px) {
+  .game-card__row-preview-action {
+    display: none;
+  }
+}
+
+.od-library-room-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  margin-block: 0.3rem 0.85rem;
+  min-height: clamp(3.5rem, 8vh, 5.5rem);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-md);
+  color: var(--od-text);
+  text-decoration: none;
+  background-color: var(--od-surface);
+  background-image:
+    linear-gradient(90deg, var(--od-surface), transparent 65%),
+    var(--od-room-art, url('/static/newstyle/rooms/greenhouse.webp'));
+  background-position:
+    center,
+    center 45%;
+  background-size: cover;
+}
+.od-library-room-link > :first-child {
+  font-family: var(--font-display);
+  font-size: var(--od-font-lg);
+  font-weight: 700;
+}
+.od-library-room-link > :last-child {
+  color: var(--od-text);
+  background: var(--od-surface);
+  font-size: var(--od-font-sm);
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--od-radius-sm);
+}
+.od-library-room-link:is(:hover, :focus-visible) {
+  outline: 2px solid var(--od-accent);
+  outline-offset: -2px;
+}
+@media (max-height: 580px) {
+  .od-library-room-link {
+    min-height: 2.2rem;
+    padding-block: 0.35rem;
+  }
+}
+
+@container (min-width: 461px) {
+  .game-card__row-compact-actions {
+    display: none;
+  }
+}
+@container (max-width: 460px) {
+  .game-library-container[data-layout='rows'] .game-card :is(.game-status-btn, .od-tile-play) {
+    display: none;
+  }
+  .game-library-container[data-layout='rows'] .game-card__row-title {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+  }
+  .game-card__row-compact-actions {
+    display: grid;
+  }
+}
+@media (max-width: 460px) {
+  .library-layout.is-chrome-v2:has([data-layout='rows']) {
+    padding-inline: 0;
+  }
+  .od-library-room-link {
+    align-items: center;
+    padding: 0.5rem 0.65rem;
+  }
+  .od-library-room-link > :last-child {
+    white-space: nowrap;
   }
 }

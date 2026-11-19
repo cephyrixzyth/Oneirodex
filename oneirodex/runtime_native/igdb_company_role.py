@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+import json
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
@@ -42,7 +43,7 @@ class IGDBCompanyRoleData:
                           screenshots, videos.video_id, first_release_date, aggregated_rating, involved_companies, player_perspectives.name,
                           aggregated_rating_count, rating, rating_count, slug, status, category, total_rating,
                           total_rating_count, storyline;'''
-        query_filter = f'search "{game_name}";'
+        query_filter = f'search {json.dumps(game_name, ensure_ascii=False)};'
         if platform_id and platform_id.isdigit():
             query_filter += f' where platforms = ({platform_id});'
         query_filter += ' limit 10;'

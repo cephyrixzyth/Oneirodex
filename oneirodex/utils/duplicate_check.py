@@ -120,6 +120,25 @@ def same_duplicate_scope(
     return True
 
 
+_EDITION_MARKERS = {
+    'disc': re.compile(r'\b(?:disc|disk|cd)\s*[-._ ]?([0-9]+)\b', re.I),
+    'revision': re.compile(r'\b(?:rev(?:ision)?)[ ._-]*([a-z0-9]+)\b', re.I),
+    'presentation': re.compile(r'\b(remaster(?:ed)?|remake|prototype|demo|beta|translation)\b', re.I),
+}
+
+
+def edition_conflict(left: str, right: str) -> str | None:
+    """A provider ID may cover several discs, releases, or localized editions."""
+    for category, pattern in _EDITION_MARKERS.items():
+        def values(text):
+            return {v.casefold().removesuffix('ed') if v.casefold() == 'remastered' else v.casefold()
+                    for v in pattern.findall(text.replace('_', ' '))}
+        a, b = values(left), values(right)
+        if a != b and (category == 'presentation' or (a and b)):
+            return category
+    return None
+
+
 def explain_duplicate_match(
     existing_game,
     new_full_disk_path: str,
@@ -187,6 +206,13 @@ def explain_duplicate_match(
 
     new_label = new_raw_name or folder_basename(new_full_disk_path)
     existing_label = folder_basename(existing_path) or (getattr(existing_game, 'name', None) or '')
+
+    conflict = edition_conflict(new_label, existing_label)
+    if conflict:
+        return {'is_duplicate': False, 'match_reason': 'different_' + conflict,
+                'match_score': 0.0, 'matched_game_uuid': None,
+                'threshold': title_threshold, 'transforms': [],
+                'compared_labels': [new_label, existing_label]}
 
     new_parsed = parse_game_label(new_label)
     new_cleaned = new_parsed.get('cleaned_name') or new_label

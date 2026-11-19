@@ -171,18 +171,12 @@ def test_store_deals_row_is_registered():
     assert spec.item_kind == 'articles'
 
 
-def test_store_deals_scheduler_starts_once(monkeypatch):
-    monkeypatch.setattr(store_deals_poller, '_scheduler_started', False)
-    started = []
-
-    class _FakeThread:
-        def __init__(self, *args, **kwargs):
-            self.kwargs = kwargs
-
-        def start(self):
-            started.append(self.kwargs.get('name'))
-
-    monkeypatch.setattr(store_deals_poller.threading, 'Thread', _FakeThread)
-    store_deals_poller.start_store_deals_scheduler(object())
-    store_deals_poller.start_store_deals_scheduler(object())
-    assert started == ['oneirodex-store-deals']
+def test_store_deals_scheduler_starts_once():
+    first = store_deals_poller.start_store_deals_scheduler(object())
+    try:
+        thread = first.thread
+        assert thread.name == 'oneirodex-store-deals'
+        assert store_deals_poller.start_store_deals_scheduler(object()).thread is thread
+    finally:
+        first.stop()
+    assert not thread.is_alive()

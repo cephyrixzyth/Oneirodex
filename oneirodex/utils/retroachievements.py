@@ -191,23 +191,23 @@ def _nes_hash(data: bytes) -> str:
         body = data[start:]
         if 0 < size <= len(body):
             body = body[:size]
-        return hashlib.md5(body).hexdigest()
+        return hashlib.md5(body, usedforsecurity=False).hexdigest()
     if data[:4] == b'FDS\x1a' and len(data) > 16:
-        return hashlib.md5(data[16:]).hexdigest()
-    return hashlib.md5(data).hexdigest()
+        return hashlib.md5(data[16:], usedforsecurity=False).hexdigest()
+    return hashlib.md5(data, usedforsecurity=False).hexdigest()
 
 
 def _snes_hash(data: bytes) -> str:
     """Copier header: 512 bytes when the size is 512 past a multiple of 8 KiB."""
     if len(data) % 8192 == 512:
         data = data[512:]
-    return hashlib.md5(data).hexdigest()
+    return hashlib.md5(data, usedforsecurity=False).hexdigest()
 
 
 def _lynx_hash(data: bytes) -> str:
     if data[:4] == b'LYNX' and len(data) > 64:
         data = data[64:]
-    return hashlib.md5(data).hexdigest()
+    return hashlib.md5(data, usedforsecurity=False).hexdigest()
 
 
 def _pce_hash(data: bytes) -> str:
@@ -215,13 +215,13 @@ def _pce_hash(data: bytes) -> str:
     calc = (len(data) // 0x20000) * 0x20000
     if len(data) - calc == 512:
         data = data[512:]
-    return hashlib.md5(data).hexdigest()
+    return hashlib.md5(data, usedforsecurity=False).hexdigest()
 
 
 def _a7800_hash(data: bytes) -> str:
     if data[:10] == b'\x01ATARI7800' and len(data) > 128:
         data = data[128:]
-    return hashlib.md5(data).hexdigest()
+    return hashlib.md5(data, usedforsecurity=False).hexdigest()
 
 
 def _n64_hash(data: bytes) -> str:
@@ -235,7 +235,7 @@ def _n64_hash(data: bytes) -> str:
     so only the complete words are swapped and any short tail is left as-is.
     """
     if len(data) < 4:
-        return hashlib.md5(data).hexdigest()
+        return hashlib.md5(data, usedforsecurity=False).hexdigest()
     magic = data[:4]
     if magic == b'\x37\x80\x40\x12':  # v64: 16-bit byteswapped
         end = len(data) - (len(data) % 2)
@@ -252,7 +252,7 @@ def _n64_hash(data: bytes) -> str:
             data[0:end:4],
         )
         data = bytes(body) + data[end:]
-    return hashlib.md5(data).hexdigest()
+    return hashlib.md5(data, usedforsecurity=False).hexdigest()
 
 
 _HASHERS = {
@@ -271,7 +271,7 @@ def ra_hash_bytes(data: bytes, platform_key: str | None) -> str | None:
     if key not in RA_CONSOLE_IDS or not data:
         return None
     hasher = _HASHERS.get(key)
-    return hasher(data) if hasher else hashlib.md5(data).hexdigest()
+    return hasher(data) if hasher else hashlib.md5(data, usedforsecurity=False).hexdigest()
 
 
 def _read_rom_bytes(path: str | Path, platform_key: str | None) -> bytes | None:

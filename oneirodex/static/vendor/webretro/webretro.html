@@ -55,6 +55,7 @@
             <button type="button" id="od-saves-sync" title="Push the current state and SRAM to the server now">Sync now</button>
             <span class="od-saves-hint">States also save on Back / Power.</span>
         </form>
+        <ul id="od-local-saves" class="od-saves-list" aria-label="Locally pending saves"></ul>
         <ul id="od-saves-list" class="od-saves-list" aria-label="Saved states"></ul>
     </div>
     <div id="od-resume-bar" class="od-resume-bar" role="dialog" aria-live="polite" aria-label="Resume where you left off?" hidden>
@@ -104,6 +105,7 @@
         </div>
     </div>
     <script src="./constants.js"></script>
+    <script src="./save-outbox.js"></script>
     <script>
         (function () {
             function getQueryStringArgs() {
@@ -235,19 +237,15 @@
 
             var leaving = false;
             function goBackToLibrary() {
-                /* Auto-state on quit: take a state and push it as `auto`
-                   before the page goes. Capped so a slow server never holds
-                   the member on this screen; the upload uses keepalive so it
-                   can finish after navigation. */
                 if (leaving) return;
+                if (saveEnabled === false) { leaveNow(); return; }
                 leaving = true;
                 setStatus('Saving your place…');
-                var capped = new Promise(function (resolve) {
-                    window.setTimeout(resolve, 3500);
+                autoSaveState({ explicitExit: true }).then(leaveNow, function (err) {
+                    leaving = false;
+                    setStatus(err.message || 'Could not save your place.');
+                    if (window.confirm('Your place could not be saved. Leave anyway?')) leaveNow();
                 });
-                Promise.race([autoSaveState({ keepalive: true }), capped])
-                    .catch(function () {})
-                    .then(leaveNow);
             }
 
             if (backBtn) {
@@ -539,26 +537,20 @@
 
             /* Optional: called on each retry so a long wait can say what it is
                waiting for instead of showing one frozen line. */
-            function waitUntilReady(attemptsLeft, requireMain, onWait) {
-                return callEmu('od-ping', {}, 2000).then(function (res) {
-                    var ok = res.ready && (!requireMain || res.mainCompleted);
-                    if (ok) return res;
-                    if (attemptsLeft <= 0) throw new Error(requireMain ? 'Emulator not started' : 'ROM not ready');
-                    if (onWait) onWait(attemptsLeft);
-                    return new Promise(function (resolve) {
-                        window.setTimeout(resolve, 1000);
-                    }).then(function () {
-                        return waitUntilReady(attemptsLeft - 1, requireMain, onWait);
-                    });
-                }).catch(function (err) {
-                    if (attemptsLeft <= 0) throw err;
-                    if (onWait) onWait(attemptsLeft);
-                    return new Promise(function (resolve) {
-                        window.setTimeout(resolve, 1000);
-                    }).then(function () {
-                        return waitUntilReady(attemptsLeft - 1, requireMain, onWait);
-                    });
-                });
+            async function waitUntilReady(attemptsLeft, requireMain, onWait) {
+                const frame = emuFrame;
+                for (let remaining = attemptsLeft; remaining >= 0; remaining--) {
+                    if (emuFrame !== frame) throw new Error('Emulator frame changed');
+                    try {
+                        const reply = await callEmu('od-ping', {}, 2000);
+                        if (reply.ready && (!requireMain || reply.mainCompleted)) return reply;
+                        if (!remaining) throw new Error(requireMain ? 'Emulator not started' : 'ROM not ready');
+                    } catch (err) {
+                        if (!remaining) throw err;
+                    }
+                    if (onWait) onWait(remaining);
+                    await new Promise(resolve => window.setTimeout(resolve, 1000));
+                }
             }
 
             function whenIdle(fn, timeoutMs) {
@@ -569,35 +561,143 @@
                 }
             }
 
-            function uploadSlot(slot, blob, filename, opts) {
-                var body = new FormData();
-                body.append('file', blob, filename);
-                body.append('slot', slot);
-                return withCsrf().then(function (token) {
-                    return fetch('/api/games/' + encodeURIComponent(guid) + '/saves', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: { 'X-CSRFToken': token },
-                    body: body,
-                    // keepalive: the auto-state on quit must survive the
-                    // navigation that follows it (browsers cap this at 64 KiB
-                    // in flight; states are usually well under).
-                    keepalive: !!(opts && opts.keepalive),
-                    }).then(function (r) {
-                        return r.json().then(function (j) {
-                            if (!r.ok) throw new Error(j.error || 'Upload failed');
-                            return j;
-                        });
-                    });
+            let memberId = '';
+            let saveEnabled;
+            const revisions = new Map();
+            let sawManifest = false;
+            let ownerChanged = false;
+            let queue = Promise.resolve();
+            const pendingRequests = new Map();
+
+            function saveRequestTimeout() {
+                return typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(8000) : undefined;
+            }
+
+            async function uploadAlreadyCommitted(row) {
+                const remote = await fetch('/api/games/' + encodeURIComponent(guid) + '/saves/' + encodeURIComponent(row.slot), {
+                    credentials: 'same-origin', cache: 'no-store', signal: saveRequestTimeout(),
+                    headers: { 'X-Oneirodex-Save-Member': row.member },
                 });
+                const version = Number(remote.headers.get('X-Oneirodex-Save-Revision'));
+                if (!remote.ok || version !== row.revision + 1) return false;
+                const actual = new Uint8Array(await remote.arrayBuffer());
+                if (actual.length !== row.blob.size) return false;
+                const expected = new Uint8Array(await row.blob.arrayBuffer());
+                return actual.every((value, i) => value === expected[i]);
+            }
+
+            function sendPending(row) {
+                if (memberId !== row.member || guid !== row.game) return Promise.reject(new Error('Member changed'));
+                if (pendingRequests.has(row.id)) return pendingRequests.get(row.id);
+                const request = (async () => {
+                    const body = new FormData();
+                    body.append('file', row.blob, row.filename);
+                    body.append('slot', row.slot);
+                    body.append('expected_revision', String(row.revision));
+                    body.append('expected_member', row.member);
+                    const response = await fetch('/api/games/' + encodeURIComponent(guid) + '/saves', {
+                        method: 'POST', credentials: 'same-origin', body, signal: saveRequestTimeout(),
+                        headers: { 'X-CSRFToken': await withCsrf() },
+                    });
+                    const result = await response.json();
+                    if (response.status === 409 && await uploadAlreadyCommitted(row)) {
+                        revisions.set(row.slot, row.revision + 1);
+                        await window.odSaveOutbox.remove(row.id);
+                        return;
+                    }
+                    if (!response.ok) throw new Error(response.status === 409
+                        ? 'Server save changed. Your copy is in Saves under pending saves.'
+                        : result.error || 'Upload failed');
+                    if (memberId === row.member) revisions.set(row.slot, result.revision);
+                    await window.odSaveOutbox.remove(row.id);
+                })().finally(() => pendingRequests.delete(row.id));
+                pendingRequests.set(row.id, request);
+                return request;
+            }
+
+            async function showPending() {
+                if (!memberId) return;
+                const owner = memberId;
+                const rows = await window.odSaveOutbox.list(owner, guid);
+                if (memberId !== owner) return;
+                const list = document.getElementById('od-local-saves');
+                list.replaceChildren();
+                for (const row of rows) {
+                    const item = document.createElement('li');
+                    item.className = 'od-saves-row';
+                    const label = document.createElement('span');
+                    label.textContent = slotLabel(row.slot) + ' · pending ' + new Date(row.createdAt).toLocaleString();
+                    const download = document.createElement('button');
+                    download.type = 'button';
+                    download.textContent = 'Export local copy';
+                    download.onclick = () => {
+                        const link = document.createElement('a');
+                        const url = URL.createObjectURL(row.blob);
+                        link.href = url;
+                        link.download = row.slot + (row.filename.endsWith('.srm') ? '.srm' : '.state');
+                        link.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 30000);
+                    };
+                    const retry = document.createElement('button');
+                    retry.type = 'button';
+                    retry.textContent = 'Retry sync';
+                    retry.onclick = () => sendPending(row).then(refreshSaves).catch(err => setStatus(err.message));
+                    const discard = document.createElement('button');
+                    discard.type = 'button';
+                    discard.textContent = 'Discard local copy';
+                    discard.onclick = async () => {
+                        if (!window.confirm('Discard this pending local save?')) return;
+                        await window.odSaveOutbox.remove(row.id);
+                        await showPending();
+                    };
+                    item.append(label, retry, download);
+                    if (saveEnabled && row.slot !== SRAM_SLOT) {
+                        const saveAs = document.createElement('button');
+                        saveAs.type = 'button';
+                        saveAs.textContent = 'Save as new slot';
+                        saveAs.onclick = async () => {
+                            const name = slugForName(window.prompt('New save name') || '');
+                            if (!name) return;
+                            saveAs.disabled = true;
+                            try {
+                                await listSaves();
+                                const { id, ...snapshot } = row;
+                                const [copy] = await window.odSaveOutbox.add([{
+                                    ...snapshot, slot: QS_PREFIX + name, filename: name + '.state',
+                                    revision: 0, createdAt: Date.now(),
+                                }]);
+                                await sendPending(copy);
+                                await window.odSaveOutbox.remove(id);
+                                await refreshSaves();
+                            } catch (err) { saveAs.disabled = false; await showPending(); setStatus(err.message); }
+                        };
+                        item.appendChild(saveAs);
+                    }
+                    item.appendChild(discard);
+                    list.appendChild(item);
+                }
+            }
+
+            async function retryPending() {
+                if (!memberId) return;
+                if (!saveEnabled) { await showPending(); return; }
+                const rows = await window.odSaveOutbox.list(memberId, guid);
+                for (const row of rows) {
+                    try { await sendPending(row); }
+                    catch (err) { setStatus(err.message || 'Save pending on this device'); }
+                }
+                await showPending();
             }
 
             function downloadSlotB64(slot) {
                 return fetch('/api/games/' + encodeURIComponent(guid) + '/saves/' + encodeURIComponent(slot), {
-                    credentials: 'same-origin',
+                    credentials: 'same-origin', cache: 'no-store', signal: saveRequestTimeout(),
+                    headers: { 'X-Oneirodex-Save-Member': memberId },
                 }).then(function (r) {
                     if (r.status === 404) return null;
                     if (!r.ok) throw new Error('Download failed');
+                    const revision = Number(r.headers.get('X-Oneirodex-Save-Revision'));
+                    if (revision > 0) revisions.set(slot, revision);
                     return r.blob().then(blobToB64);
                 });
             }
@@ -653,74 +753,92 @@
                     .slice(0, 24);
             }
 
-            function listSaves() {
-                if (!guid) return Promise.resolve([]);
-                return fetch('/api/games/' + encodeURIComponent(guid) + '/saves', {
-                    credentials: 'same-origin',
-                }).then(function (r) {
-                    if (!r.ok) return [];
-                    return r.json().then(function (body) {
-                        rememberCsrf(body.csrf_token);
-                        return Array.isArray(body.saves) ? body.saves : [];
-                    });
-                }).catch(function () {
-                    return [];
+            async function listSaves() {
+                if (!guid) return [];
+                if (ownerChanged) throw new Error('Member changed. Reopen this game before saving.');
+                const response = await fetch('/api/games/' + encodeURIComponent(guid) + '/saves', {
+                    credentials: 'same-origin', cache: 'no-store', signal: saveRequestTimeout(),
                 });
+                if (!response.ok) throw new Error('Save library unavailable (' + response.status + ')');
+                const body = await response.json();
+                if (!body.member_id || !Array.isArray(body.saves)) throw new Error('Save library could not verify this member');
+                if (memberId && memberId !== body.member_id) {
+                    ownerChanged = true;
+                    memberId = '';
+                    saveEnabled = false;
+                    document.getElementById('od-local-saves').replaceChildren();
+                    savesList.replaceChildren();
+                    hideResumeBar();
+                    throw new Error('Member changed. Reopen this game before saving.');
+                }
+                memberId = body.member_id;
+                saveEnabled = Boolean(body.enabled && body.can_write_own_save);
+                rememberCsrf(body.csrf_token);
+                if (!sawManifest) {
+                    body.saves.forEach(row => revisions.set(row.slot_name, row.revision));
+                    sawManifest = true;
+                }
+                return body.saves;
             }
 
-            function deleteSlot(slot) {
+            function deleteSlot(slot, revision) {
                 return withCsrf().then(function (token) {
-                    return fetch('/api/games/' + encodeURIComponent(guid) + '/saves/' + encodeURIComponent(slot), {
+                    return fetch('/api/games/' + encodeURIComponent(guid) + '/saves/' + encodeURIComponent(slot) + '?expected_revision=' + revision, {
                         method: 'DELETE',
                         credentials: 'same-origin',
-                        headers: { 'X-CSRFToken': token },
+                        headers: { 'X-CSRFToken': token, 'X-Oneirodex-Save-Member': memberId },
                     });
                 }).then(function (r) {
                     if (!r.ok) throw new Error('Delete failed');
+                    revisions.set(slot, 0);
                 });
             }
 
-            /* Export the core's state (+ SRAM) and push the state to `slot`.
-               SRAM always lands in cloud-sram — there is one battery save per
-               game, whatever the state slot. `opts.keepalive` lets the upload
-               outlive a navigation (auto-state on quit). */
+            async function captureSave(slot, opts) {
+                if (!sawManifest) await listSaves();
+                if (!saveEnabled) throw new Error('Save sync is unavailable for this member');
+                await waitUntilReady(opts.attempts ?? 20, true);
+                const exported = await callEmu('od-export-saves', {}, 130000);
+                if (!exported.stateB64 && slot.startsWith(QS_PREFIX)) {
+                    throw new Error(exported.statePending ? 'The emulator did not finish its state. Try saving again.' : 'This core has no state available to name.');
+                }
+                const rows = [];
+                function add(name, bytes, filename) {
+                    if (bytes) rows.push({ member: memberId, game: guid, slot: name, filename,
+                        revision: revisions.get(name) || 0, blob: b64ToBlob(bytes), createdAt: Date.now() });
+                }
+                add(slot, exported.stateB64, 'cloud.state');
+                add(SRAM_SLOT, exported.sramB64, 'cloud.srm');
+                if (!rows.length) throw new Error('No save data yet. Save in-game before syncing.');
+                const drafts = await window.odSaveOutbox.add(rows);
+                const sent = Promise.all(drafts.map(sendPending));
+                if (opts.explicitExit) {
+                    // The local IDB transaction committed. Navigation can safely interrupt the network.
+                    await Promise.race([sent.catch(() => undefined), new Promise(r => setTimeout(r, 1500))]);
+                } else {
+                    try { await sent; }
+                    catch (err) { await showPending(); throw err; }
+                }
+                if (exported.statePending) {
+                    throw new Error('The emulator did not finish its state. Try saving again.');
+                }
+                return exported;
+            }
+
             function exportAndUpload(slot, opts) {
-                opts = opts || {};
-                if (!guid) return Promise.reject(new Error('No game'));
-                return waitUntilReady(opts.attempts || 20)
-                    .then(function () { return callEmu('od-export-saves', {}, opts.exportTimeout || 10000); })
-                    .then(function (exported) {
-                        var jobs = [];
-                        if (exported.stateB64) {
-                            jobs.push(uploadSlot(slot, b64ToBlob(exported.stateB64, 'cloud.state'), 'cloud.state', opts));
-                        }
-                        if (exported.sramB64) {
-                            jobs.push(uploadSlot(SRAM_SLOT, b64ToBlob(exported.sramB64, 'cloud.srm'), 'cloud.srm', opts));
-                        }
-                        if (!jobs.length) {
-                            throw new Error('No save data yet - save in-game or Save State, then sync again');
-                        }
-                        return Promise.all(jobs).then(function () { return exported; });
-                    });
+                const next = queue.then(() => captureSave(slot, opts || {}));
+                queue = next.catch(() => {});
+                return next;
             }
 
-            /* Throttled so a tab flicking in and out does not upload on every
-               flicker — but the stamp is set on SUCCESS, never on the attempt.
-               Stamping up front meant a hidden-tab save that failed because the
-               core had not started yet (entirely normal in the first seconds)
-               armed the throttle, and the deliberate save on Back or Power a few
-               seconds later returned early and took nothing. The room promises
-               "States also save on Back / Power"; that has to be true even when
-               an earlier opportunistic attempt came to nothing. */
+            let autoPending;
             function autoSaveState(opts) {
-                if (Date.now() - lastAutoSaveAt < 15000) return Promise.resolve(null);
-                return exportAndUpload(
-                    AUTO_SLOT,
-                    Object.assign({ attempts: 1, exportTimeout: 9000 }, opts || {})
-                ).then(function (result) {
-                    lastAutoSaveAt = Date.now();
-                    return result;
-                });
+                if (autoPending && !opts?.explicitExit) return autoPending;
+                if (!opts?.explicitExit && Date.now() - lastAutoSaveAt < 15000) return Promise.resolve(null);
+                autoPending = exportAndUpload(AUTO_SLOT, { attempts: 1, ...opts })
+                    .then(result => { lastAutoSaveAt = Date.now(); return result; })
+                    .finally(() => { autoPending = null; });
+                return autoPending;
             }
 
             function hideResumeBar() {
@@ -745,6 +863,51 @@
                 hideResumeBar();
                 setStatus('Starting fresh');
             });
+
+            async function showSaveHistory(container, row, before) {
+                const base = '/api/games/' + encodeURIComponent(guid) + '/saves/' + encodeURIComponent(row.slot_name) + '/history';
+                const headers = { 'X-Oneirodex-Save-Member': memberId };
+                const response = await fetch(base + (before ? '?before=' + before : ''), {
+                    headers, credentials: 'same-origin', cache: 'no-store', signal: saveRequestTimeout(),
+                });
+                if (!response.ok) throw new Error('Save history unavailable (' + response.status + ')');
+                const body = await response.json();
+                if (!before) container.replaceChildren();
+                for (const version of body.generations) {
+                    const restore = document.createElement('button');
+                    restore.type = 'button';
+                    restore.textContent = 'Restore ' + version.filename + ' · ' + whenLabel(version.retained_at) + ' (#' + version.id + ')';
+                    restore.disabled = !saveEnabled;
+                    restore.onclick = async () => {
+                        if (!window.confirm('Restore this version as the current save? The current version will stay in history.')) return;
+                        restore.disabled = true;
+                        try {
+                            const token = await withCsrf();
+                            const saved = await fetch(base + '/' + version.id + '/restore?expected_revision=' + row.revision, {
+                                method: 'POST', headers: { ...headers, 'X-CSRFToken': token },
+                                credentials: 'same-origin', signal: saveRequestTimeout(),
+                            });
+                            if (!saved.ok) throw new Error(saved.status === 409 ? 'Save changed. Reopen history before restoring.' : 'Restore failed (' + saved.status + ')');
+                            // The running core still contains its previous state. Keep its revision pin until the user loads the restored slot.
+                            await refreshSaves();
+                            setStatus('Version restored. Choose Load to play it.');
+                        } catch (err) { restore.disabled = false; setStatus(err.message); }
+                    };
+                    container.append(restore);
+                }
+                if (!body.generations.length && !before) container.textContent = 'No previous versions.';
+                if (body.next_before) {
+                    const more = document.createElement('button');
+                    more.type = 'button';
+                    more.textContent = 'Older versions';
+                    more.onclick = () => {
+                        more.disabled = true;
+                        showSaveHistory(container, row, body.next_before).then(() => more.remove())
+                            .catch(err => { more.disabled = false; setStatus(err.message); });
+                    };
+                    container.append(more);
+                }
+            }
 
             function renderSaves(rows) {
                 if (!savesList) return;
@@ -778,7 +941,7 @@
                     del.setAttribute('aria-label', 'Delete ' + slotLabel(row.slot_name));
                     del.addEventListener('click', function () {
                         del.disabled = true;
-                        deleteSlot(row.slot_name).then(refreshSaves).catch(function (err) {
+                        deleteSlot(row.slot_name, row.revision).then(refreshSaves).catch(function (err) {
                             del.disabled = false;
                             setStatus(err.message || 'Delete failed');
                         });
@@ -787,12 +950,20 @@
                     li.appendChild(when);
                     li.appendChild(load);
                     li.appendChild(del);
+                    if (row.revision > 1) {
+                        const history = document.createElement('button');
+                        const versions = document.createElement('div');
+                        history.type = 'button';
+                        history.textContent = 'History';
+                        history.onclick = () => showSaveHistory(versions, row).catch(err => setStatus(err.message));
+                        li.append(history, versions);
+                    }
                     savesList.appendChild(li);
                 });
             }
 
             function refreshSaves() {
-                return listSaves().then(renderSaves);
+                return listSaves().then(renderSaves).then(showPending).catch(err => setStatus(err.message));
             }
 
             function loadSlot(slot) {
@@ -855,9 +1026,18 @@
                close button is the common way a play session ends. */
             document.addEventListener('visibilitychange', function () {
                 if (document.visibilityState !== 'hidden' || leaving) return;
-                autoSaveState({ keepalive: true }).catch(function () {});
+                if (saveEnabled) autoSaveState({}).catch(err => setStatus(err.message || 'Save pending'));
             });
 
+            // Bind drafts to the authenticated member before the emulator boots.
+            const initialMember = guid ? listSaves().then(() => memberId).catch(err => {
+                ownerChanged = true;
+                saveEnabled = false;
+                setStatus(err.message);
+                return '';
+            }) : Promise.resolve('');
+            initialMember.then(owner => { if (owner) return retryPending(); }).catch(err => setStatus(err.message));
+            window.addEventListener('online', () => listSaves().then(retryPending).catch(err => setStatus(err.message)));
             function pullCloudIntoEmu() {
                 if (!guid) return Promise.resolve();
                 setStatus('Checking for saves…');
@@ -967,26 +1147,33 @@
                 // nobundle=1 skips dozens of CDN RetroArch asset fetches on cold start.
                 frame.src = path + '?core=' + encodeURIComponent(queries.core || '') +
                     '&rom=' + encodeURIComponent(apiUrl + queries.guid) +
+                    '&od_profile=' + encodeURIComponent(queries.profile) +
+                    '&od_game=' + encodeURIComponent(queries.guid) +
                     '&nobundle=1' +
-                    '&_gt=save-states-5';
+                    '&_gt=save-states-6';
                 node.appendChild(frame);
                 return frame;
             }
 
             preloadPlayAssets();
             var path = location.protocol + '//' + location.host + '/static/vendor/webretro/standalone.html';
-            emuFrame = webretroEmbed(document.getElementById('webretro'), path, { core: core, guid: guid });
-            // Defer cloud pull until after ROM/main — do not compete with core WASM download.
-            emuFrame.addEventListener('load', function () {
-                window.setTimeout(function () { pullCloudIntoEmu(); }, 500);
-                window.setTimeout(function () {
-                    callEmu('od-picture', { mode: pictureMode }, 2500).then(function (res) {
-                        syncChromeLabels(res);
-                    }).catch(function () {});
-                    callEmu('od-ping', {}, 2000).then(function (res) {
-                        syncChromeLabels(res);
-                    }).catch(function () {});
-                }, 800);
+            initialMember.then(function (owner) {
+                // A guest or an unreachable identity service gets a fresh cache.
+                // Playback still works without assigning legacy saves to a household member.
+                var profile = owner || 'session-' + crypto.getRandomValues(new Uint32Array(4)).join('-');
+                emuFrame = webretroEmbed(document.getElementById('webretro'), path, { core: core, guid: guid, profile: profile });
+                // Defer cloud pull until after ROM/main — do not compete with core WASM download.
+                emuFrame.addEventListener('load', function () {
+                    window.setTimeout(function () { pullCloudIntoEmu(); }, 500);
+                    window.setTimeout(function () {
+                        callEmu('od-picture', { mode: pictureMode }, 2500).then(function (res) {
+                            syncChromeLabels(res);
+                        }).catch(function () {});
+                        callEmu('od-ping', {}, 2000).then(function (res) {
+                            syncChromeLabels(res);
+                        }).catch(function () {});
+                    }, 800);
+                });
             });
 
             function loadCheatOptions() {

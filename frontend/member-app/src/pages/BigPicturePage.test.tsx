@@ -55,6 +55,7 @@ test('shows loading then renders tiles and hero for the first game', async () =>
     </ShellHarness>,
   )
 
+  expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content')
   expect(screen.getByText(/Loading games/)).toBeInTheDocument()
 
   const alphaTile = await screen.findByRole('option', { name: 'Alpha Game' })
@@ -105,13 +106,13 @@ test('child Big Picture preserves download/install controls in a disabled state'
   expect(downloadsApi.initiateGameDownload).not.toHaveBeenCalled()
 })
 
-test('Big Picture gamepad Y toggles the Friends companion', async () => {
+test('a held Y on a second-slot gamepad toggles the Friends companion once', async () => {
   vi.mocked(browseApi.fetchBrowseGames).mockResolvedValue({ games: GAMES })
   const originalGetGamepads = Object.getOwnPropertyDescriptor(navigator, 'getGamepads')
   const buttons = Array.from({ length: 16 }, (_, index) => ({ pressed: index === 3 }))
   Object.defineProperty(navigator, 'getGamepads', {
     configurable: true,
-    value: () => [{ axes: [0], buttons }],
+    value: () => [null, { index: 1, connected: true, axes: [0], buttons }],
   })
   let nextFrame: FrameRequestCallback | undefined
   vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
@@ -131,6 +132,7 @@ test('Big Picture gamepad Y toggles the Friends companion', async () => {
     await screen.findByRole('heading', { level: 2, name: 'Alpha Game' })
     await waitFor(() => expect(nextFrame).toBeDefined())
     act(() => nextFrame?.(300))
+    act(() => nextFrame?.(650))
 
     expect(screen.getByRole('button', { name: 'Friends' })).toHaveAttribute('aria-pressed', 'true')
   } finally {
@@ -292,4 +294,21 @@ describe('TC-3 honesty on the ten-foot screen', () => {
     // jsdom would record an href assignment; the guard means there is none.
     expect(window.location.href).toBe(before)
   })
+})
+
+test('advances past page one and focuses the first new title', async () => {
+  vi.mocked(browseApi.fetchBrowseGames)
+    .mockResolvedValueOnce({ games: GAMES, pages: 2 })
+    .mockResolvedValueOnce({ games: [{ uuid: 'c3', name: 'Third game' }], pages: 2 })
+  const user = userEvent.setup()
+  renderPage(
+    <ShellHarness shell={{}}>
+      <BigPicturePage />
+    </ShellHarness>,
+  )
+  await user.click(await screen.findByRole('button', { name: 'More games' }))
+  const tile = await screen.findByRole('option', { name: 'Third game' })
+  expect(tile).toHaveFocus()
+  expect(tile).toHaveAttribute('aria-selected', 'true')
+  expect(screen.queryByRole('button', { name: 'More games' })).toBeNull()
 })

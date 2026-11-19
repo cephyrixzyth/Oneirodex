@@ -65,7 +65,7 @@ class VrReadData:
                     exists(profile_link(('injector',))),
                 ),
             ))
-        query = query.order_by(Game.name.asc())
+        query = query.order_by(Game.name.asc(), Game.uuid.asc())
         total = db.session.execute(
             select(func.count()).select_from(query.order_by(None).subquery()),
         ).scalar() or 0
@@ -99,11 +99,13 @@ class VrReadData:
             return None, 'forbidden'
         if not game_in_vr_hub(game, game_vr_compat):
             return None, 'not_found'
+        from .member_game_state import MemberGameStateData
         return {
             'uuid': game.uuid, 'name': game.name,
             'cover_url': cover_url_for_game(game, db.session, Game, Image), 'summary': game.summary,
             'size': format_size(game.size) if game.size is not None else None,
             'vr_compat': game_vr_compat(game),
+            'is_favorite': MemberGameStateData().is_favorite(user, game),
             'vr_profiles': [row.to_dict() for row in (game.vr_profiles or [])],
         }, None
 

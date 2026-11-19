@@ -173,6 +173,8 @@ def _build_schema_once():
         # Idempotent, and now paid for once per process rather than per test.
         from oneirodex.updateschema import DatabaseManager
         DatabaseManager().add_column_if_not_exists()
+        from oneirodex.init_manager import InitializationManager
+        InitializationManager()._ensure_alembic_current(db.engine)
 
         # One-time floor sweep. Per-test isolation (below) keeps the database
         # clean going forward, but it cannot un-commit rows a previous harness

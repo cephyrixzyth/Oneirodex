@@ -17,7 +17,15 @@ export interface ClientCapabilities {
   denies: string[]
 }
 
+export interface CommandLease {
+  device_id: string
+  lease_id: string
+  result?: 'busy' | 'error'
+}
+
 export interface HeartbeatRequest {
+  command_protocol?: 2
+  renew_lease?: string
   device_id: string
   device_kind?: DeviceKind
   device_name?: string
@@ -26,6 +34,7 @@ export interface HeartbeatRequest {
 
 /** Queued companion command as delivered on the heartbeat response. */
 export interface RawCompanionCommand {
+  lease_id?: string
   id?: string
   game_uuid?: string
   action?: string
@@ -72,20 +81,20 @@ export function createDeviceApi(request: Requester) {
     },
 
     /** Report a batch of commands as handled. */
-    ackCommands(ids: string[]): Promise<unknown> {
+    ackCommands(ids: string[], lease?: CommandLease): Promise<unknown> {
       return request('/api/client/commands/ack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ ids, ...lease }),
       })
     },
 
     /** Return a batch of commands to `pending` (busy / failed / offline). */
-    nackCommands(ids: string[]): Promise<unknown> {
+    nackCommands(ids: string[], lease?: CommandLease): Promise<unknown> {
       return request('/api/client/commands/nack', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ ids, ...lease }),
       })
     },
   }

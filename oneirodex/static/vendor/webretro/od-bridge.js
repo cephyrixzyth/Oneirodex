@@ -5,14 +5,9 @@
 (function () {
   'use strict';
 
-  /* RetroArch writes the state's 8-byte RZIP header immediately and then
-     compresses for a second or three before the payload lands, so the tail has
-     to outlast that. It exits early the moment the size settles, which on a
-     warm core is the second read (~0.6 s). */
+  // A cold single-threaded core can take several seconds to finish compressing.
   var EXPORT_DELAYS_MS = [200, 400, 800, 1200, 1600, 2000];
-
-  /* Shorter than any real save state: an RZIP header alone is 20 bytes, and a
-     partial one -- which is exactly what a mid-write read returns -- is 8. */
+  var STATE_PATH = '/home/web_user/retroarch/userdata/states/rom.state';
   var MIN_STATE_BYTES = 24;
 
   function b64FromU8(u8) {
@@ -72,79 +67,72 @@
     return false;
   }
 
-  function collectExportPayload() {
-    var stateP = typeof getIdbItem === 'function'
-      ? getIdbItem('RetroArch_states_' + romName)
-      : Promise.resolve(null);
-    var saveP = typeof getIdbItem === 'function'
-      ? getIdbItem('RetroArch_saves_' + romName)
-      : Promise.resolve(null);
-    return Promise.all([stateP, saveP]).then(function (pair) {
-      var state = pair[0];
-      var saveArr = pair[1];
-      /* The file is what RetroArch is writing; IndexedDB is webretro's copy of
-         it, made from a write callback that can fire mid-write. Read both and
-         keep whichever is longer, rather than trusting the cache. */
-      var onDisk = null;
-      try {
-        if (
-          typeof FS !== 'undefined' &&
-          FS.analyzePath('/home/web_user/retroarch/userdata/states/rom.state').exists
-        ) {
-          onDisk = FS.readFile('/home/web_user/retroarch/userdata/states/rom.state');
-        }
-      } catch (eRead) {
-        onDisk = null;
-      }
-      if (onDisk && (!state || onDisk.length > state.length)) {
-        state = onDisk;
-      }
-      var sram = pickSramBytes(saveArr);
-      return {
-        ok: true,
-        romName: romName,
-        stateB64: state ? b64FromU8(state instanceof Uint8Array ? state : new Uint8Array(state)) : null,
-        sramB64: sram ? b64FromU8(sram) : null,
-      };
-    });
+  function stateModificationTime() {
+    try {
+      return FS.stat(STATE_PATH).mtime.getTime();
+    } catch (err) {
+      return null;
+    }
   }
 
-  /* Retry until the state stops GROWING, not until it first appears.
+  // RetroArch fills in the 20-byte RZIP header as it closes the stream. Check
+  // the advertised number of complete chunks so a partial tail cannot sync.
+  function completeState(bytes) {
+    if (!bytes || bytes.length < MIN_STATE_BYTES) return false;
+    if (String.fromCharCode.apply(null, bytes.subarray(0, 6)) !== '#RZIPv') return true;
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var chunkSize = view.getUint32(8, true);
+    var rawSize = view.getUint32(12, true) + view.getUint32(16, true) * 4294967296;
+    if (!chunkSize || !rawSize || !Number.isSafeInteger(rawSize)) return false;
+    var blocks = Math.ceil(rawSize / chunkSize);
+    var offset = 20;
+    for (var i = 0; i < blocks; i++) {
+      if (offset + 4 > bytes.length) return false;
+      var size = view.getUint32(offset, true);
+      if (!size || size > bytes.length - offset - 4) return false;
+      offset += 4 + size;
+    }
+    return offset === bytes.length;
+  }
 
-     RetroArch writes rom.state through Emscripten's FS a piece at a time, and
-     webretro copies it into IndexedDB from the write callback -- so the first
-     copy is routinely the 8-byte RZIP header and nothing else. Accepting the
-     first non-empty read is how a save state came back 9 bytes long, uploaded
-     cleanly, showed up in the list, and then would not load. */
-  function exportWithRetries(done, attempt, lastLen) {
-    var idx = attempt || 0;
-    var seen = lastLen || 0;
-    var delay = EXPORT_DELAYS_MS[Math.min(idx, EXPORT_DELAYS_MS.length - 1)];
-    var isLast = idx >= EXPORT_DELAYS_MS.length - 1;
-    window.setTimeout(function () {
-      collectExportPayload()
-        .then(function (payload) {
-          var len = payload.stateB64 ? payload.stateB64.length : 0;
-          var bytes = Math.floor((len * 3) / 4);
-          // Settled = we have something, it stopped growing, and it is big
-          // enough to be a state rather than the header of one.
-          var settled =
-            (payload.sramB64 && !payload.stateB64) ||
-            (payload.stateB64 && len <= seen && bytes >= MIN_STATE_BYTES);
-          if (isLast || settled) {
-            done(payload);
-            return;
-          }
-          exportWithRetries(done, idx + 1, len);
-        })
-        .catch(function (err) {
-          if (isLast) {
-            done({ ok: false, error: String(err && err.message ? err.message : err) });
-            return;
-          }
-          exportWithRetries(done, idx + 1, seen);
+  function exportWithRetries(done, previousTime, supportsState) {
+    var attempt = 0;
+    var previousSize = 0;
+    var idleMs = 0;
+    var elapsedMs = 0;
+    function poll() {
+      var delay = EXPORT_DELAYS_MS[Math.min(attempt++, EXPORT_DELAYS_MS.length - 1)];
+      elapsedMs += delay;
+      window.setTimeout(function () {
+        var stamp = stateModificationTime();
+        var bytes = null;
+        // IndexedDB is a cache of earlier writes and can contain a longer,
+        // older state. Only the file written by this capture can become a slot.
+        if (supportsState && stamp !== null && stamp !== previousTime) {
+          try { bytes = FS.readFile(STATE_PATH); } catch (err) {}
+        }
+        var length = bytes ? bytes.length : 0;
+        var settled = length === previousSize && completeState(bytes);
+        idleMs = length === previousSize ? idleMs + delay : 0;
+        previousSize = length;
+        if (supportsState && !settled && idleMs < 30000 && elapsedMs < 120000) {
+          poll();
+          return;
+        }
+        var sram = typeof getIdbItem === 'function'
+          ? getIdbItem('RetroArch_saves_' + romName)
+          : Promise.resolve(null);
+        sram.then(function (saves) {
+          done({ ok: true, romName: romName,
+            statePending: supportsState && !settled,
+            stateB64: settled ? b64FromU8(bytes) : null,
+            sramB64: b64FromU8(pickSramBytes(saves)) });
+        }).catch(function (err) {
+          done({ ok: false, error: String(err && err.message ? err.message : err) });
         });
-    }, delay);
+      }, delay);
+    }
+    poll();
   }
 
   function reply(source, origin, reqId, payload) {
@@ -426,13 +414,16 @@
           done({ ok: false, error: 'ROM not ready yet' });
           return;
         }
+        var previousTime = stateModificationTime();
+        var supportsState = typeof Module !== 'undefined' && typeof Module._cmd_save_state === 'function' &&
+          !(typeof noStateCores !== 'undefined' && noStateCores.indexOf(core) >= 0);
         try {
-          if (typeof Module !== 'undefined' && Module._cmd_save_state) Module._cmd_save_state();
-        } catch (e1) {}
+          if (supportsState) Module._cmd_save_state();
+        } catch (e1) { supportsState = false; }
         try {
           if (typeof Module !== 'undefined' && Module._cmd_savefiles) Module._cmd_savefiles();
         } catch (e2) {}
-        exportWithRetries(done, 0);
+        exportWithRetries(done, previousTime, supportsState);
         return;
       }
 

@@ -162,7 +162,7 @@ def create_artwork_provider_search_router(
                                     )
                                 elif isinstance(exc, RuntimeError):
                                     response = error(
-                                        str(exc), 'bad_gateway', provider=provider_id
+                                        'Artwork provider request failed', 'bad_gateway', provider=provider_id
                                     )
                                 else:
                                     raise
@@ -203,8 +203,8 @@ def create_artwork_provider_search_router(
                 else:
                     try:
                         response = JSONResponse(data.pcgamingwiki(query))
-                    except RuntimeError as exc:
-                        response = error(str(exc), 'bad_gateway', provider='pcgamingwiki')
+                    except RuntimeError:
+                        response = error('Artwork provider request failed', 'bad_gateway', provider='pcgamingwiki')
             if auth.should_set_session_cookie and response is not None:
                 from .acquire_status import _set_session_cookie
 

@@ -2,36 +2,27 @@
 
 from __future__ import annotations
 
-import threading
-import time
+from oneirodex.utils.periodic_worker import PeriodicWorker
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-_scheduler_started = False
+_scheduler = PeriodicWorker('oneirodex-scan-scheduler')
 _POLL_SECONDS = 60
 
 
 def start_scan_scheduler(app):
     """Start a daemon that runs due ScanJobs (idempotent)."""
-    global _scheduler_started
-    if _scheduler_started:
-        return
-    _scheduler_started = True
 
-    def _loop():
-        while True:
-            try:
-                with app.app_context():
-                    database_scope = lambda _app: app.app_context()
-                    _run_due_jobs(app, database_scope=database_scope)
-            except Exception as exc:
-                print(f"[SCAN SCHEDULER] Error: {exc}")
-            time.sleep(_POLL_SECONDS)
+    def run_once():
+        try:
+            with app.app_context():
+                database_scope = lambda _app: app.app_context()
+                _run_due_jobs(app, database_scope=database_scope)
+        except Exception as exc:
+            print(f"[SCAN SCHEDULER] Error: {exc}")
 
-    thread = threading.Thread(target=_loop, name='oneirodex-scan-scheduler', daemon=True)
-    thread.start()
-    print('[SCAN SCHEDULER] Started (poll every 60s)')
+    return _scheduler.start(run_once, interval=_POLL_SECONDS)
 
 
 def _run_due_jobs(app, *, database_scope=None):

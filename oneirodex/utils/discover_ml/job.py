@@ -7,8 +7,7 @@ has been running for a year.
 
 from __future__ import annotations
 
-import threading
-import time
+from oneirodex.utils.periodic_worker import PeriodicWorker
 
 from sqlalchemy import select
 
@@ -18,7 +17,7 @@ from oneirodex.runtime_native.db_session import native_db as db
 from . import similarity
 from .profile import rebuild_profile
 
-_scheduler_started = False
+_scheduler = PeriodicWorker('oneirodex-discover-ml')
 
 #: Default gap between rebuilds. Taste moves slowly; a nightly pass is ample and
 #: a tighter loop would spend the box's disk for no visible difference.
@@ -58,32 +57,22 @@ def _interval_seconds(app) -> int:
 
 def start_discover_ml_scheduler(app):
     """Start the rebuild daemon (idempotent)."""
-    global _scheduler_started
-    if _scheduler_started:
-        return
     if not _is_enabled(app):
         print('[DISCOVER ML] Disabled (ENABLE_DISCOVER_ML=false)')
         return
 
-    _scheduler_started = True
     interval = _interval_seconds(app)
 
-    def _loop():
-        # Let boot finish first: the first rebuild walks every game.
-        time.sleep(60)
-        while True:
-            try:
-                with app.app_context():
-                    stats = rebuild_all()
-                    print(
-                        f"[DISCOVER ML] Rebuilt profiles={stats.get('profiles')}"
-                        f"/{stats.get('members')} content_pairs={stats.get('content_pairs')}"
-                        f" collab={'on' if stats.get('collab_ran') else 'below floor'}"
-                    )
-            except Exception as exc:  # noqa: BLE001
-                print(f'[DISCOVER ML] Error: {exc}')
-            time.sleep(interval)
+    def run_once():
+        try:
+            with app.app_context():
+                stats = rebuild_all()
+                print(
+                    f"[DISCOVER ML] Rebuilt profiles={stats.get('profiles')}"
+                    f"/{stats.get('members')} content_pairs={stats.get('content_pairs')}"
+                    f" collab={'on' if stats.get('collab_ran') else 'below floor'}"
+                )
+        except Exception as exc:  # noqa: BLE001
+            print(f'[DISCOVER ML] Error: {exc}')
 
-    thread = threading.Thread(target=_loop, name='oneirodex-discover-ml', daemon=True)
-    thread.start()
-    print(f'[DISCOVER ML] Started (rebuild every {max(1, interval // 3600)}h)')
+    return _scheduler.start(run_once, interval=interval, delay=60)

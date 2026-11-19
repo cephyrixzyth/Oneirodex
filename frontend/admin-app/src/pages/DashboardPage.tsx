@@ -4,6 +4,7 @@ import { getJson } from '../api/adminApi'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { DashboardBoard } from '../components/DashboardBoard'
 import { DASHBOARD_OPTIONAL_IDS, DASHBOARD_WIDGET_LABELS } from '../components/dashboardLayout'
+import { AdminDirectory } from '../components/AdminDirectory'
 import { Page } from '../components/Page'
 import {
   BuildTile,
@@ -335,16 +336,14 @@ export function DashboardPage() {
   }
 
   return (
-    <Page
-      title="Dashboard"
-      lede="Observability glance — libraries, host pulse, and open issues (~15s). Drag a widget to move it; drag an edge or corner (or use S/M/L/Full) to resize; pin to lock it. Add widget brings back hidden ones; hover refresh for Updated time."
-    >
+    <Page title="Dashboard" className="od-control-dashboard">
       {/* GT-B33: the shared status block, not two hand-rolled ones.
           The error branch used to be a `.od-admin-alert` div and the loading
           branch a `.od-admin-lede` paragraph — two shapes on one page, neither
           matching the member app, and the error text discarded whatever the
           server actually said in favour of a fixed sentence. PageStatus keeps
           the operator-facing sentence and adds the status/error_code line. */}
+      <AdminDirectory />
       <PageStatus
         loading={bootLoading && !summary}
         error={error}

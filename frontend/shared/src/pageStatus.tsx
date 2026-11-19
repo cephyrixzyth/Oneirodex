@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-import { loadingEllipsisFrame, loadingMessageBase } from './loadingStatusText.js'
+import { loadingMessageBase } from './loadingStatusText.js'
 import { Button } from '@oneirodex/ui'
 
 /**
@@ -102,16 +102,6 @@ export function resolveErrorDetail(error: unknown): string | null {
 
 function DefaultLoadingStatus({ inline, className, loadingMessage }: RenderLoadingArgs) {
   const base = loadingMessageBase(loadingMessage)
-  const [tick, setTick] = useState(0)
-
-  useEffect(() => {
-    const reduce =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
-    if (reduce) return undefined
-    const timer = window.setInterval(() => setTick((n) => n + 1), 420)
-    return () => window.clearInterval(timer)
-  }, [])
 
   return (
     <div
@@ -126,7 +116,7 @@ function DefaultLoadingStatus({ inline, className, loadingMessage }: RenderLoadi
       <p className="od-page-status__message">
         <span className="od-page-status__message-base">{base}</span>
         <span className="od-page-status__ellipsis" aria-hidden="true">
-          {loadingEllipsisFrame(tick)}
+          {' ...'}
         </span>
       </p>
     </div>

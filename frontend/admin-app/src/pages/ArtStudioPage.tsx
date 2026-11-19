@@ -65,6 +65,7 @@ export function ArtStudioPage() {
      already does with an absent key. */
   const [headline, setHeadline] = useState('')
   const [subtitle, setSubtitle] = useState('')
+  const [composition, setComposition] = useState('auto')
   const [titleScale, setTitleScale] = useState(DEFAULT_TITLE_SCALE)
   const previewReqId = useRef(0)
 
@@ -126,6 +127,7 @@ export function ArtStudioPage() {
             // which is a different instruction from leaving it out.
             ...(headline.trim() ? { headline: headline.trim() } : {}),
             ...(subtitle !== '' ? { subtitle } : {}),
+            ...(composition !== 'auto' ? { composition } : {}),
             title_scale: titleScale,
           })
           if (reqId !== previewReqId.current) return
@@ -151,7 +153,7 @@ export function ArtStudioPage() {
         }
       }
     },
-    [title, systemForApi, headline, subtitle, titleScale],
+    [title, systemForApi, headline, subtitle, titleScale, composition],
   )
 
   const runPreview = useCallback(async () => {
@@ -179,7 +181,18 @@ export function ArtStudioPage() {
     return () => window.clearTimeout(timer)
   }, [title, variantKey, system, systemForApi, activeVariant, fetchPreviews])
 
+  const generation = useRef(0)
+  useEffect(() => {
+    generation.current++
+    previewReqId.current++
+    setBusy((busy) => (busy.startsWith('preview') ? '' : busy))
+    setPackId('')
+    setPreviewUrl('')
+    setPreviews({})
+  }, [title, systemForApi, headline, subtitle, titleScale, composition])
+
   const runGenerate = useCallback(async () => {
+    const id = ++generation.current
     setBusy('generate')
     setError('')
     setMessage('')
@@ -192,8 +205,10 @@ export function ArtStudioPage() {
         // other than what was on screen when it was clicked.
         ...(headline.trim() ? { headline: headline.trim() } : {}),
         ...(subtitle !== '' ? { subtitle } : {}),
+        ...(composition !== 'auto' ? { composition } : {}),
         title_scale: titleScale,
       })
+      if (id !== generation.current) return
       setPackId(data.pack_id)
       setPreviewUrl(data.preview_url)
       setPreviews({})
@@ -206,7 +221,7 @@ export function ArtStudioPage() {
     } finally {
       setBusy('')
     }
-  }, [title, systemForApi, headline, subtitle, titleScale])
+  }, [title, systemForApi, headline, subtitle, titleScale, composition])
 
   const applyToGame = useCallback(async () => {
     if (!packId || !gameUuid.trim()) {
@@ -334,6 +349,7 @@ export function ArtStudioPage() {
           game_uuids: uuids,
           missing_cover: true,
           system: systemForApi,
+          ...(composition !== 'auto' ? { composition } : {}),
         })
         const applied = batch.applied ?? (Array.isArray(batch.results) ? batch.results.length : 0)
         const failed = batch.failed ?? (Array.isArray(batch.errors) ? batch.errors.length : 0)
@@ -342,37 +358,14 @@ export function ArtStudioPage() {
           (r: any) => `✗ ${r.name || r.game_uuid}: ${r.error || 'failed'}`,
         )
         setBatchLog(['Used POST /admin/api/art-studio/batch-generate.', ...failLines].join('\n'))
-        if (applied > 0) return
-        lines.push(
-          'Batch-generate returned zero applies — trying covers/batch/apply generate_only…',
-        )
-      } catch {
-        lines.push('batch-generate unavailable — trying covers/batch/apply policy=generate_only…')
-      }
-
-      try {
-        const batch = await postJson('/admin/api/covers/batch/apply', {
-          policy: 'generate_only',
-          game_uuids: uuids,
-          missing_cover: true,
-        })
-        const applied = batch.applied ?? 0
-        const failed = batch.failed ?? 0
-        setMessage(`Placeholder apply finished — applied ${applied}, failed ${failed}.`)
-        const failLines = (batch.results || [])
-          .filter((r: any) => r.status === 'failed')
-          .map((r: any) => `✗ ${r.name || r.game_uuid}: ${r.error || 'failed'}`)
-        setBatchLog(
-          [
-            ...lines,
-            'Used POST /admin/api/covers/batch/apply policy=generate_only.',
-            ...failLines,
-          ].join('\n'),
-        )
-        if (applied > 0) return
-        lines.push('Batch apply returned zero applies — generating per selected title…')
-      } catch {
-        lines.push('Batch apply unavailable — generating per title via art-studio APIs…')
+        return
+      } catch (err) {
+        const status = (err as { status?: number } | null)?.status
+        if (status !== 404 && status !== 405) {
+          setError(errorText(err) || 'Could not generate the selected covers.')
+          return
+        }
+        lines.push('Using the per-title artwork generator on this server.')
       }
 
       let ok = 0
@@ -381,6 +374,7 @@ export function ArtStudioPage() {
           const pack = await postJson('/admin/api/art-studio/generate', {
             title: game.name,
             system: systemForApi,
+            ...(composition !== 'auto' ? { composition } : {}),
             format: 'webp',
           })
           await postJson('/admin/api/art-studio/apply', {
@@ -399,7 +393,7 @@ export function ArtStudioPage() {
     } finally {
       setBusy('')
     }
-  }, [missingCovers, batchSelected, systemForApi])
+  }, [missingCovers, batchSelected, systemForApi, composition])
 
   const downloadZip = packId ? `/admin/api/art-studio/download/${encodeURIComponent(packId)}` : null
 
@@ -422,7 +416,11 @@ export function ArtStudioPage() {
     >
       <header className="od-art-studio-head">
         <div>
-          <p className="od-art-studio-kicker">Admin · Cover atelier</p>
+          <img
+            className="od-studio-workbench"
+            src="/static/newstyle/studio/workbench.webp"
+            alt=""
+          />
         </div>
         {skin ? (
           <span
@@ -503,6 +501,8 @@ export function ArtStudioPage() {
               />
 
               <ArtStudioControls
+                composition={composition}
+                setComposition={setComposition}
                 applyFallback={applyFallback}
                 applyToGame={applyToGame}
                 busy={busy}

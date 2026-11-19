@@ -11,6 +11,18 @@ from oneirodex.models.orm import db
 logger = logging.getLogger(__name__)
 
 
+class UTCScanTime(TypeDecorator):
+    """Legacy scan columns contain UTC wall time, independent of the DB session timezone."""
+
+    impl = db.DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None and value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+
+
 class JSONEncodedDict(TypeDecorator):
     """JSON stored as TEXT (serialised in Python, not by the database).
 

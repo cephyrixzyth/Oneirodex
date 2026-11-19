@@ -1,3 +1,4 @@
+import { supportsWebRetroSaves } from '../../api/saves'
 import type { DetailsGame } from './detailsTypes'
 import { AddToCollection } from '../../components/AddToCollection'
 import { ExternalStoreLinks } from '../../components/ExternalStoreLinks'
@@ -30,7 +31,9 @@ export function DetailsQuickRows({
       <div className="od-details-page__quick-row od-details-page__quick-row--seg">
         {playHref ? (
           <>
-            {Array.isArray(game.emulator_cores) && game.emulator_cores.length > 1 ? (
+            {supportsWebRetroSaves(playHref) &&
+            Array.isArray(game.emulator_cores) &&
+            game.emulator_cores.length > 1 ? (
               <label className="od-details-page__core-picker">
                 Core{' '}
                 <select

@@ -10,11 +10,8 @@ vi.mock('./config-store.js', () => ({
 
 import { invoke } from '@tauri-apps/api/core'
 import {
-  buildFlipsApplyArgs,
-  isPatchFilename,
-  patchedOutputName,
   MAX_PATCH_DOWNLOAD_BYTES,
-  readBoundedPatchResponse,
+  streamBoundedPatchResponse,
   resolvePatchStageDir,
   safePatchFilename,
   stagePatchFile,
@@ -27,32 +24,11 @@ describe('apply_patch helpers', () => {
 
   it('sanitizes patch filenames', () => {
     expect(safePatchFilename('../evil.bps')).toBe('evil.bps')
-    expect(safePatchFilename('')).toBe('patch.bps')
+    expect(safePatchFilename('')).toBe('patch')
   })
 
   it('resolves stage dir under patches root', () => {
     expect(resolvePatchStageDir('/appdata/patches/', 'abc-123')).toBe('/appdata/patches/abc-123')
-  })
-
-  it('builds flips CLI args', () => {
-    expect(
-      buildFlipsApplyArgs({
-        flipsPath: 'C:\\Tools\\flips.exe',
-        patchPath: '/p/a.bps',
-        romPath: '/p/game.sfc',
-        outputPath: '/p/out.sfc',
-      }),
-    ).toEqual(['C:\\Tools\\flips.exe', '--apply', '/p/a.bps', '/p/game.sfc', '/p/out.sfc'])
-  })
-
-  it('detects patch extensions', () => {
-    expect(isPatchFilename('x.bps')).toBe(true)
-    expect(isPatchFilename('x.IPS')).toBe(true)
-    expect(isPatchFilename('x.txt')).toBe(false)
-  })
-
-  it('names patched output', () => {
-    expect(patchedOutputName('game.sfc', 'en.bps')).toBe('game.patched-bps.sfc')
   })
 
   it('stagePatchFile writes under app_data/patches via write_file_bytes', async () => {
@@ -82,7 +58,10 @@ describe('apply_patch helpers', () => {
       fetchImpl,
     })
 
-    expect(result).toEqual({ ok: true, path: '/appdata/patches/game-42/en.bps' })
+    expect(result).toEqual({
+      ok: true,
+      path: expect.stringMatching(/^\/appdata\/patches\/\.staging\/game-42\/[^/]+-en\.bps$/),
+    })
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,
       'https://gt.example/api/downloads/games/game-42',
@@ -99,8 +78,8 @@ describe('apply_patch helpers', () => {
       expect.objectContaining({ credentials: 'omit', redirect: 'error' }),
     )
     expect(invoke).toHaveBeenCalledWith('write_file_bytes', {
-      path: '/appdata/patches/game-42/en.bps',
-      bytes: expect.any(Array),
+      path: expect.stringMatching(/^\/appdata\/patches\/\.staging\/game-42\/[^/]+-en\.bps$/),
+      bytes: new Uint8Array([66, 80, 83, 49]),
     })
   })
 
@@ -142,7 +121,7 @@ describe('apply_patch helpers', () => {
     })
 
     await expect(
-      readBoundedPatchResponse(response, Number.POSITIVE_INFINITY),
+      streamBoundedPatchResponse(response, vi.fn(), Number.POSITIVE_INFINITY),
     ).rejects.toThrow('Patch download exceeds the 256 MiB limit')
   })
 
@@ -158,7 +137,7 @@ describe('apply_patch helpers', () => {
       { status: 200, headers: { 'content-length': '3' } },
     )
 
-    await expect(readBoundedPatchResponse(response, 5)).rejects.toThrow(
+    await expect(streamBoundedPatchResponse(response, vi.fn(), 5)).rejects.toThrow(
       'Patch download exceeds',
     )
   })
@@ -166,8 +145,8 @@ describe('apply_patch helpers', () => {
   it('preserves a normal patch response under the byte ceiling', async () => {
     const response = new Response(new TextEncoder().encode('BPS1'), { status: 200 })
 
-    await expect(readBoundedPatchResponse(response, 4)).resolves.toEqual(
-      new Uint8Array([66, 80, 83, 49]),
-    )
+    const sink = vi.fn()
+    await expect(streamBoundedPatchResponse(response, sink, 4)).resolves.toBe(4)
+    expect(sink).toHaveBeenCalledWith(new Uint8Array([66, 80, 83, 49]))
   })
 })

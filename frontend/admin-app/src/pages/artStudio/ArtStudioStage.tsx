@@ -61,7 +61,7 @@ export function ArtStudioStage({
         </div>
       )}
 
-      <div className="od-art-studio__thumbs" aria-label="Other tile sizes">
+      <div className="od-art-studio__thumbs" role="group" aria-label="Other tile sizes">
         {PREVIEW_VARIANTS.filter((v) => v.key !== activeVariant.key && v.kind === 'tile').map(
           (size) => {
             const src = previews[size.key]

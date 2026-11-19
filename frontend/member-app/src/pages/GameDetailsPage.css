@@ -16,6 +16,12 @@
   margin-bottom: var(--od-space-5);
 }
 
+.od-details-page__crumbs a {
+  color: var(--od-text);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
 .od-details-page__crumbs ol {
   display: flex;
   flex-wrap: wrap;

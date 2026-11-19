@@ -1,3 +1,6 @@
+import { fetchBrowseGames } from './browse'
+import { fetchFavoriteGames } from './favorites'
+import { fetchGameDetails } from './gameDetails'
 import { deleteJson, getJson, putJson } from './client'
 
 declare global {
@@ -27,12 +30,20 @@ export async function fetchVrCatalog({
     page: String(page),
     per_page: String(perPage),
   })
+  if (vrCompat === 'favorites') return fetchFavoriteGames({ page, per_page: perPage }, { signal })
+  if (vrCompat === 'collection') {
+    return fetchBrowseGames(
+      { page, per_page: perPage, sort_by: 'name', sort_order: 'asc' },
+      { signal },
+    )
+  }
   if (vrCompat) params.set('vr_compat', String(vrCompat))
   return getJson(`/api/vr/catalog?${params}`, { signal, label: 'vr/catalog' })
 }
 
-export async function fetchVrGame(gameUuid: any, { signal }: LooseProps = {}) {
+export async function fetchVrGame(gameUuid: string, { signal, collection }: LooseProps = {}) {
   await requirePrivateVrControl(signal)
+  if (collection) return fetchGameDetails(gameUuid, { signal })
   return getJson(`/api/vr/games/${encodeURIComponent(gameUuid)}`, {
     signal,
     label: 'vr/games',

@@ -119,6 +119,27 @@ test('the rail toggle reports whether the rail is showing', () => {
   }
 })
 
+test('the Preferences dialog receives a persistent return-focus target', () => {
+  renderTopBar()
+  const account = screen.getByRole('button', { name: 'Account menu' })
+  fireEvent.click(account)
+  const preferences = screen.getByRole('link', { name: 'Preferences' })
+  preferences.focus()
+  let activeAtOpen: Element | null = null
+  window.addEventListener(
+    'od:open-preferences',
+    () => {
+      activeAtOpen = document.activeElement
+    },
+    { once: true },
+  )
+
+  fireEvent.click(preferences)
+
+  expect(activeAtOpen).toBe(account)
+  expect(preferences.isConnected).toBe(false)
+})
+
 test('logout is a button action in the account dropdown', () => {
   renderTopBar()
   fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))

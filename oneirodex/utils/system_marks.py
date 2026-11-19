@@ -253,6 +253,7 @@ def _theme_style_bits(theme: str) -> dict[str, str]:
     preset = PRESET_BY_SLUG[slug]
     tokens = preset_tokens(preset)
     art_directions = {
+        'tideglass': 'brass instrument engraving, sea-glass enamel, deep teal instrument dial',
         'greenhouse': 'clean editorial vector illustration, restrained botanical geometry, crisp edges',
         'afterglow': 'bold arcade poster illustration, stepped pixel accents, high contrast cel shading',
         'monochrome': 'minimal monochrome industrial illustration, precise hard-surface shapes, no glow',

@@ -359,6 +359,18 @@ def test_save_options_match_legacy_allow_header(native):
     assert collection.content == item.content == b''
 
 
+
+def test_save_upload_binds_member_after_account_switch(native):
+    app, api, data, _user = native
+    cookie, csrf = _cookie(app, csrf=True)
+    listing = _request(api, 'GET', '/api/games/game-1/saves', cookie=cookie)
+    assert listing.json()['member_id'] == '7'
+    refused = _request(api, 'POST', '/api/games/game-1/saves', cookie=cookie,
+                       csrf=csrf, data={'expected_member': 'another-member', 'slot': 'auto'},
+                       files={'file': ('cloud.state', b'first', 'application/octet-stream')})
+    assert refused.status_code == 409
+    assert all(call[0] != 'store_save' for call in data.calls)
+
 def test_save_aggregate_quota_returns_payload_too_large(native, monkeypatch):
     from oneirodex.utils.emulator_saves import SaveQuotaExceeded
 

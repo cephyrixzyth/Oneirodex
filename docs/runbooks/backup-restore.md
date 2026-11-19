@@ -19,7 +19,7 @@ location with access protection suitable for account data.
 python -m oneirodex_standalone backup --pg-home <bundled-postgresql> --data-dir <standalone-data> --to <new-backup-folder>
 ```
 
-The output folder must be new or empty. A successful backup contains the
+Choose a new or empty output folder outside the source library and database. The command exports into a private folder beside that destination. It verifies the manifest, dump, managed files and completion marker before publishing the directory in a single rename. If verification fails, the destination stays available for a retry. A successful backup contains the
 verified move format version 2 payload, a versioned `backup` manifest section, and
 `backup.complete.json`. The completion marker binds the final manifest hash;
 the database dump and each listed managed file are re-hashed before the marker
@@ -31,6 +31,8 @@ accept verified version 1 backups.
 
 The bundle includes the database and files under the standalone library's
 managed user folders, including emulator saves and retained save generations.
+Backup checks that every registered save and retained generation has a carried file. When database paths use an alternate spelling of the managed library, export records the verified folder alias and restore rewrites it to the destination library.
+
 It records the Alembic revision, PostgreSQL major version, source commit when
 available, and save-table identity digests. It excludes external game-library
 contents, BIOS files, and operator key material. External game paths are

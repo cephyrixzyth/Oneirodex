@@ -9,39 +9,25 @@ restart is not staring at an empty shelf for 15 seconds.
 from __future__ import annotations
 
 import logging
-import threading
-import time
+from oneirodex.utils.periodic_worker import PeriodicWorker
 
 from oneirodex.utils.store_deals import CACHE_TTL_SEC, refresh_deep_discounts
 
 logger = logging.getLogger(__name__)
 
-_scheduler_started = False
+_scheduler = PeriodicWorker('oneirodex-store-deals')
 
 
 def start_store_deals_scheduler(app):
     """Start a daemon that refreshes CheapShark deals (idempotent)."""
-    global _scheduler_started
-    if _scheduler_started:
-        return
-    _scheduler_started = True
     interval = CACHE_TTL_SEC
 
-    def _loop():
-        time.sleep(15)
-        while True:
-            try:
-                with app.app_context():
-                    count = refresh_deep_discounts()
-                    logger.info('CheapShark deep discounts refreshed (%s deals)', count)
-            except Exception:
-                logger.exception('CheapShark deep-discount refresh failed')
-            time.sleep(interval)
+    def run_once():
+        try:
+            with app.app_context():
+                count = refresh_deep_discounts()
+                logger.info('CheapShark deep discounts refreshed (%s deals)', count)
+        except Exception:
+            logger.exception('CheapShark deep-discount refresh failed')
 
-    thread = threading.Thread(
-        target=_loop,
-        name='oneirodex-store-deals',
-        daemon=True,
-    )
-    thread.start()
-    logger.info('CheapShark deep-discount poller started (every %ss)', interval)
+    return _scheduler.start(run_once, interval=interval, delay=15)

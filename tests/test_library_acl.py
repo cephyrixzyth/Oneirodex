@@ -178,3 +178,29 @@ def test_search_and_details_blocked(client, app, db_session, child, libs):
         assert download.status_code == 405
         blocked_download = client.post(f'/download_game/{blocked.uuid}')
         assert blocked_download.status_code == 403
+
+
+def test_profile_totals_and_recency_follow_the_viewers_catalog(app, db_session, child, adult, libs):
+    from datetime import datetime, timedelta
+    from oneirodex.models import UserFriendship, UserGameProgress
+    from oneirodex.runtime_native.social_reads import SocialReadData
+
+    kids, adults = libs
+    set_user_library_allowlist(child.id, [kids.uuid])
+    db_session.add(UserFriendship(user_id=child.id, friend_user_id=adult.id, status='accepted'))
+    for index in range(54):
+        game = Game(name=f'Title {index}', library_uuid=kids.uuid if index < 13 else adults.uuid,
+                    full_disk_path=f'/tmp/{uuid4().hex}')
+        db_session.add(game)
+        db_session.flush()
+        for member in (child, adult):
+            db_session.add(UserGameProgress(user_id=member.id, game_uuid=game.uuid, total_seconds=index + 1,
+                                           last_played_at=datetime(2026, 1, 1) + timedelta(days=index)))
+    db_session.commit()
+    reads = SocialReadData()
+    profile = reads.profile(child, adult.id, app)
+    assert profile['total_seconds'] == sum(range(1, 14))
+    assert [g['game_name'] for g in profile['recent_games']] == [f'Title {n}' for n in range(12, 0, -1)]
+    shared, status = reads.profile_compare(child, adult.id, child.id)
+    assert status == 200
+    assert [g['game_name'] for g in shared['shared_games']] == [f'Title {n}' for n in range(12, -1, -1)]

@@ -7,12 +7,7 @@ no shutdown path. The servers run via uvicorn → ``asgi.py``, whose ASGI
 lifespan handler is the right owner: it starts the workers once on startup and
 stops them on shutdown.
 
-The scheduler-start block below is moved **verbatim** from ``create_app()`` —
-same ``try/except`` per scheduler, same ``logger.warning`` on failure, same
-``app.app_context()`` push, same ``pytest`` skip. The only additions are the
-``ONEIRODEX_ENABLE_BACKGROUND_WORKERS`` env gate and collecting whatever the
-``start_*`` functions return so :func:`stop_background_workers` can ask them to
-stop.
+Each periodic scheduler owns an interruptible wait and returns a stop handle.
 """
 
 from __future__ import annotations
@@ -23,10 +18,7 @@ import sys
 
 logger = logging.getLogger(__name__)
 
-#: Handles returned by the ``start_*`` functions (only the library watcher
-#: currently returns one — a ``LibraryWatchController`` with ``.stop()``). Kept
-#: so :func:`stop_background_workers` can best-effort stop them on lifespan
-#: shutdown. Anything falsy is not recorded.
+#: Active workers and workers whose preceding stop attempt timed out.
 _WORKER_HANDLES: list[object] = []
 
 #: Set once :func:`start_background_workers` has run its body, so a second call
@@ -34,6 +26,10 @@ _WORKER_HANDLES: list[object] = []
 #: individual schedulers already guard themselves with module-level flags; this
 #: is belt-and-braces at the entry point.
 _STARTED = False
+
+
+class WorkersStillRunning(RuntimeError):
+    """A previous lifespan still owns a worker that has not finished its cycle."""
 
 
 def _workers_enabled() -> bool:
@@ -59,6 +55,8 @@ def start_background_workers(app):
         return
     if _STARTED:
         return
+    if _WORKER_HANDLES:
+        stop_background_workers()
     _STARTED = True
 
     with app.app_context():
@@ -149,30 +147,30 @@ def start_background_workers(app):
 
 def _record_handle(handle) -> None:
     """Keep any non-falsy handle a ``start_*`` returned, for shutdown."""
-    if handle:
+    if handle and handle not in _WORKER_HANDLES:
         _WORKER_HANDLES.append(handle)
 
 
 def stop_background_workers():
-    """Best-effort stop of anything :func:`start_background_workers` started.
-
-    Only handles that expose ``shutdown()`` or ``stop()`` can be stopped — the
-    library watcher's ``LibraryWatchController`` does. The plain daemon-thread
-    pollers (scan, free-games, discover-ML, ownership, store-deals,
-    email-digest) return no handle and expose no stop hook; they are
-    ``daemon=True`` and die with the process. Documented no-op for those.
-    """
+    """Stop workers before re-entry and retain failed handles for a subsequent drain."""
     global _STARTED
 
-    while _WORKER_HANDLES:
-        handle = _WORKER_HANDLES.pop()
+    for handle in _WORKER_HANDLES:
+        signal = getattr(handle, 'request_stop', None)
+        if signal:
+            signal()
+    for handle in reversed(_WORKER_HANDLES.copy()):
         stopper = getattr(handle, 'shutdown', None) or getattr(handle, 'stop', None)
         if stopper is None:
             logger.debug("No stop hook on %r; relying on daemon-thread exit", handle)
+            _WORKER_HANDLES.remove(handle)
             continue
         try:
             stopper()
+            _WORKER_HANDLES.remove(handle)
         except Exception as exc:
             logger.warning("Stopping %r failed: %s", handle, exc)
 
     _STARTED = False
+    if _WORKER_HANDLES:
+        raise WorkersStillRunning(f'{len(_WORKER_HANDLES)} background worker(s) are still stopping')

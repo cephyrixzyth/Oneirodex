@@ -79,8 +79,8 @@ def resolve_hashable_file(path: str | Path) -> Path | None:
 def hash_fileobj(handle: BinaryIO, *, chunk_size: int = 1024 * 1024) -> dict[str, str]:
     """Return lowercase hex crc/md5/sha1 for an open binary stream."""
     crc = 0
-    md5 = hashlib.md5()
-    sha1 = hashlib.sha1()
+    md5 = hashlib.md5(usedforsecurity=False)
+    sha1 = hashlib.sha1(usedforsecurity=False)
     while True:
         chunk = handle.read(chunk_size)
         if not chunk:

@@ -137,7 +137,7 @@ _DOTTED_ACRONYM_TOKEN_RE = re.compile(
 )
 
 
-def _list_game_dirs(folder_path, scan_depth=1, skip_dir_patterns=None, skip_dir_regexes=None):
+def _list_game_dirs(folder_path, scan_depth=1, skip_dir_patterns=None, skip_dir_regexes=None, *, strict=False):
     """Return list of (item_name, full_path) game directories honoring scan_depth.
 
     scan_depth=2 unwraps letter buckets (_a…_z, _#) used by layouts like
@@ -157,6 +157,8 @@ def _list_game_dirs(folder_path, scan_depth=1, skip_dir_patterns=None, skip_dir_
     try:
         entries = sorted(os.listdir(folder_path), key=str.lower)
     except OSError as exc:
+        if strict:
+            raise
         print(f"Error listing '{folder_path}': {exc}")
         return results
 
@@ -170,6 +172,8 @@ def _list_game_dirs(folder_path, scan_depth=1, skip_dir_patterns=None, skip_dir_
             try:
                 children = sorted(os.listdir(full_path), key=str.lower)
             except OSError:
+                if strict:
+                    raise
                 continue
             for child in children:
                 child_path = os.path.join(full_path, child)
@@ -190,8 +194,11 @@ def get_game_names_from_folder(
     scan_depth=1,
     skip_dir_patterns=None,
     skip_dir_regexes=None,
+    *, strict=False,
 ):
     if not os.path.exists(folder_path) or not os.access(folder_path, os.R_OK):
+        if strict:
+            raise OSError("Scan root is unavailable")
         print(f"Error: The folder '{folder_path}' does not exist or is not readable.")
         _flash_if_request_context(
             f"Error: The folder '{folder_path}' does not exist or is not readable."
@@ -200,7 +207,7 @@ def get_game_names_from_folder(
     game_names_with_paths = []
     for item, full_path in _list_game_dirs(
         folder_path, scan_depth=scan_depth, skip_dir_patterns=skip_dir_patterns,
-        skip_dir_regexes=skip_dir_regexes,
+        skip_dir_regexes=skip_dir_regexes, strict=strict,
     ):
         game_name = clean_game_name(item, insensitive_patterns, sensitive_patterns)
         game_names_with_paths.append({'name': game_name, 'full_path': full_path})
@@ -210,6 +217,7 @@ def get_game_names_from_files(folder_path, extensions, insensitive_patterns, sen
     if not os.path.exists(folder_path) or not os.access(folder_path, os.R_OK):
         print(f"Error: The path '{folder_path}' does not exist or is not readable.")
         return []
+    extensions = {ext.lstrip('.').casefold() for ext in extensions}
     file_contents = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
     # print(f"Files found in folder: {file_contents}")
     game_names_with_paths = []

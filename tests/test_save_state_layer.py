@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -542,6 +543,14 @@ def test_failed_save_commit_keeps_previous_generation_readable(
 # --- the shell ---------------------------------------------------------------
 
 
+def _room_handler(shell, name):
+    """Limit source contracts to the named outer handler and its nested callbacks."""
+    declaration = re.search(rf'^( *)(?:async )?function {re.escape(name)}\(', shell, re.MULTILINE)
+    assert declaration, f'Missing play-room handler {name}'
+    closing_line = '\n' + declaration.group(1) + '}'
+    return shell[declaration.start():shell.index(closing_line, declaration.end())]
+
+
 def test_shell_asks_before_loading_and_saves_on_leave():
     shell = (WEBRETRO / 'webretro.html').read_text(encoding='utf-8')
     bridge = (WEBRETRO / 'od-bridge.js').read_text(encoding='utf-8')
@@ -554,11 +563,16 @@ def test_shell_asks_before_loading_and_saves_on_leave():
     assert 'data.autoLoad !== false' in bridge
     assert 'autoLoaded = autoLoad ? tryLoadState() : false' in bridge
 
-    # Auto-state on quit: Back / Power go through the autosave, capped, with
-    # keepalive so the upload survives the navigation.
-    assert 'function goBackToLibrary()' in shell
-    assert "autoSaveState({ keepalive: true })" in shell
-    assert 'keepalive: !!(opts && opts.keepalive)' in shell
+    # Commit locally before sending. A large multipart upload can exceed the
+    # browser's keepalive quota when the member navigates away.
+    assert 'src="./save-outbox.js"' in shell
+    assert 'autoSaveState({ explicitExit: true }).then(leaveNow' in _room_handler(shell, 'goBackToLibrary')
+    assert 'exportAndUpload(AUTO_SLOT' in _room_handler(shell, 'autoSaveState')
+    assert 'captureSave(slot' in _room_handler(shell, 'exportAndUpload')
+    capture = _room_handler(shell, 'captureSave')
+    assert capture.index('await window.odSaveOutbox.add(rows)') < capture.index('drafts.map(sendPending)')
+    assert 'Promise.race(' in capture
+    assert 'keepalive' not in _room_handler(shell, 'sendPending')
     assert "document.addEventListener('visibilitychange'" in shell
 
     # Named quick saves + the slot vocabulary the backend understands.
@@ -613,37 +627,23 @@ def test_the_room_sends_the_token_the_listing_gave_it():
     assert 'function withCsrf(' in shell
     assert 'rememberCsrf(body.csrf_token)' in shell
 
-    # Both writing paths go through it rather than reading an empty meta tag.
-    for fn in ('function uploadSlot(', 'function deleteSlot('):
-        at = shell.index(fn)
-        body = shell[at:at + 900]
-        assert 'withCsrf()' in body, fn
-        assert "'X-CSRFToken': csrfToken()" not in body, fn
+    # The three server mutations send the token supplied by the listing.
+    for handler in ('sendPending', 'deleteSlot', 'showSaveHistory'):
+        body = _room_handler(shell, handler)
+        assert 'withCsrf()' in body, handler
+        assert "'X-CSRFToken':" in body, handler
+        assert "'X-CSRFToken': csrfToken()" not in body, handler
 
 
 def test_an_export_waits_for_the_state_to_stop_growing():
-    """The second fault: a save state that uploaded 8 bytes and would not load.
+    """Run the actual bridge through delayed, partial, stale and battery-only captures."""
+    import shutil
+    import subprocess
 
-    RetroArch writes the state's RZIP header immediately and compresses the
-    payload over the next second or three; webretro copies the file into
-    IndexedDB from its write callback, so a read taken straight after the save
-    command returns the header alone. The bridge used to accept the first
-    non-empty read.
-    """
-    bridge = (WEBRETRO / 'od-bridge.js').read_text(encoding='utf-8')
-
-    # Retries carry the previous length and stop only when it stops growing …
-    assert 'function exportWithRetries(done, attempt, lastLen)' in bridge
-    assert 'len <= seen' in bridge
-    # … and never settle on something too small to be a state.
-    assert 'MIN_STATE_BYTES' in bridge
-    assert 'bytes >= MIN_STATE_BYTES' in bridge
-    # The tail has to outlast the compression, not just the first frame.
-    assert 'EXPORT_DELAYS_MS = [200, 400, 800, 1200, 1600, 2000]' in bridge
-    # The file being written wins over the IndexedDB copy of it.
-    assert 'onDisk.length > state.length' in bridge
-    # A zero-length array must read as nothing, not as an empty base64 string.
-    assert 'if (!bytes.length) return null;' in bridge
+    node = shutil.which('node')
+    if node is None:
+        pytest.skip('WebRetro bridge behavior requires Node')
+    subprocess.run([node, str(ROOT / 'tests/js/od_bridge_origin.test.mjs')], check=True, timeout=20)
 
 
 def test_the_shell_cache_key_moved_with_the_bridge():

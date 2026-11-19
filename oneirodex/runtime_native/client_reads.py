@@ -9,6 +9,7 @@ from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
+from .query_compat import first_query_value
 from .acquire_status import _companion_login_response as _login_redirect
 from .csrf_compat import csrf_error_response
 from .request_auth import request_auth_context
@@ -71,7 +72,7 @@ class ClientReadData:
 
     def heartbeat(
         self, user_id, device_id, device_kind, device_name, client_version,
-        user_agent, token, user,
+        user_agent, token, user, *, leased=False, renew_lease=None,
     ):
         from oneirodex.utils.client_capabilities import (
             normalize_device_kind,
@@ -93,7 +94,7 @@ class ClientReadData:
         payload = device.to_dict()
         payload.update(resolve_client_capabilities(kind, api_token=token, user=user))
         payload['commands'] = (
-            claim_pending_commands(user_id)
+            claim_pending_commands(user_id, **({'limit': 1, 'device_id': device_id, 'renew_lease': renew_lease} if leased else {'legacy_device_id': device_id}))
             if should_deliver_install_commands(kind, api_token=token, user=user)
             else []
         )
@@ -178,9 +179,17 @@ def create_client_reads_router(
                 response = _login_redirect(flask_app, request, login_manager, auth)
             else:
                 device_kinds = request.query_params.getlist('device_kind')
-                response = JSONResponse(data.capabilities(
-                    device_kinds[0] if device_kinds else None, auth.token, auth.user
-                ))
+                capabilities = data.capabilities(device_kinds[0] if device_kinds else None, auth.token, auth.user)
+                if first_query_value(request.query_params, 'include_devices') == '1' and auth.has_scope('read:library'):
+                    from oneirodex.utils.client_presence import companion_targets
+
+                    capabilities['devices'] = companion_targets(auth.user.id)
+                command_game = first_query_value(request.query_params, 'command_game')
+                if command_game and auth.has_scope('read:library'):
+                    from oneirodex.utils.client_commands import command_status_for_game
+
+                    capabilities['commands'] = command_status_for_game(auth.user.id, command_game)
+                response = JSONResponse(capabilities)
                 if auth.should_set_session_cookie:
                     from .oidc_status import _set_session_cookie
 
@@ -332,6 +341,8 @@ def create_client_reads_router(
                 version_uuid = _text(body.get('version_uuid')) or None
                 open_path = _text(body.get('path')) or None
                 select_in_folder = body.get('select')
+                target_device = _text(body.get('target_device_id'))
+                target = {'target_device_id': target_device} if target_device else {}
 
                 from oneirodex.utils.client_commands import WRITE_DOWNLOAD_ACTIONS
 
@@ -373,7 +384,7 @@ def create_client_reads_router(
                             command = data.enqueue(
                                 auth.user.id, game_uuid, action, path=open_path,
                                 select=None if select_in_folder is None
-                                else bool(select_in_folder),
+                                else bool(select_in_folder), **target,
                             )
                         except ValueError as exc:
                             flask_response, status = api_error(str(exc), code='bad_request')
@@ -408,7 +419,7 @@ def create_client_reads_router(
                             try:
                                 command = data.enqueue(
                                     auth.user.id, game_uuid, action, kind=kind,
-                                    version_uuid=version_uuid,
+                                    version_uuid=version_uuid, **target,
                                 )
                             except ValueError as exc:
                                 flask_response, status = api_error(
@@ -630,6 +641,8 @@ async def _heartbeat_payload(request: Request, data, user_id: int, token, user):
         request.headers.get('User-Agent'),
         token,
         user,
+        **({'leased': True, 'renew_lease': _text(value.get('renew_lease')) or None}
+           if value.get('command_protocol') == 2 else {}),
     )
 
 
@@ -713,6 +726,16 @@ async def _client_command_ack(
                     'Request body is too large.', code='payload_too_large', status=413,
                 )
                 response = _from_flask_response(flask_response, status)
+            elif body.get('lease_id'):
+                from oneirodex.utils.client_commands import finish_leased_command
+
+                result = 'ok' if action == 'ack' else body.get('result')
+                if len(ids) != 1 or not body.get('device_id') or (action == 'nack' and result not in ('busy', 'error')):
+                    response, _ = api_error('Invalid leased command result', code='bad_request')
+                else:
+                    count = finish_leased_command(auth.user.id, ids[0], _text(body['device_id']),
+                                                  _text(body['lease_id']), result)
+                    response, _ = api_ok({'removed' if action == 'ack' else 'released': count})
             else:
                 count = (
                     data.acknowledge(auth.user.id, ids)

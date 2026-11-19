@@ -82,7 +82,7 @@ class GameDeleteMutationData:
 
         try:
             existing = db.session.execute(
-                select(UnmatchedFolder).filter_by(folder_path=entry.folder_path),
+                select(UnmatchedFolder).filter_by(folder_path=entry.folder_path, library_uuid=entry.library_uuid),
             ).scalars().first()
             if existing is not None:
                 return True

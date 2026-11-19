@@ -6,7 +6,6 @@ from sqlalchemy import func, select
 from oneirodex.models import User, SystemEvents
 from oneirodex.runtime_native.db_session import current_native_engine, native_db as db
 from oneirodex.utils.global_settings import global_settings_row
-from config import Config
 from urllib.parse import urlparse
 from oneirodex.utils.runtime_config import get_runtime_config
 
@@ -70,8 +69,12 @@ def get_config_values(config=None):
     active_config = config
     if active_config is None:
         active_config = get_runtime_config()
+    if active_config is None:
+        from config import Config
+
+        active_config = vars(Config)
     for item in whitelist:
-        path = active_config.get(item) if active_config is not None else getattr(Config, item, None)
+        path = active_config.get(item)
         if path:
             safe_config_values[item] = _probe_path(path)
 
@@ -82,7 +85,7 @@ def get_config_values(config=None):
     # `Archive=/mnt/a|Archive=/mnt/b` is a plausible typo — wrote the same dict
     # key, so one of them vanished from the very view that exists to report a
     # root that stopped being mounted.
-    roots = active_config.get('LIBRARY_ROOTS') if active_config is not None else getattr(Config, 'LIBRARY_ROOTS', None)
+    roots = active_config.get('LIBRARY_ROOTS')
     for root in roots or []:
         path = root.get('path')
         if not path:

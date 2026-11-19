@@ -21,4 +21,4 @@ clients/desktop/src-tauri/target/**
 **/*.min.js
 **/coverage/**
 # Emitted by scripts/gen_loading_motifs.py — format it there, not here.
-frontend/member-app/src/components/systemMotifCatalogue.ts
+frontend/shared/src/loadingMotifs/systemMotifCatalogue.ts

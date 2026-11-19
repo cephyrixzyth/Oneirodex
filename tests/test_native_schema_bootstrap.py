@@ -15,9 +15,8 @@ from sqlalchemy.orm import Session
 
 from database_test_guard import validate_test_database_url
 from oneirodex.init_manager import InitializationManager
-from oneirodex.models import EmulatorSave, EmulatorSaveGeneration, Game, Library, User
+from oneirodex.models import EmulatorSave, EmulatorSaveGeneration, Game, User
 from oneirodex.models.orm import ModelBase
-from oneirodex.platform import LibraryPlatform
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -90,13 +89,20 @@ def _owner_and_game(db):
         name='SyntheticSchemaOwner', email='schema@example.invalid',
         user_id=str(uuid4()), password_hash='unused', role='user', state=True,
     )
-    library = Library(name='Synthetic Schema', platform=LibraryPlatform.NES)
-    db.add_all([user, library])
+    db.add(user)
     db.flush()
-    game = Game(uuid=str(uuid4()), name='Synthetic Save', library_uuid=library.uuid)
-    db.add(game)
-    db.flush()
-    return user.id, game.uuid
+    # These fixtures also run against real predecessor schemas. Only populate
+    # columns that existed at that revision.
+    library_uuid, game_uuid = str(uuid4()), str(uuid4())
+    db.execute(sa.text("""
+        INSERT INTO libraries (uuid, name, platform, scan_depth)
+        VALUES (:uuid, 'Synthetic Schema', 'NES', 1)
+    """), {'uuid': library_uuid})
+    db.execute(sa.text("""
+        INSERT INTO games (uuid, name, library_uuid, size)
+        VALUES (:uuid, 'Synthetic Save', :library, 0)
+    """), {'uuid': game_uuid, 'library': library_uuid})
+    return user.id, game_uuid
 
 
 def test_native_fresh_schema_reaches_declared_head(schema_case):
@@ -275,3 +281,32 @@ def test_native_missing_alembic_config_is_not_success(schema_case, monkeypatch, 
     monkeypatch.setattr(init_manager, 'PACKAGE_ROOT', str(tmp_path / 'missing-package'))
     with pytest.raises(RuntimeError, match='migration|Alembic'):
         schema_case.manager._ensure_alembic_current(schema_case.engine)
+
+
+def test_catalog_upgrade_backfills_legacy_titles_and_preserves_paging(schema_case):
+    from oneirodex.models import UserPreference
+    case = schema_case
+    command.upgrade(_alembic_config(), 'a4b5c6d7e8f9')
+    with case.engine.begin() as connection:
+        # Old installations have none of the current ORM-only fields. Use
+        # raw rows to prove that the normal bootstrap upgrades existing data.
+        library_uuid, game_uuid = str(uuid4()), str(uuid4())
+        connection.execute(sa.text("""
+            INSERT INTO libraries (uuid, name, platform, scan_depth)
+            VALUES (:uuid, 'Catalog upgrade', 'NES', 1)
+        """), {'uuid': library_uuid})
+        connection.execute(sa.text("""
+            INSERT INTO games (uuid, name, library_uuid, size)
+            VALUES (:uuid, 'Étoile 日本', :library, 42)
+        """), {'uuid': game_uuid, 'library': library_uuid})
+    case.manager._ensure_alembic_current(case.engine)
+    assert 'ix_games_browse_title_key' in {i['name'] for i in sa.inspect(case.engine).get_indexes('games')}
+    with Session(case.engine) as db:
+        member_id, _ = _owner_and_game(db)
+        db.add(UserPreference(user_id=member_id, items_per_page=20))
+        db.commit()
+    for _ in range(2):
+        assert case.manager._phase2_database_structure()
+        with Session(case.engine) as db:
+            assert db.scalar(sa.select(Game.browse_title_key).where(Game.uuid == game_uuid)) == 'étoile 日本'
+            assert db.scalar(sa.select(UserPreference.items_per_page).where(UserPreference.user_id == member_id)) == 20

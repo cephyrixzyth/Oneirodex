@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { CardGame } from './cardTypes'
 import { AddToCollection } from '../AddToCollection'
 import { GameActionBar } from '../GameActionBar'
@@ -9,6 +10,8 @@ export function GameCardAdminMenu({
   enableDeleteOnDisk,
   game,
   igdbUrl,
+  onRowPreview,
+  compactRowActions,
   isAdmin,
   menuOpen,
   setMenuOpen,
@@ -17,6 +20,8 @@ export function GameCardAdminMenu({
 }: {
   enableDeleteOnDisk: boolean
   game: CardGame
+  compactRowActions?: ReactNode
+  onRowPreview?: () => void
   igdbUrl: string | null
   isAdmin: boolean
   menuOpen: boolean
@@ -28,6 +33,16 @@ export function GameCardAdminMenu({
     <>
       {menuOpen && (
         <div id={`popupMenu-${game.uuid}`} className="popup-menu">
+          {compactRowActions && (
+            <div className="menu-item game-card__row-compact-actions">{compactRowActions}</div>
+          )}
+          {onRowPreview && (
+            <div className="menu-item game-card__row-preview-action">
+              <button type="button" className="menu-button" onClick={onRowPreview}>
+                Preview game
+              </button>
+            </div>
+          )}
           <div className="menu-item menu-item--action-bar">
             <GameActionBar
               gameUuid={game.uuid}

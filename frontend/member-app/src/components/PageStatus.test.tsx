@@ -18,9 +18,7 @@ test('loading state sets aria-busy and shows loading message', () => {
   expect(status).toHaveClass('od-page-status--takeover')
   expect(screen.getByText('Loading Discover')).toBeInTheDocument()
   expect(status.textContent).toMatch(/Loading Discover\s+\.{1,3}/)
-  // Seed motif comes from the retired 'orbit' → 'disc' alias; rotation may
-  // advance off it under timers, so only assert a live motif id is present.
-  expect(screen.getByRole('img')).toHaveAttribute('data-motif')
+  expect(screen.getByRole('img')).toHaveAttribute('data-motif', 'disc')
 })
 
 test('nested loading stays inline instead of taking over the page', () => {

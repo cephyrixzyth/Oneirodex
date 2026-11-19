@@ -184,8 +184,9 @@ def _path_columns(tables) -> set[tuple[str, str]]:
     return {(t, c) for (t, c) in found if t in tables and any(c == col for col, _ in tables[t])}
 
 
-def _ordered(roots: dict[str, str]) -> list[tuple[str, str]]:
-    return sorted(roots.items(), key=lambda kv: -len(kv[1]))  # a nested root wins over its parent
+def _ordered(roots: dict[str, str], library_aliases=()) -> list[tuple[str, str]]:
+    entries = list(roots.items()) + [(LIBRARY_ROOT, path) for path in library_aliases]
+    return sorted(entries, key=lambda kv: -len(kv[1]))  # a nested root wins over its parent
 
 
 def _under_sql(col: str, key: str, root: str, params: dict) -> str:
@@ -195,19 +196,19 @@ def _under_sql(col: str, key: str, root: str, params: dict) -> str:
     return f'({col} = :{key}r OR left({col}, :{key}n) = :{key}f OR left({col}, :{key}n) = :{key}b)'
 
 
-def _relative_sql(col: str, roots: dict[str, str], params: dict) -> str:
+def _relative_sql(col: str, roots: dict[str, str], params: dict, library_aliases=()) -> str:
     """SQL rewriting a path under a named root to ``NAME:/rest`` with ``/`` separators,
     so the same file compares equal on Windows and on the server."""
     whens = []
     params['bs'] = '\\'
-    for i, (name, prefix) in enumerate(_ordered(roots)):
+    for i, (name, prefix) in enumerate(_ordered(roots, library_aliases)):
         params[f'rn{i}'], params[f'rl{i}'] = f'{name}:', len(prefix)
         whens.append(f"WHEN {_under_sql(col, f'r{i}', prefix, params)} "
                      f"THEN :rn{i} || replace(substr({col}, :rl{i} + 1), :bs, '/')")
     return f"CASE {' '.join(whens)} ELSE {col} END" if whens else col
 
 
-def snapshot_db(url: str, roots: dict[str, str]) -> dict:
+def snapshot_db(url: str, roots: dict[str, str], *, library_aliases=()) -> dict:
     from sqlalchemy import text
     engine = _engine(url)
     try:
@@ -218,7 +219,7 @@ def snapshot_db(url: str, roots: dict[str, str]) -> dict:
             digests, unrooted = {}, {}
             for table, columns in sorted(tables.items()):
                 params: dict = {}
-                parts = [_relative_sql(_quote(c), roots, params) if (table, c) in path_cols else _quote(c)
+                parts = [_relative_sql(_quote(c), roots, params, library_aliases) if (table, c) in path_cols else _quote(c)
                          for c, _ in columns]
                 count, digest = conn.execute(text(
                     # COLLATE "C": the standalone and the server sort text
@@ -230,7 +231,10 @@ def snapshot_db(url: str, roots: dict[str, str]) -> dict:
                 digests[table] = {'rows': count, 'md5': digest}
             for table, column in sorted(path_cols):
                 col, params = _quote(column), {'absolute': ABSOLUTE_PATH_RE}
-                inside = ' OR '.join(_under_sql(col, f'u{i}', p, params) for i, p in enumerate(roots.values())) or 'false'
+                inside = ' OR '.join(
+                    _under_sql(col, f'u{i}', prefix, params)
+                    for i, (_name, prefix) in enumerate(_ordered(roots, library_aliases))
+                ) or 'false'
                 # Only absolute paths are tied to a machine; a folder name
                 # ('extras') or a relative path moves as it is.
                 unrooted[f'{table}.{column}'] = conn.execute(text(
@@ -346,7 +350,7 @@ def database_is_empty(url: str) -> bool:
         engine.dispose()
 
 
-def remap_paths(url: str, old_roots: dict[str, str], new_roots: dict[str, str]) -> dict[str, int]:
+def remap_paths(url: str, old_roots: dict[str, str], new_roots: dict[str, str], *, library_aliases=()) -> dict[str, int]:
     """Rewrite every rooted path to its new root in one transaction, converting
     separators to the new root's style (a Windows laptop to a Linux server)."""
     from sqlalchemy import text
@@ -356,7 +360,7 @@ def remap_paths(url: str, old_roots: dict[str, str], new_roots: dict[str, str]) 
         with engine.begin() as conn:  # all rewritten, or none
             for table, column in sorted(_path_columns(_schema(conn))):
                 col, params, whens, matches = _quote(column), {}, [], []
-                for i, (name, old) in enumerate(_ordered(old_roots)):
+                for i, (name, old) in enumerate(_ordered(old_roots, library_aliases)):
                     new = new_roots[name]
                     # Separators change only across operating systems: a Linux
                     # file name may legally contain a backslash.
@@ -495,7 +499,7 @@ def is_carried_path(rel: str) -> bool:
     return parts[0] == 'themes' and len(parts) > 2 and parts[1] != 'default'
 
 
-def save_contexts_by_path(url: str) -> dict[str, dict]:
+def save_contexts_by_path(url: str, *, storage_paths=None) -> dict[str, dict]:
     """Load immutable save-owner contexts without placing them in SQL logs."""
     from sqlalchemy import text
     from oneirodex.utils.save_crypto import generation_id_for_path, save_context
@@ -516,6 +520,8 @@ def save_contexts_by_path(url: str) -> dict[str, dict]:
             rows = conn.execute(text(query)).all()
         contexts = {}
         for path, user_id, game_uuid, slot_name in rows:
+            if storage_paths is not None:
+                storage_paths.add(path)
             generation_id = generation_id_for_path(str(path))
             try:
                 contexts[path] = save_context(user_id, game_uuid, slot_name, generation_id)
@@ -526,6 +532,34 @@ def save_contexts_by_path(url: str) -> dict[str, dict]:
         return contexts
     finally:
         engine.dispose()
+
+
+def _managed_save_paths(library, storage_paths, *, require_all):
+    """Map stored path spellings to carried files without assuming a mount spelling."""
+    library = Path(library).resolve()
+    aliases = set()
+    mapped = {}
+    for stored in storage_paths:
+        path = Path(stored)
+        try:
+            relative = path.resolve(strict=True).relative_to(library)
+            if not path.is_absolute() or len(relative.parts) < 2 or relative.parts[0] != 'saves':
+                raise ValueError
+            # A root alias may be /tmp vs /private/tmp or an operator folder
+            # alias. The suffix must agree exactly before rewriting any rows.
+            if path.parts[-len(relative.parts):] != relative.parts or not path.is_file():
+                raise ValueError
+            spelling = path.parents[len(relative.parts) - 1]
+            if spelling.resolve(strict=True) != library:
+                raise ValueError
+        except (OSError, RuntimeError, ValueError, IndexError):
+            if require_all:
+                raise Refused('a database save or retained generation is missing from the managed saves folder') from None
+            continue
+        if str(spelling) != str(library):
+            aliases.add(str(spelling))
+        mapped[stored] = relative.as_posix()
+    return mapped, sorted(aliases)
 
 
 def snapshot_files(
@@ -654,9 +688,15 @@ def export(args) -> int:
         except BundleError as exc:
             raise Refused(str(exc)) from None
         try:
-            db = snapshot_db(pg.url(), roots)
-            contexts_by_path = save_contexts_by_path(pg.url())
-            if getattr(args, 'require_no_plaintext_secrets', False):
+            protected_backup = getattr(args, 'require_no_plaintext_secrets', False)
+            storage_paths = set()
+            contexts_by_path = save_contexts_by_path(pg.url(), storage_paths=storage_paths)
+            managed_paths, library_aliases = _managed_save_paths(library, storage_paths, require_all=protected_backup)
+            for stored, relative in managed_paths.items():
+                if stored in contexts_by_path:
+                    contexts_by_path[str(library / relative)] = contexts_by_path[stored]
+            db = snapshot_db(pg.url(), roots, library_aliases=library_aliases)
+            if protected_backup:
                 if db['legacy_reusable_secret_count']:
                     raise Refused(
                         'migrate remaining reusable plaintext credentials before creating a protected backup'
@@ -685,6 +725,8 @@ def export(args) -> int:
 
         save_key = save_key_for(state['secret_key'])
         files = snapshot_files(library, save_key, contexts_by_path)
+        if protected_backup and set(managed_paths.values()) - {entry['path'] for entry in files}:
+            raise Refused('the snapshot is missing a registered save or retained generation')
         from oneirodex.utils.save_crypto import _encrypt_with_keyring, maybe_decrypt
         from oneirodex.utils.save_keyring import load_save_keyring
 
@@ -723,6 +765,7 @@ def export(args) -> int:
         encrypted = any('plain_sha256' in e for e in files)
         manifest = {
             'format': FORMAT, 'roots': roots, 'db': db, 'files': files,
+            **({'library_root_aliases': library_aliases} if library_aliases else {}),
             'db_dump': {'size': (work / 'db.dump').stat().st_size, 'sha256': _sha256(work / 'db.dump'),
                         'pg_major': dump_major},
             # Key material stays in the separate protected operator keyring.
@@ -779,6 +822,13 @@ def check_bundle(bundle: Path, expect: str) -> dict:
     if bundle_format == LEGACY_FORMAT and any(
             entry.get('save_context') is not None for entry in manifest.get('files', [])):
         raise Refused('context-bound saves require move folder format 2')
+    aliases = manifest.get('library_root_aliases', [])
+    if not isinstance(aliases, list) or any(
+        not isinstance(path, str) or not re.match(ABSOLUTE_PATH_RE, path)
+        or not path.rstrip('/\\') or re.fullmatch(r'[A-Za-z]:[\\/]*', path)
+        for path in aliases
+    ):
+        raise Refused('the move manifest contains an invalid managed library root alias')
     problems = []
     dump = bundle / 'db.dump'
     if dump.is_symlink() or not dump.is_file() or _sha256(dump) != manifest['db_dump']['sha256']:
@@ -858,7 +908,12 @@ def rekey_saves(library: Path, manifest: dict, target_key: str) -> int:
 def verify(url: str, manifest: dict, new_roots: dict[str, str], library: Path, target_key: str | None) -> list[str]:
     expected, problems = manifest['db'], []
     actual = snapshot_db(url, new_roots)
-    actual_save_contexts = save_contexts_by_path(url)
+    storage_paths = set()
+    actual_save_contexts = save_contexts_by_path(url, storage_paths=storage_paths)
+    if manifest.get('backup'):
+        restored_paths, aliases = _managed_save_paths(library, storage_paths, require_all=True)
+        if aliases or set(restored_paths.values()) - {entry['path'] for entry in manifest['files']}:
+            problems.append('a restored save row does not reference its carried file in the target library')
     if actual['alembic_revision'] != expected['alembic_revision']:
         problems.append(f"schema revision {actual['alembic_revision']} != {expected['alembic_revision']}")
     for table, want in expected['tables'].items():
@@ -981,7 +1036,7 @@ def import_(args) -> int:
             _copy_checked(_safe_join(bundle / 'files', entry['path'], 'move folder'), target, entry['sha256'])
             if not existed:
                 created.append(target)
-        changed = remap_paths(url, old_roots, new_roots)
+        changed = remap_paths(url, old_roots, new_roots, library_aliases=manifest.get('library_root_aliases', ()))
         rekeyed = rekey_saves(library, manifest, target_key) if target_key else 0
         problems = verify(url, manifest, new_roots, library, target_key)
         for problem in problems:

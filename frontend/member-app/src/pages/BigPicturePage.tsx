@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { fetchGameDetails } from '../api/gameDetails'
 import { fetchBrowseGames } from '../api/browse'
 import { initiateGameDownload } from '../api/downloads'
 import { queueClientCommand } from '../api/clientCommands'
@@ -96,6 +97,10 @@ export function BigPicturePage() {
   const [socialOpen, setSocialOpen] = useState(false)
   const tileRefs = useRef<any[]>([])
   const autoFocused = useRef(false)
+  const nextPage = useRef(0)
+  const pageRequest = useRef<AbortController | null>(null)
+  const [loadingNext, setLoadingNext] = useState(false)
+  const focusAppended = useRef(false)
   const padState = useRef<{
     games: LooseProps[]
     index: number
@@ -125,13 +130,25 @@ export function BigPicturePage() {
       { per_page: perPage, sort_by: 'date_identified', sort_order: 'desc' },
       { signal: controller.signal },
     )
-      .then((data) => {
+      .then(async (data) => {
         if (!active) {
           return
         }
-        const list = Array.isArray(data.games) ? data.games : []
+        const list = Array.isArray(data.games) ? [...data.games] : []
         const wanted = focusGameFromQuery()
-        const found = wanted ? list.findIndex((game: any) => game.uuid === wanted) : -1
+        let found = wanted ? list.findIndex((game: any) => game.uuid === wanted) : -1
+        if (wanted && found < 0) {
+          try {
+            const target = await fetchGameDetails(wanted, { signal: controller.signal })
+            if (target.uuid !== wanted) throw new Error('Game unavailable')
+            list.unshift(target)
+            found = 0
+          } catch {
+            if (active) showToast('That game is unavailable in your library.', 'info')
+          }
+        }
+        if (!active) return
+        nextPage.current = data.pages > 1 ? 2 : 0
         tileRefs.current = []
         setGames(list)
         setIndex(found >= 0 ? found : 0)
@@ -145,6 +162,8 @@ export function BigPicturePage() {
     return () => {
       active = false
       controller.abort()
+      pageRequest.current?.abort()
+      pageRequest.current = null
     }
   }, [perPage, retryCount])
 
@@ -152,8 +171,49 @@ export function BigPicturePage() {
   const selected = list[index] || null
   const loading = !error && games === null
 
+  const loadNextPage = async () => {
+    const page = nextPage.current
+    if (!page || pageRequest.current) return
+    const controller = new AbortController()
+    pageRequest.current = controller
+    setLoadingNext(true)
+    try {
+      const data = await fetchBrowseGames(
+        { page, per_page: perPage, sort_by: 'date_identified', sort_order: 'desc' },
+        { signal: controller.signal },
+      )
+      if (controller.signal.aborted) return
+      const ids = new Set(list.map((game: LooseProps) => game.uuid))
+      const added = (data.games || []).filter((game: LooseProps) => !ids.has(game.uuid))
+      nextPage.current = page < data.pages ? page + 1 : 0
+      if (added.length) {
+        focusAppended.current = true
+        setGames([...list, ...added])
+        setIndex(list.length)
+      }
+    } catch {
+      if (!controller.signal.aborted) showToast('Could not load more games. Try again.', 'error')
+    } finally {
+      if (pageRequest.current === controller) {
+        pageRequest.current = null
+        setLoadingNext(false)
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (focusAppended.current) {
+      focusAppended.current = false
+      tileRefs.current[index]?.focus()
+    }
+  }, [games, index])
+
   const select = (nextIndex: any) => {
     if (!list.length) {
+      return
+    }
+    if (nextIndex >= list.length && nextPage.current) {
+      void loadNextPage()
       return
     }
     const clamped = Math.max(0, Math.min(list.length - 1, nextIndex))
@@ -191,9 +251,20 @@ export function BigPicturePage() {
     let lastNav = 0
     let confirmLatch = false
     let friendsLatch = false
+    let downloadLatch = false
+    let attractLatch = false
+    let previousPad = -1
 
     const poll = () => {
-      const pad = (navigator.getGamepads() || [])[0]
+      const pad = Array.from(navigator.getGamepads() || []).find(
+        (pad) => pad && pad.connected !== false,
+      )
+      const padIndexNow = pad?.index ?? -1
+      if (!pad || previousPad !== padIndexNow) {
+        axisLatch = 0
+        confirmLatch = friendsLatch = downloadLatch = attractLatch = false
+        previousPad = padIndexNow
+      }
       const { games: padGames, index: padIndex } = padState.current
       if (!pad) {
         frame = requestAnimationFrame(poll)
@@ -203,7 +274,7 @@ export function BigPicturePage() {
       const now = performance.now()
       const friends = pad.buttons[3]?.pressed
       if (friends) {
-        if (!friendsLatch && now - lastNav > GAMEPAD_REPEAT_MS) {
+        if (!friendsLatch) {
           padState.current.toggleFriends()
           lastNav = now
         }
@@ -242,7 +313,7 @@ export function BigPicturePage() {
       }
 
       if (confirm) {
-        if (!confirmLatch && now - lastNav > GAMEPAD_REPEAT_MS) {
+        if (!confirmLatch) {
           window.location.href = gameDetailsUrl(padGames[padIndex].uuid)
           lastNav = now
         }
@@ -251,18 +322,20 @@ export function BigPicturePage() {
         confirmLatch = false
       }
 
-      if (west && now - lastNav > GAMEPAD_REPEAT_MS) {
+      if (west && !downloadLatch) {
         if (!refuseOnThinSeat()) {
           padState.current.download(padGames[padIndex].uuid)
         }
         lastNav = now
       }
 
-      if (east && now - lastNav > GAMEPAD_REPEAT_MS) {
+      downloadLatch = Boolean(west)
+      if (east && !attractLatch) {
         window.location.href = attractUrl(padGames[padIndex].uuid)
         lastNav = now
       }
 
+      attractLatch = Boolean(east)
       frame = requestAnimationFrame(poll)
     }
 
@@ -330,7 +403,11 @@ export function BigPicturePage() {
     : ''
 
   return (
-    <div className={`od-bp${shellConfig.role === 'child' ? ' od-bp--kid' : ''}`}>
+    <main
+      id="main-content"
+      tabIndex={-1}
+      className={`od-bp${shellConfig.role === 'child' ? ' od-bp--kid' : ''}`}
+    >
       <header className="od-bp__header">
         <div>
           <h1 className="od-bp__title">Big Picture</h1>
@@ -459,6 +536,16 @@ export function BigPicturePage() {
             <PageStatus emptyMessage="No games in your library yet." className="od-bp__empty" />
           ) : null}
 
+          {nextPage.current > 0 && (
+            <button
+              type="button"
+              className="od-bp__btn"
+              disabled={loadingNext}
+              onClick={() => void loadNextPage()}
+            >
+              {loadingNext ? 'Loading…' : 'More games'}
+            </button>
+          )}
           {!loading && list.length > 0 ? (
             <div
               className="od-bp__rail"
@@ -511,6 +598,6 @@ export function BigPicturePage() {
         open={socialOpen}
         onOpenChange={setSocialOpen}
       />
-    </div>
+    </main>
   )
 }

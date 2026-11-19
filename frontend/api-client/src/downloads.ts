@@ -1,6 +1,7 @@
 import type { Requester } from './client.js'
 
 export interface InitiateDownloadResponse {
+  representation?: 'companion_zip'
   download_id: number
   status: string
   stream_url: string
@@ -9,6 +10,7 @@ export interface InitiateDownloadResponse {
 }
 
 export interface InitiateDownloadOptions {
+  representation?: 'companion_zip'
   kind?: 'base' | 'update' | 'extra'
   versionUuid?: string
   version_uuid?: string
@@ -33,6 +35,7 @@ export function createDownloadsApi(request: Requester) {
       const kind = options.kind ?? 'base'
       const version_uuid = options.versionUuid ?? options.version_uuid
       const body: Record<string, string> = { kind }
+      if (options.representation) body.representation = options.representation
       if (version_uuid) {
         body.version_uuid = version_uuid
       }

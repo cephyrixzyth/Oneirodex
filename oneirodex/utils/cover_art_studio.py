@@ -9,7 +9,11 @@ from here still resolves here.
 
 from __future__ import annotations
 
+import errno
+import hashlib
 import io
+import json
+import tempfile
 import os
 import re
 import uuid
@@ -17,7 +21,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 from sqlalchemy import select
 from werkzeug.utils import secure_filename
 from oneirodex.utils.runtime_config import get_runtime_config
@@ -113,6 +117,7 @@ def render_cover_art(
     palette_override: SystemPalette | None = None,
     headline_override: str | None = None,
     subtitle_override: str | None = None,
+    composition: str = 'auto',
     title_scale: float = DEFAULT_TITLE_SCALE,
     era: str | None = None,
 ) -> Image.Image:
@@ -163,7 +168,17 @@ def render_cover_art(
     img = _vertical_gradient(width, height, top=top, bottom=bottom)
     draw = ImageDraw.Draw(img)
 
-    if artistic:
+    illustrated = artistic and composition == 'workbench'
+    if illustrated:
+        artwork = Path(__file__).resolve().parents[1] / 'static/newstyle/studio/workbench.webp'
+        with Image.open(artwork) as source:
+            img = ImageOps.fit(source.convert('RGB'), (width, height), centering=(0.72, 0.5))
+        # Keep the illustration readable and reserve contrast for the cover lettering.
+        shade = Image.new('L', (1, height))
+        shade.putdata([round(200 * max(0, (y / max(1, height - 1) - 0.44) / 0.56)) for y in range(height)])
+        img.paste((8, 19, 26), (0, 0, width, height), shade.resize((width, height)))
+        draw = ImageDraw.Draw(img)
+    elif artistic:
         _paint_artistic_backdrop(
             img,
             top=top,
@@ -176,15 +191,9 @@ def render_cover_art(
         # Gaming composition, chosen by title seed (GT-B28). This is what makes
         # two covers structurally different rather than the same picture in a
         # different palette.
-        direction = pick_art_direction(seed)
+        direction = composition if composition in ART_DIRECTIONS else pick_art_direction(seed)
         _paint_art_direction(
-            img,
-            direction=direction,
-            accent=accent,
-            secondary=secondary,
-            top=top,
-            bottom=bottom,
-            seed=seed,
+            img, direction=direction, accent=accent, secondary=secondary, top=top, bottom=bottom, seed=seed,
         )
         draw = ImageDraw.Draw(img)
         if era_key:
@@ -221,7 +230,7 @@ def render_cover_art(
         # directions that already own their edges — a CRT tube, a retail box
         # spine, an arcade marquee — draw their own frame, so adding another
         # only doubles it.
-        if direction not in ('crt', 'boxart', 'marquee'):
+        if direction not in ('crt', 'boxart', 'marquee', 'workbench'):
             _draw_bezel_frame(
                 draw,
                 width,
@@ -258,7 +267,7 @@ def render_cover_art(
     else:
         gx = width // 2
         gy = int(height * (0.26 if not is_wide else 0.32))
-    if not motif:
+    if not motif and not illustrated:
         _draw_system_glyph(draw, gx, gy, mark_scale, glyph, accent)
 
     if not title:
@@ -320,6 +329,7 @@ def generate_size_matrix(
     fmt: str = 'webp',
     headline_override: str | None = None,
     subtitle_override: str | None = None,
+    composition: str = 'auto',
     title_scale: float = DEFAULT_TITLE_SCALE,
 ) -> dict[str, bytes]:
     """Generate all UI sizes for one title.
@@ -339,7 +349,7 @@ def generate_size_matrix(
             w, h, title=title, system=system, variant=variant,
             headline_override=headline_override,
             subtitle_override=subtitle_override,
-            title_scale=title_scale,
+            title_scale=title_scale, composition=composition,
         )
         name = _filename_for(prefix, w, h, fmt)
         out[name] = _image_to_bytes(img, fmt)
@@ -406,33 +416,47 @@ def save_pack(
     package_root: str | Path | None = None,
     headline_override: str | None = None,
     subtitle_override: str | None = None,
+    composition: str = 'auto',
     title_scale: float = DEFAULT_TITLE_SCALE,
 ) -> dict[str, Any]:
-    pack_id = pack_id or uuid.uuid4().hex[:12]
+    fmt = fmt.lower() if fmt.lower() in ('webp', 'png') else 'webp'
+    recipe = {'version': 3, 'title': title, 'system': system or '', 'format': fmt,
+              'composition': composition, 'headline': headline_override,
+              'subtitle': subtitle_override, 'title_scale': clamp_title_scale(title_scale)}
+    identity = hashlib.sha256(json.dumps(recipe, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+    pack_id = pack_id or 'cover-' + identity[:32]
     pack_dir = safe_pack_dir(pack_id, package_root)
-    pack_dir.mkdir(parents=True, exist_ok=True)
-    files = generate_size_matrix(
-        title, system=system, fmt=fmt,
-        headline_override=headline_override,
-        subtitle_override=subtitle_override,
-        title_scale=title_scale,
-    )
-    written: list[str] = []
-    for name, data in files.items():
-        dest = pack_dir / name
-        dest.write_bytes(data)
-        written.append(name)
-    manifest = {
-        'pack_id': pack_id,
-        'title': title,
-        'system': system or '',
-        'format': fmt,
-        'files': written,
-    }
-    (pack_dir / 'manifest.json').write_text(
-        __import__('json').dumps(manifest, indent=2) + '\n',
-        encoding='utf-8',
-    )
+    def existing():
+        with (pack_dir / 'manifest.json').open(encoding='utf-8') as stream:
+            manifest = json.load(stream)
+        if manifest.get('recipe') != recipe:
+            raise ValueError('This artwork pack ID already belongs to a different recipe')
+        names = [_filename_for(prefix, w, h, fmt) for prefix, w, h in SIZE_MATRIX]
+        if manifest.get('files') != names or not all((pack_dir / n).is_file() for n in names):
+            raise ValueError('This artwork pack is incomplete')
+        return manifest
+
+    if pack_dir.is_dir():
+        return existing()
+    pack_dir.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.render-', dir=pack_dir.parent) as tmp:
+        staging = Path(tmp) / 'pack'
+        staging.mkdir()
+        files = generate_size_matrix(
+            title, system=system, fmt=fmt, headline_override=headline_override,
+            subtitle_override=subtitle_override, title_scale=recipe['title_scale'], composition=composition,
+        )
+        for name, content in files.items():
+            (staging / name).write_bytes(content)
+        manifest = {'pack_id': pack_id, 'title': title, 'system': system or '',
+                    'format': fmt, 'files': list(files), 'recipe': recipe}
+        (staging / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+        try:
+            staging.rename(pack_dir)
+        except OSError as exc:
+            if exc.errno not in (errno.EEXIST, errno.ENOTEMPTY, errno.EACCES) or not pack_dir.is_dir():
+                raise
+            return existing()
     return manifest
 
 

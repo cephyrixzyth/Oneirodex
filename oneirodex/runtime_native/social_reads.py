@@ -15,7 +15,7 @@ from .request_auth import request_auth_context
 
 class SocialReadData:
     def profile(self, viewer, user_id: int, flask_app):
-        from sqlalchemy import select
+        from sqlalchemy import func, select
 
         from oneirodex.runtime_native.db_session import native_db as db
         from oneirodex.models import Game, User, UserGameProgress
@@ -26,26 +26,23 @@ class SocialReadData:
         if not target or not target.state:
             return None
         friends = accepted_friend_ids(viewer.id)
-        rows = db.session.execute(
-            select(UserGameProgress)
-            .where(UserGameProgress.user_id == target.id)
-            .order_by(UserGameProgress.last_played_at.desc().nullslast())
-            .limit(40)
-        ).scalars().all()
-        recent, total_seconds = [], 0
-        for row in rows:
-            game = db.session.execute(select(Game).filter_by(uuid=row.game_uuid)).scalars().first()
-            if not game or not self._can_view_game(viewer, game):
-                continue
-            seconds = int(row.total_seconds or 0)
-            total_seconds += seconds
-            recent.append({
-                'game_uuid': row.game_uuid, 'game_name': game.name,
-                'total_seconds': seconds,
-                'last_played_at': row.last_played_at.isoformat() if row.last_played_at else None,
-            })
-            if len(recent) >= 12:
-                break
+        from oneirodex.utils.library_acl import apply_game_access_filters
+
+        visible = select(
+            Game.uuid, Game.name, UserGameProgress.total_seconds, UserGameProgress.last_played_at,
+            func.sum(UserGameProgress.total_seconds).over().label('visible_seconds'),
+        ).join(UserGameProgress, UserGameProgress.game_uuid == Game.uuid).where(
+            UserGameProgress.user_id == target.id, Game.library_uuid != '',
+        )
+        rows = db.session.execute(apply_game_access_filters(visible, viewer).order_by(
+            UserGameProgress.last_played_at.desc().nullslast(), Game.id,
+        ).limit(12)).all()
+        recent = [{
+            'game_uuid': row.uuid, 'game_name': row.name,
+            'total_seconds': int(row.total_seconds or 0),
+            'last_played_at': row.last_played_at.isoformat() if row.last_played_at else None,
+        } for row in rows]
+        total_seconds = int(rows[0].visible_seconds or 0) if rows else 0
         avatar = getattr(target, 'avatarpath', None) or DEFAULT_AVATAR
         return {
             'user': {
@@ -79,38 +76,31 @@ class SocialReadData:
         left, right = db.session.get(User, user_id), db.session.get(User, other_id)
         if not left or not right:
             return 'Not found', 404
-        left_rows = {
-            row.game_uuid: row for row in db.session.execute(
-                select(UserGameProgress).where(UserGameProgress.user_id == user_id)
-            ).scalars().all()
-        }
-        right_rows = {
-            row.game_uuid: row for row in db.session.execute(
-                select(UserGameProgress).where(UserGameProgress.user_id == other_id)
-            ).scalars().all()
-        }
-        shared = []
-        for game_uuid in set(left_rows) & set(right_rows):
-            game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalars().first()
-            if not game or not self._can_view_game(viewer, game):
-                continue
-            shared.append({
-                'game_uuid': game_uuid, 'game_name': game.name,
-                'left_seconds': int(left_rows[game_uuid].total_seconds or 0),
-                'right_seconds': int(right_rows[game_uuid].total_seconds or 0),
-            })
-        shared.sort(key=lambda row: row['left_seconds'] + row['right_seconds'], reverse=True)
+        from sqlalchemy.orm import aliased
+        from oneirodex.utils.library_acl import apply_game_access_filters
+
+        left_progress, right_progress = aliased(UserGameProgress), aliased(UserGameProgress)
+        common = select(
+            Game.uuid, Game.name, left_progress.total_seconds.label('left_seconds'),
+            right_progress.total_seconds.label('right_seconds'),
+        ).select_from(Game).join(
+            left_progress, left_progress.game_uuid == Game.uuid,
+        ).join(right_progress, right_progress.game_uuid == Game.uuid).where(
+            left_progress.user_id == user_id, right_progress.user_id == other_id,
+            Game.library_uuid != '',
+        )
+        rows = db.session.execute(apply_game_access_filters(common, viewer).order_by(
+            (left_progress.total_seconds + right_progress.total_seconds).desc(), Game.id,
+        ).limit(40))
+        shared = [{
+            'game_uuid': row.uuid, 'game_name': row.name,
+            'left_seconds': int(row.left_seconds or 0), 'right_seconds': int(row.right_seconds or 0),
+        } for row in rows]
         return {
             'left': {'id': left.id, 'name': left.name},
             'right': {'id': right.id, 'name': right.name},
-            'shared_games': shared[:40],
+            'shared_games': shared,
         }, 200
-
-    @staticmethod
-    def _can_view_game(user, game):
-        from oneirodex.utils.library_acl import user_can_access_game
-
-        return bool(user_can_access_game(user, game))
 
     def activity(self, user, *, limit: int, friends_only: bool):
         from oneirodex.utils.activity_feed import (

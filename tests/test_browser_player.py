@@ -106,7 +106,7 @@ def test_available_engines_in_plain_app_context_skips_unavailable_database(monke
 
 def test_browse_play_fields_include_engine(monkeypatch):
     library = SimpleNamespace(platform=SimpleNamespace(name='NES'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',
         lambda _p: {'emulators': ['nestopia'], 'preferred': 'nestopia'},
@@ -141,7 +141,7 @@ def test_browser_play_href_nes_pilot(monkeypatch):
 
 def test_browse_play_fields_nes_pilot_url(monkeypatch):
     library = SimpleNamespace(platform=SimpleNamespace(name='NES'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',
         lambda _p: {'emulators': ['nestopia'], 'preferred': 'nestopia'},
@@ -451,3 +451,40 @@ def test_saving_settings_drops_the_install_probe_too(app, tmp_path, monkeypatch)
         # ...until a save invalidates both caches.
         set_browser_player_settings({'browser_player_allow_member_choice': False})
         assert bp.available_engines() == ('webretro', 'emulatorjs')
+
+
+def test_native_play_payload_uses_the_enabled_engine_for_this_platform(
+    app, no_savepoint_db, tmp_path, monkeypatch,
+):
+    from sqlalchemy import create_engine
+    from oneirodex.runtime_native.db_session import native_engine_session_scope, native_db
+    from oneirodex.utils.browser_player import available_engines
+    from oneirodex.utils.play_url import browse_play_fields
+    from oneirodex.utils.emulator_profiles import set_emulator_profiles
+
+    _install_emulatorjs(tmp_path, monkeypatch)
+    engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
+    try:
+        with native_engine_session_scope(engine):
+            set_browser_player_settings({'browser_player_emulatorjs_enabled': False})
+            assert available_engines() == ('webretro',)
+            set_browser_player_settings({
+                'browser_player_emulatorjs_enabled': True,
+                'browser_player_allow_member_choice': True,
+            })
+            native_db.session.info['oneirodex_request_member'] = SimpleNamespace(
+                preferences=SimpleNamespace(browser_player_engine='emulatorjs'),
+            )
+            monkeypatch.setattr('oneirodex.utils.play_url.core_is_browser_playable', lambda _: False)
+            game = SimpleNamespace(uuid='fixture', full_disk_path='local.rom',
+                                   library=SimpleNamespace(platform=SimpleNamespace(name='SNES')))
+            fields = browse_play_fields(game)
+            assert fields['browser_player'] == 'emulatorjs'
+            assert fields['can_play_in_browser'] and '/emulatorjs/' in fields['play_url']
+            set_emulator_profiles({'ARCADE': 'mame'})
+            game.library.platform.name = 'ARCADE'
+            arcade = browse_play_fields(game)
+            assert arcade['play_mode'] == 'companion'
+            assert arcade['companion_cores'][0] == 'mame' and not arcade['play_url']
+    finally:
+        engine.dispose()

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as safe_xml
+from defusedxml.common import DefusedXmlException
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -157,7 +159,10 @@ def _rom_attrs_from_xml_game(node: ET.Element) -> dict[str, Any]:
 
 
 def parse_dat_xml(text: str, *, source: str | None = None) -> tuple[str, list[dict[str, Any]]]:
-    root = ET.fromstring(text)
+    try:
+        root = safe_xml.fromstring(text)
+    except DefusedXmlException as exc:
+        raise ValueError('Unsupported XML declarations in reference set') from exc
     prefer_description = (source or '').strip().lower() in DESCRIPTION_TITLED_SOURCES
 
     def local(tag: str) -> str:

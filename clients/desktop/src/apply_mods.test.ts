@@ -382,8 +382,7 @@ describe('apply_mods helpers', () => {
       loader: '',
       requires: [],
     })
-    const okFetch = () =>
-      vi.fn(async () => new Response(new TextEncoder().encode('PK')))
+    const okFetch = () => vi.fn(async () => new Response(new TextEncoder().encode('PK')))
 
     beforeEach(() => {
       vi.mocked(invoke).mockImplementation(async (command: string) =>
@@ -518,8 +517,8 @@ describe('apply_mods helpers', () => {
       if (command === 'get_app_subdir') {
         return '/appdata/mods'
       }
-      if (command === 'apply_staged_mod') {
-        return { applied: 3, expandedBytes: 10 }
+      if (command === 'apply_staged_mod_pack') {
+        return 3
       }
       if (command === 'inspect_staged_mod') {
         return { entryCount: 3, expandedBytes: 10 }
@@ -565,8 +564,8 @@ describe('apply_mods helpers', () => {
       loaderHint: null,
       profileName: '',
     })
-    expect(invoke).toHaveBeenCalledWith('apply_staged_mod', {
-      sourcePath: '/appdata/mods/game-42/m1/one.zip',
+    expect(invoke).toHaveBeenCalledWith('apply_staged_mod_pack', {
+      sourcePaths: ['/appdata/mods/game-42/m1/one.zip'],
       installRoot: 'C:\\Oneirodex\\installs\\game-42',
     })
   })
@@ -577,7 +576,7 @@ describe('apply_mods helpers', () => {
       if (command === 'inspect_staged_mod') {
         return { entryCount: 1, expandedBytes: 3 * 1024 * 1024 * 1024 }
       }
-      if (command === 'apply_staged_mod') return { applied: 1, expandedBytes: 0 }
+      if (command === 'apply_staged_mod_pack') return { applied: 1, expandedBytes: 0 }
       return undefined
     })
 
@@ -588,8 +587,20 @@ describe('apply_mods helpers', () => {
           json: async () => ({
             enabled: true,
             mods: [
-              { id: 'm1', name: 'One', source_url: 'https://cdn.example/one.zip', enabled: true, load_order: 0 },
-              { id: 'm2', name: 'Two', source_url: 'https://cdn.example/two.zip', enabled: true, load_order: 1 },
+              {
+                id: 'm1',
+                name: 'One',
+                source_url: 'https://cdn.example/one.zip',
+                enabled: true,
+                load_order: 0,
+              },
+              {
+                id: 'm2',
+                name: 'Two',
+                source_url: 'https://cdn.example/two.zip',
+                enabled: true,
+                load_order: 1,
+              },
             ],
           }),
         }
@@ -611,7 +622,7 @@ describe('apply_mods helpers', () => {
       ok: false,
       error: 'Mod pack exceeds the 4 GiB expanded-size limit; no files were applied',
     })
-    expect(invoke).not.toHaveBeenCalledWith('apply_staged_mod', expect.anything())
+    expect(invoke).not.toHaveBeenCalledWith('apply_staged_mod_pack', expect.anything())
   })
 
   it('modApplyBlockedReason explains offline and install requirements', () => {
@@ -619,7 +630,6 @@ describe('apply_mods helpers', () => {
       modApplyBlockedReason({
         connectionOnline: false,
         modsTrackingEnabled: true,
-        hasEnabledMods: true,
         installed: true,
       }),
     ).toMatch(/offline/i)
@@ -627,7 +637,6 @@ describe('apply_mods helpers', () => {
       modApplyBlockedReason({
         connectionOnline: true,
         modsTrackingEnabled: true,
-        hasEnabledMods: true,
         installed: false,
       }),
     ).toMatch(/Install/i)
@@ -635,7 +644,6 @@ describe('apply_mods helpers', () => {
       modApplyBlockedReason({
         connectionOnline: true,
         modsTrackingEnabled: true,
-        hasEnabledMods: true,
         installed: true,
       }),
     ).toBeNull()

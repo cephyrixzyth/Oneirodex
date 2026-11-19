@@ -114,6 +114,8 @@ def _render_item(type_, obj, autogen_context):
     """
     if type_ == "type" and obj.__class__.__name__ == "JSONEncodedDict":
         return "sa.Text()"
+    if type_ == "type" and obj.__class__.__name__ == "UTCScanTime":
+        return "sa.DateTime()"
     return False
 
 

@@ -144,6 +144,10 @@ def _drain_scan_queue_safe(app=None, database_scope=None):
     """Best-effort FIFO promote after a scan leaves Running/Stopping."""
     try:
         from oneirodex.utils.scan_queue import drain_scan_queue
+        from oneirodex.utils.shutdown import should_continue_processing
+
+        if not should_continue_processing():
+            return
         if app is None:
             from flask import current_app
 
@@ -286,7 +290,6 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         process_pc_dlc_and_extra_roots, bump_scan_job_progress,
     )
     from oneirodex.utils.igdb_api import IGDBRateLimiter
-    from oneirodex.utils.security import is_safe_path
     from oneirodex.utils.game_core import remove_from_lib
     scan_job_entry = None
     # Cache settings once at the start of scan
@@ -364,7 +367,6 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
             content_type='Games',
             status='Running',
             is_enabled=True,
-            last_run=datetime.now(),
             library_uuid=library_uuid,
             error_message='',
             total_folders=0,
@@ -376,6 +378,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
             setting_filefolder=(scan_mode == 'files'),
             setting_download_missing_images=download_missing_images,
             setting_force_updates_extras=force_updates_extras_scan,
+            setting_fetch_hltb=fetch_hltb, setting_force_hltb_refetch=force_hltb_refetch,
             schedule=schedule if schedule in ('8_hours', '24_hours', '48_hours') else None,
             # This process is about to run the scan on its own thread, so it
             # owns the job. Without the stamp a job created down this path — the
@@ -464,6 +467,8 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
 
     try:
         # Use database-stored allowed extensions
+        root_stat = os.stat(folder_path)
+        root_identity = f'{root_stat.st_dev}:{root_stat.st_ino}'
         if scan_mode == 'folders':
             scan_depth = getattr(library, 'scan_depth', 1) or 1
             game_names_with_paths = get_game_names_from_folder(
@@ -472,7 +477,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
                 sensitive_patterns,
                 scan_depth=scan_depth,
                 skip_dir_patterns=skip_dir_patterns,
-                skip_dir_regexes=skip_dir_regexes,
+                skip_dir_regexes=skip_dir_regexes, strict=True,
             )
         elif scan_mode == 'files':
             game_names_with_paths = get_game_names_from_files(folder_path, allowed_extensions, insensitive_patterns, sensitive_patterns)
@@ -827,59 +832,45 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         _drain_scan_queue_safe(app, database_scope)
         return scan_job_id
 
-    if scan_job_entry.status != 'Failed':
-        scan_job_entry.status = 'Completed'
-        # Remember last scan root for refresh-all
-        if library is not None:
-            library.last_scan_folder = folder_path
-        # Schedule next run when configured (preset / interval / cron)
-        from oneirodex.utils.scan_queue import job_next_run_from_row
+    # The first library object was detached when the worker session closed.
+    library = db.session.get(Library, library_uuid)
+    if library is None:
+        return scan_job_id
+    same_root = library.last_scan_folder == folder_path and library.last_scan_root_identity == root_identity
 
-        job_schedule = schedule or getattr(scan_job_entry, 'schedule', None)
-        if job_schedule in SCHEDULE_HOURS and not getattr(scan_job_entry, 'schedule_kind', None):
-            scan_job_entry.schedule = job_schedule
-            scan_job_entry.schedule_kind = 'preset'
-        next_run = job_next_run_from_row(scan_job_entry)
-        if next_run is None and job_schedule in SCHEDULE_HOURS:
-            next_run = compute_next_run(job_schedule)
-        if next_run is not None:
-            scan_job_entry.next_run = next_run
-            scan_job_entry.status = 'Scheduled'
-            scan_job_entry.is_enabled = True
-            logger.info(
-                f"Scheduled next scan for {scan_job_entry.next_run} "
-                f"(kind={getattr(scan_job_entry, 'schedule_kind', None)}, schedule={job_schedule})"
-            )
-    
-    # Persist path_status for every library game (cheap exists per row — not Ops poll).
-    # When remove_missing is enabled, also delete rows whose path is gone.
-    logger.info("Refreshing path_status for library games...")
-    from oneirodex.utils.library_health import (
-        PATH_STATUS_MISSING,
-        refresh_game_path_status,
-    )
-    games_in_library = db.session.execute(
-        select(Game).filter_by(library_uuid=library_uuid)
-    ).scalars().all()
+    # A missing mount can appear as a perfectly readable empty directory.
+    # Pruning needs a previous scan of the same root and positive content now.
+    # Never turn a partial subtree scan into a whole-library deletion.
+    from oneirodex.utils.library_health import PATH_STATUS_MISSING, refresh_game_path_status
+    from pathlib import Path
+
+    prune = bool(remove_missing and same_root and game_names_with_paths)
+    if remove_missing and not prune:
+        message = 'Missing entries retained: establish a nonempty scan of the same storage root before pruning.'
+        scan_job_entry.error_message = ' '.join(filter(None, (scan_job_entry.error_message, message)))
+    root = Path(folder_path).resolve()
+    games_in_library = db.session.execute(select(Game).filter_by(library_uuid=library_uuid)).scalars().all()
     for game in games_in_library:
-        try:
-            status = refresh_game_path_status(game)
-        except Exception as e:
-            logger.error(f"Error refreshing path_status for {game.name}: {e}")
-            continue
-        if status != PATH_STATUS_MISSING:
-            continue
-        logger.warning(f"Game no longer found at path: {game.full_disk_path}")
-        if not remove_missing:
+        path = game.full_disk_path
+        if not path or not os.path.isabs(path):
             continue
         try:
-            remove_from_lib(game.uuid, config=app.config)
-            scan_job_entry.removed_count += 1
-            logger.info(
-                f"Removed game {game.name} as it no longer exists at {game.full_disk_path}"
-            )
-        except Exception as e:
-            logger.error(f"Error removing game {game.name}: {e}")
+            candidate = Path(path).resolve()
+            if root not in candidate.parents:
+                continue
+            if refresh_game_path_status(game) != PATH_STATUS_MISSING or not prune:
+                continue
+            # Never remove an entry because its containing folder disappeared.
+            # Refresh the mount identity and check the leaf again before deletion.
+            observed_root = os.stat(folder_path)
+            if (observed_root.st_dev, observed_root.st_ino) != (root_stat.st_dev, root_stat.st_ino):
+                break
+            if not os.path.isdir(os.path.dirname(path)) or os.path.lexists(path):
+                continue
+            if not remove_from_lib(game.uuid, config=app.config, scan_job_id=scan_job_id):
+                scan_job_entry.error_message = (scan_job_entry.error_message or '') + ' One or more missing entries could not be removed.'
+        except (OSError, RuntimeError) as exc:
+            logger.warning("Could not verify game path during scan: %s", type(exc).__name__)
 
     # If download_missing_images is enabled, check for and queue missing images
     if download_missing_images:
@@ -907,6 +898,33 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
             error_message = f"Error during missing images processing: {str(e)}"
             logger.error(error_message)
             scan_job_entry.error_message += f" | {error_message}"
+
+    db.session.refresh(scan_job_entry, attribute_names=['status', 'is_enabled'])
+    if scan_job_entry.status == 'Stopping' or not scan_job_entry.is_enabled:
+        scan_job_entry.status = 'Cancelled'
+        scan_job_entry.current_processing = None
+    elif scan_job_entry.status == 'Running':
+        scan_job_entry.status = 'Completed'
+        library.last_scan_folder = folder_path
+        library.last_scan_root_identity = root_identity
+        # Schedule next run when configured (preset / interval / cron)
+        from oneirodex.utils.scan_queue import job_next_run_from_row
+
+        job_schedule = schedule or getattr(scan_job_entry, 'schedule', None)
+        if job_schedule in SCHEDULE_HOURS and not getattr(scan_job_entry, 'schedule_kind', None):
+            scan_job_entry.schedule = job_schedule
+            scan_job_entry.schedule_kind = 'preset'
+        next_run = job_next_run_from_row(scan_job_entry)
+        if next_run is None and job_schedule in SCHEDULE_HOURS:
+            next_run = compute_next_run(job_schedule)
+        if next_run is not None:
+            scan_job_entry.next_run = next_run
+            scan_job_entry.status = 'Scheduled'
+            scan_job_entry.is_enabled = True
+            logger.info(
+                f"Scheduled next scan for {scan_job_entry.next_run} "
+                f"(kind={getattr(scan_job_entry, 'schedule_kind', None)}, schedule={job_schedule})"
+            )
 
     try:
         # Truncate error message if it's too long
@@ -1164,7 +1182,7 @@ def handle_manual_scan(manual_form):
                 sensitive_patterns,
                 scan_depth=scan_depth,
                 skip_dir_patterns=skip_dir_patterns,
-                skip_dir_regexes=skip_dir_regexes,
+                skip_dir_regexes=skip_dir_regexes, strict=True,
             )
         else:  # files mode
             # Load allowed file types from database

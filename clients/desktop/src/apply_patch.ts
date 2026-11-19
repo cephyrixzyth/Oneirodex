@@ -9,8 +9,6 @@ import { isTauriRuntime } from './config-store.js'
 import { joinUrl } from './paths.js'
 import { checkDownloadRedirectUrl } from './transport-policy.js'
 
-const PATCH_EXTS = new Set(['.ips', '.bps', '.ups'])
-
 /** Keep patch staging bounded before the response is copied into a Tauri IPC array. */
 export const MAX_PATCH_DOWNLOAD_BYTES = 256 * 1024 * 1024
 
@@ -28,11 +26,12 @@ function patchSizeLimitLabel(maxBytes: number): string {
     : `${maxBytes} byte${maxBytes === 1 ? '' : 's'}`
 }
 
-/** Buffer a patch only after enforcing a declared and cumulative byte ceiling. */
-export async function readBoundedPatchResponse(
+/** Send bounded chunks to native storage while enforcing the cumulative patch limit. */
+export async function streamBoundedPatchResponse(
   response: Response,
+  writeChunk: (chunk: Uint8Array) => Promise<void>,
   maxBytes = MAX_PATCH_DOWNLOAD_BYTES,
-): Promise<Uint8Array> {
+): Promise<number> {
   // Keep the exported helper from weakening production's ceiling if a caller
   // supplies a non-finite or larger value; smaller limits remain useful to tests.
   const byteLimit = Number.isFinite(maxBytes)
@@ -50,10 +49,9 @@ export async function readBoundedPatchResponse(
   }
 
   const body = response.body
-  if (!body) return new Uint8Array(0)
+  if (!body) throw new Error('Patch response was empty')
 
   const reader = body.getReader()
-  const chunks: Uint8Array[] = []
   let bytesReceived = 0
   try {
     while (true) {
@@ -64,7 +62,9 @@ export async function readBoundedPatchResponse(
         throw new Error(`Patch download exceeds the ${limitLabel} limit`)
       }
       bytesReceived += value.byteLength
-      chunks.push(value)
+      for (let offset = 0; offset < value.byteLength; offset += 1024 * 1024) {
+        await writeChunk(value.subarray(offset, offset + 1024 * 1024))
+      }
     }
   } catch (error) {
     await reader.cancel().catch(() => undefined)
@@ -73,13 +73,10 @@ export async function readBoundedPatchResponse(
     reader.releaseLock()
   }
 
-  const bytes = new Uint8Array(bytesReceived)
-  let offset = 0
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset)
-    offset += chunk.byteLength
+  if (!bytesReceived || (declared !== null && declared !== bytesReceived)) {
+    throw new Error('Patch response was empty or incomplete')
   }
-  return bytes
+  return bytesReceived
 }
 
 export function safePatchFilename(filename: string): string {
@@ -87,7 +84,7 @@ export function safePatchFilename(filename: string): string {
   const base = trimmed.split('/').pop() || ''
   const cleaned = base.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^\.+/, '')
   if (!cleaned) {
-    return 'patch.bps'
+    return 'patch'
   }
   return cleaned
 }
@@ -96,34 +93,6 @@ export function resolvePatchStageDir(patchesDir: string, gameUuid: string): stri
   const root = patchesDir.replace(/[\\/]+$/, '')
   const safeUuid = gameUuid.replace(/[^a-zA-Z0-9_-]/g, '_')
   return `${root}/${safeUuid}`
-}
-
-export function buildFlipsApplyArgs(opts: {
-  flipsPath: string
-  patchPath: string
-  romPath: string
-  outputPath: string
-}): string[] {
-  // Flips CLI: flips --apply patch rom output
-  return [opts.flipsPath, '--apply', opts.patchPath, opts.romPath, opts.outputPath]
-}
-
-export function isPatchFilename(name: string): boolean {
-  const lower = name.toLowerCase()
-  const dot = lower.lastIndexOf('.')
-  if (dot < 0) {
-    return false
-  }
-  return PATCH_EXTS.has(lower.slice(dot))
-}
-
-export function patchedOutputName(romBasename: string, patchBasename: string): string {
-  const romRoot = romBasename.replace(/\.[^.]+$/, '') || 'rom'
-  const lower = patchBasename.toLowerCase()
-  const fmt = lower.endsWith('.ips') ? 'ips' : lower.endsWith('.ups') ? 'ups' : 'bps'
-  const extMatch = romBasename.match(/(\.[^.]+)$/)
-  const ext = extMatch ? extMatch[1] : '.rom'
-  return `${romRoot}.patched-${fmt}${ext}`
 }
 
 async function getPatchesDir(): Promise<string> {
@@ -191,15 +160,23 @@ export async function stagePatchFile(opts: {
     if (!response.ok) {
       return { ok: false, error: `patch download ${response.status}` }
     }
-    const bytes = await readBoundedPatchResponse(response)
-    const patchesDir = await getPatchesDir()
-    const stageDir = resolvePatchStageDir(patchesDir, opts.gameUuid)
-    const name = safePatchFilename(opts.filename || `${opts.patchUuid}.bps`)
-    const path = `${stageDir}/${name}`
-    await invoke('write_file_bytes', {
-      path,
-      bytes: Array.from(bytes),
-    })
+    let path = ''
+    try {
+      await streamBoundedPatchResponse(response, async (chunk) => {
+        if (!path) {
+          const patchesDir = await getPatchesDir()
+          const stageDir = resolvePatchStageDir(patchesDir + '/.staging', opts.gameUuid)
+          const name = safePatchFilename(opts.filename || opts.patchUuid)
+          path = `${stageDir}/${crypto.randomUUID()}-${name}`
+          await invoke('write_file_bytes', { path, bytes: chunk })
+        } else {
+          await invoke('append_file_bytes', { path, bytes: chunk })
+        }
+      })
+    } catch (error) {
+      if (path) await invoke('remove_path', { path }).catch(() => undefined)
+      throw error
+    }
     return { ok: true, path }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }

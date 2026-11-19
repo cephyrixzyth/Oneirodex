@@ -237,12 +237,11 @@ class TestSyncModeHonesty:
         """
         from oneirodex.utils import ownership_poller, store_ownership
 
-        monkeypatch.setattr(ownership_poller, '_scheduler_started', False)
         monkeypatch.setitem(store_ownership.STORE_SYNC_MODE, 'playnite', 'live')
         app.config['ENABLE_OWNERSHIP_POLL'] = True
 
         # Must not raise — the app keeps booting.
-        ownership_poller.start_ownership_scheduler(app)
+        assert ownership_poller.start_ownership_scheduler(app) is None
 
         # And must not have armed a poller that can only fail.
-        assert ownership_poller._scheduler_started is False
+        assert ownership_poller._scheduler.thread is None

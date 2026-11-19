@@ -58,11 +58,14 @@ def refresh_game_path_status(game: Game) -> str:
     if not path:
         game.path_status = PATH_STATUS_EMPTY
         return PATH_STATUS_EMPTY
-    if os.path.exists(path):
-        game.path_status = PATH_STATUS_OK
-        return PATH_STATUS_OK
-    game.path_status = PATH_STATUS_MISSING
-    return PATH_STATUS_MISSING
+    try:
+        os.stat(path)
+    except FileNotFoundError:
+        game.path_status = PATH_STATUS_MISSING
+        return PATH_STATUS_MISSING
+    # Other I/O errors have no bearing on the last verified presence.
+    game.path_status = PATH_STATUS_OK
+    return PATH_STATUS_OK
 
 
 def mark_game_path_ok(game: Game) -> None:

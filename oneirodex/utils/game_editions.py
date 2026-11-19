@@ -1,28 +1,11 @@
 """Where else in the library the same title exists, and how to launch each one.
 
-A member browsing a grid sees one tile per *row in one library*, so a household
-that keeps Chrono Trigger as both a SNES ROM and a PC release shows two
-unrelated tiles and the preview for either one implies it is the only copy.
-This is the join that was missing: given a game, the same title anywhere the
-member can see, grouped by system, each carrying its own play options.
-
-Matching is by normalised title, deliberately, and it is worth saying why the
-obvious key does not work: ``Game.igdb_id`` and ``Game.slug`` are both
-``unique=True``, so a cross-platform pair *cannot* share either — the second
-copy is a different row with a different (or absent) IGDB id. Title is what
-those rows actually have in common.
-
-Normalisation is the same shape as ``patch_catalog.local_yaml.normalize_title``
-(casefold, collapse anything non-alphanumeric) which is enough for
-"Final Fantasy VII" vs "Final Fantasy VII " vs "Final Fantasy: VII", and
-deliberately does *not* try to peel editions or regions. Guessing wider here
-would list titles that are not the same game, and a wrong system in a launch
-menu is worse than a missing one.
+The catalog and preview share the stored Unicode title key. The preview lists
+visible copies across systems, with the active copy first, so members can
+choose a playable edition. Provider IDs and slugs are unique per database row.
 """
 
 from __future__ import annotations
-
-import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload, selectinload
@@ -32,13 +15,8 @@ from oneirodex.models import Game, User, UserGameProgress, UserPreference, user_
 from oneirodex.utils.browser_player import browser_play_href
 from oneirodex.utils.play_url import browse_play_fields
 from oneirodex.utils.presence import accepted_friend_ids
-from oneirodex.utils.title_grouping import TITLE_KEY_PATTERN
+from oneirodex.utils.title_grouping import normalize_title
 
-# Imported, not restated. The browse grid groups tiles with the same key
-# computed in SQL (`utils/title_grouping.title_key_expr`); if these two
-# patterns ever drifted, the grid would collapse a set of copies that the
-# preview then refused to list as one title.
-_NON_ALNUM = re.compile(TITLE_KEY_PATTERN)
 
 #: Cap on rows considered for one lookup. A library with thousands of copies of
 #: one name is a scan fault, not a use case, and the preview shows a handful.
@@ -47,11 +25,6 @@ MAX_EDITIONS = 12
 #: Tags and household friends on the preview — enough to scan, not a dump.
 MAX_PREVIEW_TAGS = 8
 MAX_PREVIEW_FRIENDS = 5
-
-
-def normalize_title(value: str | None) -> str:
-    """Casefolded, punctuation-collapsed title used to pair copies across systems."""
-    return _NON_ALNUM.sub(' ', (value or '').strip().lower()).strip()
 
 
 def _core_label(core_id: str) -> str:
@@ -167,15 +140,12 @@ def _edition_games(game, user) -> list:
     if not key:
         return [game]
 
-    # Narrow in SQL on the raw name, then confirm on the normalised one in
-    # Python. A functional index on the normalisation does not exist, and the
-    # candidate set for one title is small, so the cheap prefilter plus an exact
-    # check is both correct and honest about what the database can do.
     stmt = (
         select(Game)
         .options(selectinload(Game.urls), joinedload(Game.library))
-        .where(Game.name.ilike(f'%{game.name.strip()[:60]}%'))
-        .limit(MAX_EDITIONS * 8)
+        .where(Game.browse_title_key == key)
+        .order_by((Game.uuid == game.uuid).desc(), Game.library_uuid, Game.uuid)
+        .limit(MAX_EDITIONS)
     )
     # ACL first, always: a member must not learn that a title exists in a
     # library they cannot see. `apply_game_access_filters` only adds WHERE
@@ -184,7 +154,7 @@ def _edition_games(game, user) -> list:
 
     candidates = db.session.execute(stmt).unique().scalars().all()
 
-    rows = [other for other in candidates if normalize_title(other.name) == key]
+    rows = list(candidates)
     if not any(other.uuid == game.uuid for other in rows):
         rows.insert(0, game)
 

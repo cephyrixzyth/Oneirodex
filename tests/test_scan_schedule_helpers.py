@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import pytest
 import tempfile
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -266,3 +267,18 @@ def test_impossible_cron_fails_without_walking_two_years():
     # the same answer; day-stepping is ~800.
     assert elapsed < 1.0, f'impossible cron took {elapsed:.2f}s to reject'
 
+
+
+def test_leap_day_scan_includes_nonleap_centuries():
+    from oneirodex.utils.cron_schedule import next_cron_fire
+    from datetime import datetime, timezone
+
+    assert next_cron_fire('0 0 29 2 *', datetime(2028, 3, 1, tzinfo=timezone.utc)).year == 2032
+    assert next_cron_fire('0 0 29 2 *', datetime(2096, 3, 1, tzinfo=timezone.utc)).year == 2104
+
+
+@pytest.mark.parametrize('expression', ['1,61 * * * *', '1, * * * *', '55-60 * * * *', '0 0 * * 8'])
+def test_invalid_cron_member_rejects_the_entire_expression(expression):
+    from oneirodex.utils.cron_schedule import validate_cron_expression
+
+    assert validate_cron_expression(expression)

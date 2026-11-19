@@ -112,6 +112,8 @@ export function AdminTopNav({
 
   async function handlePreferencesClick(event: ReactMouseEvent) {
     event.preventDefault()
+    // The menu link disappears when the dialog opens. Restore to its persistent trigger.
+    accountButtonRef.current?.focus()
     setAccountOpen(false)
     await openPreferencesModal()
   }
@@ -156,6 +158,15 @@ export function AdminTopNav({
               so it lines up with the account control — member ContextBar’s
               trail slot. Page actions (AdminPageActions) stay in the centre. */}
           <div id="od-admin-topbar-trail" className="od-topbar__trail" />
+          <button
+            type="button"
+            className="od-cbtn od-workspace-search"
+            aria-label="Find an admin tool"
+            onClick={() => document.dispatchEvent(new Event('od-admin-palette:open'))}
+          >
+            <span aria-hidden="true">⌕</span>
+            <span>Find tools</span>
+          </button>
           <div className="od-topnav__dropdown">
             <button
               ref={accountButtonRef}

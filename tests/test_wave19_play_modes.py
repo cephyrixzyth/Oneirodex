@@ -43,7 +43,7 @@ def test_platforms_for_play_mode_matches_matrix():
 
 def test_browse_play_fields_catalog_only():
     library = SimpleNamespace(platform=SimpleNamespace(name='PS5'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     fields = browse_play_fields(game)
     assert fields['can_play_in_browser'] is False
     assert fields['play_mode'] == 'catalog'
@@ -53,7 +53,7 @@ def test_browse_play_fields_catalog_only():
 
 def test_browse_play_fields_companion_no_fake_play(monkeypatch):
     library = SimpleNamespace(platform=SimpleNamespace(name='WII'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',
         lambda _p: {'emulators': ['dolphin'], 'preferred': 'dolphin'},
@@ -69,7 +69,7 @@ def test_browse_play_fields_companion_no_fake_play(monkeypatch):
 
 def test_wave19c_gamecube_companion_hint():
     library = SimpleNamespace(platform=SimpleNamespace(name='NGC'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     fields = browse_play_fields(game)
     assert fields['can_play_in_browser'] is False
     assert fields['play_mode'] == 'companion'
@@ -83,7 +83,7 @@ def test_wave19d_dreamcast_and_3ds_companion():
     dc = browse_play_fields(
         SimpleNamespace(
             uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-            library=SimpleNamespace(platform=SimpleNamespace(name='SEGA_DC')),
+            full_disk_path='fixture.rom', library=SimpleNamespace(platform=SimpleNamespace(name='SEGA_DC')),
         )
     )
     assert dc['play_blocker'] == 'companion_preferred'
@@ -92,7 +92,7 @@ def test_wave19d_dreamcast_and_3ds_companion():
     n3 = browse_play_fields(
         SimpleNamespace(
             uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-            library=SimpleNamespace(platform=SimpleNamespace(name='N3DS')),
+            full_disk_path='fixture.rom', library=SimpleNamespace(platform=SimpleNamespace(name='N3DS')),
         )
     )
     assert 'citra' in (n3.get('companion_cores') or [])
@@ -102,7 +102,7 @@ def test_wave19e_ps2_and_vita_companion():
     ps2 = browse_play_fields(
         SimpleNamespace(
             uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-            library=SimpleNamespace(platform=SimpleNamespace(name='PS2')),
+            full_disk_path='fixture.rom', library=SimpleNamespace(platform=SimpleNamespace(name='PS2')),
         )
     )
     assert ps2['play_mode'] == 'companion'
@@ -110,7 +110,7 @@ def test_wave19e_ps2_and_vita_companion():
     vita = browse_play_fields(
         SimpleNamespace(
             uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-            library=SimpleNamespace(platform=SimpleNamespace(name='PSVITA')),
+            full_disk_path='fixture.rom', library=SimpleNamespace(platform=SimpleNamespace(name='PSVITA')),
         )
     )
     assert 'vita3k' in (vita.get('companion_cores') or [])
@@ -124,7 +124,7 @@ def test_wave19f_catalog_current_gen():
 
 def test_wave19a_pce_companion_cores_until_wasm(monkeypatch):
     library = SimpleNamespace(platform=SimpleNamespace(name='PCE'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',
         lambda _p: {'emulators': ['mednafen_pce_fast'], 'preferred': 'mednafen_pce_fast'},
@@ -138,7 +138,7 @@ def test_wave19a_pce_companion_cores_until_wasm(monkeypatch):
 def test_wave19a_c64_companion_until_wasm(monkeypatch):
     assert play_mode_for_platform('VICE_X64SC') == 'companion'
     library = SimpleNamespace(platform=SimpleNamespace(name='VICE_X64SC'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',
         lambda _p: {'emulators': ['vice_x64'], 'preferred': 'vice_x64'},
@@ -171,7 +171,7 @@ def test_wave19a_vice_browser_unlocks_when_wasm_vendored(monkeypatch):
 def test_wave19b_pcdos_companion_by_default():
     assert play_mode_for_platform('PCDOS') == 'companion'
     library = SimpleNamespace(platform=SimpleNamespace(name='PCDOS'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     fields = browse_play_fields(game)
     assert fields['can_play_in_browser'] is False
     assert fields['play_mode'] == 'companion'
@@ -204,7 +204,7 @@ def test_wave19b_pcdos_browser_when_flag_and_wasm(monkeypatch):
         lambda _p: {'emulators': ['dosbox_pure'], 'preferred': 'dosbox_pure'},
     )
     library = SimpleNamespace(platform=SimpleNamespace(name='PCDOS'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     fields = browse_play_fields(game)
     assert fields['can_play_in_browser'] is True
     assert fields['play_mode'] == 'browser'
@@ -214,7 +214,7 @@ def test_wave19b_pcdos_browser_when_flag_and_wasm(monkeypatch):
 def test_wave19b_pcdos_flag_on_but_no_wasm(monkeypatch):
     monkeypatch.setattr('oneirodex.utils.play_url.pcdos_browser_enabled', lambda: True)
     library = SimpleNamespace(platform=SimpleNamespace(name='PCDOS'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     fields = browse_play_fields(game)
     assert fields['can_play_in_browser'] is False
     assert fields['play_blocker'] == 'pcdos_wasm_missing'
@@ -236,7 +236,7 @@ def test_wave19_cheat_surface_pc_vs_console():
     pc = browse_play_fields(
         SimpleNamespace(
             uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-            library=SimpleNamespace(platform=SimpleNamespace(name='PCWIN')),
+            full_disk_path='fixture.rom', library=SimpleNamespace(platform=SimpleNamespace(name='PCWIN')),
         )
     )
     assert pc['cheat_surface'] == 'pc_wand'
@@ -244,7 +244,7 @@ def test_wave19_cheat_surface_pc_vs_console():
     nes = browse_play_fields(
         SimpleNamespace(
             uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-            library=SimpleNamespace(platform=SimpleNamespace(name='NES')),
+            full_disk_path='fixture.rom', library=SimpleNamespace(platform=SimpleNamespace(name='NES')),
         )
     )
     assert nes['cheat_surface'] == 'retroarch'

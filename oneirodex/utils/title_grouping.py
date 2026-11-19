@@ -1,48 +1,27 @@
-"""Collapse copies of one title across systems into a single browse row.
-
-The grid shows one tile per *row in one library*, so a household keeping Chrono
-Trigger on SNES, PC and Switch sees three unrelated tiles. This is the grouping
-that makes them one tile, with the copies reachable from the preview's
-"Available on" list — which already existed and is the only place they were ever
-shown as one title.
-
-**Why title, not id.** `Game.igdb_id` and `Game.slug` are both `unique=True`, so
-a cross-platform pair *cannot* share either: the second copy is a different row
-with a different (or absent) IGDB id. The normalised title is what those rows
-actually have in common. This is the same decision, and the same normalisation,
-as `oneirodex.utils.game_editions` — the two must agree, or the tile would
-collapse a set the preview then refuses to list. `test_title_grouping.py` pins
-that parity.
-
-**Why no migration.** The obvious implementation is a persisted `title_key`
-column, and it is not needed: Postgres can compute the key inline, so grouping
-happens in the query and pagination stays correct. An index on the expression is
-a performance question for later, not a correctness one now.
-"""
+"""Catalog grouping keys and platform ordering."""
 
 from __future__ import annotations
+
+import unicodedata
 
 from sqlalchemy import case, func
 
 from oneirodex.platform_recency import PLATFORM_LAUNCH_YEAR, platform_rank
 
-#: The one pattern. `game_editions.normalize_title` compiles this for Python and
-#: `title_key_expr` hands it to Postgres, so the two cannot drift.
-TITLE_KEY_PATTERN = r'[^a-z0-9]+'
 
-
-def title_key_expr(name_column):
-    """SQL for `game_editions.normalize_title`, computed in the database.
-
-    `lower()` then collapse every run of non-alphanumerics to one space, then
-    trim — the same three steps, in the same order. Postgres `regexp_replace`
-    needs the `g` flag to replace every run rather than only the first, which is
-    the one place this is easy to get subtly wrong: without it, "Final Fantasy:
-    VII" and "Final Fantasy VII" would not pair.
-    """
-    return func.trim(
-        func.regexp_replace(func.lower(name_column), TITLE_KEY_PATTERN, ' ', 'g')
+def normalize_title(value: str | None) -> str:
+    """Case-fold a title while retaining letters, numbers and combining marks in every script."""
+    folded = unicodedata.normalize('NFC', (value or '').casefold())
+    tokens = ''.join(
+        char if unicodedata.category(char)[0] in ('L', 'M', 'N') else ' '
+        for char in folded
     )
+    return ' '.join(tokens.split())
+
+
+def title_key_expr(game):
+    """Rows with no usable key remain individually visible."""
+    return func.coalesce(func.nullif(game.browse_title_key, ''), '#' + game.uuid)
 
 
 def platform_rank_case(platform_column):

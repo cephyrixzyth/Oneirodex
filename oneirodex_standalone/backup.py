@@ -14,7 +14,8 @@ import io
 import json
 import os
 from pathlib import Path
-import shutil
+import tempfile
+from types import SimpleNamespace
 import subprocess
 import sys
 
@@ -73,12 +74,53 @@ def _atomic_write(path: Path, raw: bytes) -> None:
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(temporary, path)
+    _sync_directory(path.parent)
+
+
+def _sync_directory(path: Path) -> None:
     if os.name != 'nt':
-        directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+        fd = os.open(path, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
         try:
-            os.fsync(directory_fd)
+            os.fsync(fd)
         finally:
-            os.close(directory_fd)
+            os.close(fd)
+
+
+def _sync_staged_bundle(bundle: Path) -> None:
+    if os.name == 'nt':
+        return  # Python does not expose flushable directory handles on Windows.
+    for directory, _dirs, filenames in os.walk(bundle, topdown=False):
+        for filename in filenames:
+            with (Path(directory) / filename).open('rb') as handle:
+                os.fsync(handle.fileno())
+        _sync_directory(Path(directory))
+
+
+def _publish_new_directory(source: Path, destination: Path) -> None:
+    """Rename without replacing a destination created by another process."""
+    if os.name == 'nt':
+        try:
+            os.rename(source, destination)  # Windows refuses an existing destination.
+        except OSError:
+            if destination.exists() or destination.is_symlink():
+                raise Refused('the backup destination changed during export') from None
+            raise
+        return
+    import ctypes
+    import errno
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    if sys.platform == 'darwin':
+        result = libc.renamex_np(os.fsencode(source), os.fsencode(destination), 4)  # RENAME_EXCL
+    elif sys.platform.startswith('linux') and hasattr(libc, 'renameat2'):
+        result = libc.renameat2(-100, os.fsencode(source), -100, os.fsencode(destination), 1)
+    else:
+        raise Refused('this platform cannot atomically publish a new backup directory')
+    if result != 0:
+        error = ctypes.get_errno()
+        if error in {errno.EEXIST, errno.ENOTEMPTY}:
+            raise Refused('the backup destination changed during export')
+        raise OSError(error, os.strerror(error), destination)
 
 
 def finalize_backup_manifest(
@@ -202,32 +244,47 @@ def create(args) -> int:
     out = requested_out.resolve()
     if out.exists() and (not out.is_dir() or any(out.iterdir())):
         raise Refused('the backup destination must be new or empty')
-    export_args = type('MoveExportArgs', (), {
-        'pg_home': args.pg_home,
-        'data_dir': args.data_dir,
-        'to': str(out),
-        'root': args.root,
-        'require_no_plaintext_secrets': True,
-    })()
-    created = False
-    try:
+    original = out.stat() if out.exists() else None
+    out.parent.mkdir(parents=True, exist_ok=True)
+    data_dir = (args.data_dir or _default_data_dir()).resolve()
+    if out.is_relative_to(data_dir / 'library') or out.is_relative_to(data_dir / 'pgdata'):
+        raise Refused('choose a backup destination outside the source library and database')
+    with tempfile.TemporaryDirectory(prefix='.oneirodex-backup-', dir=out.parent) as private:
+        staged = Path(private) / 'bundle'
+        export_args = SimpleNamespace(pg_home=args.pg_home, data_dir=args.data_dir, to=str(staged),
+                                      root=args.root, require_no_plaintext_secrets=True)
         with redirect_stdout(io.StringIO()):
             result = export_move(export_args)
         if result != 0:
             raise Refused('standalone backup export did not complete')
-        created = True
-        data_dir = (args.data_dir or _default_data_dir()).resolve()
-        fingerprint = finalize_backup_manifest(out, data_dir=data_dir, source_commit=_source_commit())
-        manifest = verify_complete_backup(out)
-        print(f'backup complete: {len(manifest["files"])} managed files; schema {manifest["backup"]["schema_revision"]}')
-        print(f'folder: {out}')
-        print(f'manifest sha256: {fingerprint}')
-        print('restore with the verified move importer and the matching protected operator keyrings.')
-        return 0
-    except BaseException:
-        if created and out.is_dir() and not out.is_symlink():
-            shutil.rmtree(out, ignore_errors=True)
-        raise
+        fingerprint = finalize_backup_manifest(staged, data_dir=data_dir, source_commit=_source_commit())
+        manifest = verify_complete_backup(staged)
+        _sync_staged_bundle(staged)
+        if original is not None:
+            try:
+                if out.is_symlink() or not os.path.samestat(original, out.stat()):
+                    raise Refused('the backup destination changed during export')
+                out.rmdir()  # atomically refuse a concurrently populated directory
+            except OSError:
+                raise Refused('the backup destination changed during export') from None
+        try:
+            _publish_new_directory(staged, out)
+        except BaseException:
+            if original is not None:
+                try:
+                    out.mkdir(mode=original.st_mode & 0o777)
+                except FileExistsError:
+                    pass
+            raise
+        try:
+            _sync_directory(out.parent)
+        except OSError:
+            raise Refused('the verified backup was published but the destination directory could not be flushed') from None
+    print(f'backup complete: {len(manifest["files"])} managed files; schema {manifest["backup"]["schema_revision"]}')
+    print(f'folder: {out}')
+    print(f'manifest sha256: {fingerprint}')
+    print('restore with the verified move importer and the matching protected operator keyrings.')
+    return 0
 
 
 def _default_data_dir() -> Path:
@@ -255,5 +312,9 @@ def main(argv=None) -> int:
         return 2
     except Refused as exc:
         print(f'REFUSED: {exc}', file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f'Backup filesystem operation failed ({type(exc).__name__}). Check free space and permissions.',
+              file=sys.stderr)
         return 1
 

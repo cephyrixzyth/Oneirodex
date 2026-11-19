@@ -402,7 +402,7 @@ def test_provider_search_does_not_return_raw_runtime_error(
         raise RuntimeError(f'upstream response?key={secret}')
 
     monkeypatch.setattr(
-        'oneirodex.utils.providers.registry.get_provider',
+        'oneirodex.utils.providers.get_provider',
         lambda _provider_id: SimpleNamespace(
             id='steamgriddb', is_enabled=lambda: True, search_artwork=fail,
         ),

@@ -240,7 +240,7 @@ def test_asgi_router_startup_does_not_construct_or_import_flask():
     assert result.returncode == 0, result.stderr or result.stdout
 
 
-def test_native_background_lifecycle_starts_without_flask_or_jinja():
+def test_native_background_lifecycle_starts_without_flask_or_jinja(tmp_path):
     script = r'''
 import os
 import sys
@@ -255,7 +255,7 @@ class BlockFrameworkImports(MetaPathFinder):
         return None
 
 sys.meta_path.insert(0, BlockFrameworkImports())
-from sqlalchemy import create_engine
+from sqlalchemy import URL, create_engine
 from oneirodex.runtime_native.runtime_context import NativeRuntimeContext
 from oneirodex.runtime_native.runtime_context import get_runtime_config
 from oneirodex.utils import scan_scheduler, library_watch, free_games_poller
@@ -280,7 +280,8 @@ from oneirodex.utils import status, ops_summary
 
 app = NativeRuntimeContext({}, package_root='.')
 app.config['ENABLE_FREE_GAMES'] = False
-app.native_engine = create_engine('sqlite:///:memory:')
+# The real cleanup thread and foreground checks need the same schema.
+app.native_engine = create_engine(URL.create('sqlite', database=sys.argv[1]))
 from oneirodex.models.orm import ModelBase
 ModelBase.metadata.create_all(app.native_engine)
 assert not any(name == 'flask' or name.startswith(('flask.', 'flask_')) for name in sys.modules)
@@ -332,8 +333,9 @@ app.native_engine.dispose()
 '''
     child_env = os.environ.copy()
     child_env.pop('PYTEST_CURRENT_TEST', None)
+    child_env['ONEIRODEX_ENABLE_BACKGROUND_WORKERS'] = 'true'
     result = subprocess.run(
-        [sys.executable, '-c', script],
+        [sys.executable, '-c', script, str(tmp_path / 'workers.sqlite')],
         cwd=ROOT,
         env=child_env,
         capture_output=True,
@@ -400,6 +402,8 @@ print(
 '''
     child_env = os.environ.copy()
     child_env.pop('PYTEST_CURRENT_TEST', None)
+    # Importing utilities must not require an operator signing key from the host.
+    child_env['SECRET_KEY'] = ''
     result = subprocess.run(
         [sys.executable, '-c', script],
         cwd=ROOT,

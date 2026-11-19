@@ -403,7 +403,10 @@ export async function stageModFromUrl(opts: {
       }
     }
     if (!response.body) {
-      return { ok: false, error: `mod download for ${opts.mod.name} does not support bounded streaming` }
+      return {
+        ok: false,
+        error: `mod download for ${opts.mod.name} does not support bounded streaming`,
+      }
     }
     const modsDir = await getModsDir()
     const stageDir = resolveModStageDir(modsDir, opts.gameUuid, opts.mod.id)
@@ -418,7 +421,10 @@ export async function stageModFromUrl(opts: {
         if (done) break
         if (!value?.byteLength) continue
         for (let offset = 0; offset < value.byteLength; offset += MAX_TAURI_CHUNK_BYTES) {
-          const chunk = value.subarray(offset, Math.min(offset + MAX_TAURI_CHUNK_BYTES, value.byteLength))
+          const chunk = value.subarray(
+            offset,
+            Math.min(offset + MAX_TAURI_CHUNK_BYTES, value.byteLength),
+          )
           bytesReceived += chunk.byteLength
           if (bytesReceived > maxBytes) {
             throw new Error(
@@ -432,7 +438,9 @@ export async function stageModFromUrl(opts: {
         throw new Error(`mod download for ${opts.mod.name} was empty`)
       }
       if (Number.isFinite(declared) && declared > 0 && bytesReceived < declared) {
-        throw new Error(`mod download for ${opts.mod.name} was short (${bytesReceived} of ${declared} bytes)`)
+        throw new Error(
+          `mod download for ${opts.mod.name} was short (${bytesReceived} of ${declared} bytes)`,
+        )
       }
       return { ok: true, path, bytes: bytesReceived }
     } catch (error) {
@@ -445,34 +453,9 @@ export async function stageModFromUrl(opts: {
   }
 }
 
-export async function applyStagedModToInstall(opts: {
-  stagedPath: string
-  installRoot: string
-}): Promise<
-  | { ok: true; applied: number; expandedBytes: number }
-  | { ok: false; error: string }
-> {
-  if (!isTauriRuntime()) {
-    return { ok: false, error: 'Companion runtime required to apply mods' }
-  }
-  if (!isPathUnderRoot(opts.installRoot, opts.installRoot)) {
-    return { ok: false, error: 'Invalid install root' }
-  }
-  try {
-    const result = await invoke<{ applied: number; expandedBytes: number }>('apply_staged_mod', {
-      sourcePath: opts.stagedPath,
-      installRoot: opts.installRoot,
-    })
-    return { ok: true, applied: result.applied, expandedBytes: result.expandedBytes }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
-}
-
 export function modApplyBlockedReason(opts: {
   connectionOnline: boolean
   modsTrackingEnabled: boolean
-  hasEnabledMods: boolean
   installed: boolean
 }): string | null {
   if (!opts.modsTrackingEnabled) {
@@ -480,9 +463,6 @@ export function modApplyBlockedReason(opts: {
   }
   if (!opts.connectionOnline) {
     return 'Server offline — reconnect to fetch mod metadata and download BYO source URLs.'
-  }
-  if (!opts.hasEnabledMods) {
-    return 'No enabled mods with source URLs for this game.'
   }
   if (!opts.installed) {
     return 'Install the game locally first, then apply mods from the companion.'
@@ -526,15 +506,26 @@ export async function kickoffApplyModPack(
     return { ok: false, error: 'Mod tracking is disabled on this server' }
   }
   const enabled = sortEnabledMods(pack.mods)
-  if (enabled.length === 0) {
-    return { ok: false, error: 'No enabled mods with source URLs' }
+  const byId = new Set(enabled.map((mod) => mod.id))
+  for (const mod of pack.mods.filter((row) => row.enabled)) {
+    if (!mod.source_url.trim())
+      return {
+        ok: false,
+        error: `Add a downloadable source for ${mod.name} or disable it before applying this profile.`,
+      }
+    const missing = mod.requires.find((id) => !byId.has(id))
+    if (missing)
+      return {
+        ok: false,
+        error: `Enable and configure dependency ${missing} before applying ${mod.name}.`,
+      }
   }
   const conflicts = loaderConflicts(pack)
   if (conflicts.length > 0 && !options.allowLoaderMismatch) {
     const names = conflicts.map((c) => `${c.name} (${c.loader})`).join(', ')
     return {
       ok: false,
-      error: `Loader mismatch — the pack is set to ${pack.default_loader} but ${names} need a different loader. Fix the rows or the default, or apply anyway from the row's menu.`,
+      error: `Loader mismatch — the pack is set to ${pack.default_loader} but ${names} need a different loader. Change the conflicting rows or the pack's default loader before applying.`,
     }
   }
   const loaderHint = loaderRequirementHint(pack)
@@ -574,7 +565,10 @@ export async function kickoffApplyModPack(
     expandedBytes += stats.expandedBytes
     entryCount += stats.entryCount
     if (expandedBytes > MAX_MOD_PACK_EXPANDED_BYTES) {
-      return { ok: false, error: 'Mod pack exceeds the 4 GiB expanded-size limit; no files were applied' }
+      return {
+        ok: false,
+        error: 'Mod pack exceeds the 4 GiB expanded-size limit; no files were applied',
+      }
     }
     if (entryCount > MAX_MOD_PACK_ENTRIES) {
       return {
@@ -584,19 +578,19 @@ export async function kickoffApplyModPack(
     }
   }
 
-  let appliedMods = 0
-  let filesApplied = 0
-  for (const staged of stagedMods) {
-    const applied = await applyStagedModToInstall({
-      stagedPath: staged.path,
+  try {
+    const filesApplied = await invoke<number>('apply_staged_mod_pack', {
+      sourcePaths: stagedMods.map((mod) => mod.path),
       installRoot: install.extractPath,
     })
-    if (!applied.ok) {
-      return { ok: false, error: applied.error }
+    return {
+      ok: true,
+      appliedMods: enabled.length,
+      filesApplied,
+      loaderHint,
+      profileName: pack.active_profile_name,
     }
-    appliedMods += 1
-    filesApplied += applied.applied
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
-
-  return { ok: true, appliedMods, filesApplied, loaderHint, profileName: pack.active_profile_name }
 }

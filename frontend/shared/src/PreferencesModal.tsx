@@ -101,6 +101,7 @@ export function PreferencesModal({ open, onClose }: Props): ReactNode {
   const previewOriginal = useRef<{
     accent: string
     legacyAccent: string
+    theme: string | null
     era: string | null
     iconPack: string | null
     iconHref: string | null
@@ -113,6 +114,7 @@ export function PreferencesModal({ open, onClose }: Props): ReactNode {
     previewOriginal.current = {
       accent: root.style.getPropertyValue('--od-accent'),
       legacyAccent: root.style.getPropertyValue('--btn-primary'),
+      theme: root.getAttribute('data-theme'),
       era: root.getAttribute('data-era'),
       iconPack: root.getAttribute('data-icon-pack'),
       iconHref: link?.getAttribute('href') || null,
@@ -141,6 +143,7 @@ export function PreferencesModal({ open, onClose }: Props): ReactNode {
       root.style.setProperty('--od-accent', accent)
       root.style.setProperty('--btn-primary', accent)
     }
+    root.setAttribute('data-theme', theme.slug)
     if (theme.era) root.setAttribute('data-era', theme.era)
     if (theme.icon_pack && data?.choices.icon_packs.some((pack) => pack.id === theme.icon_pack))
       previewIconPack(theme.icon_pack)
@@ -157,6 +160,8 @@ export function PreferencesModal({ open, onClose }: Props): ReactNode {
       if (value) root.style.setProperty(key, value)
       else root.style.removeProperty(key)
     }
+    if (original.theme) root.setAttribute('data-theme', original.theme)
+    else root.removeAttribute('data-theme')
     if (original.era) root.setAttribute('data-era', original.era)
     else root.removeAttribute('data-era')
     if (original.iconPack) root.setAttribute('data-icon-pack', original.iconPack)

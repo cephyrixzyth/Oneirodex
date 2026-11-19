@@ -21,7 +21,8 @@ from math import ceil
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import joinedload, lazyload
 
 from oneirodex.runtime_native.db_session import native_db as db
@@ -45,7 +46,6 @@ from oneirodex.platform import LibraryPlatform, platforms_for_play_mode
 from oneirodex.utils.browse_filters import apply_badge_filters, apply_filter_tree
 from oneirodex.utils.browse_pagination import normalize_page_size
 from oneirodex.utils.client_lifecycle import installed_game_uuids, load_lifecycle_map
-from oneirodex.utils.game_editions import normalize_title
 from oneirodex.utils.library_acl import apply_game_access_filters, user_can_access_library
 from oneirodex.utils.lifecycle import web_client_connected
 from oneirodex.utils.store_ownership import get_matched_owned_game_uuids
@@ -97,7 +97,7 @@ def run_browse_query(args, user) -> BrowseQueryResult:
     :class:`BrowseQueryResult`; callers pass it straight to
     :func:`oneirodex.utils.browse_payload.build_browse_payload`.
     """
-    page = args.get("page", 1, type=int)
+    page = max(1, args.get("page", 1, type=int))
     per_page = normalize_page_size(args.get("per_page", 20, type=int))
     library_uuid = args.get("library_uuid")
     library_platform = args.get("library_platform")
@@ -145,7 +145,10 @@ def run_browse_query(args, user) -> BrowseQueryResult:
     if igdb_platform:
         query = query.filter(Game.platforms.any(Platform.name == igdb_platform))
     if category:
-        query = query.filter(Game.category.has(Category.name == category))
+        selected = next((item for item in Category if category in (item.name, item.value)), None)
+        if selected is None:
+            return BrowseQueryResult.empty(page)
+        query = query.filter(Game.category == selected)
     if genre:
         query = query.filter(Game.genres.any(Genre.name == genre))
     if rating is not None:
@@ -190,14 +193,14 @@ def run_browse_query(args, user) -> BrowseQueryResult:
         .where(Library.uuid == Game.library_uuid)
         .scalar_subquery()
     )
-    grouping_key = title_key_expr(Game.name)
+    grouping_key = title_key_expr(Game)
     hardware_recency = platform_rank_case(platform_of_library)
 
     representatives = select(Game.id.label("id"))
     if query.whereclause is not None:
         representatives = representatives.where(query.whereclause)
     representatives = (
-        representatives.distinct(grouping_key)
+        representatives.ext(distinct_on(grouping_key))
         .order_by(grouping_key, hardware_recency.desc(), Game.id)
         .subquery()
     )
@@ -228,6 +231,10 @@ def run_browse_query(args, user) -> BrowseQueryResult:
             else Game.date_identified.desc()
         )
 
+    else:
+        query = query.order_by(Game.name.asc())
+    query = query.order_by(Game.id.asc())
+
     games, total, pages = _native_paginate(query, page=page, per_page=per_page)
 
     result = BrowseQueryResult(
@@ -246,15 +253,14 @@ def run_browse_query(args, user) -> BrowseQueryResult:
     # the title — which are exactly the rows that filter excluded. One bulk
     # lookup keyed on the same grouping expression, so a page of a thousand
     # tiles costs one round trip rather than a thousand.
-    page_title_keys = sorted(
-        {normalize_title(game.name) for game in games if game.name}
-    )
-    if page_title_keys:
+    if games:
+        keys = {game.browse_title_key for game in games if game.browse_title_key}
+        ungrouped_ids = [game.uuid for game in games if not game.browse_title_key]
         edition_query = (
             select(grouping_key.label("title_key"), Library.platform)
             .select_from(Game)
             .join(Library, Library.uuid == Game.library_uuid)
-            .where(grouping_key.in_(page_title_keys))
+            .where(or_(Game.browse_title_key.in_(keys), Game.uuid.in_(ungrouped_ids)))
         )
         edition_query = apply_game_access_filters(edition_query, user)
         result.edition_platforms_by_key = editions_by_title_key(

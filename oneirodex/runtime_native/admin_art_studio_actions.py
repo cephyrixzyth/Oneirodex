@@ -1,8 +1,12 @@
 """FastAPI art-studio pack generation and download operations."""
 from __future__ import annotations
 
+import errno
+from functools import partial
+from inspect import isawaitable
+from anyio import CapacityLimiter, to_thread
 from contextlib import nullcontext
-from typing import Any, Callable
+from typing import Any, Callable, get_args
 
 from fastapi import APIRouter, FastAPI, Request
 from pydantic import ValidationError
@@ -16,6 +20,9 @@ from .request_auth import request_auth_context
 
 
 class ArtStudioActions:
+    def __init__(self):
+        self.pack_slots = CapacityLimiter(1)
+
     def generate(self, body, package_root):
         from oneirodex.utils.cover_art_studio import clamp_title_scale, save_pack
         return save_pack(
@@ -25,7 +32,7 @@ class ArtStudioActions:
             package_root=package_root,
             headline_override=body.headline,
             subtitle_override=body.subtitle,
-            title_scale=clamp_title_scale(body.title_scale),
+            title_scale=clamp_title_scale(body.title_scale), composition=body.composition,
         )
 
     def generate_stock(self, ids, fmt, package_root):
@@ -63,7 +70,7 @@ class ArtStudioActions:
             static_url_path=static_url_path,
         )}
 
-    def batch_generate(self, app, body):
+    async def batch_generate(self, app, body):
         from sqlalchemy import select
         from sqlalchemy.orm import joinedload
         from oneirodex.runtime_native.db_session import native_db as db
@@ -95,7 +102,10 @@ class ArtStudioActions:
                 game.library.platform.value if game.library and game.library.platform else None
             )
             try:
-                manifest = save_pack(game.name or 'Untitled', system=current_system, package_root=app.root_path)
+                manifest = await to_thread.run_sync(partial(
+                    save_pack, game.name or 'Untitled', system=current_system, package_root=app.root_path,
+                    composition=body.get('composition', 'auto'),
+                ), limiter=self.pack_slots)
                 result = apply_pack_to_game(
                     manifest['pack_id'], game.uuid, package_root=app.root_path,
                     image_save_path=app.config['IMAGE_SAVE_PATH'],
@@ -131,6 +141,7 @@ def create_admin_art_studio_action_router(
 ) -> APIRouter:
     router = APIRouter()
     service = actions or ArtStudioActions()
+    pack_slots = service.pack_slots if isinstance(service, ArtStudioActions) else CapacityLimiter(1)
 
     @router.post('/admin/api/art-studio/generate')
     async def generate(request: Request):
@@ -154,9 +165,9 @@ def create_admin_art_studio_action_router(
         except ValidationError as exc:
             return _finish(_validation_error(exc), flask_app, auth, scope)
         try:
-            manifest = service.generate(body, flask_app.root_path)
+            manifest = await to_thread.run_sync(service.generate, body, flask_app.root_path, limiter=pack_slots)
             manifest = {**manifest, 'preview_url': (
-                f"/static/library/generated/{manifest['pack_id']}/tile_400x600.webp"
+                f"/static/library/generated/{manifest['pack_id']}/tile_400x600.{_format(body.format)}"
             )}
             (event_logger or _event_logger)(
                 f"Art studio generated pack {manifest['pack_id']} for {body.title!r}"
@@ -164,8 +175,8 @@ def create_admin_art_studio_action_router(
             response = JSONResponse(manifest, status_code=201)
         except ValueError as exc:
             response = _api_error(str(exc), 'bad_request')
-        except (PermissionError, OSError):
-            response = _api_error('Failed to write generated art pack to disk', 'internal')
+        except OSError as exc:
+            response = _storage_error('Failed to write generated art pack to disk', exc)
         return _finish(response, flask_app, auth, scope)
 
     @router.post('/admin/api/art-studio/stock/generate')
@@ -198,8 +209,8 @@ def create_admin_art_studio_action_router(
             response = JSONResponse(result, status_code=201)
         except ValueError as exc:
             response = _api_error(str(exc), 'bad_request')
-        except (PermissionError, OSError):
-            response = _api_error('Failed to write stock packs', 'internal')
+        except OSError as exc:
+            response = _storage_error('Failed to write stock packs', exc)
         return _finish(response, flask_app, auth, scope)
 
     @router.api_route(
@@ -221,8 +232,8 @@ def create_admin_art_studio_action_router(
             response = _api_error(str(exc), 'bad_request')
         except FileNotFoundError:
             response = _api_error('Pack not found', 'not_found')
-        except (PermissionError, OSError):
-            response = _api_error('Failed to read art pack from disk', 'internal')
+        except OSError as exc:
+            response = _storage_error('Failed to read art pack from disk', exc)
         return _finish(response, flask_app, auth, scope)
 
     @router.post('/admin/api/art-studio/system-marks/generate')
@@ -328,7 +339,7 @@ def create_admin_art_studio_action_router(
                 elif isinstance(exc, (ValueError, FileNotFoundError)):
                     response = _api_error(str(exc), 'bad_request')
                 elif isinstance(exc, (PermissionError, OSError)):
-                    response = _api_error('Failed to write cover art to disk', 'internal')
+                    response = _storage_error('Failed to write cover art to disk', exc)
                 else:
                     response = _api_error('Unexpected error applying pack', 'internal')
         return _finish(response, flask_app, auth, scope)
@@ -350,8 +361,15 @@ def create_admin_art_studio_action_router(
             return _finish(_api_error(
                 'Request body is too large.', 'payload_too_large', status=413,
             ), flask_app, auth, scope)
+        from oneirodex.schemas.admin_art_studio import Composition
+        if body.get('composition', 'auto') not in get_args(Composition):
+            return _finish(_api_error('Unknown cover composition', 'bad_request'), flask_app, auth, scope)
+        if len(_game_uuids(body.get('game_uuids')) or []) > 100:
+            return _finish(_api_error('Select at most 100 games per batch', 'bad_request'), flask_app, auth, scope)
         try:
             result = service.batch_generate(flask_app, body)
+            if isawaitable(result):
+                result = await result
             _log_art_studio(
                 event_logger,
                 f"Art studio apply-batch applied={result['applied']} failed={result['failed']}",
@@ -416,6 +434,15 @@ def _validation_error(exc):
         'Invalid request.', code='unprocessable', detail=format_validation_errors(exc),
     )
     return JSONResponse(payload, status_code=status)
+
+
+def _storage_error(message: str, error: OSError):
+    # Give operators a remedy without returning raw exception text or paths.
+    if isinstance(error, PermissionError):
+        message += '. Permission denied. Check the art directory permissions.'
+    elif error.errno == errno.ENOSPC:
+        message += '. Free space on the art volume and try again.'
+    return _api_error(message, 'internal')
 
 
 def _api_error(message, code, *, status=None):

@@ -2,7 +2,7 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, test, vi } from 'vitest'
-import { ShellConfigProvider } from '@oneirodex/ui'
+import { ShellConfigProvider, ViewerProvider } from '@oneirodex/ui'
 import { VrPage } from './VrPage'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -32,9 +32,11 @@ test('VR catalog waits for safe browser control before making a private request'
   )
   render(
     <ShellConfigProvider value={{ enableNewChrome: true }}>
-      <MemoryRouter>
-        <VrPage />
-      </MemoryRouter>
+      <ViewerProvider value={{ userId: 17 }}>
+        <MemoryRouter>
+          <VrPage />
+        </MemoryRouter>
+      </ViewerProvider>
     </ShellConfigProvider>,
   )
   expect(fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/vr/'))).toHaveLength(0)
@@ -59,9 +61,11 @@ test('VR refuses private requests when browser privacy migration fails', async (
   vi.stubGlobal('odPwaPrivacyReady', Promise.resolve(false))
   render(
     <ShellConfigProvider value={{ enableNewChrome: true }}>
-      <MemoryRouter>
-        <VrPage />
-      </MemoryRouter>
+      <ViewerProvider value={{ userId: 17 }}>
+        <MemoryRouter>
+          <VrPage />
+        </MemoryRouter>
+      </ViewerProvider>
     </ShellConfigProvider>,
   )
   await screen.findByRole('alert')
@@ -80,9 +84,11 @@ test('VR compatibility filters render in the shared THN view strip', async () =>
   vi.stubGlobal('fetch', fetchMock)
   render(
     <ShellConfigProvider value={{ enableNewChrome: true }}>
-      <MemoryRouter initialEntries={['/vr']}>
-        <VrPage />
-      </MemoryRouter>
+      <ViewerProvider value={{ userId: 17 }}>
+        <MemoryRouter initialEntries={['/vr']}>
+          <VrPage />
+        </MemoryRouter>
+      </ViewerProvider>
     </ShellConfigProvider>,
   )
 
@@ -96,3 +102,34 @@ test('VR compatibility filters render in the shared THN view strip', async () =>
     'true',
   )
 })
+
+test.each(['collection', 'favorites'])(
+  'the %s pager shows its page across the browse API format',
+  async (scope) => {
+    const user = userEvent.setup()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const page = Number(new URL(String(input), location.origin).searchParams.get('page')) || 1
+        return new Response(
+          JSON.stringify({ games: [], current_page: page, pages: 2, total: 49 }),
+          {
+            headers: { 'Content-Type': 'application/json' },
+          },
+        )
+      }),
+    )
+    render(
+      <ShellConfigProvider value={{ enableNewChrome: true }}>
+        <ViewerProvider value={{ userId: 17 }}>
+          <MemoryRouter initialEntries={['/vr?vr_compat=' + scope]}>
+            <VrPage />
+          </MemoryRouter>
+        </ViewerProvider>
+      </ShellConfigProvider>,
+    )
+    expect(await screen.findByText('Page 1 of 2')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Next', exact: true }))
+    expect(await screen.findByText('Page 2 of 2')).toBeVisible()
+  },
+)

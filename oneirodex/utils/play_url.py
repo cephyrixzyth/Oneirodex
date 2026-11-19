@@ -165,10 +165,18 @@ def browse_play_fields(game) -> dict[str, Any]:
     """Fields for GameCard play / demo links."""
     key = library_platform_key(game)
     surface = cheat_surface_for_platform(key)
+    engines = play_engine_fields()
 
     def finish(payload: dict[str, Any]) -> dict[str, Any]:
+        from oneirodex.utils.play_readiness import browser_readiness
+        payload['browser_readiness'] = browser_readiness(payload)
         payload['cheat_surface'] = surface
-        payload.update(play_engine_fields())
+        payload.update(engines)
+        href = payload.get('play_url') or ''
+        for engine in ('webretro', 'emulatorjs', 'nostalgist'):
+            if href.startswith(f'/static/vendor/{engine}/'):
+                payload['browser_player'] = engine
+                break
         # FEAT-D5: per-system room treatment so the play surface can dress
         # itself for the era. Data only — the caller decides scope.
         try:
@@ -199,6 +207,12 @@ def browse_play_fields(game) -> dict[str, Any]:
 
     # Suppress Play when on-disk path cannot be extracted for WebRetro (e.g. .tar.gz).
     disk_path = getattr(game, 'full_disk_path', None)
+    if key in WEBRETRO_PLATFORMS and not str(disk_path or '').strip():
+        return finish({
+            'play_url': None, 'can_play_in_browser': False, 'emulator_cores': [],
+            'library_platform': key, 'play_mode': 'catalog', 'play_blocker': 'missing_game_file',
+            'companion_hint': 'No game file is attached to this library entry.',
+        })
     if disk_path and not path_supports_browser_extract(disk_path):
         return finish({
             'play_url': None,
@@ -236,6 +250,10 @@ def browse_play_fields(game) -> dict[str, Any]:
 
     if key not in WEBRETRO_PLATFORMS:
         companion = mapped_core_ids(key)
+        if key == 'ARCADE' and mode == 'companion':
+            from oneirodex.utils.emulator_profiles import resolve_emulators_for_platform
+
+            companion = resolve_emulators_for_platform(key)['emulators']
         blocker = (
             'companion_preferred'
             if key in COMPANION_PREFERRED_BLOCKERS
@@ -251,6 +269,17 @@ def browse_play_fields(game) -> dict[str, Any]:
             'play_blocker': blocker,
             'companion_hint': companion_hint_for(key, companion),
         })
+    if engines['browser_player'] == 'emulatorjs' and not (key == 'NES' and engines.get('nostalgist_nes_pilot')):
+        from oneirodex.utils.emulatorjs import emulatorjs_core_for_platform, emulatorjs_play_href
+
+        core = emulatorjs_core_for_platform(key)
+        if core:
+            return finish({
+                'play_url': emulatorjs_play_href(game_uuid=str(game.uuid), platform_key=key, cheat_surface=surface),
+                'can_play_in_browser': True, 'emulator_core': core, 'emulator_cores': [core],
+                'library_platform': key, 'play_mode': 'browser', 'bios': None,
+                'bios_required': False, 'firmware_missing': False,
+            })
     try:
         from oneirodex.utils.emulator_profiles import resolve_emulators_for_platform
 

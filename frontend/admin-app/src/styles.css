@@ -3043,3 +3043,204 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
     flex-basis: 100%;
   }
 }
+
+/* Task directory and shared workspace surfaces. */
+.od-admin-skip {
+  position: fixed;
+  z-index: 1000;
+  inset-block-start: 0.5rem;
+  inset-inline-start: 0.5rem;
+  padding: 0.75rem;
+  background: var(--od-surface);
+  color: var(--od-text);
+  transform: translateY(-160%);
+}
+.od-admin-skip:focus {
+  transform: none;
+}
+.od-admin-main {
+  min-inline-size: 0;
+}
+.od-admin-main .od-admin-page__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-end: 1rem;
+  padding-block: 0.4rem 1rem;
+  border-block-end: 1px solid var(--od-border);
+}
+.od-admin-main .od-admin-page__heading h1 {
+  font-size: var(--od-font-3xl, 1.8rem);
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+}
+.od-directory {
+  margin: 0 0 1.25rem;
+  padding: clamp(0.875rem, 2vw, 1.75rem);
+  border-radius: var(--od-radius, 0.75rem);
+  border: 1px solid var(--od-border);
+  background: var(--od-surface);
+}
+.od-directory__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-block-end: 1rem;
+}
+.od-directory__header h2 {
+  margin: 0;
+}
+.od-directory__header input {
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  inline-size: min(100%, 22rem);
+  min-block-size: 44px;
+}
+.od-directory__sections,
+.od-directory__links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.od-directory li {
+  min-inline-size: 0;
+}
+.od-directory li a {
+  display: flex;
+  min-block-size: 48px;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-lg, 10px);
+  color: var(--od-text);
+  background: var(--od-bg);
+  text-decoration: none;
+}
+.od-directory li a:hover,
+.od-directory li a:focus-visible {
+  border-color: var(--od-accent);
+}
+.od-directory li svg {
+  width: 1.3rem;
+  height: 1.3rem;
+  flex: none;
+  color: var(--od-accent);
+}
+.od-directory__links li a {
+  flex-direction: column;
+  align-items: start;
+  gap: 0.1rem;
+}
+.od-directory__links small {
+  color: var(--od-text-muted);
+}
+.od-art-studio-head {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--od-radius-lg, 10px);
+  min-height: clamp(5rem, 15vw, 11rem);
+}
+.od-studio-workbench {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 57%;
+}
+.od-art-studio-skin {
+  position: relative;
+}
+
+.od-workspace-search {
+  gap: 0.35rem;
+}
+@media (max-width: 44rem) {
+  .od-workspace-search span:last-child {
+    display: none;
+  }
+}
+
+.od-admin-main .od-admin-page__heading h1 {
+  color: var(--od-text);
+  text-transform: none;
+}
+.od-admin-main .od-admin-lede {
+  max-inline-size: 74ch;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.od-admin-main :is(.od-admin-panel, .od-admin-card) {
+  min-inline-size: 0;
+  padding: clamp(0.85rem, 1.65vw, 1.45rem);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius, 0.75rem);
+  background: var(--od-surface);
+  color: var(--od-text);
+}
+.od-admin-main a.od-admin-card:is(:hover, :focus-visible) {
+  border-color: var(--od-accent);
+}
+.od-admin-main .od-admin-field :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 2.65rem;
+  border-radius: var(--od-radius-md, 8px);
+}
+.od-admin-main :is(.od-admin-actions-row, .od-admin-page__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.od-admin-main .od-table :is(th, td) {
+  padding-block: 0.62rem;
+  vertical-align: middle;
+}
+.od-admin-main .od-table tbody tr:focus-within {
+  background: var(--od-bg);
+}
+.od-directory__group {
+  margin-block-start: 0.4rem;
+  padding-inline-start: 0.4rem;
+}
+.od-directory__group summary {
+  cursor: pointer;
+  padding: 0.4rem;
+  color: var(--od-text);
+}
+.od-directory__group :is(ul, li) {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.od-directory .od-directory__group a {
+  background: transparent;
+  border: 0;
+  min-block-size: 2.5rem;
+  block-size: auto;
+  padding: 0.4rem 0.75rem;
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
+}
+@media (max-width: 42rem) {
+  .od-admin-main {
+    padding-inline: clamp(0.5rem, 2.4vw, 1rem);
+  }
+  .od-admin-main .od-admin-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (pointer: coarse) {
+  .od-admin-main :is(.od-btn, .od-cbtn, summary, .od-directory__group a) {
+    min-block-size: 44px;
+  }
+}

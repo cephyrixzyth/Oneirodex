@@ -55,3 +55,32 @@ def test_uvicorn_lifespan_stops_workers_on_shutdown_and_keeps_sigterm_handler():
     engine.dispose.assert_called_once_with()
     assert app._native_sqlalchemy_engine is None
     assert signal.getsignal(signal.SIGTERM) == original_sigterm
+
+
+def test_reentered_lifespan_starts_new_work_without_reactivating_old_threads(monkeypatch):
+    from oneirodex.utils import shutdown
+
+    monkeypatch.setattr(shutdown, 'shutdown_manager', shutdown.ShutdownManager())
+    old_job = shutdown.bind_shutdown_owner(shutdown.should_continue_processing)
+    assert old_job()
+    shutdown.request_shutdown()
+    assert not old_job()
+    shutdown.begin_lifespan()
+    new_job = shutdown.bind_shutdown_owner(shutdown.should_continue_processing)
+    assert new_job()
+    assert not old_job()
+
+
+def test_failed_worker_shutdown_keeps_handle_until_drained(monkeypatch):
+    from oneirodex import background
+    import pytest
+
+    stopped = Mock(spec=['stop'])
+    stopped.stop.side_effect = [TimeoutError('active cycle'), None]
+    monkeypatch.setattr(background, '_WORKER_HANDLES', [stopped])
+    monkeypatch.setattr(background, '_STARTED', True)
+    with pytest.raises(background.WorkersStillRunning):
+        background.stop_background_workers()
+    assert background._WORKER_HANDLES == [stopped]
+    background.stop_background_workers()
+    assert background._WORKER_HANDLES == []

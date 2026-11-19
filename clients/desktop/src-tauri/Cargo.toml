@@ -40,3 +40,7 @@ plist = { version = "=1.10.3", features = ["enable_unstable_features_that_may_br
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[patch.crates-io]
+# GTK 3 requires this release line. See vendor/glib/ONEIRODEX-BACKPORT.md.
+glib = { path = "vendor/glib" }

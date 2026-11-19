@@ -198,7 +198,12 @@ test('profiles: a librarian saves the enabled set, activates it, and copies its 
   expect(await screen.findByText('Vanilla+')).toBeTruthy()
   expect(screen.getByText('1 mod')).toBeTruthy()
 
-  await user.click(screen.getByRole('button', { name: 'Activate' }))
+  await user.click(screen.getByRole('button', { name: 'Review changes' }))
+  expect(screen.getByRole('region', { name: 'Profile changes' })).toBeTruthy()
+  await user.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(calls.some((c) => c.url.endsWith('/profiles/vanilla/activate'))).toBe(false)
+  await user.click(screen.getByRole('button', { name: 'Review changes' }))
+  await user.click(screen.getByRole('button', { name: 'Activate profile' }))
   await waitFor(() =>
     expect(calls.some((c) => c.url.endsWith('/profiles/vanilla/activate'))).toBe(true),
   )

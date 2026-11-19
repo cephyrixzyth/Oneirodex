@@ -84,3 +84,18 @@ def _truncate(value: str | None, max_len: int) -> str | None:
     if not trimmed:
         return None
     return trimmed[:max_len]
+
+def companion_targets(user_id: int) -> list[dict]:
+    """This member's full companions, including recent offline seats."""
+    rows = db.session.execute(select(ClientDevice).filter_by(user_id=user_id, device_kind='companion')
+                              .order_by(ClientDevice.last_seen_at.desc()).limit(100)).scalars()
+    cutoff = _utcnow() - timedelta(seconds=CLIENT_HEARTBEAT_TTL_SECONDS)
+    devices = []
+    for row in rows:
+        seen = row.last_seen_at
+        if seen is not None and seen.tzinfo is None:
+            seen = seen.replace(tzinfo=timezone.utc)
+        devices.append({'device_id': row.device_id, 'device_name': row.device_name,
+                        'last_seen_at': seen.isoformat() if seen else None,
+                        'online': bool(seen and seen >= cutoff)})
+    return devices

@@ -102,11 +102,11 @@ def apply_game_content_filters(query, user):
     denied_themes = denied_theme_names(user) or set()
     if denied_genres:
         query = query.filter(
-            ~Game.genres.any(func.lower(Genre.name).in_(list(denied_genres)))
+            ~Game.genres.any(func.lower(func.trim(Genre.name)).in_(list(denied_genres)))
         )
     if denied_themes:
         query = query.filter(
-            ~Game.themes.any(func.lower(Theme.name).in_(list(denied_themes)))
+            ~Game.themes.any(func.lower(func.trim(Theme.name)).in_(list(denied_themes)))
         )
     return query
 

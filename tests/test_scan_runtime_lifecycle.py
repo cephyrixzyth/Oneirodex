@@ -8,6 +8,7 @@ import pytest
 from oneirodex.models import AllowedFileType, Game, Library, ScanJob
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils import scan_queue, scan_scheduler
+from oneirodex.utils.library_health import refresh_game_path_status as _real_refresh_path
 from oneirodex.utils.services import scan_orchestration as scans
 
 
@@ -245,3 +246,104 @@ def test_existing_game_force_refresh_is_independent_of_worker_count(
     updates.assert_called_once()
     extras.assert_called_once()
     hltb.assert_called_once()
+
+
+def test_reconciliation_keeps_other_roots_and_empty_mounts(app, db_session, library, global_settings,
+                                                          worker_stubs, tmp_path, monkeypatch):
+    from oneirodex.utils import library_health
+
+    # worker_stubs disables I/O checks for orchestration-only tests. Use the real
+    # function here so the stored paths and deletions cross the database boundary.
+    monkeypatch.setattr(library_health, 'refresh_game_path_status', _real_refresh_path)
+    inside = tmp_path / 'shelf'
+    outside = tmp_path / 'shelf-backup'
+    inside.mkdir()
+    outside.mkdir()
+    present = inside / 'keep.exe'
+    present.write_bytes(b'game')
+    live = Game(name='Present', library_uuid=library.uuid, full_disk_path=str(present))
+    gone = Game(name='Missing inside', library_uuid=library.uuid, full_disk_path=str(inside / 'gone.exe'))
+    other = Game(name='Missing outside', library_uuid=library.uuid, full_disk_path=str(outside / 'other.exe'))
+    db_session.add_all([live, gone, other])
+    db_session.commit()
+    library_id, gone_id, other_id, live_id = library.uuid, gone.id, other.id, live.id
+
+    def run():
+        target = make_job(db_session, db_session.get(Library, library_id), inside, 'Running', removed_count=0)
+        target_id = target.id
+        scans.scan_and_add_games(str(inside), scan_mode='files', library_uuid=library_id, existing_job=target,
+                                 app=app, remove_missing=True)
+        db_session.expire_all()
+        return db_session.get(ScanJob, target_id)
+
+    assert run().removed_count == 0
+    assert db_session.get(Library, library_id).last_scan_folder == str(inside)
+    assert run().removed_count == 1
+    assert db_session.get(Game, gone_id) is None
+    assert db_session.get(Game, other_id).path_status is None
+    present.unlink()
+    assert run().removed_count == 0
+    assert db_session.get(Game, live_id).path_status == 'missing'
+
+
+@pytest.mark.parametrize('zone', ['UTC', 'America/Chicago'])
+def test_scan_claim_is_fresh_in_connection_timezone(db_session, library, tmp_path, zone):
+    from sqlalchemy import text
+
+    db_session.execute(text("select set_config('TimeZone', :zone, true)"), {'zone': zone})
+    job = scan_queue.create_scan_job_row(folder_path=str(tmp_path), library_uuid=library.uuid, status='Running')
+    db_session.expire_all()
+    assert scan_queue.reclaim_stale_busy_jobs() == 0
+    assert db_session.get(ScanJob, job.id).status == 'Running'
+
+
+def test_queued_scans_keep_requested_options_and_coalesce_only_equal_work(app, db_session, library, tmp_path,
+                                                                        monkeypatch):
+    busy = scan_queue.create_scan_job_row(folder_path=str(tmp_path), library_uuid=library.uuid, status='Running')
+    kwargs = dict(folder_path=str(tmp_path), library_uuid=library.uuid, app=app, scan_mode='files',
+                  fetch_hltb=True, force_hltb_refetch=True)
+    queued = scan_queue.start_or_queue_scan(**kwargs)
+    repeat = scan_queue.start_or_queue_scan(**kwargs)
+    different = scan_queue.start_or_queue_scan(**kwargs, remove_missing=True)
+    assert queued['job_id'] == repeat['job_id'] != different['job_id']
+    busy.status = 'Completed'
+    db_session.commit()
+    db_session.expire_all()
+    launch = Mock()
+    monkeypatch.setattr(scan_queue, '_start_job_thread', launch)
+    scanned = scan_queue.drain_scan_queue(app=app)
+    assert scanned.id == queued['job_id']
+    assert scanned.setting_fetch_hltb and scanned.setting_force_hltb_refetch
+    assert scanned.setting_filefolder and not scanned.setting_remove
+    launch.assert_called_once()
+
+
+def test_changed_storage_and_partial_enumeration_preserve_missing_rows(
+    app, db_session, library, global_settings, worker_stubs, tmp_path, monkeypatch,
+):
+    from oneirodex.utils import gamenames, library_health
+
+    monkeypatch.setattr(library_health, 'refresh_game_path_status', _real_refresh_path)
+    shelf = tmp_path / 'shelf'
+    shelf.mkdir()
+    game_path = shelf / 'present.exe'
+    game_path.write_bytes(b'game')
+    library.last_scan_folder = str(shelf)
+    library.last_scan_root_identity = 'old-device:old-inode'
+    missing = Game(name='Absent', library_uuid=library.uuid, full_disk_path=str(shelf / 'absent.exe'))
+    present = Game(name='Present', library_uuid=library.uuid, full_disk_path=str(game_path))
+    db_session.add_all([missing, present])
+    db_session.commit()
+    library_id, absent_id = library.uuid, missing.id
+    for partial in (False, True):
+        current = db_session.get(Library, library_id)
+        job = make_job(db_session, current, shelf, 'Running', removed_count=0)
+        job_id = job.id
+        if partial:
+            monkeypatch.setattr(gamenames, 'get_game_names_from_files', Mock(side_effect=PermissionError('busy')))
+        scans.scan_and_add_games(str(shelf), scan_mode='files', library_uuid=library_id, existing_job=job,
+                                 app=app, remove_missing=True)
+        completed = db_session.get(ScanJob, job_id)
+        assert completed.status == ('Failed' if partial else 'Completed')
+        assert completed.removed_count == 0
+        assert db_session.get(Game, absent_id) is not None

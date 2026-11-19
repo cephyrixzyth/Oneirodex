@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchGameAssists } from '../api/assists'
 import { initiateGameDownload } from '../api/downloads'
 import { fetchRemotePlayStatus } from '../api/remotePlay'
-import { queueClientCommand } from '../api/clientCommands'
+import { queueClientCommand, fetchCompanionQueue } from '../api/clientCommands'
 import { honestyApiErrorMessage } from '../utils/playHonesty'
 import { isThinSeat } from '../utils/seatMode'
 import { showToast } from '../utils/toast'
@@ -33,6 +33,15 @@ export function GameActionBar({
   const isThin = thinSeat === undefined ? isThinSeat() : thinSeat
   const [busyAction, setBusyAction] = useState<any>(null)
   const [statusMessage, setStatusMessage] = useState('')
+  const queueRequest = useRef(0)
+  useEffect(
+    () => () => {
+      queueRequest.current++
+    },
+    [gameUuid],
+  )
+  const [queueGame, setQueueGame] = useState('')
+  const [queueText, setQueueText] = useState('')
   const [assistPack, setAssistPack] = useState(assistPackProp === undefined ? null : assistPackProp)
   const [remotePlay, setRemotePlay] = useState(remotePlayProp === undefined ? null : remotePlayProp)
   const updatesUrl = updateHref || `/game_details/${gameUuid}#updates`
@@ -426,6 +435,44 @@ export function GameActionBar({
         >
           Play via Moonlight
         </button>
+      ) : null}
+      {!compact && canDownload && !isThin ? (
+        <details
+          onToggle={async (event) => {
+            if (!event.currentTarget.open) return
+            const request = ++queueRequest.current
+            setQueueGame(gameUuid)
+            setQueueText('Loading companion queue…')
+            try {
+              const rows = await fetchCompanionQueue(gameUuid)
+              if (request !== queueRequest.current) return
+              setQueueText(
+                rows.length
+                  ? rows
+                      .map((row) =>
+                        [
+                          row.action.replace(/_/g, ' '),
+                          row.status.replace(/_/g, ' '),
+                          row.target_device_id ? 'device ' + row.target_device_id.slice(-8) : '',
+                          row.retry_at && row.status === 'pending'
+                            ? 'retry after ' + new Date(row.retry_at).toLocaleTimeString()
+                            : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' · '),
+                      )
+                      .join('\n')
+                  : 'No outstanding commands for this game.',
+              )
+            } catch {
+              if (request === queueRequest.current)
+                setQueueText('The companion queue is unavailable.')
+            }
+          }}
+        >
+          <summary>Companion queue</summary>
+          {queueGame === gameUuid && <p style={{ whiteSpace: 'pre-line' }}>{queueText}</p>}
+        </details>
       ) : null}
       {statusMessage ? (
         <span className="od-action-bar__status" role="status">

@@ -9,7 +9,6 @@ from oneirodex.utils.global_settings import global_settings_row
 from oneirodex.runtime_native.db_session import native_db as db
 from sqlalchemy import select, create_engine
 from sqlalchemy.orm import sessionmaker
-from config import Config
 
 try:
     from howlongtobeatpy import HowLongToBeat
@@ -19,6 +18,12 @@ try:
 except ImportError:
     HLTB_AVAILABLE = False
     print("Warning: howlongtobeatpy library not installed. HLTB integration disabled.")
+
+
+def _open_database_engine():
+    from config import Config
+
+    return create_engine(Config.SQLALCHEMY_DATABASE_URI)
 
 
 class HLTBRateLimiter:
@@ -62,7 +67,7 @@ def get_rate_limiter():
             delay = settings.hltb_rate_limit_delay if settings else 2.0
         except:
             # Fallback to direct engine connection
-            engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
+            engine = _open_database_engine()
             SessionLocal = sessionmaker(bind=engine)
             session = SessionLocal()
             try:
@@ -105,7 +110,7 @@ async def fetch_hltb_data(game_name):
         return None
 
     # Create a new database session for this thread
-    engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
+    engine = _open_database_engine()
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
 
@@ -165,7 +170,7 @@ def store_hltb_data(game_uuid, hltb_data):
         return False
 
     # Create a new database session for this thread
-    engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
+    engine = _open_database_engine()
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
 
@@ -211,7 +216,7 @@ async def update_game_hltb(game_uuid, game_name=None):
     bool: True if successful, False otherwise.
     """
     # Create a new database session for this thread
-    engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
+    engine = _open_database_engine()
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()
 
@@ -261,7 +266,7 @@ def get_games_without_hltb(limit=None):
         return games
     except:
         # Fallback to direct session (for standalone scripts)
-        engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
+        engine = _open_database_engine()
         SessionLocal = sessionmaker(bind=engine)
         session = SessionLocal()
 

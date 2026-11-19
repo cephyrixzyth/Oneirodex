@@ -119,6 +119,8 @@ htmlcov/
 # Static uploads and generated files (these should be mounted as volumes or generated)
 oneirodex/static/library/images/
 oneirodex/static/library/zips/
+# Emulator progress belongs to household members.
+oneirodex/static/library/saves/
 oneirodex/static/library/themes/
 
 # Docker library host path (default mount point for persistent library data)
@@ -173,6 +175,8 @@ oneirodex/static/library/generated/
 # Per-member state written by the running app (install states, wanted
 # updates). Never source; guarded by tests/test_repo_hygiene.py.
 oneirodex/static/library/client_lifecycle/
+oneirodex/static/library/client_commands/
+oneirodex/static/.native-spas-stage-*/
 oneirodex/static/library/wanted_updates/
 
 # WebRetro libretro cores — operator-provisioned, not vendored (71MB of WASM).

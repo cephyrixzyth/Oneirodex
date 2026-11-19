@@ -15,7 +15,7 @@ def _parse_field(field: str, minimum: int, maximum: int) -> set[int]:
     for part in field.split(','):
         part = part.strip()
         if not part:
-            continue
+            raise ValueError(f'empty element in {field!r}')
         if part == '*':
             values.update(range(minimum, maximum + 1))
             continue
@@ -28,15 +28,15 @@ def _parse_field(field: str, minimum: int, maximum: int) -> set[int]:
         if '-' in part:
             start_s, end_s = part.split('-', 1)
             start, end = int(start_s), int(end_s)
-            if start > end:
+            if not minimum <= start <= end <= maximum:
                 raise ValueError(f'invalid range in {field!r}')
             values.update(range(start, end + 1))
             continue
-        values.add(int(part))
-    out = {v for v in values if minimum <= v <= maximum}
-    if not out:
-        raise ValueError(f'empty cron field {field!r}')
-    return out
+        value = int(part)
+        if not minimum <= value <= maximum:
+            raise ValueError(f'value outside range in {field!r}')
+        values.add(value)
+    return values
 
 
 def parse_cron_expression(expr: str) -> tuple[set[int], set[int], set[int], set[int], set[int]]:
@@ -78,8 +78,8 @@ def next_cron_fire(expr: str, from_time: datetime | None = None) -> datetime:
     turns roughly five fires a month into roughly one a year.
 
     The search steps a whole day at a time while the date does not match, so
-    an unsatisfiable-but-parseable expression (``0 0 30 2 *``) costs ~800
-    iterations rather than the ~1.15 million a minute-by-minute walk took.
+    an unsatisfiable-but-parseable expression (``0 0 30 2 *``) advances
+    by days instead of testing every minute.
     """
     minutes, hours, doms, months, dows = parse_cron_expression(expr)
     dom_restricted, dow_restricted = _day_fields_restricted(expr)
@@ -101,8 +101,9 @@ def next_cron_fire(expr: str, from_time: datetime | None = None) -> datetime:
 
     # Start at the next whole minute — the result is strictly after `base`.
     cursor = base.replace(second=0, microsecond=0) + timedelta(minutes=1)
-    # Bound the search to ~2 years so an impossible expression terminates.
-    limit = cursor + timedelta(days=800)
+    # Nine years includes the longest leap-day gap, even across a
+    # non-leap century (2096 to 2104). Nonmatching dates advance by day.
+    limit = cursor + timedelta(days=9 * 366)
     while cursor <= limit:
         if not _day_matches(cursor):
             cursor = (cursor + timedelta(days=1)).replace(hour=0, minute=0)

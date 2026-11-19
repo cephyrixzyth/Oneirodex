@@ -170,11 +170,11 @@ def generate_csrf_token(
     """Generate a Flask-WTF-compatible timed token and persist its session key."""
     serializer = URLSafeTimedSerializer(secret_key, salt=CSRF_TOKEN_SALT)
     if field_name not in session_data:
-        session_data[field_name] = hashlib.sha1(random_bytes(64)).hexdigest()
+        session_data[field_name] = random_bytes(32).hex()
     try:
         token = serializer.dumps(session_data[field_name])
     except TypeError:
-        session_data[field_name] = hashlib.sha1(random_bytes(64)).hexdigest()
+        session_data[field_name] = random_bytes(32).hex()
         token = serializer.dumps(session_data[field_name])
     return token
 

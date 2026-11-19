@@ -47,13 +47,12 @@ ADMIN_STATIC_ROUTES = (
     '/admin/integrations',
     '/admin/scan-jobs',
     '/admin/scan-controls',
-    '/admin/unmatched',
     '/admin/edit_filters',
     '/add_game_manual',
 )
 ADMIN_BOOTSTRAP_ROUTE = '/admin/api/runtime-bootstrap'
 ADMIN_REDIRECT_ROUTES = (
-    '/admin/library_tools', '/admin/scan_management',
+    '/admin/library_tools', '/admin/scan_management', '/admin/unmatched',
     '/admin/server_logs', '/admin/system_logs', '/admin/server_status_page',
 )
 

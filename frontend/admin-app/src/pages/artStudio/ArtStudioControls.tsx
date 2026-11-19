@@ -4,6 +4,8 @@ import { Button } from '@oneirodex/ui'
 
 /** The form column: title / system / headline / scale, generate, apply, fallback, download. */
 export function ArtStudioControls({
+  composition,
+  setComposition,
   applyFallback,
   applyToGame,
   busy,
@@ -28,6 +30,8 @@ export function ArtStudioControls({
   titleScale,
   variantKey,
 }: {
+  composition: string
+  setComposition: (value: string) => void
   applyFallback: () => Promise<void>
   applyToGame: () => Promise<void>
   busy: string
@@ -54,6 +58,29 @@ export function ArtStudioControls({
 }) {
   return (
     <div className="od-art-studio__controls">
+      <label className="od-art-studio__title-field">
+        <span className="od-art-studio__label">Composition</span>
+        <select
+          aria-label="Composition"
+          value={composition}
+          onChange={(event) => setComposition(event.target.value)}
+        >
+          {Object.entries({
+            auto: 'From title',
+            workbench: 'Archivist’s workbench',
+            cartridge: 'Cartridge',
+            marquee: 'Arcade marquee',
+            crt: 'CRT screen',
+            pixel: 'Pixel landscape',
+            boxart: 'Box art',
+            neon: 'Neon city',
+          }).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
       <label className="od-art-studio__title-field">
         <span className="od-art-studio__label">Title</span>
         <input

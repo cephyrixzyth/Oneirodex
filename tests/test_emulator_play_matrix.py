@@ -44,7 +44,7 @@ HEAVY_REWIND_CORES = frozenset({
 def _game(platform: str) -> SimpleNamespace:
     return SimpleNamespace(
         uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-        library=SimpleNamespace(platform=SimpleNamespace(name=platform)),
+        full_disk_path='fixture.rom', library=SimpleNamespace(platform=SimpleNamespace(name=platform)),
     )
 
 
@@ -223,3 +223,13 @@ def test_free_rom_manifest_platforms_are_real():
     assert 'gb' in asserted
     assert 'snes' in asserted
     assert len(asserted) >= 6
+
+
+def test_catalog_entry_without_rom_has_no_browser_launch():
+    game = _game('NES')
+    game.full_disk_path = None
+    game.demo_url = 'https://example.invalid/demo'
+    fields = browse_play_fields(game)
+    assert not fields['can_play_in_browser'] and fields['play_url'] is None
+    assert fields['play_blocker'] == 'missing_game_file'
+    assert game.demo_url.endswith('/demo')

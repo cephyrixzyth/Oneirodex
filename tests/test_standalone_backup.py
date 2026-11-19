@@ -113,3 +113,57 @@ def test_backup_refuses_legacy_plaintext_credential_rows(tmp_path):
 
     with pytest.raises(Refused, match='migrate remaining reusable plaintext'):
         finalize_backup_manifest(bundle, data_dir=data_dir)
+
+
+@pytest.mark.parametrize('case', ['new', 'empty', 'failed_verification', 'concurrent_writer'])
+def test_backup_only_publishes_verified_staging(tmp_path, monkeypatch, case):
+    from shutil import copytree
+    from types import SimpleNamespace
+    from oneirodex_standalone import backup
+
+    source, data_dir = _move_bundle(tmp_path)
+    destination = tmp_path / 'published'
+    if case == 'empty':
+        destination.mkdir()
+
+    def capture(args):
+        copytree(source, args.to)
+        assert Path(args.to).parent != destination
+        assert not destination.exists() or not any(destination.iterdir())
+        if case == 'failed_verification':
+            (Path(args.to) / 'db.dump').write_bytes(b'incomplete')
+        if case == 'concurrent_writer':
+            destination.mkdir()
+            (destination / 'other.txt').write_text('keep')
+        return 0
+
+    monkeypatch.setattr(backup, 'export_move', capture)
+    args = SimpleNamespace(to=str(destination), data_dir=data_dir, pg_home=tmp_path, root=[])
+    if case in {'new', 'empty'}:
+        assert backup.create(args) == 0
+        assert verify_complete_backup(destination)['backup']['schema_revision'] == 'revision-test'
+    else:
+        with pytest.raises(Refused):
+            backup.create(args)
+        if case == 'concurrent_writer':
+            assert (destination / 'other.txt').read_text() == 'keep'
+        else:
+            assert not destination.exists()
+    assert not list(tmp_path.glob('.oneirodex-backup-*'))
+
+
+def test_managed_save_root_alias_is_remapped_and_missing_generation_refuses(tmp_path):
+    from oneirodex_standalone.move import _managed_save_paths
+
+    library = tmp_path / 'library'
+    (library / 'saves').mkdir(parents=True)
+    (library / 'saves/retained.sav').write_bytes(b'generation')
+    alias = tmp_path / 'other-spelling'
+    try:
+        alias.symlink_to(library, target_is_directory=True)
+    except OSError:
+        pytest.skip('directory aliases unavailable in this test environment')
+    stored = str(alias / 'saves/retained.sav')
+    assert _managed_save_paths(library, [stored], require_all=True) == ({stored: 'saves/retained.sav'}, [str(alias)])
+    with pytest.raises(Refused, match='retained generation'):
+        _managed_save_paths(library, [str(alias / 'saves/missing.sav')], require_all=True)

@@ -157,7 +157,7 @@ class TestLogSystemEvent:
                 
                 assert result is False
                 mock_db.session.rollback.assert_called_once()
-                mock_print.assert_called_once_with("Error logging system event: Database error")
+                mock_print.assert_called_once_with("Error logging system event: Exception")
     
     @patch('oneirodex.utils.event_logging.db')
     def test_log_system_event_commit_error(self, mock_db, app):
@@ -171,7 +171,7 @@ class TestLogSystemEvent:
                 
                 assert result is False
                 mock_db.session.rollback.assert_called_once()
-                mock_print.assert_called_once_with("Error logging system event: Commit failed")
+                mock_print.assert_called_once_with("Error logging system event: Exception")
     
     def test_log_system_event_creates_proper_timestamp(self, app, db_session):
         """Test that events are created with proper UTC timestamp."""

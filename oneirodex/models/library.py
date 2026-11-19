@@ -8,7 +8,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import relationship
 
 from oneirodex.models.orm import db
-from oneirodex.models._base import JSONEncodedDict
+from oneirodex.models._base import JSONEncodedDict, UTCScanTime
 from oneirodex.platform import LibraryPlatform
 
 class Library(db.Model):
@@ -23,6 +23,7 @@ class Library(db.Model):
     scan_depth = db.Column(db.Integer, default=1, nullable=False)
     # Last successful scan root (used by refresh-all / scheduled scans)
     last_scan_folder = db.Column(db.String(512), nullable=True)
+    last_scan_root_identity = db.Column(db.String(96), nullable=True)
     # Incremental watch intent under ONEIRODEX_LIBRARY_WATCH master switch.
     # null = follow global (watch when env on); False = opt-out; True = prefer watch.
     watch_enabled = db.Column(db.Boolean, nullable=True, default=None)
@@ -61,8 +62,8 @@ class ScanJob(db.Model):
         'Scheduled', 'Queued', 'Running', 'Stopping', 'Completed', 'Failed', 'Cancelled',
         name='status_enum',
     ))
-    last_run = db.Column(db.DateTime, nullable=True)
-    next_run = db.Column(db.DateTime, nullable=True)
+    last_run = db.Column(UTCScanTime(), nullable=True)
+    next_run = db.Column(UTCScanTime(), nullable=True)
     error_message = db.Column(db.Text)
     total_folders = db.Column(db.Integer, default=0)
     folders_success = db.Column(db.Integer, default=0)
@@ -75,8 +76,10 @@ class ScanJob(db.Model):
     setting_filefolder = db.Column(db.Boolean, default=False)
     setting_download_missing_images = db.Column(db.Boolean, default=False)
     setting_force_updates_extras = db.Column(db.Boolean, default=False)
+    setting_fetch_hltb = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    setting_force_hltb_refetch = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     current_processing = db.Column(db.String(255), nullable=True)  # "Processing: Game Name (450/1000)"
-    last_progress_update = db.Column(db.DateTime, nullable=True)
+    last_progress_update = db.Column(UTCScanTime(), nullable=True)
     # Which process owns the worker thread while this job is Running/Stopping.
     #
     # A scan runs on a daemon Thread inside one process, so a job is only really
@@ -117,12 +120,26 @@ class UnmatchedFolder(db.Model):
     # UX-C5: operator feedback that a proposed match is wrong. Kept apart from
     # `match_reason`, which is the matcher explaining itself — this is a human
     # contradicting it, and conflating the two would lose that distinction.
+    review_decision = db.Column(db.JSON, nullable=True)
     bad_match_reason = db.Column(db.String(32), nullable=True)
     bad_match_note = db.Column(db.String(500), nullable=True)
     bad_match_at = db.Column(db.DateTime, nullable=True)
     bad_match_by_user_id = db.Column(
         db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True,
     )
+
+class CatalogMatchReview(db.Model):
+    """Manual choices survive retiring or recreating an individual scan result."""
+    __tablename__ = 'catalog_match_reviews'
+    library_uuid = db.Column(db.String(36), ForeignKey('libraries.uuid', ondelete='CASCADE'), primary_key=True)
+    source_key = db.Column(db.String(64), primary_key=True)
+    decision = db.Column(db.JSON, nullable=False)
+
+    @staticmethod
+    def key(folder_path):
+        import hashlib
+        return hashlib.sha256(str(folder_path).encode('utf-8')).hexdigest()
+
 
 class DuplicateFixLog(db.Model):
     """Queryable admin/dev log of duplicate triage actions (merge/keep/ignore)."""

@@ -12,11 +12,17 @@ export type UnmatchedRow = {
   match_reason?: string
   match_score?: number | null
   suggested_kind?: string | null
+  matched_game_uuid?: string | null
   matched_game?: { name?: string; path?: string } | null
   folder_name?: string | null
   search_name?: string | null
   why_unmatched?: string | null
   unmatched_reason?: string | null
+  review?: {
+    revision: number
+    current?: { action: string; note: string; label?: string } | null
+    can_undo: boolean
+  }
   bad_match_reason?: string | null
   suggested_candidate_name?: string | null
   is_bare_update_package?: boolean

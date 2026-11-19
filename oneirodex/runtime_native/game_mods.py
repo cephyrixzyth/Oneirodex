@@ -446,11 +446,15 @@ async def _activate_profile(request, app, data, auth, *, game_uuid, profile_id, 
         return _ok(data.activate_profile(app, game_uuid, profile_id))
     except LookupError:
         return _error(404, 'not_found', 'Profile not found')
+    except ValueError as exc:
+        return _error(409, 'conflict', str(exc))
     except Exception:
         return _internal_error()
 
 
 async def _export_profile(request, app, data, auth, *, game_uuid, profile_id, **_):
+    from oneirodex.utils.game_mod_profiles import ProfileConflict
+
     if not data.enabled(app):
         return _mods_disabled()
     _game, denied = await _game_read(app, data, auth, game_uuid)
@@ -460,6 +464,10 @@ async def _export_profile(request, app, data, auth, *, game_uuid, profile_id, **
         code = data.export_profile(app, game_uuid, profile_id)
     except LookupError:
         return _error(404, 'not_found', 'Profile not found')
+    except ProfileConflict as exc:
+        return _error(409, 'conflict', str(exc))
+    except ValueError as exc:
+        return _error(413, 'payload_too_large', str(exc))
     except Exception:
         return _internal_error()
     return _ok({'profile_id': profile_id, 'code': code})

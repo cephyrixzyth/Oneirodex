@@ -25,7 +25,7 @@ class ArtStudioPreviewData:
         artistic = kwargs['artistic']
         image = render_cover_art(
             width, height, title=title, system=system, variant=variant,
-            artistic=artistic,
+            artistic=artistic, composition=kwargs.get('composition', 'auto'),
             headline_override=kwargs['headline_override'],
             subtitle_override=kwargs['subtitle_override'],
             title_scale=clamp_title_scale(kwargs['title_scale']),
@@ -47,6 +47,8 @@ def create_admin_art_studio_preview_router(
     preview_data=None,
 ) -> APIRouter:
     router = APIRouter()
+    from anyio import CapacityLimiter
+    render_slots = CapacityLimiter(2)
     data = preview_data or ArtStudioPreviewData()
 
     @router.post('/admin/api/art-studio/preview')
@@ -78,37 +80,40 @@ def create_admin_art_studio_preview_router(
                 if csrf is not None:
                     response = csrf
                 else:
-                    try:
-                        body = await request.json()
-                    except Exception:
-                        body = {}
-                    try:
-                        from oneirodex.schemas.admin_art_studio import ArtStudioPreviewBody
-                        from oneirodex.utils.validation import format_validation_errors
-
-                        model = ArtStudioPreviewBody.model_validate(body)
-                    except ValidationError as exc:
-                        from oneirodex.utils.validation import format_validation_errors
-
-                        payload, status = api_error_payload(
-                            'Invalid request.', code='unprocessable',
-                            detail=format_validation_errors(exc),
-                        )
-                        response = JSONResponse(payload, status_code=status)
-                    except TypeError:
-                        payload, status = api_error_payload(
-                            'Invalid request.', code='unprocessable', detail={},
-                        )
-                        response = JSONResponse(payload, status_code=status)
+                    from .admin_art_studio_actions import _json_object
+                    from .bounded_request_body import BODY_TOO_LARGE
+                    body = await _json_object(request)
+                    if body is BODY_TOO_LARGE:
+                        response = JSONResponse({'error': 'Artwork request is too large'}, status_code=413)
                     else:
-                        result, error = _render_preview(model, data)
-                        if error is not None:
+                        try:
+                            from oneirodex.schemas.admin_art_studio import ArtStudioPreviewBody
+                            from oneirodex.utils.validation import format_validation_errors
+
+                            model = ArtStudioPreviewBody.model_validate(body)
+                        except ValidationError as exc:
+                            from oneirodex.utils.validation import format_validation_errors
+
                             payload, status = api_error_payload(
-                                'Invalid request.', code='unprocessable', detail=error,
+                                'Invalid request.', code='unprocessable',
+                                detail=format_validation_errors(exc),
+                            )
+                            response = JSONResponse(payload, status_code=status)
+                        except TypeError:
+                            payload, status = api_error_payload(
+                                'Invalid request.', code='unprocessable', detail={},
                             )
                             response = JSONResponse(payload, status_code=status)
                         else:
-                            response = JSONResponse(result)
+                            from anyio import to_thread
+                            result, error = await to_thread.run_sync(_render_preview, model, data, limiter=render_slots)
+                            if error is not None:
+                                payload, status = api_error_payload(
+                                    'Invalid request.', code='unprocessable', detail=error,
+                                )
+                                response = JSONResponse(payload, status_code=status)
+                            else:
+                                response = JSONResponse(result)
 
             if auth.should_set_session_cookie:
                 _set_session_cookie(response, flask_app, auth)
@@ -143,6 +148,7 @@ def _render_preview(body, data):
             format=fmt, variant=variant, artistic=artistic,
             headline_override=body.headline, subtitle_override=body.subtitle,
             title_scale=body.title_scale,
+            **({'composition': body.composition} if body.composition != 'auto' else {}),
         )
     except ValidationError as exc:
         from oneirodex.utils.validation import format_validation_errors

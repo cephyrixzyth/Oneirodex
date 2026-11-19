@@ -110,7 +110,7 @@ Every screenshot and clip on this page is **live UI** from a stock install seede
 
 **Optional modules** — most `ENABLE_*` modules are **on** by default; OIDC, AI auto-apply and hardlink apply stay **off** until you opt in
 - 📡 *arr + hardlink pipeline · 🤖 Ollama AI assist · 🔐 OIDC / Authentik SSO
-- 🥽 **VR — any SteamVR / PSVR2-on-PC / Quest seat**: a headset-friendly `/vr` hub, honest *Plays in VR / community profile / plays flat* rows and a per-title headset record ([controllers-and-vr.md](docs/user/controllers-and-vr.md)); the runtime, adapter and streamer stay yours — [vr-byo-runtime.md](docs/runbooks/vr-byo-runtime.md) says which does what
+- 🥽 **VR — any SteamVR / PSVR2-on-PC / Quest seat**: a furnished WebXR library room with a reading desk, favorites and desktop navigation, plus *Plays in VR / community profile / plays flat* rows and a per-title headset record ([controllers-and-vr.md](docs/user/controllers-and-vr.md)); the runtime, adapter and streamer stay yours — [vr-byo-runtime.md](docs/runbooks/vr-byo-runtime.md) says which does what
 - 🔔 **BYO notification bus** — fan in-app alerts out to an Apprise API server or an ntfy topic; nothing bundled, a dead endpoint never breaks the in-app notice
 - 🖌️ Generated cover art against **your own** A1111-compatible endpoint (AUTOMATIC1111 · SD.Next · Forge) — nothing leaves your network; GPU-less NAS? [artwork-gpu-workstation.md](docs/runbooks/artwork-gpu-workstation.md)
 - 🛡️ Login rate limit (app + [proxy runbook](docs/runbooks/login-rate-limit-proxy.md)) · malware scan — heuristics on by default, optional [ClamAV profile](docs/runbooks/docker-compose-deploy.md#clamav-malware-scan)

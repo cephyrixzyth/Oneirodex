@@ -33,6 +33,12 @@ def _system_geometry(slug: str) -> dict:
             'od-radius-3xl': '36px', 'od-space-5': '1.1rem',
             'od-shadow-md': '0 8px 22px rgba(28, 10, 44, 0.44)', 'od-motion-base': '220ms',
         },
+        'tideglass': {
+            'od-radius-xs': '3px', 'od-radius-sm': '8px', 'od-radius-md': '14px',
+            'od-radius-lg': '21px', 'od-radius-xl': '26px', 'od-radius-2xl': '32px',
+            'od-radius-3xl': '36px', 'od-space-5': '1rem', 'od-space-6': '1.45rem',
+            'od-shadow-md': '0 8px 24px rgba(2, 20, 32, 0.40)', 'od-motion-base': '170ms',
+        },
         'deep-space': {
             'od-radius-xs': '4px', 'od-radius-sm': '7px', 'od-radius-md': '11px',
             'od-radius-lg': '15px', 'od-radius-xl': '19px', 'od-radius-2xl': '25px',

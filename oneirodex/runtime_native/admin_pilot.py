@@ -130,9 +130,15 @@ def create_admin_pilot(
     """
     from oneirodex.utils.role_catalog import normalize_role
 
-    shell = Path(shell_path).read_text(encoding='utf-8')
-    if shell.count('</head>') != 1 or 'id="admin-app-root"' not in shell:
-        raise ValueError('Pilot requires a built admin static shell')
+    def read_shell():
+        shell = Path(shell_path).read_text(encoding='utf-8')
+        if shell.count('</head>') != 1 or 'id="admin-app-root"' not in shell:
+            raise ValueError('Pilot requires a built admin static shell')
+        return shell
+
+    # Fail at startup for an invalid deployment. Read this small manifest again
+    # per document request so atomic bundle promotion cannot strand a live worker.
+    read_shell()
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     # Exact static and numeric route matching must reject trailing-slash aliases.
     app.router.redirect_slashes = False
@@ -173,17 +179,24 @@ def create_admin_pilot(
                 )
             else:
                 flashes = list(auth.session_data.pop('_flashes', []) or [])
-                response_shell = _shell_with_admin_flashes(shell, flashes)
-                exists = (
-                    shell_entity_exists(request)
-                    if shell_entity_exists is not None
-                    else _admin_shell_entity_exists(request)
-                )
-                response = Response(
-                    response_shell,
-                    status_code=200 if exists else 404,
-                    media_type='text/html',
-                )
+                try:
+                    response_shell = _shell_with_admin_flashes(read_shell(), flashes)
+                except (OSError, ValueError):
+                    response = Response('The admin interface is updating. Reload in a moment.',
+                                        status_code=503, headers={'Retry-After': '1'}, media_type='text/plain')
+                    if flashes:
+                        auth.session_data['_flashes'] = flashes
+                else:
+                    exists = (
+                        shell_entity_exists(request)
+                        if shell_entity_exists is not None
+                        else _admin_shell_entity_exists(request)
+                    )
+                    response = Response(
+                        response_shell,
+                        status_code=200 if exists else 404,
+                        media_type='text/html',
+                    )
             if auth.user is not None and (auth.should_set_session_cookie or flashes):
                 _set_session_cookie(response, flask_app, auth)
         response.headers['Cache-Control'] = 'no-store'

@@ -7,7 +7,7 @@ import { setGameStatus, toggleFavorite } from '../api/userActions'
 import { coverUrl, DEFAULT_COVER_URL } from '../utils/coverUrl'
 import { CoverFallback } from './CoverFallback'
 import { safeHttpUrl } from '../utils/safeUrl'
-import { resumeHref } from '../api/saves'
+import { supportsWebRetroSaves, resumeHref } from '../api/saves'
 import { editionChipLabels } from '../utils/platformAbbrev'
 import { trailerEmbedUrls, prefersReducedMotion } from '../utils/detailsMedia'
 import { BadgeStack } from './BadgeStack'
@@ -107,7 +107,8 @@ export function GameCard({
   // A state on the server turns Play into Resume: same room, the shell offers
   // that slot first and still asks before loading it. `demo_url` rows never
   // carry a state, so they keep reading Play.
-  const resumeState = game.resume_state && game.play_url ? game.resume_state : null
+  const resumeState =
+    game.resume_state && supportsWebRetroSaves(game.play_url) ? game.resume_state : null
   const playHref =
     resumeState && basePlayHref ? resumeHref(basePlayHref, resumeState.slot_name) : basePlayHref
   const archiveBlocked = game.play_blocker === 'unsupported_archive'
@@ -115,9 +116,18 @@ export function GameCard({
     game.companion_hint ||
     'This archive type cannot be extracted for browser play. Use .zip / .7z / .rar / ROM.gz or a raw ROM.'
   const firmwareHint = firmwareBlockMessage(game)
-  const playBlocked = firmwareBlocked || archiveBlocked
-  const playBlockHint = firmwareBlocked ? firmwareHint : archiveBlockHint
-  const playBlockLabel = firmwareBlocked ? 'firmware missing' : 'unsupported archive'
+  const fileMissing = game.play_blocker === 'missing_game_file' && !game.demo_url
+  const playBlocked = firmwareBlocked || archiveBlocked || fileMissing
+  const playBlockHint = fileMissing
+    ? game.companion_hint || 'Link a game file before starting browser play.'
+    : firmwareBlocked
+      ? firmwareHint
+      : archiveBlockHint
+  const playBlockLabel = fileMissing
+    ? 'game file missing'
+    : firmwareBlocked
+      ? 'firmware missing'
+      : 'unsupported archive'
   const platformChip =
     !hidePlatformChip && (game.library_platform || game.edition_platforms?.length)
       ? editionChipLabels(game, activePlatform)
@@ -462,6 +472,50 @@ export function GameCard({
         <GameCardAdminMenu
           enableDeleteOnDisk={enableDeleteOnDisk}
           game={game}
+          compactRowActions={
+            layout === 'rows' && (
+              <>
+                {playHref ? (
+                  <a className="menu-button" href={playHref}>
+                    {resumeState ? 'Resume in browser' : 'Play in browser'}
+                  </a>
+                ) : (
+                  playBlocked && (
+                    <button
+                      type="button"
+                      className="menu-button"
+                      onClick={() => {
+                        setMenuOpen(false)
+                        setPlayInfoOpen(true)
+                      }}
+                    >
+                      Why is play unavailable?
+                    </button>
+                  )
+                )}
+                {showPlayStatus && (
+                  <button
+                    type="button"
+                    className="menu-button"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setStatusOpen(true)
+                    }}
+                  >
+                    Change play status
+                  </button>
+                )}
+              </>
+            )
+          }
+          onRowPreview={
+            layout === 'rows'
+              ? () => {
+                  setMenuOpen(false)
+                  setPreviewOpen(true)
+                }
+              : undefined
+          }
           igdbUrl={igdbUrl}
           isAdmin={isAdmin}
           menuOpen={menuOpen}
@@ -517,16 +571,22 @@ export function GameCard({
 
         {layout === 'rows' ? (
           <a className="game-card__row-meta" href={`/game_details/${game.uuid}`}>
-            <strong className="game-card__row-title">{game.name}</strong>
-            <span className="game-card__row-detail">
-              {[
-                platformChip?.full || game.library_platform_label,
-                releaseYear(game.first_release_date),
-                showPlayStatus ? currentStatus.label : '',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
+            <span className="game-card__row-identity">
+              <strong className="game-card__row-title">{game.name}</strong>
+              <span className="game-card__row-detail">
+                {[releaseYear(game.first_release_date), game.genres?.slice(0, 2).join(' / ')]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
             </span>
+            <span className="game-card__row-platform">
+              {platformChip?.full ||
+                game.library_platform_label ||
+                game.library_platform ||
+                'Platform unknown'}
+              {platformChip?.extra ? ` +${platformChip.extra}` : ''}
+            </span>
+            {showPlayStatus && <span className="game-card__row-status">{currentStatus.label}</span>}
           </a>
         ) : null}
 

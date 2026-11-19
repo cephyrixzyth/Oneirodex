@@ -194,9 +194,11 @@ def test_igdb_name_search_adapter_builds_optional_platform_filter(monkeypatch):
 
     data.search_games_by_name('Sample Game', '6')
     data.search_games_by_name('Sample Game', 'invalid')
+    data.search_games_by_name('Le «Rêve» "Perdu"', None)
 
     assert calls[0][0] == 'https://api.igdb.com/v4/games'
     assert 'search "Sample Game";' in calls[0][1]
     assert 'where platforms = (6);' in calls[0][1]
     assert calls[0][1].endswith(' limit 10;')
     assert 'where platforms' not in calls[1][1]
+    assert r'search "Le «Rêve» \"Perdu\""; limit 10;' in calls[2][1]

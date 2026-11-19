@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
-_RequiredTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+_RequiredTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=240)]
+
+
+Composition = Literal['auto', 'workbench', 'cartridge', 'marquee', 'crt', 'pixel', 'boxart', 'neon']
 
 
 class ArtStudioPreviewBody(BaseModel):
@@ -18,6 +21,7 @@ class ArtStudioPreviewBody(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
 
+    composition: Composition = 'auto'
     title: _RequiredTitle
     system: str | None = None
     width: Any = None
@@ -37,6 +41,7 @@ class ArtStudioGenerateBody(BaseModel):
 
     model_config = ConfigDict(extra='forbid')
 
+    composition: Composition = 'auto'
     title: _RequiredTitle
     system: str | None = None
     format: str | None = None

@@ -1,3 +1,4 @@
+import { openArchiveCheckpoint, resumeScope } from './archive-resume.js'
 import { invoke } from '@tauri-apps/api/core'
 
 import type { GameVersionItem, InitiateDownloadResponse } from '@oneirodex/api-client'
@@ -99,6 +100,29 @@ export async function consumeLimitedDownloadBody(
   }
 }
 
+/** Verify the transport container before registering an installable download. */
+function archivePrefixCheck(representation?: 'companion_zip' | 'legacy') {
+  const prefix: number[] = []
+  return (chunk?: Uint8Array) => {
+    if (!representation || prefix.length >= 4) return
+    if (chunk) {
+      for (const byte of chunk.subarray(0, 4 - prefix.length)) prefix.push(byte)
+      if (prefix.length < 4) return
+    }
+    if (
+      prefix[0] !== 0x50 ||
+      prefix[1] !== 0x4b ||
+      !((prefix[2] === 3 && prefix[3] === 4) || (prefix[2] === 5 && prefix[3] === 6))
+    ) {
+      throw new Error(
+        representation === 'legacy'
+          ? 'This server returned a single file instead of an installable ZIP. Update the server or download the file from the library.'
+          : 'The companion download was not a ZIP file. Retry the download or check the server.',
+      )
+    }
+  }
+}
+
 async function readBoundedDownloadError(response: Response): Promise<string> {
   if (!response.body) return ''
   const decoder = new TextDecoder()
@@ -153,7 +177,10 @@ export async function initiateDownloadRequest(
   gameUuid: string,
   options: { kind?: 'base' | 'update' | 'extra'; versionUuid?: string } = {},
 ): Promise<InitiateDownloadResponse> {
-  return api.downloads.initiateGameDownload(gameUuid, options)
+  return api.downloads.initiateGameDownload(gameUuid, {
+    ...options,
+    representation: 'companion_zip',
+  })
 }
 
 /**
@@ -184,6 +211,7 @@ export async function fetchDownloadStream(
   auth: AuthStore,
   streamPath: string,
   options: {
+    archiveRepresentation?: 'companion_zip' | 'legacy'
     fetchImpl?: typeof fetch
     onProgress?: DownloadProgressCallback
   } = {},
@@ -213,17 +241,20 @@ export async function fetchDownloadStream(
   const body = response.body
   if (!body) throw new Error('Game archive response did not provide a readable body')
 
+  const checkArchive = archivePrefixCheck(options.archiveRepresentation)
   const chunks: Uint8Array[] = []
   const bytesReceived = await consumeLimitedDownloadBody(
     body,
     MAX_BUFFERED_GAME_ARCHIVE_BYTES,
     (chunk) => {
+      checkArchive(chunk)
       chunks.push(chunk)
     },
     options.onProgress,
     totalBytes,
   )
 
+  checkArchive()
   const merged = new Uint8Array(bytesReceived)
   let offset = 0
   for (const chunk of chunks) {
@@ -239,6 +270,8 @@ export async function streamDownloadToFile(
   streamPath: string,
   archivePath: string,
   options: {
+    resumeIdentity?: string
+    archiveRepresentation?: 'companion_zip' | 'legacy'
     fetchImpl?: typeof fetch
     onProgress?: DownloadProgressCallback
   } = {},
@@ -248,45 +281,115 @@ export async function streamDownloadToFile(
     throw new Error('Not authenticated')
   }
 
-  const fetchImpl = options.fetchImpl ?? fetch
-  const response = await fetchImpl(joinUrl(auth.getBaseUrl(), streamPath), {
-    method: 'GET',
-    redirect: 'error',
-    headers: {
-      Authorization: authHeader,
-    },
-  })
-  assertDownloadFinalUrlAllowed(response)
-
-  if (!response.ok) {
-    const text = await readBoundedDownloadError(response)
-    throw new Error(text || `Download failed with HTTP ${response.status}`)
+  const scope =
+    options.resumeIdentity &&
+    isTauriRuntime() &&
+    globalThis.navigator?.locks &&
+    globalThis.crypto?.subtle
+      ? await resumeScope([auth.getBaseUrl(), authHeader, options.resumeIdentity, archivePath])
+      : null
+  if (scope) {
+    return navigator.locks.request('od.download.' + archivePath, async () => {
+      await transfer(await openArchiveCheckpoint(archivePath, scope))
+    })
   }
+  return transfer(null)
 
-  const totalBytes = contentLength(response)
-  assertContentLengthWithinLimit(response, totalBytes, MAX_GAME_ARCHIVE_BYTES)
-  const body = response.body
+  async function transfer(checkpoint: Awaited<ReturnType<typeof openArchiveCheckpoint>> | null) {
+    const fetchImpl = options.fetchImpl ?? fetch
+    const headers: Record<string, string> = { Authorization: authHeader! }
+    if (checkpoint) {
+      headers['X-Oneirodex-Resume'] = '1'
+      if (
+        checkpoint.receipt &&
+        checkpoint.offset > 0 &&
+        checkpoint.offset < checkpoint.receipt.total
+      ) {
+        headers.Range = 'bytes=' + checkpoint.offset + '-'
+        headers['If-Range'] = checkpoint.receipt.etag
+      }
+    }
+    const response = await fetchImpl(joinUrl(auth.getBaseUrl(), streamPath), {
+      method: 'GET',
+      redirect: 'error',
+      headers,
+    })
+    assertDownloadFinalUrlAllowed(response)
 
-  if (!isTauriRuntime()) {
-    return
-  }
+    if (!response.ok) {
+      if (response.status === 416) checkpoint?.forget()
+      const text = await readBoundedDownloadError(response)
+      throw new Error(text || `Download failed with HTTP ${response.status}`)
+    }
 
-  if (!body) throw new Error('Game archive response did not provide a readable body')
+    const totalBytes = contentLength(response)
+    assertContentLengthWithinLimit(response, totalBytes, MAX_GAME_ARCHIVE_BYTES)
+    const body = response.body
 
-  // Truncate / create destination only after the declared size check. If the
-  // stream later exceeds the limit or fails, remove the partial archive.
-  await invoke('write_file_bytes', { path: archivePath, bytes: new Uint8Array(0) })
-  try {
-    await consumeLimitedDownloadBody(
-      body,
-      MAX_GAME_ARCHIVE_BYTES,
-      (chunk) => invoke('append_file_bytes', { path: archivePath, bytes: chunk }),
-      options.onProgress,
-      totalBytes,
-    )
-  } catch (error) {
-    await invoke('remove_path', { path: archivePath }).catch(() => undefined)
-    throw error
+    if (!isTauriRuntime()) {
+      return
+    }
+
+    if (!body) throw new Error('Game archive response did not provide a readable body')
+
+    const etag = response.headers.get('ETag') || ''
+    const resumable = checkpoint && /^"sha256-[0-9a-f]{64}"$/.test(etag) && totalBytes !== null
+    const offset = response.status === 206 && checkpoint ? checkpoint.offset : 0
+    const total = totalBytes === null ? null : totalBytes + offset
+    if (
+      response.status === 206 &&
+      (!resumable ||
+        !headers.Range ||
+        etag !== checkpoint.receipt?.etag ||
+        total !== checkpoint.receipt.total ||
+        response.headers.get('Content-Range') !==
+          'bytes ' + offset + '-' + (total! - 1) + '/' + total)
+    ) {
+      checkpoint?.forget()
+      throw new Error('The archive range changed. Retry the download.')
+    }
+    if (total !== null && total > MAX_GAME_ARCHIVE_BYTES)
+      throw new Error('Game archive exceeds the download size limit')
+    const target = checkpoint?.partial ?? archivePath
+    if (!offset) await invoke('write_file_bytes', { path: target, bytes: new Uint8Array(0) })
+    if (resumable) checkpoint.remember({ etag, total: total! })
+    try {
+      const checkArchive = archivePrefixCheck(offset ? undefined : options.archiveRepresentation)
+      const received = await consumeLimitedDownloadBody(
+        body,
+        MAX_GAME_ARCHIVE_BYTES - offset,
+        async (chunk) => {
+          checkArchive(chunk)
+          await invoke('append_file_bytes', { path: target, bytes: chunk })
+        },
+        (progress) =>
+          options.onProgress?.({
+            bytesReceived: offset + progress.bytesReceived,
+            totalBytes: total,
+          }),
+        totalBytes,
+      )
+      checkArchive()
+      if (totalBytes !== null && received !== totalBytes)
+        throw new Error('Incomplete archive transfer')
+      if (resumable) {
+        const verified = await invoke<{ size: number; sha256: string }>('archive_checkpoint', {
+          path: target,
+          verify: true,
+        })
+        if (verified.size !== total || '"sha256-' + verified.sha256 + '"' !== etag) {
+          checkpoint.forget()
+          throw new Error('Downloaded archive failed integrity verification')
+        }
+      }
+      if (checkpoint) {
+        await invoke('publish_archive_checkpoint', { path: archivePath, scope: checkpoint.scope })
+        checkpoint.forget()
+      }
+    } catch (error) {
+      if (!resumable) await invoke('remove_path', { path: target }).catch(() => undefined)
+      throw error
+    }
   }
 }
 
@@ -334,10 +437,18 @@ export async function downloadGameArchive(
   const downloadsDir = await getDownloadsDir()
   const archivePath = resolveArchivePath(downloadsDir, gameUuid, options.generation)
 
+  const downloadOptions = {
+    ...options,
+    resumeIdentity: JSON.stringify([gameUuid, options.kind || 'base', options.versionUuid || '']),
+    archiveRepresentation:
+      initiated.representation === 'companion_zip'
+        ? ('companion_zip' as const)
+        : ('legacy' as const),
+  }
   if (isTauriRuntime()) {
-    await streamDownloadToFile(auth, streamPath, archivePath, options)
+    await streamDownloadToFile(auth, streamPath, archivePath, downloadOptions)
   } else {
-    const bytes = await fetchDownloadStream(auth, streamPath, options)
+    const bytes = await fetchDownloadStream(auth, streamPath, downloadOptions)
     await writeDownloadArchive(archivePath, bytes)
   }
 

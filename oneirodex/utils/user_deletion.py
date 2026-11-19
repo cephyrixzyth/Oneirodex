@@ -9,6 +9,8 @@ from pathlib import Path
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
+from oneirodex.utils.periodic_worker import PeriodicWorker
+
 _ABSOLUTE_PATH_PATTERN = re.compile(
     r'(?<![\w])(?:[A-Za-z]:\\|\\\\)[^\s\'"<>|]+'
     r'|(?<![:/\w])/(?:[^\s\'"<>|]+)',
@@ -99,6 +101,16 @@ def _candidate_still_referenced(
     from oneirodex.utils.avatar import AVATAR_URL_PREFIX
 
     absolute = os.path.abspath(Path(root) / relative)
+    if kind == 'game_image':
+        from oneirodex.models import Game, Image, Library
+        from oneirodex.utils.image_paths import image_path_under_save_dir
+
+        target = Path(root) / relative
+        for column in (Image.url, Library.image_url, Game.cover):
+            names = session.scalars(select(column).where(column.endswith(target.name, autoescape=True)))
+            if any(image_path_under_save_dir(url, root) == target for url in names):
+                return True
+        return False
     if kind == 'avatar':
         name = Path(relative).name
         stem, extension = os.path.splitext(name)
@@ -192,6 +204,27 @@ def _enqueue_file_candidates(
     return job_ids
 
 
+def _image_identity(target: Path):
+    stat = target.lstat()
+    return f'{stat.st_dev}:{stat.st_ino}:{stat.st_size}:{stat.st_mtime_ns}'
+
+
+def enqueue_game_image_cleanup(session, urls, image_root):
+    """Queue only verified existing local artwork after removing its database references."""
+    from oneirodex.models import UserDeletionFileJob
+    from oneirodex.utils.image_paths import image_path_under_save_dir
+
+    root = Path(image_root).resolve()
+    for url in set(urls):
+        path = image_path_under_save_dir(url, root)
+        if path is None or path.is_symlink() or not path.is_file():
+            continue
+        identity = _image_identity(path)
+        relative = path.relative_to(root).as_posix()
+        for job_id in _enqueue_file_candidates(session, [('game_image', str(root), relative)]):
+            session.get(UserDeletionFileJob, job_id).image_identity = identity
+
+
 def enqueue_avatar_replacement_cleanup(
     session, app, user_id: int, previous_path: str | None, new_path: str | None,
 ) -> list[int]:
@@ -248,6 +281,11 @@ def process_pending_file_jobs(session, *, limit: int = 100) -> int:
             if target.is_symlink():
                 raise ValueError('unsafe_symlink_target')
             target.parent.resolve().relative_to(root)
+            if job.image_identity is not None and target.exists():
+                if (_image_identity(target) != job.image_identity or
+                        _candidate_still_referenced(session, 'game_image', str(root), relative.as_posix())):
+                    session.delete(job)
+                    continue
             target.unlink(missing_ok=True)
             session.delete(job)
         except Exception as exc:  # retain a path-free retry record
@@ -290,68 +328,24 @@ def delete_user_account(session, user) -> int:
         return max(1, len(job_ids))
 
 
-class _FileCleanupWorker:
-    def __init__(self):
-        import threading
-
-        self.stop_event = threading.Event()
-
-    def stop(self):
-        self.stop_event.set()
-        global _worker_started
-        if _worker_lock is not None:
-            with _worker_lock:
-                _worker_started = False
-
-
-_worker_lock = None
-_worker_started = False
+_cleanup_worker = PeriodicWorker('user-deletion-file-cleanup')
 
 
 def start_file_cleanup_worker(app, *, interval_seconds: int = 60):
-    """Retry failed deletion-file jobs after startup and periodically."""
-    import threading
+    """Retry committed file jobs when the app starts and until shutdown."""
+    def run_once():
+        from oneirodex.runtime_native.db_session import native_db
 
-    global _worker_lock, _worker_started
-    if _worker_lock is None:
-        _worker_lock = threading.Lock()
-    with _worker_lock:
-        if _worker_started:
-            return None
-        _worker_started = True
-
-    handle = _FileCleanupWorker()
-
-    def run():
-        while not handle.stop_event.is_set():
+        with app.app_context():
             try:
-                with app.app_context():
-                    from oneirodex.runtime_native.db_session import native_db
-                    remaining = process_pending_file_jobs(native_db.session)
-                    if remaining:
-                        app.logger.warning(
-                            'Account deletion file cleanup remains pending (%s jobs)',
-                            remaining,
-                        )
+                remaining = process_pending_file_jobs(native_db.session)
+                if remaining:
+                    app.logger.warning('Account deletion file cleanup remains pending (%s jobs)', remaining)
             except Exception as exc:
-                try:
-                    native_db.session.rollback()
-                except Exception:
-                    pass
-                app.logger.warning(
-                    'Account deletion file cleanup retry failed (%s)',
-                    type(exc).__name__,
-                )
-            handle.stop_event.wait(interval_seconds)
+                native_db.session.rollback()
+                app.logger.warning('Account deletion file cleanup retry failed (%s)', type(exc).__name__)
 
-    thread = threading.Thread(
-        target=run,
-        name='user-deletion-file-cleanup',
-        daemon=True,
-    )
-    thread.start()
-    handle.thread = thread
-    return handle
+    return _cleanup_worker.start(run_once, interval=interval_seconds)
 
 
 def anonymize_user_audit_events(session, user) -> None:

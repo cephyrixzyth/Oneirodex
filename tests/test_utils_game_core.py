@@ -1158,3 +1158,52 @@ class TestGetOrCreateEntity:
                         db.session.commit()
                     except Exception:
                         db.session.rollback()
+
+
+def test_game_delete_preserves_shared_artwork_and_rolls_back_with_invalid_scan(db_session, sample_game, tmp_path):
+    from sqlalchemy import select
+    from oneirodex.utils.services.game_delete import delete_game
+
+    only = tmp_path / 'only.jpg'
+    shared = tmp_path / 'shared.jpg'
+    only.write_bytes(b'unique')
+    shared.write_bytes(b'shared')
+    other = Game(name='Shares cover', library_uuid=sample_game.library_uuid, full_disk_path=str(tmp_path / 'two'))
+    db_session.add(other)
+    db_session.flush()
+    db_session.add_all([
+        Image(game_uuid=sample_game.uuid, image_type='cover', url=only.name),
+        Image(game_uuid=sample_game.uuid, image_type='hero', url=shared.name),
+        Image(game_uuid=other.uuid, image_type='cover', url='/static/library/images/' + shared.name),
+    ])
+    uid = sample_game.uuid
+    db_session.commit()
+    config = {'IMAGE_SAVE_PATH': str(tmp_path)}
+    with pytest.raises(RuntimeError, match='cancelled'):
+        delete_game(uid, config=config, scan_job_id=str(uuid4()))
+    assert set(db_session.scalars(select(Image.url).where(Image.game_uuid == uid))) == {only.name, shared.name}
+    assert only.read_bytes() == b'unique'
+    delete_game(uid, config=config)
+    assert not only.exists()
+    assert shared.read_bytes() == b'shared'
+
+
+def test_game_artwork_cleanup_after_retry_retains_replaced_bytes(db_session, sample_game, tmp_path, monkeypatch):
+    from sqlalchemy import select
+    from oneirodex.models import UserDeletionFileJob
+    from oneirodex.utils.services import game_delete
+    from oneirodex.utils.user_deletion import process_pending_file_jobs
+
+    cover = tmp_path / 'cover.jpg'
+    cover.write_bytes(b'old cover')
+    db_session.add(Image(game_uuid=sample_game.uuid, image_type='cover', url=cover.name))
+    game_uuid = sample_game.uuid
+    db_session.commit()
+    monkeypatch.setattr(game_delete, 'process_pending_file_jobs', lambda _session: None)
+    game_delete.delete_game(game_uuid, config={'IMAGE_SAVE_PATH': str(tmp_path)})
+    assert db_session.scalar(select(UserDeletionFileJob.id)) is not None
+    replacement = tmp_path / 'new.tmp'
+    replacement.write_bytes(b'updated art')
+    replacement.replace(cover)
+    assert process_pending_file_jobs(db_session) == 0
+    assert cover.read_bytes() == b'updated art'

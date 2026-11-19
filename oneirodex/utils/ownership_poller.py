@@ -23,12 +23,11 @@ launcher surfaces (operator-supplied tokens); CSV still works for all of them.
 from __future__ import annotations
 
 import logging
-import threading
-import time
+from oneirodex.utils.periodic_worker import PeriodicWorker
 
 logger = logging.getLogger(__name__)
 
-_scheduler_started = False
+_scheduler = PeriodicWorker('od-ownership-poll')
 
 #: Stores that can actually be re-synced live today. Derived from the handler
 #: registry below — see _live_sync_handlers for why this must not be edited
@@ -250,9 +249,6 @@ def sync_all_linked_accounts() -> dict:
 
 def start_ownership_scheduler(app):
     """Start the daemon that keeps linked accounts current (idempotent)."""
-    global _scheduler_started
-    if _scheduler_started:
-        return
     if not _is_enabled(app):
         print('[OWNERSHIP] Disabled (ENABLE_OWNERSHIP_POLL=false)')
         return
@@ -275,28 +271,22 @@ def start_ownership_scheduler(app):
             print(f'[OWNERSHIP] NOT started — sync registry is inconsistent: {exc}')
             return
 
-    _scheduler_started = True
     interval = _poll_seconds(app)
 
-    def _loop():
-        # Let boot finish before making outbound calls, same as the other pollers.
-        time.sleep(30)
-        while True:
-            try:
-                with app.app_context():
-                    stats = sync_all_linked_accounts()
-                    if 'skipped' in stats:
-                        print(f"[OWNERSHIP] Skipped: {stats['skipped']}")
-                    else:
-                        print(
-                            f"[OWNERSHIP] Re-synced {stats['synced']}/{stats['accounts']}"
-                            f" linked accounts ({stats['failed']} failed)"
-                        )
-            except Exception as exc:
-                # A poller that dies takes ownership freshness with it silently.
-                # Type only: a database error's text includes statement parameters.
-                print(f'[OWNERSHIP] Poll error: {type(exc).__name__}')
-            time.sleep(interval)
+    def run_once():
+        try:
+            with app.app_context():
+                stats = sync_all_linked_accounts()
+                if 'skipped' in stats:
+                    print(f"[OWNERSHIP] Skipped: {stats['skipped']}")
+                else:
+                    print(
+                        f"[OWNERSHIP] Re-synced {stats['synced']}/{stats['accounts']}"
+                        f" linked accounts ({stats['failed']} failed)"
+                    )
+        except Exception as exc:
+            # A poller that dies takes ownership freshness with it silently.
+            # Type only: a database error's text includes statement parameters.
+            print(f'[OWNERSHIP] Poll error: {type(exc).__name__}')
 
-    threading.Thread(target=_loop, name='od-ownership-poll', daemon=True).start()
-    print(f'[OWNERSHIP] Started (re-sync every {interval // 3600}h)')
+    return _scheduler.start(run_once, interval=interval, delay=30)

@@ -90,6 +90,11 @@ export function App() {
 
   return (
     <div className="od-admin-shell">
+      {!legacy && (
+        <a href="#od-admin-workspace" className="od-admin-skip">
+          Skip to workspace
+        </a>
+      )}
       <AdminSideRail railState={railState} isMobile={isMobile} onCloseDrawer={closeDrawer} />
       {drawerOpen ? (
         <button
@@ -106,7 +111,7 @@ export function App() {
           only — no <main>, no <Routes>. The one intentional Jinja-DOM sniff
           lives in hasLegacyBody() above. */}
       {!legacy ? (
-        <main className="od-admin-main">
+        <main id="od-admin-workspace" tabIndex={-1} className="od-admin-main">
           <AdminRoutes />
         </main>
       ) : null}

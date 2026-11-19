@@ -75,7 +75,7 @@ def test_bios_root_honors_app_config(app, tmp_path, monkeypatch):
 
 def test_browse_play_fields_firmware_missing(monkeypatch):
     library = SimpleNamespace(platform=SimpleNamespace(name='PSX'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
 
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',
@@ -106,7 +106,7 @@ def test_browse_play_fields_firmware_missing(monkeypatch):
 
 def test_browse_play_fields_firmware_present(monkeypatch):
     library = SimpleNamespace(platform=SimpleNamespace(name='PSX'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
 
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',
@@ -142,7 +142,7 @@ def test_browse_play_fields_firmware_in_subfolder_still_blocks(monkeypatch):
     which is worse than the honest block.
     """
     library = SimpleNamespace(platform=SimpleNamespace(name='PSX'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
 
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',
@@ -171,7 +171,7 @@ def test_browse_play_fields_firmware_in_subfolder_still_blocks(monkeypatch):
 
 def test_browse_play_fields_no_bios_for_nes(monkeypatch):
     library = SimpleNamespace(platform=SimpleNamespace(name='NES'))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',
         lambda _p: {'emulators': ['nestopia'], 'preferred': 'nestopia'},
@@ -192,7 +192,7 @@ def test_browse_play_fields_no_bios_for_nes(monkeypatch):
 
 def _play_fields(monkeypatch, platform: str, core: str):
     library = SimpleNamespace(platform=SimpleNamespace(name=platform))
-    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library)
+    game = SimpleNamespace(uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', library=library, full_disk_path='fixture.rom')
     monkeypatch.setattr(
         'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform',
         lambda _p: {'emulators': [core], 'preferred': core},
