@@ -104,7 +104,12 @@ fn publish(source: &Path, dest: &Path, hash: &str) -> Result<(), String> {
     let temp = parent.join(format!(".oneirodex-pending-{}", uuid::Uuid::new_v4()));
     let result = (|| {
         fs::copy(source, &temp).map_err(err)?;
-        File::open(&temp).and_then(|f| f.sync_all()).map_err(err)?;
+        // Windows flushes only through a handle with write access.
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&temp)
+            .and_then(|f| f.sync_all())
+            .map_err(err)?;
         if digest_file(&temp)?.as_deref() != Some(hash) {
             return Err("File changed while preparing the mod profile".into());
         }
