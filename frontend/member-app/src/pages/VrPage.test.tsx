@@ -129,7 +129,7 @@ test.each(['collection', 'favorites'])(
       </ShellConfigProvider>,
     )
     expect(await screen.findByText('Page 1 of 2')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Next', exact: true }))
+    await user.click(screen.getByRole('button', { name: 'Next' }))
     expect(await screen.findByText('Page 2 of 2')).toBeVisible()
   },
 )

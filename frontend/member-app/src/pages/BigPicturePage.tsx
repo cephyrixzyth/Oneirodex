@@ -183,8 +183,8 @@ export function BigPicturePage() {
         { signal: controller.signal },
       )
       if (controller.signal.aborted) return
-      const ids = new Set(list.map((game: LooseProps) => game.uuid))
-      const added = (data.games || []).filter((game: LooseProps) => !ids.has(game.uuid))
+      const ids = new Set(list.map((game: { uuid?: unknown }) => game.uuid))
+      const added = (data.games || []).filter((game: { uuid?: unknown }) => !ids.has(game.uuid))
       nextPage.current = page < data.pages ? page + 1 : 0
       if (added.length) {
         focusAppended.current = true
