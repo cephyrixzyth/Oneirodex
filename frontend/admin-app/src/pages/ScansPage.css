@@ -7,3 +7,20 @@
   flex-wrap: wrap;
   gap: var(--od-space-2);
 }
+
+/* Scan history: start → finish with the run time under it. */
+.od-scan-when {
+  display: grid;
+  gap: var(--od-space-1);
+  white-space: nowrap;
+}
+
+/* A run-level error with the per-reason counts beneath it. */
+.od-scan-detail-stack {
+  display: grid;
+  gap: var(--od-space-1);
+}
+
+.od-scan-detail--reasons {
+  color: var(--od-text-muted);
+}

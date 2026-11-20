@@ -69,11 +69,21 @@ def test_a4_vr_tail_peel_step():
     assert r['had_vr_suffix'] is True
 
 
-def test_a5_steam_app_id_peel_step():
+def test_a5_catalog_number_peel_step():
+    """A bare trailing (digits) is a catalogue number, never a Steam App ID."""
     r = parse_game_label('Abandon Ship (81735)')
-    assert r['steam_app_id'] == 81735
+    assert r['catalog_number'] == 81735
+    assert r['steam_app_id'] is None
     a5 = next(t for t in r['transforms'] if t['stage'] == 'A5')
     _assert_step(a5, stage='A5', before_contains='81735', after_lacks='81735')
+    assert a5['reason'] == 'catalog_number'
+
+
+def test_a5_labelled_steam_app_id_peel_step():
+    r = parse_game_label('Abandon Ship (Steam 1245620)')
+    assert r['steam_app_id'] == 1245620
+    assert r['catalog_number'] is None
+    a5 = next(t for t in r['transforms'] if t['stage'] == 'A5')
     assert a5['reason'] == 'steam_app_id'
 
 

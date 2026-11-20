@@ -562,6 +562,7 @@ def retrieve_and_save_game(
     app=None,
     database_scope=None,
     allowed_bases=None,
+    allow_store_identify=True,
 ):
     # print(f"retrieve_and_save_game Retrieving and saving game: {game_name} on {full_disk_path} to library with UUID {library_uuid}.")
     from oneirodex.utils.local_metadata import read_local_metadata
@@ -905,10 +906,18 @@ def retrieve_and_save_game(
     high_thr = match_policy.get('match_high_threshold')
     amb_gap = match_policy.get('match_ambiguous_gap')
 
+    from oneirodex.utils.clients.igdb import IgdbUnavailable
+
+    igdb_unavailable = None
     # Try each variant until we find a high-confidence match
     for search_name in search_variants:
         logger.info(f"Trying IGDB search with: '{search_name}'")
-        candidates = search_igdb_for_game(search_name, platform_id, limit=10)
+        try:
+            candidates = search_igdb_for_game(search_name, platform_id, limit=10, raise_on_error=True)
+        except IgdbUnavailable as exc:
+            igdb_unavailable = str(exc)
+            logger.warning(f"IGDB unavailable while identifying '{game_name}': {exc}")
+            break
         if not candidates:
             logger.info(f"No match found for variant: '{search_name}'")
             continue
@@ -945,6 +954,7 @@ def retrieve_and_save_game(
     store_candidate = None
     if (
         selected_game is None
+        and igdb_unavailable is None
         and not bare_franchise
         and not is_propose_only_scan(settings)
     ):
@@ -1258,34 +1268,26 @@ def retrieve_and_save_game(
                 logger.error("Failed to save game due to a duplicate entry.")
         return new_game
     else:
-        if response_json and 'error' in response_json:
-            # Check specifically for authentication error
-            if response_json.get('error') == 'Failed to retrieve access token':
-                error_msg = 'IGDB API Authentication Failed'
-                if scan_job_id:
-                    # Column-only update — avoid loading a ScanJob ORM row that could
-                    # clobber folders_success/failed from the scan coordinator.
-                    db.session.execute(
-                        update(ScanJob)
-                        .where(ScanJob.id == scan_job_id)
-                        .values(
-                            error_message=error_msg,
-                            status='Failed',
-                            is_enabled=False,
-                        )
-                    )
-                    db.session.commit()
-                
-                log_system_event(f"IGDB API Authentication Failed: {response_json.get('error')}", 
-                                 event_type='scan', event_level='error')
-                return None
-            
+        if igdb_unavailable:
+            # IGDB could not be asked. Do not import from a store title on its
+            # own (that is how sequels collapsed onto base games); record the
+            # folder with the reason so the next scan retries it.
+            from oneirodex.utils.scanning import note_scan_job_problem
+
+            note_scan_job_problem(scan_job_id, f'IGDB unavailable: {igdb_unavailable}')
+            if scan_job_id:
+                log_unmatched_folder(
+                    scan_job_id, full_disk_path, 'Unmatched',
+                    library_uuid=library.uuid, match_reason='igdb_unavailable',
+                )
+            return None
+
         logger.info(f"No match found: {game_name} in library {library.name} on platform {library.platform.name}.")
 
         # Stage D (W20-5a): IGDB miss → Steam App ID / exact storesearch or GOG
         # exact title → custom-range Game. Skipped for C11 bare franchise and
         # propose-only (those stay proposal / Unmatched). Ambiguous → fall through.
-        if not bare_franchise and not is_propose_only_scan(settings):
+        if allow_store_identify and not bare_franchise and not is_propose_only_scan(settings):
             try:
                 stage_d_size = 0
                 if not defer_enrichment:

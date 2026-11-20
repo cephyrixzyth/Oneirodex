@@ -160,6 +160,7 @@ class TestTryAddGame:
             app=None,
             allowed_bases=None,
             database_scope=None,
+            allow_store_identify=True,
         )
     
     @patch('oneirodex.utils.game_core.retrieve_and_save_game')
@@ -282,7 +283,8 @@ class TestProcessGameWithFallback:
             library_uuid=sample_library.uuid,
             check_exists=False,
             fetch_hltb=False,
-            settings=None
+            settings=None,
+            allow_store_identify=False,
         )
     
     def test_process_game_with_fallback_existing_game(self, db_session, sample_library, sample_scan_job, sample_game):
@@ -373,7 +375,7 @@ class TestLogUnmatchedFolder:
         assert unmatched_folder.library_uuid == sample_library.uuid
         assert unmatched_folder.content_type == 'Games'
     
-    def test_log_unmatched_folder_existing_entry(self, db_session, sample_library):
+    def test_log_unmatched_folder_existing_entry(self, db_session, sample_library, sample_scan_job):
         """Test logging existing unmatched folder does not create duplicate."""
         # Create existing entry
         existing = UnmatchedFolder(
@@ -389,7 +391,7 @@ class TestLogUnmatchedFolder:
         initial_count = db_session.query(UnmatchedFolder).count()
         
         log_unmatched_folder(
-            1,
+            sample_scan_job.id,
             '/test/existing/path',
             'Unmatched',
             sample_library.uuid

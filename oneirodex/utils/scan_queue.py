@@ -373,7 +373,7 @@ def scan_run_values(*, now=None):
         status='Running', is_enabled=True, last_run=now,
         last_progress_update=now, owner_token=PROCESS_TOKEN,
         total_folders=0, folders_success=0, folders_failed=0, removed_count=0,
-        current_processing=None, error_message='', next_run=None,
+        current_processing=None, error_message='', next_run=None, finished_at=None,
     )
 
 

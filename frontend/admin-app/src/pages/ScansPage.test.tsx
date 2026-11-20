@@ -752,3 +752,50 @@ describe('LibrariesPage refresh all', () => {
     expect(libraryAttempts).toHaveLength(2)
   })
 })
+
+describe('ScansPage history', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  test('a finished scan shows when it ran and why folders were not added', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => '',
+        json: async () => [
+          {
+            id: 'eeeeeeee-1111-2222-3333-ffffffffffff',
+            library_name: 'PC',
+            library_uuid: 'lib-1',
+            status: 'Completed',
+            scan_folder: '/storage/_pc',
+            folders_success: 1713,
+            folders_failed: 370,
+            total_folders: 2083,
+            started_at: '2026-11-19T20:11:06+00:00',
+            finished_at: '2026-11-20T02:38:54+00:00',
+            elapsed_label: '6h 27m 48s',
+            failure_reasons: [
+              { reason: 'no_confident_match', label: 'No confident match', count: 342 },
+              { reason: 'update_package_folder', label: 'Update package, not a game', count: 28 },
+            ],
+          },
+        ],
+      })),
+    )
+    render(
+      <MemoryRouter>
+        <ScansPage />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByText('6h 27m 48s')).toBeInTheDocument()
+    expect(screen.getByText(/→/)).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: '370 not added' })
+    expect(link).toHaveAttribute('href', '/scan_management?active_tab=unmatched')
+    expect(
+      screen.getByText(/342 no confident match · 28 update package, not a game/),
+    ).toBeInTheDocument()
+  })
+})

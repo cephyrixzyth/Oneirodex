@@ -339,11 +339,11 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
             select(Game.full_disk_path).filter_by(library_uuid=library_uuid)
         ).scalars().all()
     )
-    existing_unmatched_paths = set(
-        db.session.execute(
-            select(UnmatchedFolder.folder_path).filter_by(library_uuid=library_uuid)
-        ).scalars().all()
-    )
+    # Only folders a person has dealt with are skipped. A plain "Unmatched" row is
+    # retried on every scan, so matcher and provider fixes reach old misses.
+    from oneirodex.utils.scanning import settled_unmatched_paths
+
+    existing_unmatched_paths = settled_unmatched_paths(library_uuid)
     logger.info(f"Prefetched {len(existing_game_paths)} existing games and {len(existing_unmatched_paths)} unmatched folders")
     
     # Use existing job or create new one (before library/extension gates so early

@@ -1335,3 +1335,41 @@ def test_auth_the_caller_really_sent_is_still_reported(resolves, caplog):
         safe_get('https://good.example/start', validator=_allow_all, session=session, auth=('user', 'pw'))
     assert 'dropped: auth' in caplog.text
     assert 'pw' not in caplog.text
+
+
+# --- provider hostname allowlists survive the address pin -------------------
+
+
+def test_allowlisted_provider_host_is_dialed_through_its_pinned_address(resolves):
+    """IGDB/Twitch validators allow one hostname; the pinned IP must still pass.
+
+    Regression: the pin re-ran the hostname allowlist against the IP URL, so every
+    Twitch token request was refused and IGDB matching silently stopped.
+    """
+    from oneirodex.utils.igdb_api import _validate_twitch_url
+
+    resolves({'id.twitch.tv': ['93.184.216.34']})
+    session = _FakeSession([_FakeResponse(200)])
+    safe_get(
+        'https://id.twitch.tv/oauth2/token',
+        validator=_validate_twitch_url,
+        session=session,
+    )
+    assert session.calls == [('GET', 'https://93.184.216.34/oauth2/token')]
+    assert session.last_kwargs['headers']['Host'] == 'id.twitch.tv'
+
+
+def test_allowlisted_provider_host_still_refuses_a_private_pin(resolves):
+    from oneirodex.utils.igdb_api import _validate_igdb_url
+
+    resolves({'api.igdb.com': ['10.0.0.5']})
+    session = _FakeSession([_FakeResponse(200)])
+    with pytest.raises(BlockedOutboundUrl):
+        safe_get('https://api.igdb.com/v4/games', validator=_validate_igdb_url, session=session)
+    assert session.calls == []
+
+
+def test_allowlist_does_not_accept_a_bare_ip_outside_a_pin():
+    from oneirodex.utils.igdb_api import _validate_igdb_url
+
+    assert _validate_igdb_url('https://93.184.216.34/v4/games')[0] is False

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, event
 from sqlalchemy.orm import relationship
 
 from oneirodex.models.orm import db
@@ -94,6 +94,29 @@ class ScanJob(db.Model):
     # different process, not the original owner. NULL means a job written before
     # this column existed, which the reclaim sweep treats as unowned.
     owner_token = db.Column(db.String(80), nullable=True)
+    # When the run reached Completed / Failed / Cancelled. Start is ``last_run``.
+    finished_at = db.Column(UTCScanTime(), nullable=True)
+
+
+SCAN_JOB_FINAL_STATUSES = frozenset({'Completed', 'Failed', 'Cancelled'})
+
+
+@event.listens_for(ScanJob.status, 'set')
+def _stamp_scan_job_finish(job, value, oldvalue, _initiator):
+    """Every ORM status change keeps the run's finish time honest.
+
+    A job built already finished (an import or a fixture) keeps the times it was given.
+    """
+    from sqlalchemy import inspect
+
+    if inspect(job).transient:
+        return
+    if value in SCAN_JOB_FINAL_STATUSES:
+        if oldvalue not in SCAN_JOB_FINAL_STATUSES or job.finished_at is None:
+            job.finished_at = datetime.now(timezone.utc)
+    elif value in ('Running', 'Queued', 'Scheduled'):
+        job.finished_at = None
+
 
 class UnmatchedFolder(db.Model):
     __tablename__ = 'unmatched_folders'

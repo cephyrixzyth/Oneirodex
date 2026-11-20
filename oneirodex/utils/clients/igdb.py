@@ -134,10 +134,16 @@ def fetch_and_store_game_urls(game_uuid, igdb_id):
         
 
     
-def search_igdb_for_game(search_name, platform_id, limit=10):
+class IgdbUnavailable(RuntimeError):
+    """IGDB could not be asked (credentials, token or transport), as opposed to no results."""
+
+
+def search_igdb_for_game(search_name, platform_id, limit=10, *, raise_on_error=False):
     """
     Search IGDB for games matching name (and optional platform).
     Returns a list of game dicts, or None if the API errors / returns empty.
+    With ``raise_on_error`` an API error raises :class:`IgdbUnavailable` instead,
+    so a scan can tell "IGDB is down" from "IGDB has no such game".
     """
     query_fields = """fields id, name, cover.url, cover.image_id, summary, url, release_dates.date, release_dates.region, release_dates.platform, platforms.name, genres.name, themes.name, game_modes.name,
                       screenshots.url, screenshots.image_id, videos.video_id, first_release_date, aggregated_rating, involved_companies, player_perspectives.name,
@@ -150,7 +156,11 @@ def search_igdb_for_game(search_name, platform_id, limit=10):
 
     response_json = make_igdb_api_request(get_runtime_config()['IGDB_API_ENDPOINT'], query_fields + query_filter)
 
-    if 'error' not in response_json and response_json:
+    if isinstance(response_json, dict) and 'error' in response_json:
+        if raise_on_error:
+            raise IgdbUnavailable(str(response_json.get('error') or 'IGDB request failed'))
+        return None
+    if response_json:
         return response_json
     return None
 

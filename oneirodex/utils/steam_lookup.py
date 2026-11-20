@@ -110,3 +110,42 @@ def fetch_steam_title_by_app_id(app_id: int, *, timeout: float = 5.0) -> str | N
     """
     details = fetch_steam_app_details(app_id, timeout=timeout)
     return details.get('name') if details else None
+
+
+_STEAM_ASSET_BASE = 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps'
+
+
+def steam_cover_for_app(app_id, fallback: str | None = None, *, timeout: float = 6.0) -> str | None:
+    """The best cover Steam has for ``app_id``: the 600×900 (2:3) library capsule
+    when the app has one, else its full-size header, else ``fallback``.
+
+    Store search only returns the 231×87 capsule, which no 2:3 tile can show.
+    The tall capsule is an optional upload, so it is checked before use; the
+    header always exists for a live app. Tests never reach Steam from here.
+    """
+    import os
+
+    try:
+        app = int(app_id)
+    except (TypeError, ValueError):
+        return fallback
+    if app <= 0:
+        return fallback
+    header = f'{_STEAM_ASSET_BASE}/{app}/header.jpg'
+    if os.environ.get('PYTEST_CURRENT_TEST'):
+        return fallback or header
+    portrait = f'{_STEAM_ASSET_BASE}/{app}/library_600x900.jpg'
+    try:
+        with requests.Session() as session:
+            response = safe_request(
+                'HEAD', portrait, validator=validate_user_outbound_http_url,
+                session=session, timeout=timeout,
+            )
+        content_type = (response.headers.get('content-type') or '').lower()
+        if response.status_code == 200 and content_type.startswith('image/'):
+            return portrait
+    except requests.RequestException:
+        logger.info('Steam portrait check failed for app %s', app)
+    except Exception:  # noqa: BLE001 — a cover check must never fail identify
+        logger.info('Steam portrait check refused for app %s', app, exc_info=True)
+    return header
