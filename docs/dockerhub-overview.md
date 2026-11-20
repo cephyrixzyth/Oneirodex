@@ -8,7 +8,7 @@ Oneirodex is a self-hosted home for the games you already own. Scan mounted game
 
 It runs as **one container with PostgreSQL included**. Your games stay on your storage, mounted read-only for scanning. App data, generated artwork, settings, and the database stay on persistent storage you control.
 
-**Current release: `__VERSION__`** · Docker Hub tags: [`latest`](https://hub.docker.com/r/cephyrixzyth/oneirodex/tags?name=latest) · [`1.1`](https://hub.docker.com/r/cephyrixzyth/oneirodex/tags?name=1.1) · [`__VERSION__`](https://hub.docker.com/r/cephyrixzyth/oneirodex/tags?name=__VERSION__) · **Platforms:** `linux/amd64`, `linux/arm64` · [AGPL-3.0](https://github.com/cephyrixzyth/Oneirodex/blob/main/LICENSE)
+**Current release: `__VERSION__`** · Docker Hub tags: [`latest`](https://hub.docker.com/r/cephyrixzyth/oneirodex/tags?name=latest) · [`__MINOR__`](https://hub.docker.com/r/cephyrixzyth/oneirodex/tags?name=__MINOR__) · [`__VERSION__`](https://hub.docker.com/r/cephyrixzyth/oneirodex/tags?name=__VERSION__) · **Platforms:** `linux/amd64`, `linux/arm64` · [AGPL-3.0](https://github.com/cephyrixzyth/Oneirodex/blob/main/LICENSE)
 
 ## Take a look
 
@@ -95,7 +95,7 @@ For an installed container, use Unraid's **Docker** page and run the available u
 ## Image tags and updates
 
 - `__VERSION__` pins this exact release. Older exact patch tags remain available.
-- `1.1` is a moving alias for compatible patch updates in the 1.1 minor line.
+- `__MINOR__` is a moving alias for compatible patch updates in the __MINOR__ minor line.
 - `latest` advances with each stable release.
 
 GitHub Actions runs the release checks before publishing multi-architecture images. Compare the running app's version on its `/awake` endpoint after updating. Read the [release notes](https://github.com/cephyrixzyth/Oneirodex/releases/tag/v__VERSION__) before upgrading and keep a current `/config` backup.

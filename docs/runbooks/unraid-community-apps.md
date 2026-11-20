@@ -107,8 +107,9 @@ firmware, keys or `.env`.
 
 The long listing lives in [`docs/dockerhub-overview.md`](../dockerhub-overview.md). It uses
 screenshots captured from a populated Oneirodex instance and links each screenshot to the
-corresponding feature tour. Keep its version markers (`__VERSION__`) intact: the release workflow
-stamps the version before syncing the overview to Docker Hub. The listing should include the
+corresponding feature tour. Keep its version markers (`__VERSION__` for the release, `__MINOR__` for
+the moving minor tag) intact: the release workflow stamps them, drops the doc-status line, and stops
+if a marker is left before syncing the overview to Docker Hub. The listing should include the
 single-container architecture, persistent storage, read-only game mount, supported image tags,
 Unraid update instructions, and links to source, release notes, and support.
 
@@ -116,7 +117,7 @@ The short Docker Hub description is limited to 100 characters. Image publication
 metadata editing are separate operations: the `DOCKERHUB_TOKEN` used by the `DOCKERHUB` Actions
 environment must be able both to push the image and edit the repository's description/overview.
 If the build/push step succeeds but `dockerhub-description` returns `403 Forbidden`, the image is
-published but the listing is stale. Update the token's repository metadata permission or edit the
+published but the listing is stale; the run shows a "Docker Hub overview not updated" warning. Update the token's repository metadata permission or edit the
 description and overview from Docker Hub's repository page, then rerun the metadata sync and read
 the public page back to verify it. The overview update is independent of the image and CA template
 sync, so a Hub metadata 403 should not prevent the CA template job from running. Never put a Docker

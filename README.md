@@ -401,7 +401,8 @@ Full lists: [`.env.example`](.env.example) · [`.env.docker.example`](.env.docke
 The admin and member interfaces are React single-page apps. Application-authored
 Jinja templates and the WSGI bridge have been retired. FastAPI owns request
 dispatch; the runtime requirements exclude Flask, its extensions, and Jinja.
-Legacy Flask route modules remain available to development and parity tests.
+The Flask route layer has been removed; tests drive the served ASGI app. A small
+`create_app()` shim remains only for maintenance scripts and test fixtures.
 
 **Default ports:** `5006` (web app) and `5432` (PostgreSQL, internal to Compose).
 

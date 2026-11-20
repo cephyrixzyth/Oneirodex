@@ -22,7 +22,7 @@ The flow follows the optional, ordered setup used by Plex and Jellyfin: establis
 
 **SMTP settings:** The form preserves the legacy save rules: enabling SMTP requires its connection fields, while disabled settings remain editable; a blank password keeps an existing saved password. Port 465 uses implicit TLS and requires TLS to stay enabled; other TLS-enabled ports use STARTTLS. **Test Settings** always checks the saved SMTP settings, even when edits are pending or SMTP is disabled in the form. It checks connection/authentication and does not send a message.
 
-**Download requests:** `/admin/manage-downloads` lists each member's zip job and only the ZIP basename; the API does not return the stored full path. Deleting a request record requires a confirmation and does not delete a ZIP file. The React page uses the Flask route and guarded API.
+**Download requests:** `/admin/manage-downloads` lists each member's zip job and only the ZIP basename; the API does not return the stored full path. Deleting a request record requires a confirmation and does not delete a ZIP file. The React page uses the guarded admin API.
 
 **Browser play engine (BP-0 / BP-1):** `GET`/`PUT /api/browser-player-settings` stores admin defaults under `GlobalSettings.settings.browser_player`. The only selectable default today is `webretro`; `emulatorjs` is reserved until that shell ships. Optional bool `nostalgist_nes_pilot` (default off) points **NES only** at `/static/vendor/nostalgist/play.html` (vendored Nostalgist + WebRetro `nestopia` WASM). Toggle it on **Admin → Emulators**. Browse payloads include `browser_player` / `browser_players_available` / `nostalgist_nes_pilot`. See [browser-play.md](../user/browser-play.md) and [browser-play-engines.md](../dev/browser-play-engines.md).
 
@@ -93,7 +93,7 @@ Product modules default **on**. Disable during **setup → Features**, under **A
   - Longest remote prefix wins, so a specific mapping beats a general one. A prefix only matches at a path separator, so `/downloads` never matches `/downloads-old`.
   - Leave empty when client and app share a filesystem view — unmapped paths pass through untouched.
   - When no mapping is set and a lookup fails, the preview reason now names the path it tried and points at this setting instead of just saying "not found".
-- **Quality / release profiles (P1-12):** `GlobalSettings.quality_profiles` (multi-profile JSON). Admin → **Quality profiles** SPA at `/admin/quality_profiles` (`QualityProfilesPage`: list · set active · new · delete · edit · score probe; the Flask route serves the shared React shell). APIs: `GET/POST /api/quality-profiles`, `PUT /api/quality-profiles/active`, `GET/PUT/DELETE /api/quality-profiles/<id>`. Active profile scores Arr search and extends scan name-clean with blocked/excluded terms.
+- **Quality / release profiles (P1-12):** `GlobalSettings.quality_profiles` (multi-profile JSON). Admin → **Quality profiles** SPA at `/admin/quality_profiles` (`QualityProfilesPage`: list · set active · new · delete · edit · score probe; the server returns the shared React shell). APIs: `GET/POST /api/quality-profiles`, `PUT /api/quality-profiles/active`, `GET/PUT/DELETE /api/quality-profiles/<id>`. Active profile scores Arr search and extends scan name-clean with blocked/excluded terms.
 
 ## AI
 
@@ -103,7 +103,7 @@ Product modules default **on**. Disable during **setup → Features**, under **A
 
 ## Arr module
 
-`/admin/arr` now has a native React page in the optional admin pilot, with indexer add/toggle/delete, bulk import, presets, connector settings, search results, and hardlink preview. Saved connector keys and passwords stay write-only; blank secret fields preserve existing values. Search is explicit, and sending a result to qBittorrent requires confirmation. Hardlink preview is read-only; Apply stays disabled unless the pipeline, helper, and apply environment gates are enabled, and applying previewed rows requires a second confirmation. The Flask route serves the shared React page.
+`/admin/arr` now has a native React page in the optional admin pilot, with indexer add/toggle/delete, bulk import, presets, connector settings, search results, and hardlink preview. Saved connector keys and passwords stay write-only; blank secret fields preserve existing values. Search is explicit, and sending a result to qBittorrent requires confirmation. Hardlink preview is read-only; Apply stays disabled unless the pipeline, helper, and apply environment gates are enabled, and applying previewed rows requires a second confirmation. The server returns the shared React page.
 
 ## Storage / hardlinks
 
@@ -160,7 +160,7 @@ Product modules default **on**. Disable during **setup → Features**, under **A
 - Hyperion: `HYPERION_URL`, optional `HYPERION_TOKEN`, `HYPERION_PRIORITY` (default 50), `AMBIENT_ACCENT_COLOR`.
 - Home Assistant: `HA_URL`, `HA_TOKEN`, `HA_LIGHT_ENTITIES`, optional `HA_PLAY_SCENE` / `HA_STOP_SCENE`.
 - Play session start/stop hooks fire-and-forget — never block play launch. Child accounts never trigger lighting.
-- Configure in the native **Admin → Features → Ambient lighting** panel or through the environment settings above. The panel stores provider settings through the admin-only config API and never returns saved tokens; blank token inputs preserve the saved credentials. **Test connection** asks for confirmation because it may briefly turn on lights or a Home Assistant scene, and the test does not restore the previous scene. Status: `GET /api/admin/ambient-lighting/status`; `probe=1` contacts the configured connector. The Flask route serves the shared React page.
+- Configure in the native **Admin → Features → Ambient lighting** panel or through the environment settings above. The panel stores provider settings through the admin-only config API and never returns saved tokens; blank token inputs preserve the saved credentials. **Test connection** asks for confirmation because it may briefly turn on lights or a Home Assistant scene, and the test does not restore the previous scene. Status: `GET /api/admin/ambient-lighting/status`; `probe=1` contacts the configured connector. The server returns the shared React page.
 - URLs validated via `validate_connector_http_url` + `ALLOW_PRIVATE_LAN_URLS`.
 
 ## Support → GitHub
@@ -327,7 +327,7 @@ These behaviors are available through the React admin pages. Flask continues to 
 
 ### SMTP
 
-The React admin page provides the SMTP form at the existing URL. Its direct page GET is served by the React shell; the legacy POST at the same URL remains a settings compatibility handler. Saved passwords are never returned to the browser; leave Password blank to keep the stored credential. Port 465 uses implicit TLS; other TLS-enabled ports use STARTTLS. Save settings before using **Test Settings**. That action checks the saved server connection and authentication without sending email; success does not establish delivery. A failed load disables saving and offers Retry; a failed save preserves the draft. The Flask route continues to own session, validation and compatibility behavior.
+The React admin page provides the SMTP form at the existing URL. Its direct page GET is served by the React shell; the legacy POST at the same URL remains a settings compatibility handler. Saved passwords are never returned to the browser; leave Password blank to keep the stored credential. Port 465 uses implicit TLS; other TLS-enabled ports use STARTTLS. Save settings before using **Test Settings**. That action checks the saved server connection and authentication without sending email; success does not establish delivery. A failed load disables saving and offers Retry; a failed save preserves the draft. The served ASGI route owns session, validation and compatibility behavior.
 
 ### Scan / match policy recovery
 
