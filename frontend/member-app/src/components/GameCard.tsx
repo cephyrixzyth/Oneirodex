@@ -11,6 +11,7 @@ import { supportsWebRetroSaves, resumeHref } from '../api/saves'
 import { editionChipLabels } from '../utils/platformAbbrev'
 import { trailerEmbedUrls, prefersReducedMotion } from '../utils/detailsMedia'
 import { BadgeStack } from './BadgeStack'
+import { GameCardRowActions, GameCardRowMeta, playBlockCopy } from './GameCardRowActions'
 import { GamePreviewPopup } from './GamePreviewPopup'
 import { HOVER_TRAILER_MS, TileHoverTrailer } from './TileHoverTrailer'
 import { firmwareBlockMessage, isFirmwarePlayBlocked } from '../utils/playHonesty'
@@ -36,12 +37,6 @@ const LONG_PRESS_MS = 480
  * tile whenever any one of them opened a menu.
  */
 const TILE_OVERLAY_OPENED = 'od-tile-overlay-opened'
-
-function releaseYear(value: any) {
-  if (!value) return ''
-  const match = String(value).match(/^(\d{4})/)
-  return match ? match[1] : ''
-}
 
 export function GameCard({
   game,
@@ -118,16 +113,19 @@ export function GameCard({
   const firmwareHint = firmwareBlockMessage(game)
   const fileMissing = game.play_blocker === 'missing_game_file' && !game.demo_url
   const playBlocked = firmwareBlocked || archiveBlocked || fileMissing
-  const playBlockHint = fileMissing
-    ? game.companion_hint || 'Link a game file before starting browser play.'
-    : firmwareBlocked
-      ? firmwareHint
-      : archiveBlockHint
-  const playBlockLabel = fileMissing
-    ? 'game file missing'
-    : firmwareBlocked
-      ? 'firmware missing'
-      : 'unsupported archive'
+  const openRowPreview = () => {
+    setMenuOpen(false)
+    setPreviewOpen(true)
+  }
+  const { hint: playBlockHint, label: playBlockLabel } = playBlockCopy(
+    fileMissing,
+    firmwareBlocked,
+    {
+      file: game.companion_hint || 'Link a game file before starting browser play.',
+      firmware: firmwareHint,
+      archive: archiveBlockHint,
+    },
+  )
   const platformChip =
     !hidePlatformChip && (game.library_platform || game.edition_platforms?.length)
       ? editionChipLabels(game, activePlatform)
@@ -474,48 +472,18 @@ export function GameCard({
           game={game}
           compactRowActions={
             layout === 'rows' && (
-              <>
-                {playHref ? (
-                  <a className="menu-button" href={playHref}>
-                    {resumeState ? 'Resume in browser' : 'Play in browser'}
-                  </a>
-                ) : (
-                  playBlocked && (
-                    <button
-                      type="button"
-                      className="menu-button"
-                      onClick={() => {
-                        setMenuOpen(false)
-                        setPlayInfoOpen(true)
-                      }}
-                    >
-                      Why is play unavailable?
-                    </button>
-                  )
-                )}
-                {showPlayStatus && (
-                  <button
-                    type="button"
-                    className="menu-button"
-                    onClick={() => {
-                      setMenuOpen(false)
-                      setStatusOpen(true)
-                    }}
-                  >
-                    Change play status
-                  </button>
-                )}
-              </>
+              <GameCardRowActions
+                playHref={playHref}
+                resuming={Boolean(resumeState)}
+                playBlocked={playBlocked}
+                showPlayStatus={showPlayStatus}
+                closeMenu={() => setMenuOpen(false)}
+                onExplainBlock={() => setPlayInfoOpen(true)}
+                onChangeStatus={() => setStatusOpen(true)}
+              />
             )
           }
-          onRowPreview={
-            layout === 'rows'
-              ? () => {
-                  setMenuOpen(false)
-                  setPreviewOpen(true)
-                }
-              : undefined
-          }
+          onRowPreview={layout === 'rows' ? openRowPreview : undefined}
           igdbUrl={igdbUrl}
           isAdmin={isAdmin}
           menuOpen={menuOpen}
@@ -570,24 +538,11 @@ export function GameCard({
         {layout !== 'rows' ? <span className="game-card__title">{game.name}</span> : null}
 
         {layout === 'rows' ? (
-          <a className="game-card__row-meta" href={`/game_details/${game.uuid}`}>
-            <span className="game-card__row-identity">
-              <strong className="game-card__row-title">{game.name}</strong>
-              <span className="game-card__row-detail">
-                {[releaseYear(game.first_release_date), game.genres?.slice(0, 2).join(' / ')]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </span>
-            </span>
-            <span className="game-card__row-platform">
-              {platformChip?.full ||
-                game.library_platform_label ||
-                game.library_platform ||
-                'Platform unknown'}
-              {platformChip?.extra ? ` +${platformChip.extra}` : ''}
-            </span>
-            {showPlayStatus && <span className="game-card__row-status">{currentStatus.label}</span>}
-          </a>
+          <GameCardRowMeta
+            game={game}
+            platform={platformChip}
+            status={showPlayStatus ? currentStatus.label : null}
+          />
         ) : null}
 
         {platformChip ? (

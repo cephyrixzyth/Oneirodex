@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { fetchGameDetails } from '../api/gameDetails'
+import { placeFocusedGame } from './bigPictureFocus'
 import { fetchBrowseGames } from '../api/browse'
 import { initiateGameDownload } from '../api/downloads'
 import { queueClientCommand } from '../api/clientCommands'
@@ -73,14 +73,6 @@ function attractUrl(uuid: any) {
   return `/trailers?${qs.toString()}`
 }
 
-function focusGameFromQuery() {
-  try {
-    return new URLSearchParams(window.location.search).get('game') || ''
-  } catch (_err: any) {
-    return ''
-  }
-}
-
 export function BigPicturePage() {
   const navigate = useNavigate()
   const shellConfig = useShellConfig()
@@ -135,17 +127,11 @@ export function BigPicturePage() {
           return
         }
         const list = Array.isArray(data.games) ? [...data.games] : []
-        const wanted = focusGameFromQuery()
-        let found = wanted ? list.findIndex((game: any) => game.uuid === wanted) : -1
-        if (wanted && found < 0) {
-          try {
-            const target = await fetchGameDetails(wanted, { signal: controller.signal })
-            if (target.uuid !== wanted) throw new Error('Game unavailable')
-            list.unshift(target)
-            found = 0
-          } catch {
-            if (active) showToast('That game is unavailable in your library.', 'info')
-          }
+        let found = -1
+        try {
+          found = await placeFocusedGame(list, controller.signal)
+        } catch {
+          if (active) showToast('That game is unavailable in your library.', 'info')
         }
         if (!active) return
         nextPage.current = data.pages > 1 ? 2 : 0

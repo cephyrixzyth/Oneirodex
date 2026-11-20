@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Button } from '@oneirodex/ui'
 import { getJson } from '../api/client'
 interface BrowserReadiness {
   device: string
@@ -129,16 +130,15 @@ export function PlayDiagnostics({ browser, connected, gameId }: Props) {
       ))}
       {state === 'Checked' && !devices.length && <p>No paired companion has reported.</p>}
       {state === 'Unavailable' && <p>Device reports could not be loaded.</p>}
-      <button type="button" className="od-btn" onClick={() => setAttempt((value) => value + 1)}>
+      <Button type="button" onClick={() => setAttempt((value) => value + 1)}>
         Refresh device checks
-      </button>
+      </Button>
       <label>
         Diagnostic preview
         <textarea readOnly value={summary} rows={5} />
       </label>
-      <button
+      <Button
         type="button"
-        className="od-btn"
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(summary)
@@ -149,7 +149,7 @@ export function PlayDiagnostics({ browser, connected, gameId }: Props) {
         }}
       >
         Copy diagnostics
-      </button>
+      </Button>
       {copied && <span role="status">{copied}</span>}
     </details>
   )
