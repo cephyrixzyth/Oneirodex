@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - The full desktop companion can recover interrupted archive transfers and publish a completed checkpoint. Downloads validate the remote archive before reusing partial data.
 - Improved keyboard focus, small-screen layouts and loading feedback across library and administration screens.
+- Applying a mod profile in the desktop companion no longer fails on Windows.
+
+### Changed
+- Building from source now requires Node.js 26 (native installers, Docker image and desktop builds). Install Node.js 26 before running a native installer or upgrade.
 
 ## [1.2.3] — 2026-11-18
 

@@ -20,8 +20,8 @@ const buildId = `${process.pid}-${Date.now()}`
 const stageRoot = resolve(staticRoot, `.native-spas-stage-${buildId}`)
 const backupRoot = resolve(staticRoot, `.native-spas-backup-${buildId}`)
 const [major] = process.versions.node.split('.').map(Number)
-if (major !== 22) {
-  console.error(`Native installer SPA builds require Node 22; found ${process.versions.node}.`)
+if (major !== 26) {
+  console.error(`Native installer SPA builds require Node 26; found ${process.versions.node}.`)
   process.exit(2)
 }
 

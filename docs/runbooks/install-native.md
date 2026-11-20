@@ -22,7 +22,7 @@ For containers, use [docker-compose-deploy.md](docker-compose-deploy.md) or
 The installers below check these, run `npm ci` from the repository root, build
 the member, member-auth, admin, admin-pilot and ops-glance bundles, create a
 Python virtual environment and databases, then write a `.env` with a generated
-`SECRET_KEY`. Node.js 22.x and npm must already be installed; the installers do
+`SECRET_KEY`. Node.js 26.x and npm must already be installed; the installers do
 not install Node.js for you. None of them
 install Docker, and none of them expose Oneirodex to the internet — put a
 reverse proxy in front for that ([login-rate-limit-proxy.md](login-rate-limit-proxy.md)).
@@ -31,7 +31,7 @@ The shared `npm run build:native-spas` command builds into a clean staging
 generation, records the source commit (when available), root lockfile digest,
 and SHA-256/size for each output file in `server-ui-manifest.json`, then
 validates all five targets before promotion. A failed build or promotion keeps
-the last working bundle. Docker uses the same Node 22 build contract. The native
+the last working bundle. Docker uses the same Node 26 build contract. The native
 runtime installer validates the manifest and files without importing Flask or
 requiring Node at server startup.
 
@@ -426,7 +426,7 @@ library database — game *files* on disk are untouched.
 | `connection refused` on 5432 | PostgreSQL is not running — `systemctl status postgresql`, `brew services list`, or Services on Windows |
 | `database ... does not exist` | Re-run the installer, or `createdb oneirodex` |
 | Port 5006 in use | `PORT=5010 ./startweb.sh`, or `--port` at install time |
-| Library grid unstyled | Frontend bundles missing — from the repository root run `npm ci` then `npm run build:native-spas` with Node.js 22.x |
+| Library grid unstyled | Frontend bundles missing — from the repository root run `npm ci` then `npm run build:native-spas` with Node.js 26.x |
 | Scan sees an empty folder | Permissions or an unmounted share — [remote-scan-locations.md](remote-scan-locations.md#troubleshooting) |
 
 More: [../admin/troubleshooting.md](../admin/troubleshooting.md) ·

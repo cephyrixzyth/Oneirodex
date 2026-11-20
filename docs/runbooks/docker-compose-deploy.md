@@ -46,7 +46,7 @@ docker compose --env-file /path/to/staging.env -p oneirodex-staging -f docker-co
 docker compose --env-file /path/to/staging.env -p oneirodex-staging -f docker-compose.review.yml up -d --build
 ```
 
-The Docker build uses Node 22 and Python 3.12 with repository dependency pins,
+The Docker build uses Node 26 and Python 3.12 with repository dependency pins,
 isolating runtime imports from other tools installed on the host. Run `python -m
 pip check` in the built image before accepting it. A health endpoint is only the
 first check: finish setup with test-only accounts, then smoke member and admin
