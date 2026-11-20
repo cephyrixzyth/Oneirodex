@@ -6,6 +6,8 @@ Path fixtures use Y: / UNC / %TEMP% shapes — never Z: (NAS).
 
 import os
 
+import pytest
+
 from oneirodex.utils.game_name_parse import (
     inject_franchise_apostrophes,
     is_bare_franchise,
@@ -52,13 +54,13 @@ def test_generic_repack_and_hv_repack_brackets():
 
 def test_steam_app_id_extracted_and_stripped():
     r = parse_game_label("barony (89881)")
-    assert r['steam_app_id'] == 89881
+    assert r['catalog_number'] == 89881
     assert r['cleaned_name'].lower() == "barony"
 
 
 def test_steam_app_id_with_fitgirl_not_typical_but_id_trailing():
     r = parse_game_label("Abandon Ship (81735)")
-    assert r['steam_app_id'] == 81735
+    assert r['catalog_number'] == 81735
     assert "Abandon Ship" in r['cleaned_name']
 
 
@@ -85,7 +87,7 @@ def test_raw_preserved():
     raw = "ctrl alt ego (89861)"
     r = parse_game_label(raw)
     assert r['raw'] == raw
-    assert r['steam_app_id'] == 89861
+    assert r['catalog_number'] == 89861
 
 
 def test_a0_basename_only_y_drive_and_unc():
@@ -95,7 +97,7 @@ def test_a0_basename_only_y_drive_and_unc():
     unc = r"\\192.168.50.116\isos\library\_pc\_a\Abandon Ship (81735)"
     r2 = parse_game_label(unc)
     assert r2['cleaned_name'] == "Abandon Ship"
-    assert r2['steam_app_id'] == 81735
+    assert r2['catalog_number'] == 81735
     temp_shaped = os.path.join(os.environ.get('TEMP', '/tmp'), 'Abiotic Factor [Repack]')
     assert parse_game_label(temp_shaped)['cleaned_name'] == "Abiotic Factor"
 
@@ -123,13 +125,13 @@ def test_gm_03_assassins_creed_rogue_apostrophe_inject():
 def test_gm_04_abandon_ship_steam_id():
     r = parse_game_label("Abandon Ship (81735)")
     assert r['cleaned_name'] == "Abandon Ship"
-    assert r['steam_app_id'] == 81735
+    assert r['catalog_number'] == 81735
 
 
 def test_gm_05_angeline_era_steam_id():
     r = parse_game_label("angeline era (88323)")
     assert r['cleaned_name'] == "Angeline Era"
-    assert r['steam_app_id'] == 88323
+    assert r['catalog_number'] == 88323
 
 
 def test_gm_06_fishermans_tale_vr():
@@ -189,14 +191,14 @@ def test_gm_15_baldurs_gate_dark_alliance_1():
 
 def test_gm_16_agatha_christie_steam_id():
     r = parse_game_label("agatha christie death on the nile (85933)")
-    assert r['steam_app_id'] == 85933
+    assert r['catalog_number'] == 85933
     assert r['cleaned_name'] == "Agatha Christie Death On The Nile"
 
 
 def test_gm_17_barony_steam_id():
     r = parse_game_label("barony (89881)")
     assert r['cleaned_name'] == "Barony"
-    assert r['steam_app_id'] == 89881
+    assert r['catalog_number'] == 89881
 
 
 def test_abiotic_factor_fitgirl_repack():
@@ -304,7 +306,7 @@ def test_a11_alfred_hitchcock_date_stamp():
 
 def test_steam_id_63_days():
     r = parse_game_label("63 days (88642)")
-    assert r['steam_app_id'] == 88642
+    assert r['catalog_number'] == 88642
     assert r['cleaned_name'] == "63 Days"
 
 
@@ -420,20 +422,20 @@ def test_beyond_good_and_evil_hv_repack():
 
 def test_lowercase_steam_id_49_keys():
     r = parse_game_label("49 keys (87117)")
-    assert r['steam_app_id'] == 87117
+    assert r['catalog_number'] == 87117
     assert r['cleaned_name'] == "49 Keys"
 
 
 def test_steam_id_1000x_resist():
     r = parse_game_label("1000x Resist (77125)")
-    assert r['steam_app_id'] == 77125
+    assert r['catalog_number'] == 77125
     assert "1000x" in r['cleaned_name']
     assert "Resist" in r['cleaned_name']
 
 
 def test_baldurs_gate_ee_steam_id():
     r = parse_game_label("Baldur's Gate 1 Enhanced Edition (68994)")
-    assert r['steam_app_id'] == 68994
+    assert r['catalog_number'] == 68994
     assert "Baldur's Gate 1 Enhanced Edition" == r['cleaned_name']
 
 
@@ -507,3 +509,39 @@ def test_format_why_unmatched_update_package():
     assert 'update or patch package' in text
     assert 'Soft title' not in text
     assert 'Experience' not in text
+
+
+# --- household packaging noise (2026-11-19 unmatched review) -----------------
+
+
+@pytest.mark.parametrize('raw, cleaned', [
+    ('3 Minutes to Midnight v1.1.0a', '3 Minutes To Midnight'),
+    ('8bit Adventures 2 (79354)', '8bit Adventures 2'),
+    ('The necromancers tale 1 235 (64bit) (91571) win gog', 'The Necromancers Tale 1 235'),
+    ('Superhot Mind Control Delete [GOG]', 'Superhot Mind Control Delete'),
+    ('Call Of Cthulhu Prisoner Of Ice GOG', 'Call Of Cthulhu Prisoner Of Ice'),
+    ('ALIEN ABDUCTION EXPERIENCE TiNYiSO', 'ALIEN ABDUCTION EXPERIENCE'),
+    ('DERELIKT-P2P', 'DERELIKT'),
+    ('Chuchel Cherry Edition V 2 0 0', 'Chuchel Cherry Edition'),
+    ('Cultures 1+2 (July25, 2001)', 'Cultures 1+2'),
+    ('Wonder Boy The Dragons Trap 1.03g', 'Wonder Boy The Dragons Trap'),
+    ('Myst 3 Exile (83079)', 'Myst 3 Exile'),
+    ('1979 Revolution (2016)', '1979 Revolution'),
+    # Titles that only look like noise stay intact.
+    ('Win That War', 'Win That War'),
+    ('Kingdom Hearts 2.5', 'Kingdom Hearts 2.5'),
+    ('Quake 2', 'Quake 2'),
+])
+def test_household_packaging_noise_is_peeled(raw, cleaned):
+    assert parse_game_label(raw)['cleaned_name'] == cleaned
+
+
+def test_bare_paren_number_is_never_a_steam_app_id():
+    r = parse_game_label('8bit Adventures 2 (79354)')
+    assert r['steam_app_id'] is None
+    assert r['catalog_number'] == 79354
+
+
+def test_paren_year_is_not_a_catalog_number():
+    r = parse_game_label('1979 Revolution (2016)')
+    assert r['catalog_number'] is None

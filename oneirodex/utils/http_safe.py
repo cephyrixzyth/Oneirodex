@@ -262,7 +262,8 @@ def _pin_checked_address(url: str, validator: Validator) -> tuple[str, str | Non
     last_reason = 'URL host is not allowed'
     for ip in addrs:
         candidate = _replace_host_with_ip(url, str(ip))
-        ok, cleaned = validator(candidate)
+        with security.pinned_hostname(host):
+            ok, cleaned = validator(candidate)
         if ok:
             return cleaned, host
         last_reason = cleaned

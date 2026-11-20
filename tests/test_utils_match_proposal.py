@@ -24,8 +24,13 @@ def test_build_match_proposal_from_scene_repack_label():
 
 
 def test_build_includes_steam_app_id():
+    payload = build_match_proposal('barony (Steam 335240)', [{'id': 1, 'name': 'Barony'}])
+    assert payload['proposal']['steam_app_id'] == 335240
+
+
+def test_bare_catalogue_number_is_not_a_steam_app_id():
     payload = build_match_proposal('barony (89881)', [{'id': 1, 'name': 'Barony'}])
-    assert payload['proposal']['steam_app_id'] == 89881
+    assert payload['proposal']['steam_app_id'] is None
 
 
 def test_write_match_proposal_roundtrip():

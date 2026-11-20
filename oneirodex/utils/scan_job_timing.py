@@ -67,6 +67,7 @@ def compute_scan_job_timing(job, *, now: Optional[datetime] = None) -> dict[str,
     now = _ensure_utc(now) or datetime.now(timezone.utc)
     started = _ensure_utc(getattr(job, 'last_run', None))
     last_update = _ensure_utc(getattr(job, 'last_progress_update', None))
+    finished = _ensure_utc(getattr(job, 'finished_at', None))
     status = getattr(job, 'status', None) or ''
     total = int(getattr(job, 'total_folders', 0) or 0)
     processed = folders_processed(job)
@@ -76,7 +77,7 @@ def compute_scan_job_timing(job, *, now: Optional[datetime] = None) -> dict[str,
     elapsed_seconds: Optional[int] = None
     if started is not None:
         if status in _TERMINAL:
-            end = last_update or started
+            end = finished or last_update or started
             elapsed_seconds = max(0, int((end - started).total_seconds()))
         else:
             # Running / Stopping / Queued / Scheduled — live clock from last_run
@@ -112,8 +113,14 @@ def compute_scan_job_timing(job, *, now: Optional[datetime] = None) -> dict[str,
     if status in _WAITING or status in _TERMINAL:
         eta_seconds = None
 
+    if status in _TERMINAL:
+        finished = finished or last_update
+    else:
+        finished = None
+
     return {
         'started_at': started_at,
+        'finished_at': finished.isoformat() if finished else None,
         'created_at': None,  # ScanJob has no create column — honest null
         'folders_processed': processed,
         'elapsed_seconds': elapsed_seconds,
@@ -122,6 +129,22 @@ def compute_scan_job_timing(job, *, now: Optional[datetime] = None) -> dict[str,
         'elapsed_label': format_duration_label(elapsed_seconds),
         'eta_label': format_duration_label(eta_seconds),
     }
+
+
+_UNMATCHED_REASON_LABELS = {
+    None: 'No confident match',
+    '': 'No confident match',
+    'no_confident_match': 'No confident match',
+    'update_package_folder': 'Update package, not a game',
+    'igdb_unavailable': 'IGDB unavailable (retried next scan)',
+}
+
+
+def unmatched_reason_label(reason: Optional[str]) -> str:
+    """Plain words for an unmatched folder's ``match_reason``."""
+    if reason in _UNMATCHED_REASON_LABELS:
+        return _UNMATCHED_REASON_LABELS[reason]
+    return str(reason).replace('_', ' ').strip().capitalize()
 
 
 def parse_scan_job_status_filter(raw: Optional[str]) -> list[str]:

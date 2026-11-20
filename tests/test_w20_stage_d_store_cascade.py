@@ -476,8 +476,9 @@ def test_retrieve_and_save_game_stage_d_on_igdb_miss(
     """IGDB empty → Stage D App-ID custom Game; Unmatched not required."""
     from oneirodex.utils.game_core import retrieve_and_save_game
 
-    # Trailing (digits) must be end-of-basename for A5 steam_app_id extract.
-    path = f'/tmp/oneirodex-stage-d-test/Abandon Ship (81735)'
+    # A5 reads a Steam App ID only when the label names it; a bare (81735) is a
+    # catalogue number.
+    path = f'/tmp/oneirodex-stage-d-test/Abandon Ship (Steam 81735)'
     details = {
         'steam_app_id': 81735,
         'name': 'Abandon Ship',

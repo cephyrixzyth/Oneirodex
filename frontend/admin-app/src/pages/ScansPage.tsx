@@ -5,6 +5,12 @@ import { formatScanJobCounters } from '../components/opsWidgets'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
 import { isScanBusyStatus, isScanQueuedStatus } from '../components/scanQueuePolicy'
+import {
+  ScanFailureReasons,
+  scanJobReasons,
+  scanJobStartedValue,
+  scanJobWhenLabel,
+} from './scanJobHistory'
 import './ScansPage.css'
 import { useScans } from './useScans'
 
@@ -244,18 +250,39 @@ export function ScansPage() {
                     Number(job.folders_success ?? 0) + Number(job.folders_failed ?? 0),
                 },
                 {
+                  // When the run started and finished, with the time it took
+                  // under it: the history must say *when* a scan went wrong.
+                  key: 'when',
+                  label: 'When',
+                  value: (job) => scanJobStartedValue(job),
+                  render: (job) => (
+                    <span className="od-scan-when">
+                      {scanJobWhenLabel(job)}
+                      {job.elapsed_label && !isScanQueuedStatus(job.status) ? (
+                        <span className="od-scan-detail--muted">{String(job.elapsed_label)}</span>
+                      ) : null}
+                    </span>
+                  ),
+                },
+                {
                   key: 'detail',
                   label: 'Detail',
                   sortable: false,
                   render: (job) => {
+                    const reasons = scanJobReasons(job).length ? (
+                      <ScanFailureReasons job={job} />
+                    ) : null
                     // A failed job's reason outranks everything: it is the only
                     // thing that explains a queue that stopped moving. This is
                     // where a reclaimed job now says the owner process is gone,
                     // instead of the operator seeing an idle-looking queue.
                     if (job.error_message) {
                       return (
-                        <span className="od-scan-detail od-scan-detail--error">
-                          {job.error_message}
+                        <span className="od-scan-detail-stack">
+                          <span className="od-scan-detail od-scan-detail--error">
+                            {String(job.error_message)}
+                          </span>
+                          {reasons}
                         </span>
                       )
                     }
@@ -269,15 +296,16 @@ export function ScansPage() {
                     if (job.current_processing) {
                       return <span className="od-scan-detail">{job.current_processing}</span>
                     }
-                    if (job.elapsed_label || job.eta_label) {
+                    if (job.eta_label) {
                       return (
                         <span className="od-scan-detail od-scan-detail--muted">
-                          {job.elapsed_label || '—'}
-                          {job.eta_label ? ` · ~${job.eta_label} left` : ''}
+                          ~{String(job.eta_label)} left
                         </span>
                       )
                     }
-                    return <span className="od-scan-detail od-scan-detail--muted">—</span>
+                    return (
+                      reasons ?? <span className="od-scan-detail od-scan-detail--muted">—</span>
+                    )
                   },
                 },
                 {

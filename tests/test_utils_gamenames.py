@@ -807,13 +807,13 @@ class TestRealFolderPipeline:
 
     def test_gm_04_abandon_ship_steam(self):
         parsed = parse_game_label("Abandon Ship (81735)")
-        assert parsed['steam_app_id'] == 81735
+        assert parsed['catalog_number'] == 81735
         assert parsed['cleaned_name'] == "Abandon Ship"
         assert "Abandon Ship" in generate_goty_variants(parsed['cleaned_name'])
 
     def test_gm_05_angeline_era_steam(self):
         parsed = parse_game_label("angeline era (88323)")
-        assert parsed['steam_app_id'] == 88323
+        assert parsed['catalog_number'] == 88323
         assert parsed['cleaned_name'] == "Angeline Era"
         assert "Angeline Era" in generate_goty_variants(parsed['cleaned_name'])
 
@@ -879,13 +879,13 @@ class TestRealFolderPipeline:
 
     def test_gm_16_agatha_christie_hyphen(self):
         parsed = parse_game_label("agatha christie death on the nile (85933)")
-        assert parsed['steam_app_id'] == 85933
+        assert parsed['catalog_number'] == 85933
         variants = generate_goty_variants(parsed['cleaned_name'])
         assert "Agatha Christie - Death On The Nile" in variants
 
     def test_gm_17_barony_steam(self):
         parsed = parse_game_label("barony (89881)")
-        assert parsed['steam_app_id'] == 89881
+        assert parsed['catalog_number'] == 89881
         assert "Barony" in generate_goty_variants(parsed['cleaned_name'])
 
     def test_optional_dlc_pack_peel(self):
@@ -947,7 +947,7 @@ class TestRealFolderPipeline:
         """Shapes from …/_pc/_s — FitGirl, Steam IDs, spaced v…, x.y.z, backtick VR."""
         assert parse_game_label('Sail the Seas [FitGirl Repack]')['cleaned_name'] == 'Sail The Seas'
         parsed = parse_game_label('sacred 2 remaster (87880)')
-        assert parsed['steam_app_id'] == 87880
+        assert parsed['catalog_number'] == 87880
         assert parsed['cleaned_name'] == 'Sacred 2 Remaster'
         assert parse_game_label('Sable v3 2 9')['cleaned_name'] == 'Sable'
         assert parse_game_label('Satellite Reign 1.13.06')['cleaned_name'] == 'Satellite Reign'
@@ -965,7 +965,7 @@ class TestRealFolderPipeline:
         ] == 'SHINOBI Art Of Vengeance'
         assert parse_game_label("3 Minutes to Midnight v1.1.0a")['cleaned_name'] == "3 Minutes To Midnight"
         parsed = parse_game_label("49 keys (87117)")
-        assert parsed['steam_app_id'] == 87117
+        assert parsed['catalog_number'] == 87117
         assert parsed['cleaned_name'] == "49 Keys"
         assert parse_game_label('Sengoku Dynasty v1 2 2 1 P2')['cleaned_name'] == 'Sengoku Dynasty'
         assert parse_game_label('Ferocious v1 08 P2P')['cleaned_name'] == 'Ferocious'
@@ -987,7 +987,7 @@ class TestRealFolderPipeline:
         from unittest.mock import patch
         import oneirodex.utils.steam_lookup as steam_lookup
 
-        parsed = parse_game_label("49 keys (87117)")
+        parsed = parse_game_label("49 keys (Steam 87117)")
         assert parsed['steam_app_id'] == 87117
         variant_base = parsed['cleaned_name']
         with patch.object(
@@ -1005,7 +1005,7 @@ class TestRealFolderPipeline:
 
     def test_baldurs_gate_ee_and_gate_2_variants(self):
         parsed = parse_game_label("Baldur's Gate 1 Enhanced Edition (68994)")
-        assert parsed['steam_app_id'] == 68994
+        assert parsed['catalog_number'] == 68994
         variants = generate_goty_variants(parsed['cleaned_name'])
         assert "Baldur's Gate 1 Enhanced Edition" in variants
         assert "Baldur's Gate: 1 Enhanced Edition" in variants or any(

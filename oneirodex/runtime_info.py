@@ -10,9 +10,9 @@ def _read_version() -> str:
     version_file = Path(__file__).resolve().parent.parent / 'VERSION'
     try:
         value = version_file.read_text(encoding='utf-8').strip()
-        return value or '1.3.0'
+        return value or '1.3.1'
     except OSError:
-        return '1.3.0'
+        return '1.3.1'
 
 
 app_version = _read_version()

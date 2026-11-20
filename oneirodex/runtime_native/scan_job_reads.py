@@ -54,6 +54,32 @@ class ScanJobReadData:
             ))
         return db.session.execute(query).scalars().unique().all()
 
+    def failure_reasons(self, job_ids):
+        """Unmatched folders per job and reason: {job_id: [{reason, label, count}]}."""
+        from sqlalchemy import func, select
+
+        from oneirodex.runtime_native.db_session import native_db as db
+        from oneirodex.models import UnmatchedFolder
+        from oneirodex.utils.scan_job_timing import unmatched_reason_label
+
+        if not job_ids:
+            return {}
+        rows = db.session.execute(
+            select(UnmatchedFolder.scan_job_id, UnmatchedFolder.match_reason, func.count())
+            .where(UnmatchedFolder.scan_job_id.in_(job_ids))
+            .group_by(UnmatchedFolder.scan_job_id, UnmatchedFolder.match_reason)
+        ).all()
+        out = {}
+        for job_id, reason, count in rows:
+            out.setdefault(job_id, []).append({
+                'reason': reason or 'no_confident_match',
+                'label': unmatched_reason_label(reason),
+                'count': int(count),
+            })
+        for items in out.values():
+            items.sort(key=lambda item: -item['count'])
+        return out
+
     def queue_position(self, job_id):
         from oneirodex.utils.scan_queue import queue_position
 
@@ -115,7 +141,10 @@ def create_scan_job_reads_router(
                         ).strip(),
                     }
                     rows = []
-                    for job in data.list_jobs(filters):
+                    jobs = data.list_jobs(filters)
+                    reason_reader = getattr(data, 'failure_reasons', None)
+                    reasons = reason_reader([job.id for job in jobs]) if reason_reader else {}
+                    for job in jobs:
                         timing = compute_scan_job_timing(job)
                         processed = timing['folders_processed']
                         total = job.total_folders or 0
@@ -140,6 +169,7 @@ def create_scan_job_reads_router(
                             'last_update': job.last_progress_update.isoformat() if job.last_progress_update else None,
                             'next_run': job.next_run.strftime('%Y-%m-%d %H:%M:%S') if job.next_run else 'Not Scheduled',
                             'progress_percentage': round(processed / total * 100, 1) if total > 0 else 0,
+                            'failure_reasons': reasons.get(job.id, []),
                             **timing,
                         }
                         if job.status == 'Queued':

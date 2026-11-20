@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-11-20
+
+### Fixed
+
+- **IGDB matching works again.** Since 1.2.0 every IGDB sign-in was refused before it left the server (the outbound address check rejected the IP it had just resolved for an allowed host), so scans silently fell back to exact store titles. Allowed hosts are now checked by name while their resolved addresses still pass every private-network and metadata check.
+- An IGDB outage is no longer read as "no such game": the folder is recorded as *IGDB unavailable*, retried on the next scan, and the scan job says so, instead of being imported from a store title.
+- Sequels no longer collapse onto the base game. The shortened-name retry never drops a number or roman numeral ("Myst 3 Exile" can no longer become "Myst") and is checked against IGDB only.
+- A bare trailing `(12345)` in a folder name is a download catalogue number, not a Steam App ID: it is peeled and never searched. A Steam App ID is read only when labelled, e.g. `(Steam 220)`.
+- Title clean-up peels `[GOG]`, `(64bit)`, trailing `win`/`gog`, `P2P`/`TiNYiSO`-style group tags, `V 2 0 0`, `1.03g`, `-1.6.8` and parenthetical release dates.
+- Rescans retry folders that were left unmatched; folders you ignored, reviewed or flagged stay as they are, and a later match clears the unmatched row.
+- Games identified from a Steam listing get Steam's 600×900 (2:3) library capsule as their cover, or the full-size header when a game has none, instead of the 231×87 search thumbnail that left 2:3 tiles empty.
+
+### Added
+
+- Scan history shows when each run started and finished, how long it took, and why folders were not added (counts per reason, linked to the unmatched list).
+- `scripts/refresh_steam_covers.py` (dry run by default, `--apply` to write) gives existing store-identified games a full-size cover.
+
+### Upgrade notes
+
+- One migration adds `scan_jobs.finished_at`; earlier finished runs take their last progress time.
+- Libraries scanned on 1.2.0–1.3.0 were identified without IGDB. Rescan them (old misses are now retried); for games already added, run the cover script or reset the catalog and scan again.
+
 ## [1.3.0] — 2026-11-19
 
 ### Added

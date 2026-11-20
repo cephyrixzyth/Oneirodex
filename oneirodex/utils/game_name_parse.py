@@ -26,8 +26,27 @@ _MOTHERVR_TAIL_RE = re.compile(r'\s*-?\s*\bMotherVR\b.*$', re.IGNORECASE)
 _TRAILING_VR_RE = re.compile(r'\s+VR\s*$', re.IGNORECASE)
 # Glued product names like 3DSenVR (no whitespace before VR).
 _GLUED_TRAILING_VR_RE = re.compile(r'(?<=[A-Za-z0-9])VR\s*$', re.IGNORECASE)
-# A5 — trailing (digits) Steam App ID (4–7 digits).
-_STEAM_ID_RE = re.compile(r'\(\s*(\d{4,7})\s*\)\s*$')
+# A5 — Steam App ID only when the label says so: (Steam 220), [AppID 220], (steam_app 220).
+# A bare trailing (12345) is a download-site catalogue number (GOG installer
+# numbering on household shares), not a Steam App ID: peel it, keep it as a
+# hint, never search with it.
+_STEAM_ID_RE = re.compile(
+    r'[\(\[]\s*(?:steam(?:[\s_-]*app)?(?:[\s_-]*id)?|app[\s_-]*id)\s*[:#]?\s*(\d{1,8})\s*[\)\]]\s*$',
+    re.IGNORECASE,
+)
+_CATALOG_NUMBER_RE = re.compile(r'\s*\(\s*(\d{4,7})\s*\)\s*$')
+# A5b — packaging tails peeled together with the catalogue number, in any order:
+# [GOG] / (GOG) / (64bit) / (x64) / (Win) and bare trailing "win", "gog", "win64".
+_PACKAGING_PAREN_RE = re.compile(
+    r'\s*[\(\[]\s*(?:gog(?:\.com)?|(?:32|64)\s*-?\s*bit|x(?:64|86)|win(?:dows)?(?:\s*(?:32|64))?|multi\d*|en(?:glish)?)\s*[\)\]]\s*$',
+    re.IGNORECASE,
+)
+_PACKAGING_WORD_TAIL_RE = re.compile(r'\s+(?:gog|win(?:32|64)?|x64|x86)\s*$', re.IGNORECASE)
+# A5c — a parenthetical release date such as (July25, 2001) or (Mar 2 2019).
+_DATE_PAREN_RE = re.compile(
+    r'\s*\(\s*(?=[^)]*\b(?:19|20)\d{2}\b)(?=[^)]*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*)[^)]*\)\s*$',
+    re.IGNORECASE,
+)
 # A6 — trailing spaced/dotted version tails (v0 4, v1.188, v1.1.0a); not mid-title "v".
 _SPACED_VERSION_TAIL_RE = re.compile(
     r'\s+\bv\d+(?:[.\s_]\d+)+[a-zA-Z]?(?:\s+P2P?)?\s*$',
@@ -39,6 +58,11 @@ _SPACED_VERSION_TAIL_RE = re.compile(
 _DOTTED_VERSION_TAIL_RE = re.compile(
     r'\s+(?<!- )\d+\.\d+\.\d+(?:\.\d+)*\s*$',
 )
+# A6 — other version tails: "1.03g" (dotted pair + letter), "V 2 0 0" (spaced V),
+# "vector-1.6.8" (hyphen-glued dotted triple).
+_LETTERED_VERSION_TAIL_RE = re.compile(r'\s+\d+\.\d+[a-z]\s*$', re.IGNORECASE)
+_SPACED_V_DIGITS_TAIL_RE = re.compile(r'\s+v\s+\d+(?:\s+\d+){1,3}\s*$', re.IGNORECASE)
+_GLUED_DOTTED_VERSION_TAIL_RE = re.compile(r'-v?\d+(?:\.\d+){2,}[a-z]?\s*$', re.IGNORECASE)
 # A6 — trailing Early Access / EA tokens only.
 _EARLY_ACCESS_TAIL_RE = re.compile(
     r'\s+\b(?:Early\s+Access|EA)\s*$',
@@ -75,6 +99,10 @@ _UNBRACKETED_SCENE_ALIASES = frozenset({
     'flt',
     'dodi',
     'goldberg',
+    'tinyiso',
+    'p2p',
+    'tenoke',
+    'fckdrm',
 })
 _UNBRACKETED_SCENE_TAIL_RE = re.compile(
     r'(?:\s+-\s*|\s+|-)('
@@ -213,6 +241,9 @@ def strip_version_access_tails(raw: str) -> str:
     for _ in range(3):
         next_pass = _SPACED_VERSION_TAIL_RE.sub('', working).strip()
         next_pass = _DOTTED_VERSION_TAIL_RE.sub('', next_pass).strip()
+        next_pass = _LETTERED_VERSION_TAIL_RE.sub('', next_pass).strip()
+        next_pass = _SPACED_V_DIGITS_TAIL_RE.sub('', next_pass).strip()
+        next_pass = _GLUED_DOTTED_VERSION_TAIL_RE.sub('', next_pass).strip()
         next_pass = _EARLY_ACCESS_TAIL_RE.sub('', next_pass).strip()
         if next_pass == working:
             break
@@ -495,6 +526,7 @@ def _empty_parse_result(raw: str = '') -> dict:
         'raw': raw or '',
         'cleaned_name': '',
         'steam_app_id': None,
+        'catalog_number': None,
         'bare_franchise': False,
         'had_vr_suffix': False,
         'transforms': [],
@@ -582,14 +614,40 @@ def parse_game_label(raw: str, *, peel_profile: str | None = None) -> dict:
         transforms, 'A4', working, strip_vr_noise_tail(working),
         reason='vr_mod_tail',
     )
-    # A5
-    match = _STEAM_ID_RE.search(working)
-    if match:
-        steam_app_id = int(match.group(1))
-        working = _record_transform(
-            transforms, 'A5', working, working[: match.start()].strip(),
-            reason='steam_app_id',
-        )
+    # A5 — packaging tails, catalogue number and labelled Steam App ID, peeled
+    # repeatedly because they come in any order ("Title (64bit) (91571) win gog").
+    catalog_number = None
+    while True:
+        match = _STEAM_ID_RE.search(working)
+        if match and steam_app_id is None:
+            steam_app_id = int(match.group(1))
+            working = _record_transform(
+                transforms, 'A5', working, working[: match.start()].strip(),
+                reason='steam_app_id',
+            )
+            continue
+        match = _CATALOG_NUMBER_RE.search(working)
+        if match and catalog_number is None and match.start() > 0:
+            number = int(match.group(1))
+            is_year = len(match.group(1)) == 4 and 1970 <= number <= 2039
+            if not is_year:
+                catalog_number = number
+            working = _record_transform(
+                transforms, 'A5', working, working[: match.start()].strip(),
+                reason='release_year' if is_year else 'catalog_number',
+            )
+            continue
+        peeled = _PACKAGING_PAREN_RE.sub('', working)
+        if peeled == working and len(working.split()) > 1:
+            peeled = _PACKAGING_WORD_TAIL_RE.sub('', working)
+        if peeled == working:
+            peeled = _DATE_PAREN_RE.sub('', working)
+        if peeled != working and peeled.strip():
+            working = _record_transform(
+                transforms, 'A5', working, peeled.strip(), reason='packaging_tail',
+            )
+            continue
+        break
     # A6
     working = _record_transform(
         transforms, 'A6', working, strip_version_access_tails(working),
@@ -674,6 +732,7 @@ def parse_game_label(raw: str, *, peel_profile: str | None = None) -> dict:
         'raw': raw,
         'cleaned_name': cleaned,
         'steam_app_id': steam_app_id,
+        'catalog_number': catalog_number,
         'bare_franchise': is_bare_franchise(cleaned),
         'had_vr_suffix': had_vr_suffix,
         'transforms': transforms,

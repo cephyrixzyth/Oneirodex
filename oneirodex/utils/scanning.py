@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import re
 from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import select, update
@@ -48,7 +49,7 @@ def bump_scan_job_progress(
     db.session.commit()
 
 
-def try_add_game(game_name, full_disk_path, scan_job_id, library_uuid, check_exists=True, fetch_hltb=False, settings=None, app=None, database_scope=None):
+def try_add_game(game_name, full_disk_path, scan_job_id, library_uuid, check_exists=True, fetch_hltb=False, settings=None, app=None, database_scope=None, allow_store_identify=True):
     from oneirodex.utils.game_core import (
         retrieve_and_save_game
     )
@@ -112,8 +113,83 @@ def try_add_game(game_name, full_disk_path, scan_job_id, library_uuid, check_exi
         fetch_hltb=fetch_hltb, settings=settings, app=app,
         allowed_bases=allowed_bases,
         database_scope=database_scope,
+        allow_store_identify=allow_store_identify,
     )
     return game is not None
+
+
+def settled_unmatched_paths(library_uuid):
+    """Unmatched folders a scan must not retry: ignored, duplicate, reviewed or flagged."""
+    from sqlalchemy import or_
+
+    return set(db.session.execute(
+        select(UnmatchedFolder.folder_path).where(
+            UnmatchedFolder.library_uuid == library_uuid,
+            or_(
+                UnmatchedFolder.status.in_(('Ignore', 'Duplicate', 'Pending')),
+                UnmatchedFolder.review_decision.isnot(None),
+                UnmatchedFolder.bad_match_reason.isnot(None),
+            ),
+        )
+    ).scalars().all())
+
+
+def clear_retried_unmatched(full_disk_path, library_uuid):
+    """Drop a stale Unmatched row once its folder has been identified."""
+    from sqlalchemy import delete
+
+    try:
+        db.session.execute(delete(UnmatchedFolder).where(
+            UnmatchedFolder.folder_path == full_disk_path,
+            UnmatchedFolder.library_uuid == library_uuid,
+            UnmatchedFolder.status == 'Unmatched',
+            UnmatchedFolder.review_decision.is_(None),
+        ))
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        logger.warning('Could not clear a retried unmatched row', exc_info=True)
+
+
+def note_scan_job_problem(scan_job_id, message, *, limit=2000):
+    """Record a run-level problem on a scan job once, without failing the scan.
+
+    Column-only update so the coordinator's progress counters are not clobbered.
+    """
+    if not scan_job_id or not message:
+        return
+    try:
+        current = db.session.execute(
+            select(ScanJob.error_message).where(ScanJob.id == scan_job_id)
+        ).scalar_one_or_none() or ''
+        if message in current:
+            return
+        combined = f'{current}\n{message}' if current else message
+        db.session.execute(
+            update(ScanJob).where(ScanJob.id == scan_job_id).values(error_message=combined[:limit])
+        )
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        logger.warning('Could not record a scan job problem', exc_info=True)
+
+
+_SEQUEL_TOKEN = re.compile(r'^(?:\d+|[ivxlcdm]+)$', re.IGNORECASE)
+
+
+def truncated_search_names(game_name, max_attempts=3):
+    """Shorter search names for an unmatched title, longest first.
+
+    Stops before dropping a number or roman numeral: those mark a sequel or
+    edition, and the base title is a different game.
+    """
+    parts = (game_name or '').split()
+    names = []
+    for end in range(len(parts) - 1, 0, -1):
+        if len(names) >= max_attempts or _SEQUEL_TOKEN.match(parts[end]):
+            break
+        names.append(' '.join(parts[:end]))
+    return names
 
 
 def process_game_with_fallback(game_name, full_disk_path, scan_job_id, library_uuid, existing_game_paths=None, existing_unmatched_paths=None, fetch_hltb=False, settings=None, app=None, database_scope=None):
@@ -146,11 +222,9 @@ def process_game_with_fallback(game_name, full_disk_path, scan_job_id, library_u
     # Log skipping of processing for already matched or unmatched folders (fallback for when cached sets not provided)
     # Do NOT bump ScanJob counters here — the scan coordinator owns folders_success/failed
     # (worker increments race with multithreaded progress and stall the UI).
-    if not existing_unmatched_paths:
-        existing_unmatched_folder = db.session.execute(select(UnmatchedFolder).filter_by(folder_path=full_disk_path)).scalar_one_or_none()
-        if existing_unmatched_folder:
-            print(f"Skipping processing for already logged unmatched folder: {full_disk_path}")
-            return False
+    if not existing_unmatched_paths and full_disk_path in settled_unmatched_paths(library_uuid):
+        print(f"Skipping processing for a reviewed or ignored unmatched folder: {full_disk_path}")
+        return False
 
     # Check if the game already exists in the database (fallback for when cached sets not provided)
     if not existing_game_paths:
@@ -172,16 +246,16 @@ def process_game_with_fallback(game_name, full_disk_path, scan_job_id, library_u
     if not try_add_game(game_name, full_disk_path, scan_job_id, library_uuid=library_uuid, check_exists=False, fetch_hltb=fetch_hltb, settings=settings, **worker_scope_kwargs):
         # Truncate name from the right — cap attempts so one bad title cannot
         # burn minutes of IGDB round-trips (legacy unbounded fallback loop).
-        parts = game_name.split()
-        max_fallback = min(3, max(0, len(parts) - 1))
-        for i in range(len(parts) - 1, len(parts) - 1 - max_fallback, -1):
-            if i <= 0:
-                break
-            fallback_name = ' '.join(parts[:i])
-            if try_add_game(fallback_name, full_disk_path, scan_job_id, library_uuid=library_uuid, check_exists=False, fetch_hltb=fetch_hltb, settings=settings, **worker_scope_kwargs):
+        # A shortened name is weak evidence: it is searched on IGDB only (no
+        # store exact-title import), and it never drops a sequel number, so
+        # "Myst 3 Exile" cannot become "Myst".
+        for fallback_name in truncated_search_names(game_name):
+            if try_add_game(fallback_name, full_disk_path, scan_job_id, library_uuid=library_uuid, check_exists=False, fetch_hltb=fetch_hltb, settings=settings, allow_store_identify=False, **worker_scope_kwargs):
                 print(f"[GAME MATCH] Success with fallback name: '{fallback_name}'")
+                clear_retried_unmatched(full_disk_path, library_uuid)
                 return True
     else:
+        clear_retried_unmatched(full_disk_path, library_uuid)
         return True
 
     # If the game does not match, log it as unmatched
@@ -295,6 +369,14 @@ def log_unmatched_folder(
                 existing_unmatched_folder.match_reason = match_reason
             if match_score is not None:
                 existing_unmatched_folder.match_score = match_score
+        elif matched_status == 'Unmatched' and existing_unmatched_folder.status == 'Unmatched':
+            # A retried miss: record this scan and its reason (a stale
+            # "IGDB unavailable" must not outlive a scan where IGDB answered).
+            same_run = scan_job_id and existing_unmatched_folder.scan_job_id == scan_job_id
+            if match_reason is not None or not same_run:
+                existing_unmatched_folder.match_reason = match_reason
+            existing_unmatched_folder.scan_job_id = scan_job_id or existing_unmatched_folder.scan_job_id
+            existing_unmatched_folder.failed_time = datetime.now(timezone.utc)
         elif match_reason and not existing_unmatched_folder.match_reason:
             existing_unmatched_folder.match_reason = match_reason
         # Refresh kind / Stage E hint when a newer proposal exists
@@ -307,7 +389,7 @@ def log_unmatched_folder(
         if stage_e is not None:
             existing_unmatched_folder.stage_e = stage_e
         if (
-            matched_status == 'Duplicate'
+            matched_status in ('Duplicate', 'Unmatched')
             or match_reason
             or suggested_kind is not None
             or suggested_candidate_name is not None

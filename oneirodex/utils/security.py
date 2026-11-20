@@ -11,6 +11,8 @@ import socket
 import stat
 import sys
 import unicodedata
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
@@ -611,6 +613,21 @@ def url_authority_is_unambiguous(url: str) -> bool:
         return False
 
 
+# Set while http_safe checks the addresses it resolved for one hostname. A
+# hostname allowlist then judges that name, not the IP literal being dialed; the
+# IP itself still goes through every address check below.
+_PINNED_HOSTNAME: ContextVar[str | None] = ContextVar('oneirodex_pinned_hostname', default=None)
+
+
+@contextmanager
+def pinned_hostname(host: str):
+    token = _PINNED_HOSTNAME.set(host)
+    try:
+        yield
+    finally:
+        _PINNED_HOSTNAME.reset(token)
+
+
 def validate_outbound_http_url(
     url: str,
     *,
@@ -642,10 +659,13 @@ def validate_outbound_http_url(
         # A name resolving to 169.254.169.254 used to walk straight through here.
         if not lan_ok or is_cloud_metadata_host(parsed.hostname):
             return False, 'URL host is not allowed'
-    if allowed_hostnames is not None and parsed.hostname.lower() not in {
-        h.lower() for h in allowed_hostnames
-    }:
-        return False, 'URL host is not on the allowlist'
+    if allowed_hostnames is not None:
+        named = parsed.hostname.lower()
+        pinned = _PINNED_HOSTNAME.get()
+        if pinned and _parse_ip_literal(named) is not None:
+            named = pinned.lower()
+        if named not in {h.lower() for h in allowed_hostnames}:
+            return False, 'URL host is not on the allowlist'
     return True, candidate
 
 

@@ -140,6 +140,11 @@ def upsert_stage_d_custom_game(
         gog_id = None
     summary = candidate.get('summary')
     cover = candidate.get('cover_url') or candidate.get('cover')
+    if steam_app_id is not None:
+        from oneirodex.utils.steam_lookup import steam_cover_for_app
+
+        # Tiles are 2:3; store search hands back a 231x87 capsule.
+        cover = steam_cover_for_app(steam_app_id, cover)
     gog_url = candidate.get('url') if candidate.get('source') == 'gog' else None
     epic_url = candidate.get('url') if candidate.get('source') == 'epic' else None
 

@@ -7,10 +7,12 @@ def test_scan_identify_receives_native_app_and_database_scope(monkeypatch):
     library = SimpleNamespace(uuid='library-1')
     results = iter([
         SimpleNamespace(scalar_one_or_none=lambda: library),
-        SimpleNamespace(scalar_one_or_none=lambda: None),
+        # settled (reviewed/ignored) unmatched paths for this library: none
+        SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [])),
         SimpleNamespace(scalar_one_or_none=lambda: None),
     ])
     monkeypatch.setattr(scanning.db.session, 'execute', lambda _statement: next(results))
+    monkeypatch.setattr(scanning, 'clear_retried_unmatched', lambda *_args: None)
     calls = []
     monkeypatch.setattr(
         scanning, 'try_add_game',
