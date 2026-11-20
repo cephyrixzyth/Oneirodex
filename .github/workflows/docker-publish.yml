@@ -148,9 +148,17 @@ jobs:
         if: steps.hub.outputs.enabled == 'true'
         run: |
           version="$(cat VERSION)"
-          sed "s/__VERSION__/${version}/g" docs/dockerhub-overview.md > "$RUNNER_TEMP/dockerhub-overview.md"
+          minor="${version%.*}"
+          # The doc-status line is for this repository's docs index, not for Docker Hub.
+          sed -e '/^> \*\*Doc status:\*\*/,+1d' -e "s/__VERSION__/${version}/g" -e "s/__MINOR__/${minor}/g" \
+            docs/dockerhub-overview.md > "$RUNNER_TEMP/dockerhub-overview.md"
+          if grep -q '__[A-Z]*__' "$RUNNER_TEMP/dockerhub-overview.md"; then
+            echo "Unrendered placeholder in the Docker Hub overview" >&2
+            exit 1
+          fi
 
       - name: Sync Docker Hub repository overview
+        id: hub_overview
         if: steps.hub.outputs.enabled == 'true'
         # Image publication and the CA feed must not fail because Hub's
         # separate repository-metadata API rejects an overview update.
@@ -163,6 +171,13 @@ jobs:
           short-description: "Self-hosted household game library for Docker and Unraid, with metadata, artwork and play."
           readme-filepath: ${{ runner.temp }}/dockerhub-overview.md
           enable-url-completion: true
+
+      - name: Report a refused overview update
+        if: steps.hub_overview.outcome == 'failure'
+        run: |
+          msg="Docker Hub overview was not updated. DOCKERHUB_TOKEN needs write access to the repository description; update it in the Hub UI from docs/dockerhub-overview.md meanwhile."
+          echo "::warning title=Docker Hub overview not updated::${msg}"
+          echo "**Docker Hub overview not updated.** ${msg}" >> "$GITHUB_STEP_SUMMARY"
 
   sync-ca-template:
     name: Sync Unraid Community Apps template
