@@ -70,16 +70,12 @@ class TestGetSystemUptime:
         assert result is None
         mock_print.assert_called_once_with("Error getting system uptime: No module named 'ctypes'")
     
-    @patch('platform.system', return_value='Darwin')  # macOS
-    @patch('builtins.open', side_effect=FileNotFoundError("No such file"))
-    @patch('builtins.print')  # Suppress error output
-    def test_get_system_uptime_unsupported_platform(self, mock_print, mock_file, mock_platform):
-        """Test uptime retrieval on unsupported platform (macOS without /proc/uptime)."""
-        result = get_system_uptime()
-        
-        assert result is None
-        mock_file.assert_called_once_with('/proc/uptime', 'r')
-        mock_print.assert_called_once_with("Error getting system uptime: No such file")
+    @patch('platform.system', return_value='Darwin')
+    @patch('psutil.boot_time', return_value=12345.0)
+    @patch('time.time', return_value=13345.0)
+    def test_macos_uses_host_boot_time(self, clock, boot_time, platform):
+        assert get_system_uptime() == 1000.0
+        boot_time.assert_called_once()
 
 
 class TestFormatUptime:

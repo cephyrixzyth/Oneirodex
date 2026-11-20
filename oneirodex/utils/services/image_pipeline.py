@@ -418,7 +418,9 @@ def start_background_image_downloader(interval_seconds=60):
                     break  # Shutdown requested during error sleep
         logger.warning("🛑 Background image downloader stopped due to shutdown request")
     
-    thread = threading.Thread(target=background_worker, daemon=True)
+    from oneirodex.utils.shutdown import bind_shutdown_owner
+
+    thread = threading.Thread(target=bind_shutdown_owner(background_worker), daemon=True)
     thread.start()
     logger.info(f"Background image downloader started (interval: {interval_seconds}s)")
     return thread
@@ -626,7 +628,9 @@ def start_turbo_background_downloader(interval_seconds=30, max_workers=4, batch_
                     break  # Shutdown requested during error sleep
         logger.warning("🛑 Turbo background downloader stopped due to shutdown request")
     
-    thread = threading.Thread(target=turbo_background_worker, daemon=True)
+    from oneirodex.utils.shutdown import bind_shutdown_owner
+
+    thread = threading.Thread(target=bind_shutdown_owner(turbo_background_worker), daemon=True)
     thread.start()
     logger.info("🔥 TURBO BACKGROUND DOWNLOADER LAUNCHED!")
     return thread

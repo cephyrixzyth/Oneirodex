@@ -1,3 +1,5 @@
+import { PlayDiagnostics } from '../components/PlayDiagnostics'
+import { supportsWebRetroSaves } from '../api/saves'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { DetailsMediaStage } from '../components/DetailsMediaStage'
@@ -125,7 +127,7 @@ export function GameDetailsPage() {
     // Prefer the server play_url (WebRetro or BP-1 Nostalgist NES host) and
     // only rewrite query params when the member picks another core.
     const base = game.play_url || null
-    if (!core || !game.uuid) {
+    if (!core || !game.uuid || (base && !supportsWebRetroSaves(base))) {
       return base
     }
     try {
@@ -316,6 +318,11 @@ export function GameDetailsPage() {
             freshnessBusy={freshnessBusy}
             handleFreshnessCheck={handleFreshnessCheck}
           />
+          <PlayDiagnostics
+            browser={game.browser_readiness}
+            connected={game.client_connected}
+            gameId={String(game.uuid || '')}
+          />
           {firmwareBlocked ? (
             <p className="od-details-page__play-honesty" role="status">
               <span>{firmwareMessage}</span>
@@ -404,7 +411,10 @@ export function GameDetailsPage() {
 
         {/* Phase 4 save-state layer: this member's states, each a Resume
             into the room (which asks before loading). Self-gates on playHref. */}
-        <SavedStatesPanel gameUuid={game.uuid} playHref={playHref} />
+        <SavedStatesPanel
+          gameUuid={game.uuid}
+          playHref={supportsWebRetroSaves(playHref) ? playHref : null}
+        />
 
         {/* R1/R2: only renders for a matched set that carries achievements. */}
         <AchievementsPanel gameUuid={game.uuid} />

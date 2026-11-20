@@ -240,11 +240,17 @@ def log_unmatched_folder(
         except Exception:
             pass
 
-    existing_unmatched_folder = db.session.execute(select(UnmatchedFolder).filter_by(folder_path=folder_path)).scalar_one_or_none()
+    existing_unmatched_folder = db.session.execute(
+        select(UnmatchedFolder).filter_by(folder_path=folder_path, library_uuid=library_uuid)
+        .order_by(UnmatchedFolder.failed_time.desc(), UnmatchedFolder.id).limit(1)
+    ).scalar_one_or_none()
 
     if existing_unmatched_folder is None:
+        from oneirodex.models.library import CatalogMatchReview
+        prior = db.session.get(CatalogMatchReview, (library_uuid, CatalogMatchReview.key(folder_path))) if library_uuid else None
         unmatched_folder = UnmatchedFolder(
             folder_path=folder_path,
+            review_decision=prior.decision if prior else None,
             failed_time=datetime.now(timezone.utc),
             content_type='Games',
             library_uuid=library_uuid,

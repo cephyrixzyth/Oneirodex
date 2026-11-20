@@ -76,10 +76,10 @@ def scan_for_firmware(source: str, wanted: dict[str, str] | None = None) -> dict
     return found
 
 
-def firmware_digest(path: str, base: str | None = None) -> str:
-    """SHA-1 of a firmware file. With *base*, the file must still be a plain
+def firmware_digest(path: str, base: str | None = None, *, legacy=False) -> str:
+    """SHA-256 of firmware, with SHA-1 lookup for saved legacy selections. With *base*, the file must still be a plain
     file under it when it is opened (see ``open_plain_file_within``)."""
-    h = hashlib.sha1()
+    h = hashlib.sha1(usedforsecurity=False) if legacy else hashlib.sha256()
     handle = open_plain_file_within(base, path) if base is not None else open(path, 'rb')
     with handle as fh:
         for chunk in iter(lambda: fh.read(1024 * 1024), b''):
@@ -205,9 +205,9 @@ def versions_for(sources: list[str], source_root: str) -> tuple[list[dict], str,
     return versions, default, note
 
 
-def _digest_or_none(path: str, source_root: str) -> str | None:
+def _digest_or_none(path: str, source_root: str, *, legacy=False) -> str | None:
     try:
-        return firmware_digest(path, source_root)
+        return firmware_digest(path, source_root, legacy=legacy)
     except OSError:
         return None
 
@@ -219,7 +219,7 @@ def _resolve_choice(sources: list[str], source_root: str, choice: str | None) ->
         if len(sources) == 1:
             return sources[0]
         versions, default, _note = versions_for(sources, source_root)
-        if default and len(default) == 40:
+        if default and len(default) == 64:
             for path in sources:
                 if _digest_or_none(path, source_root) == default:
                     return path
@@ -228,11 +228,11 @@ def _resolve_choice(sources: list[str], source_root: str, choice: str | None) ->
         return sources[0]
 
     token = choice.strip().replace('\\', '/')
-    digest_like = len(token) == 40 and all(c in '0123456789abcdef' for c in token.lower())
+    digest_like = len(token) in (40, 64) and all(c in '0123456789abcdef' for c in token.lower())
     if digest_like:
         want = token.lower()
         for path in sources:
-            if _digest_or_none(path, source_root) == want:
+            if _digest_or_none(path, source_root, legacy=len(want) == 40) == want:
                 return path
         return None
     for path in sources:

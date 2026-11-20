@@ -18,7 +18,6 @@ from oneirodex.utils.library_roots import (
     root_availability,
 )
 from oneirodex.utils.security import get_allowed_base_directories
-import oneirodex.utils.status as status_mod
 from oneirodex.utils.status import LIBRARY_ROOT_KEY_PREFIX, get_config_values
 
 BASE_KEY = 'BASE_FOLDER_WINDOWS' if os.name == 'nt' else 'BASE_FOLDER_POSIX'
@@ -169,32 +168,20 @@ def test_hostile_entries_are_dropped(raw):
 class TestOpsPathRows:
     """Ops path health must report every declared root, including duplicates."""
 
-    def test_roots_with_the_same_label_both_appear(self, monkeypatch):
+    def test_roots_with_the_same_label_both_appear(self):
         # `Archive=/mnt/a|Archive=/mnt/b` is a plausible typo, and keying the
         # health rows by label alone silently dropped one of them — from the
         # one view whose job is to report a root that stopped being mounted.
-        monkeypatch.setattr(
-            status_mod.Config,
-            'LIBRARY_ROOTS',
-            [
-                {'label': 'Archive', 'path': _norm('/mnt/a')},
-                {'label': 'Archive', 'path': _norm('/mnt/b')},
-            ],
-            raising=False,
-        )
-
-        values = get_config_values()
+        values = get_config_values({'LIBRARY_ROOTS': [
+            {'label': 'Archive', 'path': _norm('/mnt/a')},
+            {'label': 'Archive', 'path': _norm('/mnt/b')},
+        ]})
         rows = {k: v for k, v in values.items() if k.startswith(LIBRARY_ROOT_KEY_PREFIX)}
         assert len(rows) == 2
         assert {row['path'] for row in rows.values()} == {_norm('/mnt/a'), _norm('/mnt/b')}
 
-    def test_a_single_root_keeps_a_clean_label(self, monkeypatch):
-        monkeypatch.setattr(
-            status_mod.Config,
-            'LIBRARY_ROOTS',
-            [{'label': 'Archive', 'path': _norm('/mnt/a')}],
-            raising=False,
-        )
-
-        values = get_config_values()
+    def test_a_single_root_keeps_a_clean_label(self):
+        values = get_config_values({'LIBRARY_ROOTS': [
+            {'label': 'Archive', 'path': _norm('/mnt/a')},
+        ]})
         assert f'{LIBRARY_ROOT_KEY_PREFIX}Archive' in values

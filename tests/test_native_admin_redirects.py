@@ -71,6 +71,7 @@ def test_admin_redirect_targets_and_query_compatibility():
     cookie = signed_cookie(flask_app, users[7])
     cases = {
         '/admin/library_tools': '/scan_management?active_tab=tools',
+        '/admin/unmatched': '/scan_management?active_tab=unmatched',
         '/admin/server_logs': '/admin/ops?open=full-log',
         '/admin/system_logs': '/admin/ops?open=full-log',
         '/admin/server_status_page': '/admin/ops',

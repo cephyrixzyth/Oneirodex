@@ -13,6 +13,7 @@ import asyncio
 import http.client
 import io
 import os
+import pathlib
 import socket
 import sys
 import threading
@@ -210,10 +211,12 @@ def test_macos_compares_paths_the_way_its_volume_does(monkeypatch):
     """F_GETPATH reports the spelling on disk; the library root may have been typed differently."""
     base = '/Users/me/games/Caf\u00e9'
     on_disk = '/Users/me/Games/Cafe\u0301/a.bin'  # other case, decomposed accent
+    monkeypatch.setattr(security, 'sys', types.SimpleNamespace(platform='linux'))
+    monkeypatch.setattr(security, 'os', types.SimpleNamespace(name='posix'))
+    monkeypatch.setattr(security, 'Path', pathlib.PurePosixPath)
     assert not security._is_below(base, on_disk), 'elsewhere paths are compared exactly'
 
     monkeypatch.setattr(security, 'sys', types.SimpleNamespace(platform='darwin'))
-    monkeypatch.setattr(security, 'os', types.SimpleNamespace(name='posix'))
     assert security._is_below(base, on_disk)
     assert not security._is_below(base, '/Users/me/Games/Other/a.bin')
     assert not security._is_below(base, '/users/me/GAMES/CAF\u00c9'), 'a folder is not within itself'
@@ -1185,3 +1188,44 @@ def test_local_cover_of_a_game_folder_swapped_after_the_path_check_is_not_served
 
     assert SECRET not in response.data
     assert response.status_code in (403, 404)
+
+
+@pytest.mark.parametrize('layout', ['raw', 'zip', 'nested'])
+def test_companion_zip_and_browser_can_share_a_download_ticket(served, layout):
+    filename = 'fixture.zip' if layout == 'zip' else 'fixture.bin'
+    folder = served.root / 'Installed'
+    folder.mkdir()
+    file = folder / filename
+    if layout == 'zip':
+        with zipfile.ZipFile(file, 'w') as archive:
+            archive.writestr('owned.bin', b'owned game')
+    else:
+        file.write_bytes(b'owned game')
+    if layout == 'nested':
+        assets = folder / 'Data' / 'extras'
+        assets.mkdir(parents=True)
+        (assets / 'level.bin').write_bytes(b'level')
+        (folder / 'extras').mkdir()
+        (folder / 'extras' / 'third-party.bin').write_bytes(b'extra')
+    game = _make_game(served.db, folder)
+    row = _download_request(served, game, file)  # legacy ticket picked only the launcher
+    row.file_location = str(folder)
+    served.db.commit()
+    path = f'/download_zip/{row.id}'
+    wire = _Wire()
+    asyncio.run(served.lazy._handle_zip_download({'query_string': b'representation=companion_zip'}, None, wire.send, path))
+    assert _status(wire) == 200
+    with zipfile.ZipFile(io.BytesIO(wire.body)) as archive:
+        assert archive.testzip() is None
+        if layout == 'nested':
+            assert set(archive.namelist()) == {filename, 'Data/extras/level.bin'}
+        elif layout == 'zip':
+            assert wire.body == file.read_bytes()
+        else:
+            assert archive.read(filename) == file.read_bytes()
+    browser = _get_zip(served, row.id)
+    if layout == 'nested':
+        with zipfile.ZipFile(io.BytesIO(browser.body)) as archive:
+            assert archive.read('Data/extras/level.bin') == b'level'
+    else:
+        assert browser.body == file.read_bytes()

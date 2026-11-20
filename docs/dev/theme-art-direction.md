@@ -4,7 +4,7 @@
 
 > Human, 2026-08-31: *"themes are horrible; need full design with AI artwork, not
 > CSS-only."* This is the answer to the second half of that sentence — what a
-> theme **is**, so that art (drawn now, generated later) has somewhere to land.
+> theme **is**, so that room illustrations and generated artwork has somewhere to land.
 
 ## What a theme is
 
@@ -14,7 +14,7 @@ A theme is not a hue. It is six things that have to agree:
 |---|---|---|
 | **Palette** — accent, surface, text, border | the preset | `css/od-tokens.css`, generated per preset |
 | **Geometry** — radius, spacing, type scale, shadow, motion | the preset | `_system_geometry()` in `preset_themes_geometry.py` (catalogue in `preset_themes_catalog.py`, generator in `preset_themes.py`) |
-| **Room** — the space the product sits in | the **era**, not the preset | `css/od-era.css` variables + `art/era/<era>.svg` |
+| **Room** | The era chooses the scene. Each built-in preset adds its own interior when its default era is active. | `css/od-era.css`, `art/era/<era>.svg` and `static/newstyle/rooms/<slug>.webp` |
 | **Marks** — cover placeholder, avatars | the preset | `avatars/*.svg`, recoloured per preset; `.od-cover-fallback` is CSS + live text |
 | **Motifs** — loading animations | shared, tinted | `css/od-loading-motifs.css`, `currentColor` throughout |
 | **Glyphs** — rail and chrome icons | the icon pack the preset names | `icon_pack` on the preset |
@@ -39,12 +39,9 @@ families discoverable while retaining their different rendering and ownership
 rules. Do not treat the React rail map, shared SVG manifest, platform marks, and
 theme-pack SVGs as interchangeable copies of one complete icon set.
 
-The shipped catalogue now has six redesigned presets: Mosslight, Afterglow
-Arcade, Graphite Studio, Signal Room, Tape Deck, and Deep Space Media. Each has
-its own palette, geometry, type, glyph treatment, room, avatar treatment, and
-platform-mark art direction. The former built-in presets are retired; uploaded
-themes remain untouched. Existing preferences are mapped to the closest new
-preset until the member picks another one.
+Mosslight, Afterglow Arcade, Graphite Studio, Signal Room, Tape Deck and Deep Space Media each have an illustrated interior. Tideglass Observatory adds an undersea archive with a brass and sea-glass palette, serif headings and rounded instrument controls. The preferences chooser, admin inventory, catalog room entrance and 3D lounge use the same compact WebP assets. The 3D room also takes its wood, walls, furnishings and lights from the chosen preset.
+
+The shared artwork ships once in `oneirodex/static/newstyle/rooms`. A matching theme and era selects it for the atmosphere. An explicit different era retains its illustrated SVG. Uploads continue through the existing theme loader and older theme aliases keep their account mappings.
 
 The retired presets are removed only when their folder still carries the
 Oneirodex generator marker. A custom upload with the same folder name is kept.

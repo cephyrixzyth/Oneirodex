@@ -1,3 +1,4 @@
+import { MatchReview } from './MatchReview'
 import { Button } from '@oneirodex/ui'
 import { postJson } from '../api/adminApi'
 import { AdminLink } from '../components/AdminLink'
@@ -255,6 +256,7 @@ export function ScanUnmatchedTable({
                     role="toolbar"
                     aria-label={`Actions for ${row.folder_path || row.id}`}
                   >
+                    <MatchReview row={row} onChange={() => setReloadKey((n) => n + 1)} />
                     <Button
                       type="button"
                       onClick={() => setPathModal(String(row.folder_path || ''))}

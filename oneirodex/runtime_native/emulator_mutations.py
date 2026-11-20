@@ -106,10 +106,10 @@ class EmulatorMutationData:
 
         return read_save_bytes(row)
 
-    def delete_save(self, user_id, game_uuid, slot_name):
+    def delete_save(self, user_id, game_uuid, slot_name, *, expected_revision=None):
         from oneirodex.utils.emulator_saves import delete_save
 
-        return delete_save(user_id, game_uuid, slot_name)
+        return delete_save(user_id, game_uuid, slot_name, expected_revision=expected_revision)
 
     def pc_cheats(self, game_uuid):
         from sqlalchemy import select
@@ -364,6 +364,14 @@ def create_emulator_mutations_router(
     async def save_file(game_uuid: str, slot_name: str, request: Request):
         return await run(request, game_uuid, 'save_file', slot_name)
 
+    @router.get('/api/games/{game_uuid}/saves/{slot_name}/history')
+    async def save_history(game_uuid: str, slot_name: str, request: Request):
+        return await run(request, game_uuid, 'save_history', slot_name)
+
+    @router.post('/api/games/{game_uuid}/saves/{slot_name}/history/{generation_id}/restore')
+    async def restore_history(game_uuid: str, slot_name: str, generation_id: int, request: Request):
+        return await run(request, game_uuid, 'save_restore', slot_name)
+
     @router.options('/api/games/{game_uuid}/saves/{slot_name}', include_in_schema=False)
     async def save_file_options(game_uuid: str, slot_name: str):
         return Response(
@@ -503,6 +511,35 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
             return _error(400, 'bad_request', 'Send a .cht file, or a JSON body with name and codes')
 
     if operation.startswith('save'):
+        member_id = str(getattr(user, 'user_id', None) or user.id)
+        expected_member_header = request.headers.get('x-oneirodex-save-member')
+        if expected_member_header and expected_member_header != member_id:
+            return _error(409, 'member_changed', 'This save belongs to a different member')
+        if operation == 'save_history':
+            from oneirodex.utils.emulator_saves import save_history
+
+            before = first_query_value(request.query_params, 'before')
+            if before and (not before.isascii() or not before.isdigit() or len(before) > 10):
+                return _error(400, 'bad_request', 'Invalid history cursor')
+            return JSONResponse(save_history(user.id, game_uuid, filename, int(before) if before else None))
+        if operation == 'save_restore':
+            from oneirodex.utils.emulator_saves import SaveQuotaExceeded, SaveRevisionConflict, restore_save_generation
+
+            if not data.save_sync_enabled():
+                return _error(403, 'forbidden', 'Emulator save sync is disabled')
+            try:
+                revision = int(first_query_value(request.query_params, 'expected_revision', ''))
+                row = restore_save_generation(user.id, game_uuid, filename,
+                                              int(request.path_params['generation_id']), revision)
+            except SaveRevisionConflict as exc:
+                return _error(409, 'conflict', str(exc), detail={'current_revision': exc.current_revision})
+            except SaveQuotaExceeded as exc:
+                return _error(413, 'payload_too_large', str(exc))
+            except FileNotFoundError:
+                return _error(404, 'not_found', 'Saved version unavailable')
+            except ValueError as exc:
+                return _error(400, 'bad_request', str(exc))
+            return JSONResponse(row.to_dict(), status_code=201)
         if operation == 'saves' and method == 'GET':
             rows = data.list_saves(user.id, game_uuid)
             from oneirodex.utils.role_catalog import normalize_role
@@ -513,6 +550,7 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
             )
             return JSONResponse({
                 'enabled': data.save_sync_enabled(), 'game_uuid': game_uuid,
+                'member_id': member_id,
                 'csrf_token': _csrf_token(auth.session_data, flask_app.config),
                 'can_write_own_save': can_write,
                 'can_delete_own_save': can_write,
@@ -530,6 +568,9 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
             if error is not None:
                 return error
             try:
+                expected_member = first_form_value(form, 'expected_member')
+                if expected_member and expected_member != member_id:
+                    return _error(409, 'member_changed', 'This save belongs to a different member')
                 upload = first_form_upload(form, 'file') or first_form_upload(form, 'save')
                 if upload is None:
                     return _error(400, 'bad_request', 'multipart file field "file" is required')
@@ -568,9 +609,21 @@ async def _dispatch(data, auth, request, game_uuid, operation, filename, flask_a
                 return _error(404, 'not_found', 'Save not found')
             except Exception:
                 return _error(500, 'internal', 'Failed to read save')
-            return _download(payload, row.filename, 'application/octet-stream')
+            result = _download(payload, row.filename, 'application/octet-stream')
+            result.headers['X-Oneirodex-Save-Revision'] = str(getattr(row, 'revision', 1))
+            return result
         if operation == 'save_file' and method == 'DELETE':
-            if not data.delete_save(user.id, game_uuid, filename):
+            from oneirodex.utils.emulator_saves import SaveRevisionConflict
+
+            try:
+                revision = first_query_value(request.query_params, 'expected_revision')
+                kwargs = {'expected_revision': int(revision)} if revision is not None else {}
+                deleted = data.delete_save(user.id, game_uuid, filename, **kwargs)
+            except SaveRevisionConflict as exc:
+                return _error(409, 'conflict', str(exc), detail={'current_revision': exc.current_revision})
+            except ValueError:
+                return _error(400, 'bad_request', 'Invalid save revision')
+            if not deleted:
                 return _error(404, 'not_found', 'Save not found')
             return _ok({'status': 'deleted', 'slot_name': filename})
 

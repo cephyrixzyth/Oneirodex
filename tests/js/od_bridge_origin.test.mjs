@@ -143,3 +143,50 @@ for (const foreign of [
 }
 
 console.log('od_bridge_origin: all assertions passed');
+
+// A battery file is often ready long before the core has finished its state.
+async function exportSnapshot({ bytesAt, changedAt = 1, supportsState = true }) {
+    const { dispatch, sandbox } = loadBridge(ORIGIN);
+    let reads = 0;
+    sandbox.setTimeout = (callback) => queueMicrotask(() => { reads++; callback(); });
+    sandbox.Module = { _cmd_save_state() {}, _cmd_savefiles() {} };
+    sandbox.core = 'fixture';
+    sandbox.noStateCores = supportsState ? [] : ['fixture'];
+    sandbox.FS = {
+        stat() { return { mtime: new Date(reads >= changedAt ? 2 : 1) }; },
+        readFile() { return bytesAt(reads); },
+    };
+    sandbox.getIdbItem = async (key) => key.startsWith('RetroArch_saves_')
+        ? [{ ext: '.srm', data: new Uint8Array([1, 2, 3, 4]) }]
+        : new Uint8Array(1000).fill(17);
+    const { event } = message(ORIGIN, { source: 'oneirodex', type: 'od-export-saves', reqId: 'save' });
+    const payload = await new Promise((resolve) => {
+        event.source.postMessage = resolve;
+        dispatch(event);
+    });
+    return { payload, reads };
+}
+
+{
+    const full = Buffer.alloc(28);
+    full.write('#RZIPv');
+    full[6] = 1;
+    full[7] = 35;
+    full.writeUInt32LE(4096, 8);
+    full.writeUInt32LE(512, 12);
+    full.writeUInt32LE(4, 20);
+    full.set([1, 2, 3, 4], 24);
+    const delayed = await exportSnapshot({ bytesAt: poll => poll < 4 ? full.subarray(0, 25) : full });
+    assert.ok(delayed.reads >= 5, 'wait for the full capture even when battery SRAM already exists');
+    assert.equal(delayed.payload.stateB64, full.toString('base64'));
+    assert.equal(delayed.payload.sramB64, 'AQIDBA==');
+    const truncated = await exportSnapshot({ bytesAt: () => full.subarray(0, 25) });
+    assert.equal(truncated.payload.stateB64, null);
+    assert.equal(truncated.payload.statePending, true);
+    const stale = await exportSnapshot({ bytesAt: () => full, changedAt: Infinity });
+    assert.equal(stale.payload.stateB64, null, 'never publish a prior file or the cached previous save');
+    const batteryOnly = await exportSnapshot({ bytesAt: () => full, supportsState: false });
+    assert.equal(batteryOnly.reads, 1);
+    assert.equal(batteryOnly.payload.statePending, false);
+    assert.equal(batteryOnly.payload.sramB64, 'AQIDBA==');
+}

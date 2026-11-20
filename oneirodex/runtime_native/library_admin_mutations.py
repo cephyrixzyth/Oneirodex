@@ -145,40 +145,6 @@ class LibraryAdminMutationData:
             schedule_fields=options.get('schedule_fields'),
         )
 
-    def fail_scan_for_legacy_mode(self, *, library, folder: str, options: dict):
-        """Preserve v1.1.8's accepted-then-failed result for unknown modes.
-
-        The old worker accepted the request, then failed because it had no
-        branch for the mode. The native queue stores scan mode as a boolean,
-        so persist the same terminal failure directly instead of silently
-        converting the malformed request into a folder scan.
-        """
-        from oneirodex.runtime_native.db_session import native_db as db
-        from oneirodex.utils.scan_queue import create_scan_job_row
-
-        job = create_scan_job_row(
-            folder_path=folder,
-            library_uuid=library.uuid,
-            scan_mode='folders',
-            remove_missing=options['remove_missing'],
-            download_missing_images=options['download_missing_images'],
-            force_updates_extras_scan=options['force_updates_extras'],
-            schedule=options.get('schedule'),
-            schedule_fields=options.get('schedule_fields'),
-            status='Failed',
-        )
-        job.error_message = (
-            "cannot access local variable 'game_names_with_paths' "
-            'where it is not associated with a value'
-        )
-        db.session.commit()
-        return {
-            'status': 'started',
-            'job_id': job.id,
-            'position': None,
-            'message': f'Scan started (job {job.id[:8]}…).',
-        }
-
     def refresh_queue(self):
         from sqlalchemy import select
 
@@ -957,10 +923,10 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
     scan_mode = value('scan_mode', 'folders') or 'folders'
     if not isinstance(scan_mode, str):
         scan_mode = str(scan_mode)
-    invalid_scan_mode = scan_mode not in ('auto', 'folders', 'files')
-    if invalid_scan_mode:
-        scan_mode = 'folders'
-    elif scan_mode == 'auto':
+    if scan_mode not in ('auto', 'folders', 'files'):
+        return _error('scan_mode must be auto, folders, or files.', 'bad_request', 400,
+                      body_status='rejected', job_id=None, position=None)
+    if scan_mode == 'auto':
         scan_mode = data.scan_mode_for_path(resolved, scan_mode)
     force_raw = payload.get('force_parallel') if 'force_parallel' in payload else (first_form_value(form, 'force_parallel') or first_query_value(request.query_params, 'force_parallel'))
     policy_raw = payload.get('queue_policy') if 'queue_policy' in payload else (first_form_value(form, 'queue_policy') or first_query_value(request.query_params, 'queue_policy'))
@@ -1009,15 +975,10 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
         'schedule_fields': schedule_fields,
     }
     try:
-        if invalid_scan_mode:
-            result = data.fail_scan_for_legacy_mode(
-                library=library, folder=resolved, options=options,
-            )
-        else:
-            result = data.start_scan(
-                library=library, folder=resolved, options=options, app=app,
-                database_scope=database_scope,
-            )
+        result = data.start_scan(
+            library=library, folder=resolved, options=options, app=app,
+            database_scope=database_scope,
+        )
     except Exception:
         data.rollback()
         return _error('Scan request could not be queued.', 'internal', 500,
@@ -1111,11 +1072,16 @@ async def _scan(request, app, data, user, *, database_scope=None):
         return _cap_error(LIBRARY_BATCH_UUID_CAP)
     folders_map = body.get('folders') if isinstance(body.get('folders'), dict) else {}
     force_raw = body.get('force_parallel')
+    scan_mode = body.get('scan_mode') or 'folders'
+    if scan_mode not in ('auto', 'folders', 'files'):
+        return _error('scan_mode must be auto, folders, or files.', 'bad_request', 400, body_status='rejected')
     options = {
-        'scan_mode': body.get('scan_mode') or 'folders',
+        'scan_mode': scan_mode,
         'remove_missing': parse_bool_flag(body.get('remove_missing'), default=False),
         'download_missing_images': parse_bool_flag(body.get('download_missing_images'), default=False),
         'force_updates_extras': parse_bool_flag(body.get('force_updates_extras'), default=False),
+        'fetch_hltb': parse_bool_flag(body.get('fetch_hltb'), default=False),
+        'force_hltb_refetch': parse_bool_flag(body.get('force_hltb_refetch'), default=False),
         'queue_policy': parse_queue_policy(body.get('queue_policy'), force_parallel=force_raw),
     }
     started = queued = skipped = failed = 0
@@ -1174,8 +1140,11 @@ async def _scan(request, app, data, user, *, database_scope=None):
                 })
                 failed += 1
                 continue
+            per_folder = options
+            if scan_mode == 'auto':
+                per_folder = {**options, 'scan_mode': data.scan_mode_for_path(resolved, scan_mode)}
             outcome = data.start_scan(
-                library=library, folder=resolved, options=options, app=app,
+                library=library, folder=resolved, options=per_folder, app=app,
                 database_scope=database_scope,
             )
             status = outcome.get('status')

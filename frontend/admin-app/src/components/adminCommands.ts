@@ -159,6 +159,11 @@ export function scoreCommand(command: AdminCommand, query: string): number {
   if ((command.blurb || '').toLowerCase().includes(q)) return 20
   if (command.keywords.includes(q)) return 15
   if (command.section.toLowerCase().includes(q)) return 10
+  const terms = q.split(/\s+/)
+  const fields = [label, command.keywords, command.section, command.blurb || '']
+    .join(' ')
+    .toLowerCase()
+  if (terms.length > 1 && terms.every((term) => fields.includes(term))) return 8
   return -1
 }
 

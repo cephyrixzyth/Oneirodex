@@ -98,6 +98,17 @@
   color: var(--od-text);
 }
 
+.od-btn--danger {
+  border-color: color-mix(in srgb, var(--od-danger) 65%, var(--od-border));
+  color: var(--od-danger);
+}
+.od-btn--primary { font-weight: 650; box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--od-accent-contrast) 24%, transparent); }
+.od-btn[aria-pressed='true']:not(:disabled) { outline: 1px solid var(--od-accent); outline-offset: -2px; }
+.od-btn:active:not(:disabled):not([aria-disabled='true']) { box-shadow: inset 0 2px 3px color-mix(in srgb, var(--od-text) 16%, transparent); }
+@media (pointer: coarse) {
+  .od-btn:not(.od-btn--sm), .od-btn-bar .od-btn { min-block-size: 44px; }
+}
+
 /* The slab this class used to be, kept for the two places that want a button
    to be the loudest thing on the screen — the setup wizard's next step and a
    full-width empty-state CTA. Opt-in, so nothing inherits it by accident. */
@@ -623,7 +634,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .od-page-status__spinner {
-    animation-duration: 2s;
+    animation: none;
   }
 }
 
@@ -727,4 +738,14 @@
 .od-filter-chip-group__count {
   color: var(--od-text-muted);
   font-size: var(--od-font-sm);
+}
+
+.od-page-status__ellipsis { display: inline-block; white-space: pre; }
+@media (prefers-reduced-motion: no-preference) {
+  .od-page-status__ellipsis { animation: od-status-dots 1.2s steps(3, end) infinite; }
+}
+@keyframes od-status-dots { from { clip-path: inset(0 65% 0 0); } to { clip-path: inset(0 -28% 0 0); } }
+
+@media (forced-colors: active) {
+  .od-btn:focus-visible { outline: 2px solid Highlight; }
 }

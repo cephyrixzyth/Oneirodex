@@ -482,6 +482,15 @@ export function LibraryApp({ initialConfig }: LooseProps = {}) {
     </div>
   )
 
+  const roomLink = shellConfig.enableVr ? (
+    <a className="od-library-room-link" href="/vr?vr_compat=collection&amp;room=open">
+      <span>{t('Library room')}</span>
+      <span>
+        {t('Explore in 3D')} <span aria-hidden="true">↗</span>
+      </span>
+    </a>
+  ) : null
+
   if (useNewChrome) {
     return (
       <>
@@ -531,7 +540,10 @@ export function LibraryApp({ initialConfig }: LooseProps = {}) {
         {/* No aside, no collapse rail, no page header — the grid gets the
             whole width, which is the visible payoff of the refresh. */}
         <div className="library-layout is-chrome-v2">
-          <div className="library-layout__main">{content}</div>
+          <div className="library-layout__main">
+            {roomLink}
+            {content}
+          </div>
         </div>
       </>
     )
@@ -562,7 +574,10 @@ export function LibraryApp({ initialConfig }: LooseProps = {}) {
           </aside>
         )}
 
-        <div className="library-layout__main">{content}</div>
+        <div className="library-layout__main">
+          {roomLink}
+          {content}
+        </div>
       </div>
     </>
   )

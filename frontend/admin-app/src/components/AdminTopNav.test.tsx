@@ -109,15 +109,38 @@ test('top bar is page scope only — no brand, no destinations', () => {
   }
 })
 
-test('the bar carries no search control of its own (GT-B16 parity)', () => {
-  // The member bar dropped its search under GT-B16: a second search affordance
-  // in the chrome costs permanent width and buys nothing over the page's own
-  // filtering. Admin kept a "Search ⌘K" button, which was the most visible
-  // difference between the two bars. ⌘K still works — AdminCommandPalette binds
-  // it — and the hint now lives in the account menu, as it does for members.
-  renderTopBar()
+test('the tool finder opens the palette from the top bar', () => {
+  const open = vi.fn()
+  document.addEventListener('od-admin-palette:open', open)
+  try {
+    renderTopBar()
+    fireEvent.click(screen.getByRole('button', { name: 'Find an admin tool' }))
+    expect(open).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('searchbox')).toBeNull()
+  } finally {
+    document.removeEventListener('od-admin-palette:open', open)
+  }
+})
 
-  expect(screen.queryByRole('button', { name: /^search/i })).toBeNull()
+test('the Preferences dialog receives a persistent return-focus target', () => {
+  renderTopBar()
+  const account = screen.getByRole('button', { name: 'Account menu' })
+  fireEvent.click(account)
+  const preferences = screen.getByRole('link', { name: 'Preferences' })
+  preferences.focus()
+  let activeAtOpen: Element | null = null
+  window.addEventListener(
+    'od:open-preferences',
+    () => {
+      activeAtOpen = document.activeElement
+    },
+    { once: true },
+  )
+
+  fireEvent.click(preferences)
+
+  expect(activeAtOpen).toBe(account)
+  expect(preferences.isConnected).toBe(false)
 })
 
 test('the palette hint moved into the account menu, and still opens it', () => {

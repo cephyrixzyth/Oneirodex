@@ -994,7 +994,7 @@ def _is_native_unmatched_feedback_path(path: str) -> bool:
     parts = path.strip('/').split('/')
     return (
         len(parts) == 4 and parts[:2] == ['api', 'unmatched']
-        and bool(parts[2]) and parts[3] == 'bad_match'
+        and bool(parts[2]) and parts[3] in {'bad_match', 'review', 'candidates'}
     )
 
 
@@ -3845,7 +3845,7 @@ class LazyASGIApp:
                     )
                     or (
                         _is_native_unmatched_feedback_path(path)
-                        and scope.get('method') == 'POST'
+                        and (scope.get('method') == 'POST' or (path.endswith('/candidates') and scope.get('method') in {'GET', 'HEAD'}))
                     )
                     or (
                         path in {
@@ -5225,8 +5225,31 @@ class LazyASGIApp:
 
             file_path = download_request.zip_file_path
 
-            if os.path.isdir(file_path):
-                await self._handle_streaming_download(send, download_request, file_path)
+            # Existing tickets may still point at a single launcher from a
+            # previous release. Re-evaluate base directories before serving.
+            base_path = getattr(game, 'full_disk_path', None)
+            is_base = bool(base_path and getattr(download_request, 'file_location', None) == base_path)
+            if is_base:
+                bases = get_allowed_base_directories(self._flask_app)
+                if not bases or not is_safe_path(base_path, bases)[0]:
+                    await self._send_error(send, 403, "Access denied")
+                    return
+                if os.path.isdir(base_path):
+                    from oneirodex.runtime_native.download_mutations import DownloadMutationData
+                    file_path = DownloadMutationData().legacy_zip_path(game)
+            if not file_path:
+                await self._send_error(send, 404, "File not found")
+                return
+            from urllib.parse import parse_qs
+
+            query = parse_qs(scope.get('query_string', b''))
+            wrap_file = query.get(b'representation') == [b'companion_zip'] and (
+                file_path and not file_path.lower().endswith('.zip')
+            )
+            if os.path.isdir(file_path) or wrap_file:
+                from oneirodex.runtime_native.download_mutations import base_download_exclusions
+                excluded = base_download_exclusions() if is_base else ()
+                await self._handle_streaming_download(send, download_request, file_path, excluded_folders=excluded)
                 return
 
             allowed_bases = get_allowed_base_directories(self._flask_app)
@@ -5285,7 +5308,11 @@ class LazyASGIApp:
             except BaseException:
                 handle.close()
                 raise
-            await self._stream_file(send, handle, filename)
+            headers = dict(scope.get('headers', ()))
+            if filename.lower().endswith('.zip') and headers.get(b'x-oneirodex-resume') == b'1':
+                await self._stream_file(send, handle, filename, resume=headers)
+            else:
+                await self._stream_file(send, handle, filename)
 
     async def _handle_rom_download(self, scope, receive, send, path):
         """Handle ROM file downloads for emulator"""
@@ -5343,7 +5370,7 @@ class LazyASGIApp:
                 await self._send_error(send, 403, "Access denied")
                 return
 
-            if not os.path.exists(game.full_disk_path):
+            if not game.full_disk_path or not os.path.exists(game.full_disk_path):
                 log_system_event(
                     f"ROM download attempt for missing file: {game.name} at {game.full_disk_path}",
                     event_type='security',
@@ -5594,7 +5621,7 @@ class LazyASGIApp:
             )
             return None
 
-    async def _stream_file(self, send, handle, filename):
+    async def _stream_file(self, send, handle, filename, *, resume=None):
         """Stream an open file that ``open_plain_file_within`` already vetted.
 
         The size is the descriptor's and so are the bytes, so what is announced
@@ -5606,12 +5633,24 @@ class LazyASGIApp:
             with handle:
                 size = os.fstat(handle.fileno()).st_size
 
+                status = 200
+                headers = _file_headers(filename, size)
+                if resume is not None:
+                    from oneirodex.utils.archive_range import archive_identity, resolve_range
+                    etag, total = await asyncio.to_thread(archive_identity, handle)
+                    status, start, size = resolve_range(
+                        total, resume.get(b'range', b'').decode('latin1'),
+                        resume.get(b'if-range', b'').decode('latin1'), etag)
+                    headers = _file_headers(filename, size) + [
+                        (b'accept-ranges', b'bytes'), (b'etag', etag.encode('ascii')),
+                    ]
+                    if status == 416:
+                        headers.append((b'content-range', f'bytes */{total}'.encode()))
+                    if status == 206:
+                        headers.append((b'content-range', f'bytes {start}-{total-1}/{total}'.encode()))
+                    handle.seek(start)
                 started = True
-                await send({
-                    "type": "http.response.start",
-                    "status": 200,
-                    "headers": _file_headers(filename, size),
-                })
+                await send({'type': 'http.response.start', 'status': status, 'headers': headers})
 
                 async for chunk in _read_chunks(handle, size):
                     await send({
@@ -5639,7 +5678,7 @@ class LazyASGIApp:
                 raise
             await self._send_error(send, 500, "Error streaming file")
 
-    async def _handle_streaming_download(self, send, download_request, source_path):
+    async def _handle_streaming_download(self, send, download_request, source_path, *, excluded_folders=None):
         """Handle zipstream downloads for multi-file games"""
         started = False
         try:
@@ -5681,7 +5720,7 @@ class LazyASGIApp:
 
             async_generator, headers = async_generate_zipstream_response(
                 real_root, filename, chunk_size, compression_level, enable_zip64,
-                source_is_resolved=True,
+                source_is_resolved=True, excluded_folders=excluded_folders,
             )
 
             started = True
@@ -5754,6 +5793,9 @@ class LazyASGIApp:
 
             if message["type"] == "lifespan.startup":
                 try:
+                    from oneirodex.utils.shutdown import begin_lifespan
+
+                    begin_lifespan()
                     # Eager-init Flask so the first browser burst does not race bridge setup.
                     await self._ensure_flask()
 
@@ -5761,9 +5803,11 @@ class LazyASGIApp:
                     # Wrapped so a scheduler that throws on start can never wedge
                     # lifespan and take the whole server down with it.
                     try:
-                        from oneirodex.background import start_background_workers
+                        from oneirodex.background import WorkersStillRunning, start_background_workers
 
                         start_background_workers(self._flask_app)
+                    except WorkersStillRunning:
+                        raise
                     except Exception as e:
                         print(f"Background workers failed to start: {e}")
 
@@ -5775,21 +5819,14 @@ class LazyASGIApp:
 
             elif message["type"] == "lifespan.shutdown":
                 try:
-                    try:
-                        from oneirodex.background import stop_background_workers
-
-                        stop_background_workers()
-                    except Exception as e:
-                        print(f"Background workers failed to stop cleanly: {e}")
-
+                    from oneirodex.background import stop_background_workers
                     from oneirodex.utils.shutdown import request_shutdown
 
-                    try:
-                        request_shutdown()
-                    finally:
-                        if self._native_sqlalchemy_engine is not None:
-                            self._native_sqlalchemy_engine.dispose()
-                            self._native_sqlalchemy_engine = None
+                    request_shutdown()
+                    stop_background_workers()
+                    if self._native_sqlalchemy_engine is not None:
+                        self._native_sqlalchemy_engine.dispose()
+                        self._native_sqlalchemy_engine = None
                     print("🛑 ASGI lifespan shutdown initiated")
                     await send({"type": "lifespan.shutdown.complete"})
                 except Exception as e:

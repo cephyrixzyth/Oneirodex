@@ -256,7 +256,7 @@ export function CheatsPanel({ gameUuid, playHref = null, cheatSurface = 'retroar
             </select>
           </label>
         </div>
-        <div className="od-cheats-panel__codes" aria-label="Code rows">
+        <div className="od-cheats-panel__codes" role="group" aria-label="Code rows">
           {codeRows.map((row, index) => (
             <div key={row.id} className="od-cheats-panel__code-row">
               <label className="od-cheats-panel__field">

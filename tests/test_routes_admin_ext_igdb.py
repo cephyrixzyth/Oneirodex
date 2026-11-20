@@ -1,26 +1,14 @@
 import pytest
-from cryptography.fernet import Fernet
-from flask import url_for
 from oneirodex.models import GlobalSettings, User
 from oneirodex import db
 from uuid import uuid4
 import time
-import json
-from unittest.mock import patch, Mock
-from datetime import datetime, timezone
+from unittest.mock import patch
 
-pytestmark = pytest.mark.integration  # A3.1: kept out of the fast `-m "not integration"` core -- IGDB admin provider surface.
-
-
-@pytest.fixture(autouse=True)
-def reusable_secret_keyring(monkeypatch, tmp_path):
-    import json
-
-    path = tmp_path / 'test-keyring.json'
-    path.write_text(json.dumps({
-        'active_key_id': 'test', 'keys': {'test': Fernet.generate_key().decode('ascii')},
-    }), encoding='utf-8')
-    monkeypatch.setenv('ONEIRODEX_REUSABLE_SECRET_KEYRING_FILE', str(path))
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.usefixtures('reusable_secret_keyring'),
+]
 
 
 @pytest.fixture
@@ -219,10 +207,8 @@ class TestIGDBSettingsRoute:
         response_data = response.get_json()
         assert response_data['status'] == 'success'
     
-    @patch('oneirodex.routes_admin_ext.igdb.db.session.commit')
-    def test_igdb_settings_post_database_error(self, mock_commit, client, admin_user, global_settings):
+    def test_igdb_settings_post_database_error(self, client, admin_user, global_settings):
         """Test POST request handles database errors."""
-        mock_commit.side_effect = Exception("Database error")
         
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -233,15 +219,31 @@ class TestIGDBSettingsRoute:
             'igdb_client_secret': 'test_secret'
         }
         
-        response = client.post('/admin/igdb_settings', 
-                             json=test_data,
-                             content_type='application/json')
-        
+        # Fail only the request's settings write. The signed-in client also commits
+        # its own transaction after dispatch to persist the synthetic session.
+        from sqlalchemy import event
+        from sqlalchemy.orm import Session
+
+        original_id = global_settings.igdb_client_id
+
+        def fail_settings_commit(session):
+            if any(isinstance(row, GlobalSettings) and row.igdb_client_id == 'test_id'
+                   for row in session.dirty):
+                raise RuntimeError('Database error')
+
+        event.listen(Session, 'before_commit', fail_settings_commit)
+        try:
+            response = client.post('/admin/igdb_settings', json=test_data)
+        finally:
+            event.remove(Session, 'before_commit', fail_settings_commit)
+
         assert response.status_code == 500
         response_data = response.get_json()
         assert response_data['ok'] is False
         assert response_data['success'] is False
         assert response_data['message'] == 'Could not save IGDB settings'
+        db.session.refresh(global_settings)
+        assert global_settings.igdb_client_id == original_id
     
     def test_igdb_settings_post_invalid_json(self, client, admin_user):
         """Test POST request with invalid JSON."""
@@ -315,7 +317,7 @@ class TestIGDBTestRoute:
         assert response_data['success'] is False
         assert 'not configured' in response_data['message']
     
-    @patch('oneirodex.routes_admin_ext.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_test_igdb_successful_api_call(self, mock_api_request, client, admin_user, clean_global_settings):
         """Test successful IGDB API test."""
         # Mock successful API response
@@ -341,7 +343,7 @@ class TestIGDBTestRoute:
         db.session.refresh(clean_global_settings)
         assert clean_global_settings.igdb_last_tested is not None
     
-    @patch('oneirodex.routes_admin_ext.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_test_igdb_invalid_api_response(self, mock_api_request, client, admin_user, clean_global_settings):
         """Test IGDB test with invalid API response."""
         # Mock invalid API response (not a list)
@@ -358,7 +360,7 @@ class TestIGDBTestRoute:
         assert response_data['success'] is False
         assert 'Invalid API response' in response_data['message']
     
-    @patch('oneirodex.routes_admin_ext.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_test_igdb_api_exception(self, mock_api_request, client, admin_user, clean_global_settings):
         """Test IGDB test when API call raises exception."""
         # Mock API request to raise an exception
@@ -387,7 +389,8 @@ class TestIGDBTestRoute:
 
 class TestIGDBIntegration:
     
-    def test_igdb_settings_and_test_workflow(self, client, admin_user):
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request', return_value=[{'name': 'Test Game'}])
+    def test_igdb_settings_and_test_workflow(self, mock_api_request, client, admin_user):
         """Test complete workflow: set settings then test them."""
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
@@ -404,18 +407,29 @@ class TestIGDBIntegration:
                                       content_type='application/json')
         assert settings_response.status_code == 200
         
-        # Then test with those settings (will fail without mock, but that's expected)
         test_response = client.post('/admin/test_igdb')
-        # Should get an error since we don't have real IGDB credentials, but it should not be a 400
-        assert test_response.status_code in [200, 500]  # 500 for actual API failure, not config failure
-    
-    def test_igdb_routes_blueprint_registration(self, app):
-        """Test that IGDB routes are properly registered."""
-        with app.test_request_context():
-            assert url_for('admin2.igdb_settings') == '/admin/igdb_settings'
-            assert url_for('admin2.test_igdb') == '/admin/test_igdb'
-    
-    @patch('oneirodex.routes_admin_ext.igdb.make_igdb_api_request')
+        assert test_response.status_code == 200
+        assert test_response.get_json()['status'] == 'success'
+        mock_api_request.assert_called_once_with(
+            'https://api.igdb.com/v4/games', 'fields name; limit 1;',
+        )
+
+    def test_legacy_and_current_igdb_settings_routes_share_configuration(self, client, admin_user):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+            sess['_fresh'] = True
+
+        saved = client.post('/admin/igdb_settings', json={
+            'igdb_client_id': 'legacy-client', 'igdb_client_secret': 'legacy-secret',
+        })
+        assert saved.status_code == 200
+        current = client.get('/api/admin/igdb/settings')
+        assert current.status_code == 200
+        assert current.get_json()['settings']['igdb_client_id'] == 'legacy-client'
+        assert current.get_json()['settings']['secret_present'] is True
+        assert 'legacy-secret' not in current.get_data(as_text=True)
+
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_igdb_last_tested_timestamp_update(self, mock_api_request, client, admin_user, clean_global_settings):
         """Test that igdb_last_tested timestamp is properly updated."""
         # Mock successful API response

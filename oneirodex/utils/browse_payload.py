@@ -57,7 +57,7 @@ def serialize_browse_row(game, result: BrowseQueryResult) -> dict:
         )
 
     edition_platforms = result.edition_platforms_by_key.get(
-        normalize_title(game.name)
+        normalize_title(game.name) or '#' + str(game.uuid)
     ) or ([library_platform_key] if library_platform_key else [])
 
     steam_app_id = getattr(game, "steam_app_id", None)

@@ -153,7 +153,7 @@ function waitForMeasuredRefresh(maxMs) {
  * reaching retroarch.cfg. Runtime additions append here and are composed in
  * below, so a late append cannot be lost the same way again.
  */
-var extraConfigExtras = '';
+var extraConfigExtras = new URLSearchParams(location.search).has('od_profile') ? '\npause_nonactive = "false"\n' : '';
 
 /** Config text for this display. Built per write so a late measurement lands. */
 function buildExtraConfig() {
@@ -518,7 +518,11 @@ function removeIdbItem(key, customTransaction) {
 }
 
 function openIdb() {
-	var request = indexedDB.open("webretro", 2);
+	// Standalone WebRetro keeps its original local store. In Oneirodex each
+	// verified member and catalog copy receives an independent emulator cache.
+	var scoped = Boolean(queries.od_profile && queries.od_game);
+	var name = scoped ? "oneirodex-webretro/" + encodeURIComponent(queries.od_profile) + "/" + encodeURIComponent(queries.od_game) : "webretro";
+	var request = indexedDB.open(name, 2);
 	request.onsuccess = function(e) {
 		wIdb = e.target.result;
 	}
@@ -530,6 +534,8 @@ function openIdb() {
 			case 0:
 				// create the object store
 				wIdb.createObjectStore("main", {keyPath: "key"}).transaction.oncomplete = function() {
+					// Old unowned saves are recoverable in standalone WebRetro.
+					if (scoped) return;
 					// look for saves in localStorage from old versions
 					var ls = Object.keys(localStorage);
 					for (var i = 0; i < ls.length; i++) {

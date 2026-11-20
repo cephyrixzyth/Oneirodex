@@ -53,6 +53,7 @@ class UserDeletionFileJob(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     path_key = db.Column(db.String(64), nullable=False)
+    image_identity = db.Column(db.String(128), nullable=True)
     root_path = db.Column(db.String(1024), nullable=False)
     relative_path = db.Column(db.String(1024), nullable=False)
     state = db.Column(

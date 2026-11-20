@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from oneirodex.runtime_native.db_session import native_db as db
+from oneirodex.runtime_native.db_session import native_db as db, native_session_scope_key
 from oneirodex.models import GlobalSettings
 
 STORAGE_KEY = 'browser_player'
@@ -23,6 +23,8 @@ SHIPPED_ENGINES = ('webretro',)
 
 
 def _request_cache(key: str):
+    if native_session_scope_key():
+        return db.session.info.get(key)
     try:
         from flask import g, has_request_context
 
@@ -32,6 +34,9 @@ def _request_cache(key: str):
 
 
 def _set_request_cache(key: str, value) -> None:
+    if native_session_scope_key():
+        db.session.info[key] = value
+        return
     try:
         from flask import g, has_request_context
 
@@ -42,6 +47,10 @@ def _set_request_cache(key: str, value) -> None:
 
 
 def _clear_request_cache(*keys: str) -> None:
+    if native_session_scope_key():
+        for key in keys:
+            db.session.info.pop(key, None)
+        return
     try:
         from flask import g, has_request_context
 
@@ -83,7 +92,7 @@ def available_engines() -> tuple[str, ...]:
 
     engines = list(SHIPPED_ENGINES)
     enabled = True
-    if _has_sqlalchemy_app_context():
+    if native_session_scope_key() or _has_sqlalchemy_app_context():
         enabled = _blob(_settings_row()).get('browser_player_emulatorjs_enabled', True)
     if isinstance(enabled, str):
         enabled = enabled.strip().lower() in {'1', 'true', 'yes', 'on'}
@@ -246,6 +255,10 @@ def engine_label(engine: str) -> str:
 
 def member_engine_preference() -> str | None:
     """The signed-in member's stored engine choice, or None. Never raises."""
+    if native_session_scope_key():
+        user = db.session.info.get('oneirodex_request_member')
+        value = str(getattr(getattr(user, 'preferences', None), 'browser_player_engine', '') or '').strip().lower()
+        return value if value in KNOWN_ENGINES else None
     try:
         from flask import has_request_context
         from flask_login import current_user

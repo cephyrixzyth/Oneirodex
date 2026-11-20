@@ -191,7 +191,10 @@ def queue_position(job_id: str) -> int | None:
     return None
 
 
-def find_queued_for_library(library_uuid: str, folder_path: str) -> ScanJob | None:
+def find_queued_for_library(library_uuid: str, folder_path: str, *, scan_mode='folders',
+                            remove_missing=False, download_missing_images=False,
+                            force_updates_extras_scan=False, fetch_hltb=False,
+                            force_hltb_refetch=False) -> ScanJob | None:
     """Return an existing Queued job for the same library root, if any."""
     folder_n = _norm_folder(folder_path)
     rows = db.session.execute(
@@ -199,6 +202,12 @@ def find_queued_for_library(library_uuid: str, folder_path: str) -> ScanJob | No
         .where(
             ScanJob.library_uuid == library_uuid,
             ScanJob.status == 'Queued',
+            func.coalesce(ScanJob.setting_filefolder, False) == (scan_mode == 'files'),
+            func.coalesce(ScanJob.setting_remove, False) == bool(remove_missing),
+            func.coalesce(ScanJob.setting_download_missing_images, False) == bool(download_missing_images),
+            func.coalesce(ScanJob.setting_force_updates_extras, False) == bool(force_updates_extras_scan),
+            ScanJob.setting_fetch_hltb == bool(fetch_hltb),
+            ScanJob.setting_force_hltb_refetch == bool(force_hltb_refetch),
         )
         .order_by(ScanJob.last_run.asc().nullsfirst(), ScanJob.id.asc())
     ).scalars().all()
@@ -430,6 +439,8 @@ def create_scan_job_row(
     remove_missing: bool = False,
     download_missing_images: bool = False,
     force_updates_extras_scan: bool = False,
+    fetch_hltb: bool = False,
+    force_hltb_refetch: bool = False,
     schedule=None,
     schedule_fields=None,
     status: str = 'Queued',
@@ -456,6 +467,8 @@ def create_scan_job_row(
         setting_filefolder=(scan_mode == 'files'),
         setting_download_missing_images=bool(download_missing_images),
         setting_force_updates_extras=bool(force_updates_extras_scan),
+        setting_fetch_hltb=bool(fetch_hltb),
+        setting_force_hltb_refetch=bool(force_hltb_refetch),
         schedule=fields.get('schedule') if fields else (
             schedule if schedule in ('8_hours', '24_hours', '48_hours') else None
         ),
@@ -500,8 +513,7 @@ def _has_older_busy_scan(candidate: ScanJob) -> bool:
 
 
 def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False,
-                      database_scope=None, fetch_hltb: bool = False,
-                      force_hltb_refetch: bool = False):
+                      database_scope=None):
     """Spawn daemon thread that runs ``scan_and_add_games`` for an existing job."""
     from oneirodex.utils.services.scan_orchestration import scan_and_add_games
 
@@ -513,6 +525,8 @@ def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False,
     download_missing_images = bool(job.setting_download_missing_images)
     force_updates_extras = bool(job.setting_force_updates_extras)
     schedule = job.schedule
+    fetch_hltb = bool(job.setting_fetch_hltb)
+    force_hltb_refetch = bool(job.setting_force_hltb_refetch)
 
     def _run():
         from contextlib import nullcontext
@@ -538,7 +552,9 @@ def _start_job_thread(job: ScanJob, app, *, force_parallel: bool = False,
                 app=app if database_scope is not None else None,
             )
 
-    Thread(target=_run, daemon=True, name=f'oneirodex-scan-{job_id[:8]}').start()
+    from oneirodex.utils.shutdown import bind_shutdown_owner
+
+    Thread(target=bind_shutdown_owner(_run), daemon=True, name=f'oneirodex-scan-{job_id[:8]}').start()
 
 
 def start_or_queue_scan(
@@ -592,7 +608,11 @@ def start_or_queue_scan(
     busy = is_scan_busy()
 
     if busy and not force:
-        existing_queued = find_queued_for_library(library_uuid, folder_path)
+        existing_queued = find_queued_for_library(
+            library_uuid, folder_path, scan_mode=scan_mode, remove_missing=remove_missing,
+            download_missing_images=download_missing_images, force_updates_extras_scan=force_updates_extras_scan,
+            fetch_hltb=fetch_hltb, force_hltb_refetch=force_hltb_refetch,
+        )
         if existing_queued:
             # Keep the Queued row's schedule in sync with the latest submit —
             # dropping interval/cron here silently converts a recurring job
@@ -617,6 +637,7 @@ def start_or_queue_scan(
             remove_missing=remove_missing,
             download_missing_images=download_missing_images,
             force_updates_extras_scan=force_updates_extras_scan,
+            fetch_hltb=fetch_hltb, force_hltb_refetch=force_hltb_refetch,
             schedule=schedule,
             schedule_fields=schedule_fields,
             status='Queued',
@@ -637,6 +658,7 @@ def start_or_queue_scan(
         remove_missing=remove_missing,
         download_missing_images=download_missing_images,
         force_updates_extras_scan=force_updates_extras_scan,
+        fetch_hltb=fetch_hltb, force_hltb_refetch=force_hltb_refetch,
         schedule=schedule,
         schedule_fields=schedule_fields,
         status='Running',
@@ -672,12 +694,10 @@ def start_or_queue_scan(
     except Exception:
         pass
 
-    # HLTB flags are request-scoped (not ScanJob columns). Native callers
-    # supply a worker-local DB scope so the thread stays independent of Flask.
+    # Every dispatch uses the persisted options, including after a process restart.
     _start_job_thread(
         job, flask_app, force_parallel=force,
-        database_scope=database_scope, fetch_hltb=fetch_hltb,
-        force_hltb_refetch=force_hltb_refetch,
+        database_scope=database_scope,
     )
 
     if force and busy:

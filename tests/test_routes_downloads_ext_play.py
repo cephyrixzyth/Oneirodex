@@ -211,7 +211,44 @@ class TestDownloadRomRoute:
         """Test that downloadrom requires authentication."""
         response = client.get(f'/api/downloadrom/{test_game_with_file.uuid}')
         assert response.status_code == 401  # an API download is refused, not redirected
-    
+
+
+    def test_attached_rom_streams_and_a_missing_source_returns_404(
+        self, client, app, authenticated_user, test_library, db_session, tmp_path, monkeypatch,
+    ):
+        monkeypatch.setitem(app.config, 'DATA_FOLDER_GAMES', str(tmp_path))
+        monkeypatch.setenv('ONEIRODEX_LIBRARY_DIR', str(tmp_path / 'runtime'))
+        test_library.platform = LibraryPlatform.NES
+        path = tmp_path / 'fixture.nes'
+        content = b'NES\x1a' + bytes([1]) + bytes(11) + bytes(16 * 1024)
+        path.write_bytes(content)
+        game = Game(name='Platform capability sample', library_uuid=test_library.uuid, full_disk_path=str(path))
+        db_session.add(game)
+        db_session.commit()
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(authenticated_user.id)
+            sess['_fresh'] = True
+
+        launch_url = f'/play_game/{game.uuid}'
+        rom_url = f'/api/downloadrom/{game.uuid}'
+        launch = client.get(launch_url)
+        assert launch.status_code == 302
+        assert '/static/vendor/webretro/webretro.html?' in launch.location
+        delivered = client.get(rom_url)
+        assert delivered.status_code == 200
+        assert delivered.data == content
+
+        path.unlink()
+        assert client.get(rom_url).status_code == 404
+
+        game.full_disk_path = None
+        db_session.commit()
+        launch = client.get(launch_url)
+        assert launch.status_code == 302
+        assert f'/game_details/{game.uuid}' in launch.location
+        assert client.get(rom_url).status_code == 404
+
+
 class TestSecurityIntegration:
     """Integration tests for security features."""
     

@@ -5,6 +5,9 @@ from enum import Enum as PyEnum
 from uuid import uuid4
 
 from sqlalchemy import select
+from sqlalchemy.orm import validates
+
+from oneirodex.utils.title_grouping import normalize_title
 
 from oneirodex.models.orm import db
 
@@ -74,6 +77,7 @@ class Status(PyEnum):
 
 class Game(db.Model):
     __tablename__ = 'games'
+    __table_args__ = (db.Index('ix_games_browse_title_key', 'browse_title_key', postgresql_using='hash'),)
 
     id = db.Column(db.Integer, primary_key=True)
     uuid = db.Column(db.String(36), default=lambda: str(uuid4()), unique=True, nullable=False)
@@ -81,6 +85,13 @@ class Game(db.Model):
     favorited_by = db.relationship('User', secondary='user_favorites', back_populates='favorites')
     status_users = db.relationship('User', secondary='user_game_status', back_populates='game_statuses')
     name = db.Column(db.String, nullable=False)
+    browse_title_key = db.Column(db.Text, nullable=True)
+
+    @validates('name')
+    def _update_browse_title_key(self, key, name):
+        self.browse_title_key = normalize_title(name)
+        return name
+
     summary = db.Column(db.Text, nullable=True)
     storyline = db.Column(db.Text, nullable=True)
     updates = db.relationship('GameUpdate', back_populates='game', cascade='all, delete-orphan')

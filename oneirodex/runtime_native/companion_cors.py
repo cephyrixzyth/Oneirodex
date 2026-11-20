@@ -27,7 +27,8 @@ def native_companion_cors(handler):
             dispatch,
             allow_origins=NATIVE_COMPANION_ORIGINS,
             allow_methods=('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'),
-            allow_headers=('Authorization', 'Content-Type'),
+            allow_headers=('Authorization', 'Content-Type', 'Range', 'If-Range', 'X-Oneirodex-Resume'),
+            expose_headers=('ETag', 'Content-Range', 'Accept-Ranges'),
             allow_credentials=False,
         )
         await middleware(scope, receive, send)

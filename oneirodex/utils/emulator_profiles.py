@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 
-from oneirodex.runtime_native.db_session import native_db as db
+from oneirodex.runtime_native.db_session import native_db as db, native_session_scope_key
 from oneirodex.models import GlobalSettings
 from oneirodex.platform import (
     ARCADE_COMPANION_CORES,
@@ -15,6 +15,13 @@ from oneirodex.platform import (
 
 
 def _request_cache(value=None, *, write=False, clear=False):
+    if native_session_scope_key():
+        key = '_emulator_profiles_cache'
+        if clear:
+            return db.session.info.pop(key, None)
+        if write:
+            db.session.info[key] = value
+        return db.session.info.get(key)
     try:
         from flask import g, has_request_context
 
@@ -43,6 +50,13 @@ def _allowed_cores(platform_key: str) -> set[str]:
     if platform_key == 'ARCADE':
         return {e.value for e in ARCADE_COMPANION_CORES}
     return {e.value for e in platform_emulator_mapping.get(LibraryPlatform[platform_key], [])}
+
+
+def emulator_profile_catalog() -> dict[str, list[str]]:
+    catalog = {platform.name: [core.value for core in cores]
+               for platform, cores in platform_emulator_mapping.items() if cores}
+    catalog['ARCADE'] = [core.value for core in ARCADE_COMPANION_CORES]
+    return catalog
 
 
 def _global_settings() -> GlobalSettings | None:

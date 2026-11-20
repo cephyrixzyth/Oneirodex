@@ -21,6 +21,9 @@ test('catalog and detail both reject uncoordinated legacy control', async () => 
   const fetch = privateRequests()
   await expect(fetchVrCatalog()).rejects.toThrow('Reconnect and reload')
   await expect(fetchVrGame('fixture')).rejects.toThrow('Reconnect and reload')
+  await expect(fetchVrCatalog({ vrCompat: 'collection' })).rejects.toThrow('Reconnect and reload')
+  await expect(fetchVrGame('fixture', { collection: true })).rejects.toThrow('Reconnect and reload')
+  await expect(fetchVrCatalog({ vrCompat: 'favorites' })).rejects.toThrow('Reconnect and reload')
   expect(fetch).not.toHaveBeenCalled()
 })
 

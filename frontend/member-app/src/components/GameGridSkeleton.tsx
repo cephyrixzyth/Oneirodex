@@ -7,6 +7,7 @@ export function GameGridSkeleton({ count = 12, layout = 'tile' }: LooseProps) {
       data-library-grid
       data-library-skeleton
       data-layout={layout}
+      role="status"
       aria-busy="true"
       aria-label="Loading games"
     >

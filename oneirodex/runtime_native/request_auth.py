@@ -184,6 +184,11 @@ def request_auth_context(
     from oneirodex.utils.event_logging import set_acting_user
 
     set_acting_user(getattr(context.user, "id", None))
+    # Native projections can read the signed-in member without a Flask-Login proxy.
+    from oneirodex.runtime_native.db_session import native_db, native_session_scope_key
+
+    if native_session_scope_key():
+        native_db.session.info['oneirodex_request_member'] = context.user
     return context
 
 

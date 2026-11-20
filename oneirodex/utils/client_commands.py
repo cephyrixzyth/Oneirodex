@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from oneirodex.utils.library_paths import library_dir
@@ -266,6 +266,8 @@ def _public_command(row: dict[str, Any]) -> dict[str, Any]:
         'created_at': row.get('created_at'),
         'status': row.get('status') or 'pending',
     }
+    if row.get('lease_id'):
+        delivered['lease_id'] = row['lease_id']
     if row.get('kind'):
         delivered['kind'] = str(row['kind'])
     if row.get('version_uuid'):
@@ -297,6 +299,7 @@ def enqueue_client_command(
     version_uuid: str | None = None,
     path: str | None = None,
     select: bool | None = None,
+    target_device_id: str | None = None,
 ) -> dict[str, Any]:
     """Append a pending command for the companion to claim."""
     cleaned_uuid = str(game_uuid or '').strip()
@@ -338,6 +341,10 @@ def enqueue_client_command(
         'status': 'pending',
         'created_at': datetime.now(timezone.utc).isoformat(),
     }
+    if target_device_id:
+        if not isinstance(target_device_id, str) or len(target_device_id) > 128:
+            raise ValueError('Invalid target device')
+        command['target_device_id'] = target_device_id
     if cleaned_kind:
         command['kind'] = cleaned_kind
     if cleaned_version:
@@ -352,6 +359,8 @@ def enqueue_client_command(
         queue = _read_queue(store)
         # Drop duplicate pending for same game+action+version (or same open_path target).
         def _is_duplicate(row: dict[str, Any]) -> bool:
+            if row.get('target_device_id') != target_device_id:
+                return False
             if row.get('status') != 'pending' or row.get('action') != cleaned_action:
                 return False
             if cleaned_action == 'open_path':
@@ -363,25 +372,50 @@ def enqueue_client_command(
 
         queue = [row for row in queue if not _is_duplicate(row)]
         queue.append(command)
-        if len(queue) > 50:
-            queue = queue[-50:]
+        while len(queue) > 50:
+            expired = next((i for i, row in enumerate(queue) if row.get('status') == 'failed'), None)
+            if expired is None:
+                raise ValueError('Companion queue is full. Finish existing commands before adding more.')
+            del queue[expired]
         _write_queue(store, queue)
     return command
 
 
-def claim_pending_commands(user_id: int, *, limit: int = 10) -> list[dict[str, Any]]:
+def claim_pending_commands(user_id: int, *, limit: int = 10, device_id: str | None = None,
+                           renew_lease: str | None = None, legacy_device_id: str | None = None) -> list[dict[str, Any]]:
     """Mark up to ``limit`` pending commands in_flight and return them (durable until ack)."""
     path = _store_path(user_id)
     claimed: list[dict[str, Any]] = []
     now = datetime.now(timezone.utc)
     with locked(path):
         queue = _reclaim_stale(_read_queue(path), now=now)
+        if renew_lease:
+            for row in queue:
+                if (row.get('status') == 'in_flight' and row.get('lease_id') == renew_lease
+                        and row.get('claimed_device_id') == device_id):
+                    row['claimed_at'] = now.isoformat()
+            _write_queue(path, queue)
+            return []
+        if device_id and any(row.get('status') == 'in_flight' and row.get('claimed_device_id') == device_id
+                             for row in queue):
+            _write_queue(path, queue)
+            return []
         updated: list[dict[str, Any]] = []
         for row in queue:
-            if len(claimed) < limit and _claimable(row):
+            target = row.get('target_device_id')
+            retry_at = _parse_iso(row.get('retry_at'))
+            if (len(claimed) < limit and _claimable(row) and (not target or target == (device_id or legacy_device_id))
+                    and (not retry_at or retry_at <= now)):
                 in_flight = dict(row)
                 in_flight['status'] = 'in_flight'
                 in_flight['claimed_at'] = now.isoformat()
+                if device_id:
+                    in_flight['lease_id'] = str(uuid.uuid4())
+                    in_flight['claimed_device_id'] = device_id
+                    in_flight['target_device_id'] = device_id
+                else:
+                    in_flight.pop('claimed_device_id', None)
+                    in_flight.pop('lease_id', None)
                 if not in_flight.get('id'):
                     in_flight['id'] = str(uuid.uuid4())
                 updated.append(in_flight)
@@ -392,6 +426,15 @@ def claim_pending_commands(user_id: int, *, limit: int = 10) -> list[dict[str, A
     return claimed
 
 
+def command_status_for_game(user_id: int, game_uuid: str) -> list[dict[str, Any]]:
+    """Outstanding or failed work visible to its owner, omitting paths and lease secrets."""
+    path = _store_path(user_id)
+    with locked(path):
+        rows = _read_queue(path)
+    return [{key: row.get(key) for key in ('id', 'action', 'status', 'target_device_id', 'retry_at', 'attempts')}
+            for row in reversed(rows) if row.get('game_uuid') == game_uuid]
+
+
 def ack_client_commands(user_id: int, command_ids: list[str]) -> int:
     """Remove successfully handled commands from the queue."""
     wanted = {str(cid).strip() for cid in command_ids if str(cid).strip()}
@@ -400,7 +443,8 @@ def ack_client_commands(user_id: int, command_ids: list[str]) -> int:
     path = _store_path(user_id)
     with locked(path):
         queue = _read_queue(path)
-        remaining = [row for row in queue if str(row.get('id') or '') not in wanted]
+        remaining = [row for row in queue if str(row.get('id') or '') not in wanted
+                     or row.get('lease_id') or row.get('status') != 'in_flight']
         removed = len(queue) - len(remaining)
         if removed:
             _write_queue(path, remaining)
@@ -418,7 +462,7 @@ def nack_client_commands(user_id: int, command_ids: list[str]) -> int:
         queue = _read_queue(path)
         updated: list[dict[str, Any]] = []
         for row in queue:
-            if str(row.get('id') or '') in wanted:
+            if row.get('status') == 'in_flight' and str(row.get('id') or '') in wanted and not row.get('lease_id'):
                 pending = dict(row)
                 pending['status'] = 'pending'
                 pending.pop('claimed_at', None)
@@ -429,3 +473,31 @@ def nack_client_commands(user_id: int, command_ids: list[str]) -> int:
         if released:
             _write_queue(path, updated)
     return released
+
+
+def finish_leased_command(user_id: int, command_id: str, device_id: str, lease_id: str, result: str) -> int:
+    """Complete only the matching generation of a device's lease."""
+    path = _store_path(user_id)
+    with locked(path):
+        queue = _read_queue(path)
+        for row in queue:
+            if (row.get('status') != 'in_flight' or row.get('id') != command_id
+                    or row.get('lease_id') != lease_id or row.get('claimed_device_id') != device_id):
+                continue
+            if result == 'ok':
+                queue.remove(row)
+            else:
+                row.pop('lease_id', None)
+                row.pop('claimed_at', None)
+                row.pop('claimed_device_id', None)
+                row['attempts'] = int(row.get('attempts', 0)) + 1
+                if result == 'busy' and row['attempts'] < 8:
+                    row['status'] = 'pending'
+                    delay = min(600, 15 * 2 ** row['attempts'])
+                    row['retry_at'] = (datetime.now(timezone.utc) + timedelta(seconds=delay)).isoformat()
+                else:
+                    row['status'] = 'failed'
+                    row['result'] = result
+            _write_queue(path, queue)
+            return 1
+        return 0

@@ -71,7 +71,7 @@ export function GameCardPlayControl({
             }}
             onPointerDown={(event) => event.stopPropagation()}
           >
-            Play
+            {game.play_blocker === 'missing_game_file' ? 'File needed' : 'Play'}
           </button>
           {playInfoOpen && (
             <div

@@ -165,7 +165,19 @@ def _normalize_profile(row: Any, known_ids: set[str]) -> dict[str, Any] | None:
         mid = str(value or '').strip()
         if mid and mid in known_ids and mid not in mod_ids:
             mod_ids.append(mid)
-    return {'id': pid, 'name': name, 'mod_ids': mod_ids}
+    profile = {'id': pid, 'name': name, 'mod_ids': mod_ids}
+    if isinstance(row.get('import_order'), list):
+        profile['import_order'] = [str(mid)[:256] for mid in row['import_order'][:256]]
+    if isinstance(row.get('unresolved'), list):
+        profile['unresolved'] = [str(label)[:256] for label in row['unresolved'][:256]]
+    if isinstance(row.get('requirements'), list):
+        profile['requirements'] = [
+            {**{key: str(req.get(key) or '')[:limit] for key, limit in
+                (('id', 256), ('version', 64), ('loader', 64), ('source_url', 2048))},
+             **({'requires': _id_list(req['requires'])} if isinstance(req.get('requires'), list) else {})}
+            for req in row['requirements'][:256] if isinstance(req, dict)
+        ]
+    return profile
 
 
 def _normalize_profiles(rows: Any, known_ids: set[str]) -> list[dict[str, Any]]:

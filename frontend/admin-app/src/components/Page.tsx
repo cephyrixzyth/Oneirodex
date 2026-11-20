@@ -45,24 +45,15 @@ export function Page({
 
   return (
     <div className={className ? `od-admin-page ${className}` : 'od-admin-page'}>
-      {actions ? (
-        <div className="od-admin-page__heading">
-          <div>
-            <h1 ref={headingRef} className={visuallyHiddenTitle ? 'visually-hidden' : undefined}>
-              {title}
-            </h1>
-            {lede ? <p className="od-admin-lede">{lede}</p> : null}
-          </div>
-          <div className="od-admin-page__actions">{actions}</div>
-        </div>
-      ) : (
-        <>
+      <header className="od-admin-page__heading">
+        <div>
           <h1 ref={headingRef} className={visuallyHiddenTitle ? 'visually-hidden' : undefined}>
             {title}
           </h1>
           {lede ? <p className="od-admin-lede">{lede}</p> : null}
-        </>
-      )}
+        </div>
+        {actions ? <div className="od-admin-page__actions">{actions}</div> : null}
+      </header>
       {children}
     </div>
   )

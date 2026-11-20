@@ -29,6 +29,15 @@ export interface ModProfile {
   id: string
   name: string
   mod_ids: string[]
+  unresolved?: string[]
+  import_order?: string[]
+  requirements?: Array<{
+    id: string
+    version: string
+    loader: string
+    source_url: string
+    requires?: string[]
+  }>
 }
 
 export interface ModPack {

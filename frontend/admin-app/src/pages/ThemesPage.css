@@ -46,6 +46,10 @@
   min-height: 2.75rem;
   color: var(--od-accent);
 }
+/* Keep the gallery still until a specimen is hovered or keyboard-focused. */
+.od-themes-motif-preview .od-loading-motif--preview:not(:hover, :focus-visible) * {
+  animation-play-state: paused;
+}
 .od-themes-motif-note {
   flex-basis: 100%;
   margin: 0.15rem 0 0;

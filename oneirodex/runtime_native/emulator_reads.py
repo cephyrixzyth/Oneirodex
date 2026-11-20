@@ -25,27 +25,16 @@ class EmulatorReadData:
         return resolve_emulators_for_platform(name)
 
     def profiles(self):
-        from oneirodex.platform import LibraryPlatform, platform_emulator_mapping
-        from oneirodex.utils.emulator_profiles import get_emulator_profiles
+        from oneirodex.utils.emulator_profiles import emulator_profile_catalog, get_emulator_profiles
 
-        catalog = {
-            platform.name: [item.value for item in platform_emulator_mapping.get(platform, [])]
-            for platform in LibraryPlatform
-            if platform_emulator_mapping.get(platform)
-        }
-        return {'profiles': get_emulator_profiles(), 'catalog': catalog}
+        return {'profiles': get_emulator_profiles(), 'catalog': emulator_profile_catalog()}
 
     def save_profiles(self, profiles):
-        from oneirodex.platform import LibraryPlatform, platform_emulator_mapping
-        from oneirodex.utils.emulator_profiles import set_emulator_profiles
+        from oneirodex.utils.emulator_profiles import emulator_profile_catalog, set_emulator_profiles
 
         saved = set_emulator_profiles(profiles)
-        catalog = {
-            platform.name: [item.value for item in platform_emulator_mapping.get(platform, [])]
-            for platform in LibraryPlatform
-            if platform_emulator_mapping.get(platform)
-        }
-        return {'profiles': saved, 'catalog': catalog}
+
+        return {'profiles': saved, 'catalog': emulator_profile_catalog()}
 
     def browser_player_settings(self):
         from oneirodex.utils.browser_player import get_browser_player_settings

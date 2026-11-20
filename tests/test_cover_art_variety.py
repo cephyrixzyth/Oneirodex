@@ -65,21 +65,13 @@ def test_distribution_is_not_degenerate():
     assert max(counts.values()) < 300, f'skewed distribution: {counts}'
 
 
-@pytest.mark.parametrize('direction', ['crt', 'boxart', 'marquee'])
-def test_edge_owning_directions_skip_the_generic_bezel(direction):
-    """These draw their own frame; adding the shared bezel just doubles it.
-
-    Asserted against the source because the outcome is visual — a second frame
-    inside the first is exactly the kind of thing that reads as "samey" without
-    anyone being able to say why.
-    """
-    import inspect
-
+@pytest.mark.parametrize('direction', ['crt', 'boxart', 'marquee', 'workbench', 'cartridge'])
+def test_frame_is_applied_only_when_the_composition_needs_it(direction, monkeypatch):
     from oneirodex.utils import cover_art_studio
-
-    src = inspect.getsource(cover_art_studio.render_cover_art)
-    assert "direction not in ('crt', 'boxart', 'marquee')" in src
-    assert direction in ("crt", "boxart", "marquee")
+    calls = []
+    monkeypatch.setattr(cover_art_studio, '_draw_bezel_frame', lambda *a, **kw: calls.append(kw))
+    cover_art_studio.render_cover_art(160, 240, title='Fixture', composition=direction)
+    assert bool(calls) == (direction == 'cartridge')
 
 
 def test_scanlines_are_limited_to_tube_era_directions():

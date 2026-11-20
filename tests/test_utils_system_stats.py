@@ -98,7 +98,7 @@ class TestGetDiskUsage:
         mock_disk.percent = 50.0
         mock_disk_usage.return_value = mock_disk
         
-        with patch('oneirodex.utils.system_stats.Config') as mock_config:
+        with patch('config.Config') as mock_config:
             mock_config.BASE_FOLDER_POSIX = '/test/posix/path'
             
             result = get_disk_usage()
@@ -126,7 +126,7 @@ class TestGetDiskUsage:
         mock_disk.percent = 50.0
         mock_disk_usage.return_value = mock_disk
         
-        with patch('oneirodex.utils.system_stats.Config') as mock_config:
+        with patch('config.Config') as mock_config:
             mock_config.BASE_FOLDER_WINDOWS = 'C:\\test\\windows\\path'
             
             result = get_disk_usage()
@@ -149,7 +149,7 @@ class TestGetDiskUsage:
         # os.name is pinned like every sibling here. get_disk_usage picks
         # BASE_FOLDER_WINDOWS when os.name == 'nt', so on Windows this stubbed
         # only the branch that never ran and asserted a call that never happened.
-        with patch('oneirodex.utils.system_stats.Config') as mock_config:
+        with patch('config.Config') as mock_config:
             mock_config.BASE_FOLDER_POSIX = '/nonexistent/path'
             
             result = get_disk_usage()
@@ -165,7 +165,7 @@ class TestGetDiskUsage:
         mock_exists.return_value = True
         mock_disk_usage.side_effect = Exception('Disk error')
         
-        with patch('oneirodex.utils.system_stats.Config') as mock_config:
+        with patch('config.Config') as mock_config:
             mock_config.BASE_FOLDER_POSIX = '/test/path'
             
             result = get_disk_usage()
@@ -191,7 +191,7 @@ class TestGetGamesFolderUsage:
         mock_disk.percent = 50.0
         mock_disk_usage.return_value = mock_disk
 
-        with patch('oneirodex.utils.system_stats.Config') as mock_config:
+        with patch('config.Config') as mock_config:
             mock_config.DATA_FOLDER_GAMES = '/games/folder/path'
 
             result = get_games_folder_usage()
@@ -210,7 +210,7 @@ class TestGetGamesFolderUsage:
         """Test games folder usage when path doesn't exist."""
         mock_exists.return_value = False
 
-        with patch('oneirodex.utils.system_stats.Config') as mock_config:
+        with patch('config.Config') as mock_config:
             mock_config.DATA_FOLDER_GAMES = '/nonexistent/games/path'
 
             result = get_games_folder_usage()
@@ -226,7 +226,7 @@ class TestGetGamesFolderUsage:
         mock_exists.return_value = True
         mock_disk_usage.side_effect = Exception('Games disk error')
 
-        with patch('oneirodex.utils.system_stats.Config') as mock_config:
+        with patch('config.Config') as mock_config:
             mock_config.DATA_FOLDER_GAMES = '/games/path'
 
             result = get_games_folder_usage()

@@ -79,7 +79,7 @@ class TestGetConfigValues:
         mock_access.return_value = True
         
         # Mock Config class with test paths
-        with patch('oneirodex.utils.status.Config') as mock_config:
+        with patch('config.Config') as mock_config:
             mock_config.DATA_FOLDER_GAMES = '/test/games/path'
             mock_config.IMAGE_SAVE_PATH = '/test/images/path'
             mock_config.UPLOAD_FOLDER = '/test/uploads/path'
@@ -103,7 +103,7 @@ class TestGetConfigValues:
         mock_access.return_value = False
         
         # Mock Config class with test paths
-        with patch('oneirodex.utils.status.Config') as mock_config:
+        with patch('config.Config') as mock_config:
             mock_config.DATA_FOLDER_GAMES = '/nonexistent/path'
             
             result = get_config_values()
@@ -128,7 +128,7 @@ class TestGetConfigValues:
         
         mock_access.side_effect = mock_access_func
         
-        with patch('oneirodex.utils.status.Config') as mock_config:
+        with patch('config.Config') as mock_config:
             mock_config.DATA_FOLDER_GAMES = '/readonly/path'
             
             result = get_config_values()

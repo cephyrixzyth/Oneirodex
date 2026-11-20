@@ -430,8 +430,8 @@ class TestUnmatchedFolders:
             sess['_fresh'] = True
         
         response = client.get('/api/unmatched_folders')
-        assert response.status_code == 302
-        # Should redirect to login due to admin_required decorator
+        assert response.status_code == 403
+        assert response.get_json()['error_code'] == 'forbidden'
     
     def test_unmatched_folders_empty_list(self, client, admin_user):
         """Test unmatched_folders with no unmatched folders."""
@@ -710,7 +710,8 @@ class TestExportUnmatchedFolders:
             sess['_fresh'] = True
 
         response = client.get('/api/unmatched_folders/export')
-        assert response.status_code == 302
+        assert response.status_code == 403
+        assert response.get_json()['error_code'] == 'forbidden'
 
     def test_export_csv_default(self, client, admin_user, sample_unmatched_folder):
         """Test CSV export (default format) includes the unmatched folder."""
@@ -898,10 +899,7 @@ class TestScanApiIntegration:
             sess['_user_id'] = str(regular_user.id)
             sess['_fresh'] = True
         
-        # Both endpoints refuse a signed-in member. (They still differ in how:
-        # 403 vs. a sign-in redirect; tracked as a follow-up.)
-        jobs_response = client.get('/api/scan_jobs_status')
-        folders_response = client.get('/api/unmatched_folders')
-
-        assert jobs_response.status_code == 403
-        assert folders_response.status_code in (302, 403)
+        for path in ('/api/scan_jobs_status', '/api/unmatched_folders'):
+            response = client.get(path)
+            assert response.status_code == 403
+            assert response.get_json()['error_code'] == 'forbidden'

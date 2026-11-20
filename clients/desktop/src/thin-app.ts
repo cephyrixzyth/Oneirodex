@@ -1,4 +1,4 @@
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { openSiteLibraryWindow } from './library-window.js'
 
 import {
   createAuthStore,
@@ -8,7 +8,7 @@ import {
   normalizeOneirodexToken,
 } from './auth.js'
 import { createDesktopApi } from './api.js'
-import { isTauriRuntime, loadStoredConfig, saveStoredConfig } from './config-store.js'
+import { loadStoredConfig, saveStoredConfig } from './config-store.js'
 import {
   formatKeychainError,
   logCompanion,
@@ -86,41 +86,7 @@ export function joinLibraryUrl(baseUrl: string): string {
 }
 
 async function openLibraryWindow(baseUrl: string): Promise<'opened' | 'focused' | 'browser'> {
-  const url = joinLibraryUrl(baseUrl)
-  if (!url) {
-    throw new Error('Set Server URL first.')
-  }
-  if (!isTauriRuntime()) {
-    window.open(url, 'od-thin-library', 'width=1280,height=800')
-    return 'browser'
-  }
-  const existing = await WebviewWindow.getByLabel(LIBRARY_LABEL)
-  if (existing) {
-    await existing.show()
-    await existing.setFocus()
-    return 'focused'
-  }
-  const webview = new WebviewWindow(LIBRARY_LABEL, {
-    url,
-    title: 'Oneirodex Library',
-    width: 1280,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
-    resizable: true,
-    focus: true,
-  })
-  await new Promise<void>((resolve, reject) => {
-    webview.once('tauri://created', () => resolve())
-    webview.once('tauri://error', (event) => {
-      reject(
-        new Error(
-          String((event as { payload?: string }).payload || 'Failed to open library window'),
-        ),
-      )
-    })
-  })
-  return 'opened'
+  return openSiteLibraryWindow(joinLibraryUrl(baseUrl), LIBRARY_LABEL)
 }
 
 /**

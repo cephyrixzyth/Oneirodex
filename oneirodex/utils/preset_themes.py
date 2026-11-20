@@ -118,7 +118,7 @@ from oneirodex.utils.json_file_store import write_json_atomic
 # the theme JS lives on the volume, so the handler change needs a Reset.
 # 43 = preferences_modal.js restores the paired icon pack after an unsaved
 # theme preview is dismissed; existing theme volumes need Reset.
-GENERATOR_VERSION = 44
+GENERATOR_VERSION = 46
 
 # Play-room id used when a theme does not name one (default + uploaded packs).
 DEFAULT_ERA = 'wood_den_80s'

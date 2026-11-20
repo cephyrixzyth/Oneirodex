@@ -419,7 +419,7 @@ def test_legacy_other_download_failure_matches_v118_flash_and_event(
         'oneirodex.runtime_native.db_session',
         SimpleNamespace(native_db=SimpleNamespace(
             session=SimpleNamespace(rollback=lambda: rollback_calls.append(True)),
-        )),
+        ), native_session_scope_key=lambda: None),
     )
 
     class FailingDownloads(FakeDownloads):

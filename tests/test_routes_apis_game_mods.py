@@ -295,7 +295,7 @@ class TestModProfiles:
         db_session.add(other)
         db_session.commit()
         obase = f'/api/games/{other.uuid}/mods'
-        client.post(obase, json={'name': 'A again', 'source_url': 'https://x/a.zip'})
+        client.post(obase, json={'name': 'A again', 'source_url': 'https://x/a.zip', 'loader': 'bepinex'})
         r = client.post(f'{obase}/profiles/import', json={'code': code})
         assert r.status_code == 201, r.get_json()
         body = r.get_json()
@@ -303,6 +303,11 @@ class TestModProfiles:
         assert body['missing'][0]['source_url'] == 'https://x/b.zip' and body['missing'][0]['loader'] == 'bepinex'
         assert body['profile']['name'] == 'Share me' and len(body['profile']['mod_ids']) == 1
         assert body['suggested_default_loader'] == 'bepinex'
+        assert body['profile']['unresolved'] == ['B']
+        blocked = client.post(f"{obase}/profiles/{body['profile']['id']}/activate", json={})
+        assert blocked.status_code == 409
+        assert client.get(f"{obase}/profiles/{body['profile']['id']}/export").status_code == 409
+        assert not client.get(obase).get_json()['active_profile']
         assert client.get(obase).get_json()['mods'].__len__() == 1  # nothing was invented
 
         assert client.post(f'{obase}/profiles/import', json={'code': 'not-a-code'}).status_code == 400

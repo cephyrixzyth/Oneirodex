@@ -1,13 +1,9 @@
 import pytest
-import json
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 from uuid import uuid4
-from flask import url_for
 
-from oneirodex import db
 from oneirodex.models import User, Game, Library
 from oneirodex.platform import LibraryPlatform
-from oneirodex.utils.game_core import check_existing_game_by_igdb_id
 
 pytestmark = [
     pytest.mark.integration,  # A3.1: kept out of the fast `-m "not integration"` core -- IGDB provider API surface.
@@ -15,59 +11,12 @@ pytestmark = [
 ]
 
 
-def safe_cleanup_database(db_session):
-    """Completely clean up ALL test data - this is a test database, nuke everything!"""
-    from sqlalchemy import text
-    from oneirodex.models import (
-        Game, User, Library, DownloadRequest, Newsletter, 
-        SystemEvents, InviteToken, Image, GameURL, ScanJob,
-        UnmatchedFolder, GameUpdate, GameExtra, GlobalSettings,
-        AllowedFileType, IgnoredFileType
-    )
-    
-    try:
-        # Disable foreign key checks temporarily for aggressive cleanup
-        db_session.execute(text("SET session_replication_role = replica;"))
-        
-        # Delete all junction table data first
-        db_session.execute(text("TRUNCATE TABLE user_favorites CASCADE"))
-        db_session.execute(text("TRUNCATE TABLE game_genre_association CASCADE"))
-        db_session.execute(text("TRUNCATE TABLE game_platform_association CASCADE"))
-        db_session.execute(text("TRUNCATE TABLE game_game_mode_association CASCADE"))
-        db_session.execute(text("TRUNCATE TABLE game_theme_association CASCADE"))
-        
-        # Delete all main table data
-        for table in ['game_updates', 'game_extras', 'images', 'game_urls', 'unmatched_folders', 
-                     'scan_jobs', 'download_requests', 'newsletters', 'system_events', 
-                     'invite_tokens', 'games', 'users', 'libraries']:
-            try:
-                db_session.execute(text(f"TRUNCATE TABLE {table} RESTART IDENTITY CASCADE"))
-            except Exception:
-                pass  # Table might not exist
-        
-        # Re-enable foreign key checks
-        db_session.execute(text("SET session_replication_role = DEFAULT;"))
-        
-        db_session.commit()
-        print("✅ Nuked all test database data!")
-        
-    except Exception as e:
-        db_session.rollback()
-        print(f"❌ Error during aggressive cleanup: {e}")
-        # Try a simpler approach if the aggressive one fails
-        try:
-            # Re-enable foreign key checks first
-            db_session.execute(text("SET session_replication_role = DEFAULT;"))
-            db_session.commit()
-        except:
-            pass
-
-
-@pytest.fixture(autouse=True)
-def cleanup_after_each_test(db_session):
-    """Automatically clean up after each test - no test data should persist!"""
-    yield  # Let the test run first
-    safe_cleanup_database(db_session)  # Clean up after
+def assert_igdb_query(mock_request, endpoint, expected_query):
+    """Keep provider fields and values significant while allowing query indentation to change."""
+    mock_request.assert_called_once()
+    actual_endpoint, actual_query = mock_request.call_args.args
+    assert actual_endpoint == endpoint
+    assert actual_query.split() == expected_query.split()
 
 
 @pytest.fixture
@@ -143,8 +92,6 @@ def mock_game_data():
 @pytest.fixture
 def sample_game(db_session):
     """Create a sample game in the database."""
-    safe_cleanup_database(db_session)
-    
     # Create a library first
     unique_id = str(uuid4())[:8]
     library = Library(
@@ -211,7 +158,7 @@ class TestGetCompanyRole:
         response = client.get('/api/get_company_role?game_igdb_id=123&company_id=xyz')
         assert response.status_code == 400
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_get_company_role_successful_developer(self, mock_api_request, client, admin_user, mock_involved_companies_response):
         """Test successful get_company_role for developer."""
         mock_api_request.return_value = mock_involved_companies_response
@@ -230,12 +177,12 @@ class TestGetCompanyRole:
         assert data['role'] == 'Developer'
         
         # Verify API call
-        mock_api_request.assert_called_once_with(
-            "https://api.igdb.com/v4/involved_companies",
+        assert_igdb_query(
+            mock_api_request, "https://api.igdb.com/v4/involved_companies",
             "fields company.name, developer, publisher, game;\n                where game=12345 & id=(789);"
         )
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_get_company_role_successful_publisher(self, mock_api_request, client, admin_user):
         """Test successful get_company_role for publisher."""
         mock_response = [
@@ -259,7 +206,7 @@ class TestGetCompanyRole:
         assert data['role'] == 'Publisher'
         assert data['company_name'] == 'Publisher Company'
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_get_company_role_not_found(self, mock_api_request, client, admin_user):
         """Test get_company_role with role not found."""
         mock_response = [
@@ -283,7 +230,7 @@ class TestGetCompanyRole:
         assert data['role'] == 'Not Found'
         assert data['company_name'] == 'Other Company'
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_get_company_role_api_error(self, mock_api_request, client, admin_user):
         """Test get_company_role with API error."""
         mock_api_request.return_value = {'error': 'API Error'}
@@ -298,7 +245,7 @@ class TestGetCompanyRole:
         data = response.get_json()
         assert data['error'] == 'No data found or error in response.'
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_get_company_role_empty_response(self, mock_api_request, client, admin_user):
         """Test get_company_role with empty response."""
         mock_api_request.return_value = []
@@ -313,7 +260,7 @@ class TestGetCompanyRole:
         data = response.get_json()
         assert data['error'] == 'No data found or error in response.'
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_get_company_role_invalid_company_structure(self, mock_api_request, client, admin_user):
         """Test get_company_role with invalid company data structure."""
         mock_response = [
@@ -336,7 +283,7 @@ class TestGetCompanyRole:
         data = response.get_json()
         assert data['error'] == 'Company with given ID not found in the specified game.'
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_get_company_role_exception(self, mock_api_request, client, admin_user):
         """Test get_company_role with exception during processing."""
         mock_api_request.side_effect = Exception("Connection error")
@@ -439,7 +386,7 @@ class TestSearchIgdbById:
         data = response.get_json()
         assert data['error'] == 'IGDB ID is required'
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_search_igdb_by_id_successful(self, mock_api_request, client, admin_user, mock_game_data):
         """Test successful search_igdb_by_id."""
         mock_api_request.return_value = [mock_game_data]
@@ -464,9 +411,9 @@ class TestSearchIgdbById:
                total_rating_count, storyline;
         where id = 12345;
     """
-        mock_api_request.assert_called_once_with("https://api.igdb.com/v4/games", expected_query)
+        assert_igdb_query(mock_api_request, "https://api.igdb.com/v4/games", expected_query)
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_search_igdb_by_id_api_error(self, mock_api_request, client, admin_user):
         """Test search_igdb_by_id with API error."""
         mock_api_request.return_value = {'error': 'API connection failed'}
@@ -481,7 +428,7 @@ class TestSearchIgdbById:
         data = response.get_json()
         assert data['error'] == 'API connection failed'
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_search_igdb_by_id_not_found(self, mock_api_request, client, admin_user):
         """Test search_igdb_by_id when game not found."""
         mock_api_request.return_value = []
@@ -523,7 +470,7 @@ class TestSearchIgdbByName:
         assert data['error_code'] == 'bad_request'
         assert data['ok'] is False
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_search_igdb_by_name_successful(self, mock_api_request, client, admin_user, mock_game_data):
         """Test successful search_igdb_by_name."""
         mock_api_request.return_value = [mock_game_data]
@@ -545,9 +492,9 @@ class TestSearchIgdbByName:
                           screenshots, videos.video_id, first_release_date, aggregated_rating, involved_companies, player_perspectives.name,
                           aggregated_rating_count, rating, rating_count, slug, status, category, total_rating, 
                           total_rating_count, storyline;search "Test Game"; limit 10;'''
-        mock_api_request.assert_called_once_with('https://api.igdb.com/v4/games', expected_query)
+        assert_igdb_query(mock_api_request, 'https://api.igdb.com/v4/games', expected_query)
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_search_igdb_by_name_with_platform(self, mock_api_request, client, admin_user, mock_game_data):
         """Test search_igdb_by_name with platform filter."""
         mock_api_request.return_value = [mock_game_data]
@@ -567,9 +514,9 @@ class TestSearchIgdbByName:
                           screenshots, videos.video_id, first_release_date, aggregated_rating, involved_companies, player_perspectives.name,
                           aggregated_rating_count, rating, rating_count, slug, status, category, total_rating, 
                           total_rating_count, storyline;search "Test Game"; where platforms = (6); limit 10;'''
-        mock_api_request.assert_called_once_with('https://api.igdb.com/v4/games', expected_query)
+        assert_igdb_query(mock_api_request, 'https://api.igdb.com/v4/games', expected_query)
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_search_igdb_by_name_invalid_platform(self, mock_api_request, client, admin_user, mock_game_data):
         """Test search_igdb_by_name with invalid platform_id."""
         mock_api_request.return_value = [mock_game_data]
@@ -586,9 +533,9 @@ class TestSearchIgdbByName:
                           screenshots, videos.video_id, first_release_date, aggregated_rating, involved_companies, player_perspectives.name,
                           aggregated_rating_count, rating, rating_count, slug, status, category, total_rating, 
                           total_rating_count, storyline;search "Test Game"; limit 10;'''
-        mock_api_request.assert_called_once_with('https://api.igdb.com/v4/games', expected_query)
+        assert_igdb_query(mock_api_request, 'https://api.igdb.com/v4/games', expected_query)
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_search_igdb_by_name_api_error(self, mock_api_request, client, admin_user):
         """Test search_igdb_by_name with API error."""
         mock_api_request.return_value = {'error': 'Search failed'}
@@ -643,67 +590,40 @@ class TestCheckIgdbId:
         assert data['message'] == 'Invalid request'
         assert data['available'] is False
     
-    @patch('oneirodex.utils.services.game_lookup.check_existing_game_by_igdb_id')
-    def test_check_igdb_id_available(self, mock_check_existing, client, admin_user):
-        """Test check_igdb_id when IGDB ID is available."""
-        mock_check_existing.return_value = None  # Game doesn't exist
-        
+    def test_check_igdb_id_available(self, client, admin_user):
         with client.session_transaction() as sess:
             sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
-        
+
         response = client.get('/api/check_igdb_id?igdb_id=12345')
         assert response.status_code == 200
-        
-        data = response.get_json()
-        assert data['available'] is True
-        
-        mock_check_existing.assert_called_once_with(12345)
-    
-    @patch('oneirodex.utils.services.game_lookup.check_existing_game_by_igdb_id')
-    def test_check_igdb_id_not_available(self, mock_check_existing, client, sample_game, db_session):
-        """Test check_igdb_id when IGDB ID is not available."""
-        mock_check_existing.return_value = sample_game  # Game exists
-        
-        # Create a fresh admin user after sample_game to avoid session issues
-        admin_uuid = str(uuid4())
-        unique_id = str(uuid4())[:8]
-        admin = User(
-            user_id=admin_uuid,
-            name=f'TestAdmin_{unique_id}',
-            email=f'admin_{unique_id}@test.com',
-            role='admin',
-            is_email_verified=True
-        )
-        admin.set_password('testpass123')
-        db_session.add(admin)
-        db_session.commit()
-        
+        assert response.get_json()['available'] is True
+
+    def test_check_igdb_id_not_available(self, client, admin_user, sample_game):
         with client.session_transaction() as sess:
-            sess['_user_id'] = str(admin.id)
+            sess['_user_id'] = str(admin_user.id)
             sess['_fresh'] = True
-        
-        response = client.get('/api/check_igdb_id?igdb_id=888888')
+
+        response = client.get(f'/api/check_igdb_id?igdb_id={sample_game.igdb_id}')
         assert response.status_code == 200
-        
-        data = response.get_json()
-        assert data['available'] is False
-        
-        mock_check_existing.assert_called_once_with(888888)
+        assert response.get_json()['available'] is False
 
 
-class TestIgdbApiBlueprint:
-    """Test blueprint registration and URL patterns."""
-    
-    def test_igdb_routes_blueprint_registration(self, app):
-        """Test that IGDB API routes are properly registered."""
-        with app.test_request_context():
-            assert url_for('apis.get_company_role') == '/api/get_company_role'
-            assert url_for('apis.get_cover_thumbnail') == '/api/get_cover_thumbnail'
-            assert url_for('apis.search_igdb_by_id') == '/api/search_igdb_by_id'
-            assert url_for('apis.search_igdb_by_name') == '/api/search_igdb_by_name'
-            assert url_for('apis.check_igdb_id') == '/api/check_igdb_id'
-    
+class TestIgdbApiRoutes:
+    def test_igdb_routes_register_head_alongside_get(self, client, admin_user):
+        with client.session_transaction() as sess:
+            sess['_user_id'] = str(admin_user.id)
+            sess['_fresh'] = True
+
+        for route in ('get_company_role', 'get_cover_thumbnail', 'search_igdb_by_id',
+                      'search_igdb_by_name', 'check_igdb_id'):
+            endpoint = '/api/' + route
+            get = client.get(endpoint)
+            head = client.head(endpoint)
+            assert get.status_code == head.status_code == 400, endpoint
+            assert head.data == b'', endpoint
+            assert head.headers['Content-Length'] == get.headers['Content-Length'], endpoint
+
     def test_igdb_routes_authentication_required(self, client):
         """Test that all IGDB API routes require authentication."""
         endpoints = [
@@ -723,7 +643,7 @@ class TestIgdbApiBlueprint:
 class TestIgdbApiIntegration:
     """Integration tests for IGDB API routes."""
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     def test_igdb_api_workflow_search_and_check(self, mock_api_request, client, admin_user, mock_game_data):
         """Test complete workflow: search by name, then check if ID is available."""
         mock_api_request.return_value = [mock_game_data]
@@ -765,7 +685,7 @@ class TestIgdbApiIntegration:
             data = response.get_json()
             assert 'error' in data or 'message' in data
     
-    @patch('oneirodex.routes_apis.igdb.make_igdb_api_request')
+    @patch('oneirodex.utils.igdb_api.make_igdb_api_request')
     @patch('oneirodex.utils.igdb_api.get_cover_thumbnail_url')
     def test_igdb_cover_integration(self, mock_get_cover, mock_api_request, client, admin_user, mock_game_data, mock_cover_response):
         """Test integration between game search and cover retrieval."""

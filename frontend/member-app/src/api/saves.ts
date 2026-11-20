@@ -38,6 +38,16 @@ export async function deleteSavedState(gameUuid: string, slotName: string) {
   return withMemberError(saves.remove(gameUuid, slotName), 'delete saved state')
 }
 
+export function supportsWebRetroSaves(href?: string | null): boolean {
+  if (!href) return false
+  try {
+    const url = new URL(href, window.location.origin)
+    return url.origin === window.location.origin && url.pathname.endsWith('/webretro/webretro.html')
+  } catch {
+    return false
+  }
+}
+
 /** The play shell offers this slot first (it still asks before loading). */
 export function resumeHref(playHref: string | null, slotName: string): string | null {
   if (!playHref) return null

@@ -12,7 +12,7 @@ def test_scan_worker_uses_native_database_scope_without_flask_app_context(monkey
         id='scan-1', scan_folder='/library', library_uuid='lib-1',
         setting_filefolder=False, setting_remove=False,
         setting_download_missing_images=False, setting_force_updates_extras=False,
-        schedule=None,
+        schedule=None, setting_fetch_hltb=True, setting_force_hltb_refetch=True,
     )
 
     class FakeSession:
@@ -44,6 +44,7 @@ def test_scan_worker_uses_native_database_scope_without_flask_app_context(monkey
             calls.append(('scope_exit',))
 
     def scan_and_add_games(*args, **kwargs):
+        assert kwargs['fetch_hltb'] and kwargs['force_hltb_refetch']
         calls.append(('scan', args[0], kwargs['database_scope'] is database_scope, kwargs['app'] is app))
 
     monkeypatch.setattr(scan_queue, 'db', SimpleNamespace(session=FakeSession()))
@@ -110,7 +111,10 @@ def test_native_scan_start_uses_framework_free_worker_and_preserves_hltb_flags(m
     monkeypatch.setattr(scan_queue, '_application_or_current', lambda selected: app)
     monkeypatch.setattr(scan_queue, 'reclaim_stale_busy_jobs', lambda: None)
     monkeypatch.setattr(scan_queue, 'is_scan_busy', lambda: False)
-    monkeypatch.setattr(scan_queue, 'create_scan_job_row', lambda **kwargs: job)
+    def create_job(**kwargs):
+        assert kwargs['fetch_hltb'] and kwargs['force_hltb_refetch']
+        return job
+    monkeypatch.setattr(scan_queue, 'create_scan_job_row', create_job)
     monkeypatch.setattr(scan_queue, '_has_older_busy_scan', lambda _job: False)
     monkeypatch.setattr(
         scan_queue, '_start_job_thread',
@@ -134,7 +138,6 @@ def test_native_scan_start_uses_framework_free_worker_and_preserves_hltb_flags(m
     assert calls[1] == (
         True, True, {
             'force_parallel': False, 'database_scope': database_scope,
-            'fetch_hltb': True, 'force_hltb_refetch': True,
         },
     )
 

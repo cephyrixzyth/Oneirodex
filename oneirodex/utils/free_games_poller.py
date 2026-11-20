@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import threading
-import time
+from oneirodex.utils.periodic_worker import PeriodicWorker
 
-_scheduler_started = False
+_scheduler = PeriodicWorker('oneirodex-free-games')
 
 
 def _is_enabled(app) -> bool:
@@ -23,33 +22,23 @@ def _poll_seconds(app) -> int:
 
 def start_free_games_scheduler(app):
     """Start a daemon that refreshes free-game offers (idempotent)."""
-    global _scheduler_started
-    if _scheduler_started:
-        return
     if not _is_enabled(app):
         print('[FREE GAMES] Disabled (ENABLE_FREE_GAMES=false)')
         return
 
-    _scheduler_started = True
     interval = _poll_seconds(app)
 
-    def _loop():
-        # Short delay so boot is not blocked by outbound HTTP
-        time.sleep(15)
-        while True:
-            try:
-                with app.app_context():
-                    from oneirodex.utils.free_games import sync_free_game_offers
+    def run_once():
+        try:
+            with app.app_context():
+                from oneirodex.utils.free_games import sync_free_game_offers
 
-                    stats = sync_free_game_offers(notify=True)
-                    print(
-                        f"[FREE GAMES] Refresh fetched={stats.get('fetched')} "
-                        f"inserted={stats.get('inserted')} notified={stats.get('notified')}"
-                    )
-            except Exception as exc:
-                print(f'[FREE GAMES] Error: {exc}')
-            time.sleep(interval)
+                stats = sync_free_game_offers(notify=True)
+                print(
+                    f"[FREE GAMES] Refresh fetched={stats.get('fetched')} "
+                    f"inserted={stats.get('inserted')} notified={stats.get('notified')}"
+                )
+        except Exception as exc:
+            print(f'[FREE GAMES] Error: {exc}')
 
-    thread = threading.Thread(target=_loop, name='oneirodex-free-games', daemon=True)
-    thread.start()
-    print(f'[FREE GAMES] Started (poll every {max(1, interval // 3600)}h)')
+    return _scheduler.start(run_once, interval=interval, delay=15)

@@ -253,13 +253,16 @@ class TestAvatarUpload:
 
 
 class TestStockAvatars:
-    """The six shipped picks, so having no picture to hand is not a dead end."""
+    """Verify that every shipped preset is usable through the account API."""
 
     def test_summary_offers_the_full_set_with_urls(self, client, member):
         login(client, member)
         body = client.get('/api/account/summary').get_json()
 
-        assert len(body['stock_avatars']) == 6
+        assert len(body['stock_avatars']) == 10
+        assert {row['id'] for row in body['stock_avatars'] if row['path'].endswith('.webp')} == {
+            'moss-keeper', 'radio-crab', 'star-moth', 'reel-mechanic',
+        }
         assert {entry['id'] for entry in body['stock_avatars']} == {
             entry['id'] for entry in STOCK_AVATARS
         }

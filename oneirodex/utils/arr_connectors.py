@@ -6,6 +6,8 @@ import json
 import logging
 import re
 import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as safe_xml
+from defusedxml.common import DefusedXmlException
 from dataclasses import asdict, dataclass
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -423,8 +425,8 @@ def _parse_native_xml(body: str, indexer: dict[str, Any], *, limit: int) -> list
     if not body.strip():
         return []
     try:
-        root = ET.fromstring(body)
-    except ET.ParseError:
+        root = safe_xml.fromstring(body)
+    except (ET.ParseError, DefusedXmlException):
         return []
     items = [el for el in root.iter() if _local_tag(el.tag).lower() == 'item']
     hits: list[ArrHit] = []

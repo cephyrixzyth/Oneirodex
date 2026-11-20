@@ -579,7 +579,7 @@ class TestManualScanQueuesWhenBusy:
     def test_manual_while_busy_queues(self, app, db_session, sample_library, running_job):
         from unittest.mock import Mock, patch
 
-        from oneirodex.utilities import handle_manual_scan
+        from oneirodex.utils.services.scan_orchestration import handle_manual_scan
 
         mock_form = Mock()
         mock_form.validate_on_submit.return_value = True

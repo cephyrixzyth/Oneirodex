@@ -402,10 +402,6 @@ def arcade_core_override_configured() -> bool:
     the opt-in that turns the shelf into a companion-playable one.
     """
     try:
-        from flask import has_app_context
-
-        if not has_app_context():
-            return False
         from oneirodex.utils.emulator_profiles import get_emulator_profiles
 
         return bool((get_emulator_profiles() or {}).get('ARCADE'))

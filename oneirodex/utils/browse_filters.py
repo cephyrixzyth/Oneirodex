@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import false
+from sqlalchemy import and_, false, func, or_
+from oneirodex.utils.title_grouping import normalize_title
 
 from oneirodex.models import Game
 from oneirodex.utils.filter_tree import (  # noqa: F401 -- window constants re-exported
@@ -74,7 +75,18 @@ def apply_name_filter(query, args):
     name = (raw_name or raw_q or '').strip()
     if not name:
         return query
-    return query.filter(Game.name.ilike(f'%{name}%'))
+    # Search literal punctuation (including %, _ and backslash). For ordinary words
+    # also search the catalog key in any order, folding common accented Latin letters.
+    literal = Game.name.icontains(name, autoescape=True)
+    if any(c in name for c in '%_\\') or not normalize_title(name):
+        return query.filter(literal)
+    accent = 'àáâãäåāăąçćčďèéêëēėęěìíîïīłńňñòóôõöøōřśšşťùúûüūůýÿžźż'
+    plain = 'aaaaaaaaacccdeeeeeeeeiiiiilnnnooooooorssstuuuuuuyyzzz'
+    key = func.translate(Game.browse_title_key, accent, plain)
+    words = normalize_title(name).translate(str.maketrans(accent, plain)).split()
+    if len(words) > 12:
+        return query.filter(literal)
+    return query.filter(or_(literal, and_(*(key.contains(word, autoescape=True) for word in words))))
 
 
 def apply_item_kind_filter(query, args):

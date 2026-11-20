@@ -51,7 +51,7 @@ test('delayMs 0 shows immediately, without waiting a tick', () => {
   // explanation is worse than an indicator that appears at once.
   render(<LoadingOverlay active delayMs={0} label="Loading…" />)
   expect(screen.getByRole('status')).toHaveTextContent('Loading…')
-  expect(screen.getByRole('status').querySelector('.od-page-status__spinner')).toBeInTheDocument()
+  expect(screen.getByRole('status').querySelector('[data-motif]')).toBeInTheDocument()
 })
 
 test('only dims the page when explicitly blocking', () => {

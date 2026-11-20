@@ -4,7 +4,7 @@ import { isTauriRuntime } from './config-store.js'
 import { joinUrl } from './paths.js'
 
 const LIBRARY_LABEL = 'full-library'
-let lastLibraryUrl = ''
+const lastUrls = new Map<string, string>()
 
 export function buildFullLibraryUrl(baseUrl: string): string {
   const base = baseUrl.trim()
@@ -14,31 +14,38 @@ export function buildFullLibraryUrl(baseUrl: string): string {
 export async function openFullLibraryWindow(
   baseUrl: string,
 ): Promise<'opened' | 'focused' | 'browser'> {
-  const url = buildFullLibraryUrl(baseUrl)
+  return openSiteLibraryWindow(buildFullLibraryUrl(baseUrl), LIBRARY_LABEL)
+}
+
+export async function openSiteLibraryWindow(
+  url: string,
+  label: string,
+): Promise<'opened' | 'focused' | 'browser'> {
   if (!url) throw new Error('Set Server URL first.')
 
   if (!isTauriRuntime()) {
-    window.open(url, 'od-full-library', 'width=1280,height=800')
+    window.open(
+      url,
+      label === LIBRARY_LABEL ? 'od-full-library' : 'od-thin-library',
+      'width=1280,height=800',
+    )
     return 'browser'
   }
 
-  const existing = await WebviewWindow.getByLabel(LIBRARY_LABEL)
+  const existing = await WebviewWindow.getByLabel(label)
   if (existing) {
-    if (lastLibraryUrl && lastLibraryUrl !== url) {
-      try {
-        await existing.close()
-      } catch {
-        // Recreate below; a stale window must not keep its previous server.
-      }
+    if (lastUrls.get(label) !== url) {
+      // Unknown windows can survive a reload of the main webview.
+      await existing.close()
     } else {
       await existing.show()
       await existing.setFocus()
-      lastLibraryUrl = url
+      lastUrls.set(label, url)
       return 'focused'
     }
   }
 
-  const webview = new WebviewWindow(LIBRARY_LABEL, {
+  const webview = new WebviewWindow(label, {
     url,
     title: 'Oneirodex Library',
     width: 1280,
@@ -60,10 +67,10 @@ export async function openFullLibraryWindow(
       reject(new Error(message))
     })
   })
-  lastLibraryUrl = url
+  lastUrls.set(label, url)
   return 'opened'
 }
 
 export function resetFullLibraryWindowForTests(): void {
-  lastLibraryUrl = ''
+  lastUrls.clear()
 }

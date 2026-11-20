@@ -7,10 +7,11 @@ import { setGameStatus, toggleFavorite } from '../api/userActions'
 import { coverUrl, DEFAULT_COVER_URL } from '../utils/coverUrl'
 import { CoverFallback } from './CoverFallback'
 import { safeHttpUrl } from '../utils/safeUrl'
-import { resumeHref } from '../api/saves'
+import { supportsWebRetroSaves, resumeHref } from '../api/saves'
 import { editionChipLabels } from '../utils/platformAbbrev'
 import { trailerEmbedUrls, prefersReducedMotion } from '../utils/detailsMedia'
 import { BadgeStack } from './BadgeStack'
+import { GameCardRowActions, GameCardRowMeta, playBlockCopy } from './GameCardRowActions'
 import { GamePreviewPopup } from './GamePreviewPopup'
 import { HOVER_TRAILER_MS, TileHoverTrailer } from './TileHoverTrailer'
 import { firmwareBlockMessage, isFirmwarePlayBlocked } from '../utils/playHonesty'
@@ -36,12 +37,6 @@ const LONG_PRESS_MS = 480
  * tile whenever any one of them opened a menu.
  */
 const TILE_OVERLAY_OPENED = 'od-tile-overlay-opened'
-
-function releaseYear(value: any) {
-  if (!value) return ''
-  const match = String(value).match(/^(\d{4})/)
-  return match ? match[1] : ''
-}
 
 export function GameCard({
   game,
@@ -107,7 +102,8 @@ export function GameCard({
   // A state on the server turns Play into Resume: same room, the shell offers
   // that slot first and still asks before loading it. `demo_url` rows never
   // carry a state, so they keep reading Play.
-  const resumeState = game.resume_state && game.play_url ? game.resume_state : null
+  const resumeState =
+    game.resume_state && supportsWebRetroSaves(game.play_url) ? game.resume_state : null
   const playHref =
     resumeState && basePlayHref ? resumeHref(basePlayHref, resumeState.slot_name) : basePlayHref
   const archiveBlocked = game.play_blocker === 'unsupported_archive'
@@ -115,9 +111,21 @@ export function GameCard({
     game.companion_hint ||
     'This archive type cannot be extracted for browser play. Use .zip / .7z / .rar / ROM.gz or a raw ROM.'
   const firmwareHint = firmwareBlockMessage(game)
-  const playBlocked = firmwareBlocked || archiveBlocked
-  const playBlockHint = firmwareBlocked ? firmwareHint : archiveBlockHint
-  const playBlockLabel = firmwareBlocked ? 'firmware missing' : 'unsupported archive'
+  const fileMissing = game.play_blocker === 'missing_game_file' && !game.demo_url
+  const playBlocked = firmwareBlocked || archiveBlocked || fileMissing
+  const openRowPreview = () => {
+    setMenuOpen(false)
+    setPreviewOpen(true)
+  }
+  const { hint: playBlockHint, label: playBlockLabel } = playBlockCopy(
+    fileMissing,
+    firmwareBlocked,
+    {
+      file: game.companion_hint || 'Link a game file before starting browser play.',
+      firmware: firmwareHint,
+      archive: archiveBlockHint,
+    },
+  )
   const platformChip =
     !hidePlatformChip && (game.library_platform || game.edition_platforms?.length)
       ? editionChipLabels(game, activePlatform)
@@ -462,6 +470,20 @@ export function GameCard({
         <GameCardAdminMenu
           enableDeleteOnDisk={enableDeleteOnDisk}
           game={game}
+          compactRowActions={
+            layout === 'rows' && (
+              <GameCardRowActions
+                playHref={playHref}
+                resuming={Boolean(resumeState)}
+                playBlocked={playBlocked}
+                showPlayStatus={showPlayStatus}
+                closeMenu={() => setMenuOpen(false)}
+                onExplainBlock={() => setPlayInfoOpen(true)}
+                onChangeStatus={() => setStatusOpen(true)}
+              />
+            )
+          }
+          onRowPreview={layout === 'rows' ? openRowPreview : undefined}
           igdbUrl={igdbUrl}
           isAdmin={isAdmin}
           menuOpen={menuOpen}
@@ -516,18 +538,11 @@ export function GameCard({
         {layout !== 'rows' ? <span className="game-card__title">{game.name}</span> : null}
 
         {layout === 'rows' ? (
-          <a className="game-card__row-meta" href={`/game_details/${game.uuid}`}>
-            <strong className="game-card__row-title">{game.name}</strong>
-            <span className="game-card__row-detail">
-              {[
-                platformChip?.full || game.library_platform_label,
-                releaseYear(game.first_release_date),
-                showPlayStatus ? currentStatus.label : '',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-          </a>
+          <GameCardRowMeta
+            game={game}
+            platform={platformChip}
+            status={showPlayStatus ? currentStatus.label : null}
+          />
         ) : null}
 
         {platformChip ? (

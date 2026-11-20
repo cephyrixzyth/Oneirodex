@@ -69,6 +69,11 @@ def log_system_event(
         return True
         
     except Exception as e:
-        print(f"Error logging system event: {str(e)}")
-        db.session.rollback()
+        # SQL driver exception messages can contain the rejected row or connection details.
+        print(f"Error logging system event: {type(e).__name__}")
+        try:
+            db.session.rollback()
+        except Exception:
+            # The session can already be gone when a stream disconnects.
+            pass
         return False

@@ -46,6 +46,14 @@ pub struct RetainSummary {
 /// uninstall stopped snapshotting by default — impossible to remove. The skipped
 /// links are reported; the data they point at is left exactly where it is.
 pub fn retain_missing(from: &Path, to: &Path) -> std::io::Result<RetainSummary> {
+    retain_missing_except(from, to, &std::collections::BTreeSet::new())
+}
+
+pub fn retain_missing_except(
+    from: &Path,
+    to: &Path,
+    excluded: &std::collections::BTreeSet<PathBuf>,
+) -> std::io::Result<RetainSummary> {
     if fs::symlink_metadata(from)?.file_type().is_symlink()
         || fs::symlink_metadata(to)?.file_type().is_symlink()
     {
@@ -54,14 +62,22 @@ pub fn retain_missing(from: &Path, to: &Path) -> std::io::Result<RetainSummary> 
         ));
     }
     let mut summary = RetainSummary::default();
-    retain_entries(from, to, &mut summary)?;
+    retain_entries(from, to, excluded, &mut summary)?;
     Ok(summary)
 }
 
-fn retain_entries(from: &Path, to: &Path, summary: &mut RetainSummary) -> std::io::Result<()> {
+fn retain_entries(
+    from: &Path,
+    to: &Path,
+    excluded: &std::collections::BTreeSet<PathBuf>,
+    summary: &mut RetainSummary,
+) -> std::io::Result<()> {
     for entry in fs::read_dir(from)? {
         let entry = entry?;
         let source = entry.path();
+        if excluded.contains(&source) {
+            continue;
+        }
         let target = to.join(entry.file_name());
         let kind = entry.file_type()?;
         if kind.is_symlink() {
@@ -75,11 +91,11 @@ fn retain_entries(from: &Path, to: &Path, summary: &mut RetainSummary) -> std::i
                 continue;
             }
             if kind.is_dir() && target.is_dir() {
-                retain_entries(&source, &target, summary)?;
+                retain_entries(&source, &target, excluded, summary)?;
             }
         } else if kind.is_dir() {
             fs::create_dir(&target)?;
-            retain_entries(&source, &target, summary)?;
+            retain_entries(&source, &target, excluded, summary)?;
         } else if kind.is_file() {
             fs::copy(&source, &target)?;
         }

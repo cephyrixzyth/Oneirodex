@@ -32,16 +32,50 @@ export function ModProfiles({
   onChanged: () => Promise<void> | void
   onError: (message: string) => void
 }) {
+  const [reviewId, setReviewId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [imported, setImported] = useState<ModProfileImportResult | null>(null)
 
+  const review = pack.profiles.find((profile) => profile.id === reviewId)
+  const selected = new Set(review?.mod_ids || [])
+  const changes = pack.mods.filter((mod) => Boolean(mod.enabled) !== selected.has(mod.id))
+  const missing = [
+    ...(review?.unresolved || []),
+    ...(review?.requirements || [])
+      .filter((expected) => {
+        const local = pack.mods.find((mod) => mod.id === expected.id)
+        return (
+          !local ||
+          (expected.requires &&
+            (expected.requires.length !== (local.requires?.length || 0) ||
+              expected.requires.some((id) => !local.requires?.includes(id)))) ||
+          (['version', 'loader', 'source_url'] as const).some(
+            (key) => expected[key] && expected[key] !== local[key],
+          )
+        )
+      })
+      .map((expected) => expected.id),
+  ]
+  const expectedOrder = review?.import_order || []
+  const orderedIds = new Set(expectedOrder)
+  const actualOrder = pack.mods.filter((mod) => orderedIds.has(mod.id)).map((mod) => mod.id)
+  const changedOrder = expectedOrder.some((id, index) => id !== actualOrder[index])
+  const conflicts = pack.mods.filter(
+    (mod) =>
+      selected.has(mod.id) &&
+      ((!['', 'none', 'manual'].includes(mod.loader || '') &&
+        !['', 'none', 'manual'].includes(pack.default_loader) &&
+        mod.loader !== pack.default_loader) ||
+        mod.requires?.some((id) => !selected.has(id))),
+  )
   const active = pack.profiles.find((p) => p.id === pack.active_profile) || null
   if (!canEdit && pack.profiles.length === 0) return null
 
   async function run(key: string, work: () => Promise<unknown>, fallback: string) {
+    setCopied(null)
     setBusy(key)
     try {
       await work()
@@ -54,13 +88,13 @@ export function ModProfiles({
   }
 
   async function copyCode(profileId: string) {
+    setCopied(null)
     setBusy(`export:${profileId}`)
     try {
       const text = await exportModProfile(gameUuid, profileId)
       try {
         await navigator.clipboard.writeText(text)
         setCopied(profileId)
-        window.setTimeout(() => setCopied(null), 1500)
       } catch {
         // Clipboard can be blocked; fall back to showing the code in the import box.
         setCode(text)
@@ -101,15 +135,9 @@ export function ModProfiles({
                     size="sm"
                     variant={profile.id === pack.active_profile ? 'ghost' : 'default'}
                     disabled={busy !== null}
-                    onClick={() =>
-                      void run(
-                        `activate:${profile.id}`,
-                        () => activateModProfile(gameUuid, profile.id),
-                        'Could not activate the profile',
-                      )
-                    }
+                    onClick={() => setReviewId(profile.id)}
                   >
-                    {profile.id === pack.active_profile ? 'Active' : 'Activate'}
+                    Review changes
                   </Button>
                 ) : null}
                 <Button
@@ -143,6 +171,58 @@ export function ModProfiles({
           ))}
         </ul>
       )}
+
+      {review && canEdit && (
+        <section aria-label="Profile changes">
+          <h4>{review.name}</h4>
+          <p>{changes.length ? 'Changes to enabled mods' : 'No changes to enabled mods'}</p>
+          <ul>
+            {changes.map((mod) => (
+              <li key={mod.id}>
+                {selected.has(mod.id) ? 'Enable' : 'Disable'} {mod.name} {mod.version}
+              </li>
+            ))}
+          </ul>
+          {missing.length > 0 && <p role="alert">Resolve and import again: {missing.join(', ')}</p>}
+          {conflicts.length > 0 && (
+            <p role="alert">
+              Resolve loader or dependency conflicts for{' '}
+              {conflicts.map((mod) => mod.name).join(', ')}.
+            </p>
+          )}
+          {changedOrder && (
+            <p role="alert">
+              Restore the shared load order:{' '}
+              {expectedOrder
+                .map((id) => pack.mods.find((mod) => mod.id === id)?.name || id)
+                .join(' → ')}
+            </p>
+          )}
+          <Button onClick={() => setReviewId(null)}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={!!busy || !!missing.length || !!conflicts.length || changedOrder}
+            onClick={() =>
+              void run(
+                'activate:' + review.id,
+                async () => {
+                  await activateModProfile(gameUuid, review.id)
+                  setReviewId(null)
+                },
+                'Could not activate the profile',
+              )
+            }
+          >
+            Activate profile
+          </Button>
+        </section>
+      )}
+      {!canEdit && code ? (
+        <label>
+          Profile code
+          <textarea readOnly value={code} onFocus={(event) => event.currentTarget.select()} />
+        </label>
+      ) : null}
 
       {canEdit ? (
         <>

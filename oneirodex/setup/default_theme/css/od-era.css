@@ -441,3 +441,77 @@ html[data-era='desk'],
 .game-library-container[data-library-grid] > .game-card-container:last-child .game-card:has(:focus-visible) {
   transform-origin: center center;
 }
+
+/* Share each built-in interior across preferences, inventory and its matching era. */
+html[data-theme='greenhouse'], [data-theme-preview='greenhouse'] {
+  --od-room-art: url('/static/newstyle/rooms/greenhouse.webp');
+}
+html[data-theme='greenhouse'][data-era='desk'] {
+  --od-era-scene: var(--od-room-art);
+  --od-era-scene-opacity: 0.57;
+}
+html[data-theme='afterglow'], [data-theme-preview='afterglow'] {
+  --od-room-art: url('/static/newstyle/rooms/afterglow.webp');
+}
+html[data-theme='afterglow'][data-era='arcade_cabinet'] {
+  --od-era-scene: var(--od-room-art);
+  --od-era-scene-opacity: 0.57;
+}
+html[data-theme='monochrome'], [data-theme-preview='monochrome'] {
+  --od-room-art: url('/static/newstyle/rooms/monochrome.webp');
+}
+html[data-theme='monochrome'][data-era='desk'] {
+  --od-era-scene: var(--od-room-art);
+  --od-era-scene-opacity: 0.57;
+}
+html[data-theme='signal'], [data-theme-preview='signal'] {
+  --od-room-art: url('/static/newstyle/rooms/signal.webp');
+}
+html[data-theme='signal'][data-era='wood_den_80s'] {
+  --od-era-scene: var(--od-room-art);
+  --od-era-scene-opacity: 0.57;
+}
+html[data-theme='tape-deck'], [data-theme-preview='tape-deck'] {
+  --od-room-art: url('/static/newstyle/rooms/tape-deck.webp');
+}
+html[data-theme='tape-deck'][data-era='teen_bedroom_90s'] {
+  --od-era-scene: var(--od-room-art);
+  --od-era-scene-opacity: 0.57;
+}
+html[data-theme='deep-space'], [data-theme-preview='deep-space'] {
+  --od-room-art: url('/static/newstyle/rooms/deep-space.webp');
+}
+html[data-theme='deep-space'][data-era='media_center_00s'] {
+  --od-era-scene: var(--od-room-art);
+  --od-era-scene-opacity: 0.57;
+}
+
+[data-theme-preview] .theme-card-preview::after,
+.od-room-swatch {
+  background-image: var(--od-room-art);
+  background-size: cover;
+  background-position: center;
+}
+[data-theme-preview] .theme-card-preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.theme-card-preview .theme-swatch-chip { z-index: 1; }
+.od-room-swatch {
+  display: block;
+  width: min(100%, 18rem);
+  aspect-ratio: 3 / 1;
+  border-radius: var(--od-radius-md);
+}
+.od-room-swatch:not([data-theme-preview='greenhouse'], [data-theme-preview='afterglow'], [data-theme-preview='monochrome'], [data-theme-preview='signal'], [data-theme-preview='tape-deck'], [data-theme-preview='deep-space'], [data-theme-preview='tideglass']) { display: none; }
+
+html[data-theme='tideglass'], [data-theme-preview='tideglass'] {
+  --od-room-art: url('/static/newstyle/rooms/tideglass.webp');
+}
+html[data-theme='tideglass'][data-era='carpet_den_late_90s'] {
+  --od-era-scene: var(--od-room-art);
+  --od-era-scene-opacity: 0.64;
+  --od-era-bg: #091f2b;
+}

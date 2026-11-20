@@ -124,3 +124,64 @@
 .od-vr-way {
   margin: var(--od-space-2) 0;
 }
+
+.od-library-room {
+  margin-block: 1rem;
+  background: var(--od-surface);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-lg);
+  overflow: hidden;
+}
+.od-library-room__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  background-image:
+    linear-gradient(
+      90deg,
+      var(--od-surface) 35%,
+      color-mix(in srgb, var(--od-surface) 70%, transparent)
+    ),
+    var(--od-room-art);
+  background-position: center;
+  background-size: cover;
+}
+.od-library-room__header h2,
+.od-library-room__header p {
+  margin: 0;
+}
+.od-library-room__header p,
+.od-library-room__help {
+  color: var(--od-text-muted);
+}
+.od-library-room__header button {
+  flex: none;
+}
+.od-library-room__canvas {
+  display: block;
+  width: 100%;
+  height: clamp(16rem, 54vh, 34rem);
+  touch-action: none;
+}
+.od-library-room__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 1rem;
+}
+.od-library-room > p {
+  margin: 0.75rem 1rem;
+}
+.od-library-room :focus-visible {
+  outline: 2px solid var(--od-accent);
+  outline-offset: -2px;
+}
+@media (max-width: 480px) {
+  .od-library-room__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

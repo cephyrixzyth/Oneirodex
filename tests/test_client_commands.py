@@ -212,3 +212,48 @@ def test_open_path_uses_native_runtime_config_without_flask_context(tmp_path, mo
         command = cc.enqueue_client_command(18, '', 'open_path', path=str(target))
 
     assert command['path'] == str(target)
+
+
+def test_targeted_lease_redelivery_rejects_stale_completion(tmp_path, monkeypatch):
+    monkeypatch.setattr(cc, '_library_root', lambda: str(tmp_path))
+    command = cc.enqueue_client_command(3, 'game', 'install', target_device_id='den')
+    assert not cc.claim_pending_commands(3, device_id='kitchen')
+    assert not cc.claim_pending_commands(3)
+    first, = cc.claim_pending_commands(3, device_id='den')
+    lease = first['lease_id']
+    assert cc.ack_client_commands(3, [command['id']]) == 0
+    assert not cc.finish_leased_command(3, command['id'], 'kitchen', lease, 'ok')
+    cc.claim_pending_commands(3, device_id='den', renew_lease=lease)
+    path = cc._store_path(3)
+    stored = cc._read_queue(path)
+    stored[0]['claimed_at'] = '2000-01-01T01:00:00+00:00'
+    cc._write_queue(path, stored)
+    second, = cc.claim_pending_commands(3, device_id='den')
+    assert second['lease_id'] != lease
+    assert not cc.finish_leased_command(3, command['id'], 'den', lease, 'ok')
+    assert cc.finish_leased_command(3, command['id'], 'den', second['lease_id'], 'busy')
+    assert not cc.claim_pending_commands(3, device_id='den')
+    stored = cc._read_queue(path)
+    stored[0]['retry_at'] = '2000-01-01T01:00:00+00:00'
+    cc._write_queue(path, stored)
+    third, = cc.claim_pending_commands(3, device_id='den')
+    assert cc.finish_leased_command(3, command['id'], 'den', third['lease_id'], 'error')
+    assert cc._read_queue(path)[0]['status'] == 'failed'
+    assert not cc.nack_client_commands(3, [command['id']])
+    assert not cc.ack_client_commands(3, [command['id']])
+    assert cc.command_status_for_game(3, 'game')[0]['status'] == 'failed'
+    assert cc.command_status_for_game(4, 'game') == []
+    assert not cc.claim_pending_commands(3, device_id='den')
+
+
+def test_queue_pressure_keeps_active_commands(tmp_path, monkeypatch):
+    import pytest
+
+    monkeypatch.setattr(cc, '_library_root', lambda: str(tmp_path))
+    for idx in range(50):
+        cc.enqueue_client_command(7, str(idx), 'install')
+    first, = cc.claim_pending_commands(7, device_id='one', limit=1)
+    with pytest.raises(ValueError, match='queue is full'):
+        cc.enqueue_client_command(7, 'over-limit', 'download')
+    assert len(cc._read_queue(cc._store_path(7))) == 50
+    assert cc.finish_leased_command(7, first['id'], 'one', first['lease_id'], 'ok')

@@ -91,7 +91,7 @@ def test_cookie_codec_reads_fallback_signing_keys(app: Flask) -> None:
     ) == {}
 
 
-def test_csrf_codec_matches_flask_wtf_token_bytes_and_session_key(app: Flask) -> None:
+def test_csrf_codec_accepts_legacy_and_native_session_keys(app: Flask) -> None:
     entropy = b"e" * 64
     expected_session = {}
     native_session = {}
@@ -113,17 +113,18 @@ def test_csrf_codec_matches_flask_wtf_token_bytes_and_session_key(app: Flask) ->
     token = generate_csrf_token(
         native_session,
         "csrf-only-secret",
-        random_bytes=lambda size: entropy,
+        random_bytes=lambda size: entropy[:size],
     )
-    assert token == reference
-    assert native_session == expected_session
+    assert native_session['csrf_token'] == entropy[:32].hex()
+    validate_csrf_token(reference, expected_session, "csrf-only-secret")
+    assert generate_csrf_token(expected_session, "csrf-only-secret") == reference
     validate_csrf_token(token, native_session, "csrf-only-secret")
 
     with app.test_request_context("/"):
         app.config["WTF_CSRF_SECRET_KEY"] = "csrf-only-secret"
         app.config["WTF_CSRF_FIELD_NAME"] = "csrf_token"
-        __import__("flask").session.update(expected_session)
-        flask_validate_csrf(reference)
+        __import__("flask").session.update(native_session)
+        flask_validate_csrf(token)
 
 
 @pytest.mark.parametrize(

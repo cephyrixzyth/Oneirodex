@@ -585,3 +585,5 @@ input[type="checkbox"] {
     color: var(--od-text);
     font-weight: 600;
 }
+
+.theme-swatch-tideglass { --od-swatch-fill: #81e1d2; background: var(--od-swatch-fill); }

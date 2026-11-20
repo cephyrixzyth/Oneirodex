@@ -258,6 +258,18 @@ def test_admin_shell_page_skips_flask_request_context(pilot, monkeypatch):
     assert 'id="admin-app-root"' in response.text
 
 
+def test_running_worker_serves_replaced_admin_shell(pilot, tmp_path):
+    flask_app, app = pilot
+    cookie = signed_cookie(flask_app, 'admin')
+    path = tmp_path / 'shell.html'
+    replacement = path.with_suffix('.new')
+    replacement.write_text(path.read_text().replace('</head>', '<script src="/bundle-next.js"></script></head>'))
+    replacement.replace(path)
+    assert '/bundle-next.js' in fetch(app, '/admin/ops', cookie).text
+    path.unlink()
+    assert fetch(app, '/admin/ops', cookie).status_code == 503
+
+
 def test_bad_shell_fails_before_exposure(pilot, tmp_path):
     flask_app, _ = pilot
     invalid = tmp_path / 'bad.html'

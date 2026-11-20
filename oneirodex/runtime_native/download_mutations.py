@@ -17,6 +17,16 @@ from .response_compat import flask_redirect_response
 _UUID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
 
 
+def base_download_exclusions():
+    from oneirodex.utils.global_settings import global_settings_row
+
+    settings = global_settings_row()
+    return {
+        str(getattr(settings, field, '') or default).casefold()
+        for field, default in (('update_folder_name', 'updates'), ('extras_folder_name', 'extras'))
+    }
+
+
 class DownloadMutationData:
     def game(self, game_uuid):
         from sqlalchemy import select
@@ -78,23 +88,7 @@ class DownloadMutationData:
         return row
 
     def legacy_zip_path(self, game):
-        if not os.path.isdir(game.full_disk_path):
-            return game.full_disk_path
-        from oneirodex.utils.global_settings import global_settings_row
-        settings = global_settings_row()
-        files = []
-        for entry in os.listdir(game.full_disk_path):
-            full = os.path.join(game.full_disk_path, entry)
-            if os.path.isdir(full) and settings and (
-                entry.lower() == settings.update_folder_name.lower()
-                or entry.lower() == settings.extras_folder_name.lower()
-            ):
-                continue
-            if os.path.isfile(full):
-                files.append(entry)
-        significant = [entry for entry in files if not entry.lower().endswith(('.nfo', '.sfv'))
-                       and entry.lower() not in ('file_id.diz', 'oneirodex.json')]
-        return os.path.join(game.full_disk_path, significant[0]) if len(significant) == 1 else game.full_disk_path
+        return self.zip_path(game, game.full_disk_path, kind='base', zip_hint=None)
 
     def create_legacy_download_request(self, game, user, zip_file_path):
         from oneirodex.runtime_native.db_session import native_db as db
@@ -169,21 +163,22 @@ class DownloadMutationData:
         # directory when one is present.
         if game.full_disk_path and os.path.normpath(file_location) != os.path.normpath(game.full_disk_path):
             return file_location
-        from oneirodex.utils.global_settings import global_settings_row
-        settings = global_settings_row()
-        files = []
-        for entry in os.listdir(file_location):
-            full = os.path.join(file_location, entry)
-            if os.path.isdir(full) and settings and (
-                entry.lower() == settings.update_folder_name.lower()
-                or entry.lower() == settings.extras_folder_name.lower()
-            ):
-                continue
-            if os.path.isfile(full):
-                files.append(entry)
-        significant = [entry for entry in files if not entry.lower().endswith(('.nfo', '.sfv'))
-                       and entry.lower() not in ('file_id.diz', 'oneirodex.json')]
-        return os.path.join(file_location, significant[0]) if len(significant) == 1 else file_location
+        excluded = base_download_exclusions()
+        single_file = None
+        with os.scandir(file_location) as entries:
+            for entry in entries:
+                name = entry.name.casefold()
+                if entry.is_dir(follow_symlinks=False):
+                    if name not in excluded:
+                        return file_location
+                    continue
+                if entry.is_file(follow_symlinks=False) and not (
+                    name.endswith(('.nfo', '.sfv')) or name in ('file_id.diz', 'oneirodex.json')
+                ):
+                    if single_file is not None:
+                        return file_location
+                    single_file = entry.path
+        return single_file or file_location
 
     def create_request(self, game, user, *, file_location, zip_file_path, kind='base', version_uuid=None):
         from sqlalchemy import select
@@ -196,6 +191,9 @@ class DownloadMutationData:
             user_id=user.id, file_location=file_location,
         )).scalars().first()
         if existing:
+            if existing.zip_file_path != zip_file_path:
+                existing.zip_file_path = zip_file_path
+                db.session.commit()
             return existing
         download_size = game.size if kind == 'base' else self.path_size(file_location)
         row = DownloadRequest(
@@ -394,9 +392,12 @@ async def _run_download(request, *, flask_app, data, find_user, find_token,
                                     row = data.create_request(game, auth.user,
                                         file_location=file_location, zip_file_path=zip_path,
                                         kind=kind, version_uuid=resolved)
+                                    stream_url = f'/download_zip/{row.id}'
+                                    companion_zip = body.get('representation') == 'companion_zip' if body else False
                                     response = JSONResponse(api_ok_payload({
                                         'download_id': row.id, 'status': row.status,
-                                        'stream_url': f'/download_zip/{row.id}',
+                                        'stream_url': stream_url + ('?representation=companion_zip' if companion_zip else ''),
+                                        **({'representation': 'companion_zip'} if companion_zip else {}),
                                         'kind': kind if kind in ('base', 'update', 'extra') else 'base',
                                         'version_uuid': resolved,
                                     }))

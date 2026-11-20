@@ -304,3 +304,31 @@ def test_rotation_keeps_both_files_when_commit_acknowledgement_is_lost(rotation_
         assert _read(check, current) == b'original-save'
         assert current.storage_path != str(old_path)
         assert old_path.exists() and Path(current.storage_path).exists()
+
+
+def test_restore_retained_encrypted_save_creates_a_new_revision(rotation_case):
+    from io import BytesIO
+    from werkzeug.datastructures import FileStorage
+
+    from oneirodex.runtime_native.db_session import native_engine_session_scope
+    from oneirodex.utils.emulator_saves import (
+        SaveRevisionConflict, read_save_bytes, restore_save_generation, save_history, store_save,
+    )
+
+    case = rotation_case
+    with native_engine_session_scope(case.engine):
+        for revision, data in enumerate((b'original bytes', b'newer bytes')):
+            store_save(user_id=case.user_id, game_uuid=case.game_uuid, slot_name='auto',
+                       file_storage=FileStorage(stream=BytesIO(data), filename='auto.state'),
+                       expected_revision=revision)
+        version, = save_history(case.user_id, case.game_uuid, 'auto')['generations']
+        assert 'storage_path' not in version
+        assert save_history(case.user_id + 1, case.game_uuid, 'auto')['generations'] == []
+        with pytest.raises(FileNotFoundError):
+            restore_save_generation(case.user_id, case.game_uuid, 'other', version['id'], 2)
+        with pytest.raises(SaveRevisionConflict):
+            restore_save_generation(case.user_id, case.game_uuid, 'auto', version['id'], 1)
+        recovered = restore_save_generation(case.user_id, case.game_uuid, 'auto', version['id'], 2)
+        assert recovered.encrypted and recovered.revision == 3
+        assert read_save_bytes(recovered) == b'original bytes'
+        assert len(save_history(case.user_id, case.game_uuid, 'auto')['generations']) == 2

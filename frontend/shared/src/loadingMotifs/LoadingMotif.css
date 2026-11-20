@@ -1,5 +1,5 @@
 /**
- * Loading motif catalogue (Wave 2d) — member SPA copy of theme CSS.
+ * Loading motif catalogue (Wave 2d) — shared SPA styles.
  * Ids must match oneirodex.utils.loading_icons.BUILTIN_LOADING_ICONS.
  */
 
@@ -11,7 +11,7 @@
   justify-content: center;
   width: var(--od-loading-size);
   height: var(--od-loading-size);
-  color: var(--od-accent);
+  color: var(--od-platform-accent, var(--od-accent));
   flex-shrink: 0;
 }
 
@@ -29,7 +29,7 @@
   --od-loading-size: 3.5rem;
 }
 
-.od-loading-motif[data-motif="ring"] /* Console + controller motifs (GT-B23).
+/* Console + controller motifs (GT-B23).
  *
  * Motion rules for this set:
  *   - one full cycle under ~1.2s, so it reads as motion rather than drift
@@ -276,47 +276,18 @@
 }
 
 /* Motion-safe: hold a legible frame rather than freezing mid-transform. */
-/* Reduced motion reduces the motion; it does not switch the indicator off.
- *
- * This used to be a blanket `animation: none` on every descendant, which left
- * a completely static glyph on every loading screen — indistinguishable from a
- * hung page, which is the one thing a loading indicator exists to rule out.
- * The reported "loading screens not animating" is this rule doing exactly what
- * it says on a machine with the OS setting on.
- *
- * What actually triggers vestibular symptoms is large-amplitude movement:
- * spinning platters, sliding cartridges, sweeping heads. Those still stop. A
- * slow opacity breathe has no motion vector at all, stays well inside the
- * "subtle animation" the WCAG 2.3.3 understanding document allows, and is
- * enough to say the page is still working. */
-@keyframes od-loading-motif-breathe {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
+  .od-loading-motif,
   .od-loading-motif * {
     animation: none !important;
     transform: none !important;
-    opacity: 1;
-  }
-
-  /* Not the picker's specimens — a grid of a dozen breathing swatches is the
-     noise the preview variant exists to avoid, and none of them is progress. */
-  .od-loading-motif:not(.od-loading-motif--preview) {
-    animation: od-loading-motif-breathe 1.8s ease-in-out infinite;
   }
 }
 
 /* --------------------------------------------------------------------------
    Per-system archetype motifs (GT-B24)
 
-   Shared motion across all 72 systems: the archetype decides the silhouette,
+   Shared motion across all supported systems: the archetype decides the silhouette,
    these rules decide how it moves. Keeping the animation in one place means a
    new archetype inherits correct timing instead of inventing its own.
    -------------------------------------------------------------------------- */
@@ -459,8 +430,8 @@
   }
 }
 
-/* Same contract for the 72 per-system motifs: the silhouette stops moving,
-   the glyph keeps breathing (the rule above owns the breathe). */
+/* Same contract for the per-system motifs: the silhouette stops moving,
+   the progress label stays visible. */
 @media (prefers-reduced-motion: reduce) {
   .od-loading-motif [class^='od-sysmotif__'] {
     animation: none !important;

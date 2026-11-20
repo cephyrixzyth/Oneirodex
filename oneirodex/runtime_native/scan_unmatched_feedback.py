@@ -1,6 +1,7 @@
 """Native FastAPI routes for unmatched maintenance and bad-match feedback."""
 from __future__ import annotations
 
+import json
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any, Callable
@@ -8,6 +9,8 @@ from typing import Any, Callable
 from fastapi import APIRouter, FastAPI, Request
 from starlette.responses import JSONResponse
 
+from .bounded_request_body import BODY_TOO_LARGE, read_bounded_body
+from .query_compat import first_query_value
 from .request_auth import request_auth_context
 
 
@@ -21,6 +24,10 @@ BAD_MATCH_REASONS = {
     'duplicate_of_other': 'Duplicate of another entry',
     'other': 'Other',
 }
+
+
+class _FeedbackTooLarge(ValueError):
+    pass
 
 
 class ScanUnmatchedFeedbackData:
@@ -147,6 +154,14 @@ def create_scan_unmatched_feedback_router(
             folder_id=folder_id,
         )
 
+    @router.api_route('/api/unmatched/{folder_id:str}/candidates', methods=['GET', 'HEAD'])
+    async def candidates(folder_id: str, request: Request):
+        return await _run(request, **options, privilege='librarian', handler=_candidates, folder_id=folder_id)
+
+    @router.post('/api/unmatched/{folder_id:str}/review')
+    async def review(folder_id: str, request: Request):
+        return await _run(request, **options, privilege='librarian', handler=_review, folder_id=folder_id)
+
     return router
 
 
@@ -178,6 +193,8 @@ async def _run(
         if response is None:
             try:
                 response = await handler(request, data, auth, folder_id=folder_id)
+            except _FeedbackTooLarge:
+                response = _error(413, 'payload_too_large', 'Feedback is limited to 64 KiB')
             except Exception:
                 rollback = getattr(data, 'rollback', None)
                 if callable(rollback):
@@ -225,6 +242,91 @@ async def _reasons(_request, _data, _auth, **_):
     return _ok({'reasons': [{'id': key, 'label': label} for key, label in BAD_MATCH_REASONS.items()]})
 
 
+async def _candidates(request, data, auth, *, folder_id):
+    from sqlalchemy import select
+    from oneirodex.models import Game
+    from oneirodex.runtime_native.db_session import native_db as db
+    from oneirodex.utils.browse_filters import apply_name_filter
+    from oneirodex.utils.library_acl import apply_game_access_filters, user_can_access_library
+    if auth.token is not None and not auth.has_scope('admin'):
+        return _error(403, 'forbidden', 'A token with admin scope is required')
+    row = data.unmatched_folder(folder_id)
+    if row is None or not user_can_access_library(auth.user, row.library_uuid):
+        return _error(404, 'not_found', 'Scan result unavailable')
+    query = first_query_value(request.query_params, 'q', '').strip()
+    if not 2 <= len(query) <= 120:
+        return _ok({'items': []})
+    base = apply_game_access_filters(select(Game).filter_by(library_uuid=row.library_uuid), auth.user)
+    matches = db.session.scalars(apply_name_filter(base, {'q': query}).order_by(Game.name, Game.uuid).limit(20))
+    return _ok({'items': [{'uuid': game.uuid, 'name': game.name, 'provider_id': game.igdb_id,
+                           'year': game.first_release_date.year if game.first_release_date else None}
+                          for game in matches]})
+
+
+async def _review(request, data, auth, *, folder_id):
+    from sqlalchemy import select, update
+    from sqlalchemy.dialects.postgresql import insert
+    from oneirodex.models.library import CatalogMatchReview
+    from oneirodex.models import Game, UnmatchedFolder
+    from oneirodex.runtime_native.db_session import native_db as db
+    from oneirodex.utils.library_acl import user_can_access_library, user_can_access_game
+
+    if auth.token is not None and not auth.has_scope('admin'):
+        return _error(403, 'forbidden', 'A token with admin scope is required')
+    body = await _json_dict(request)
+    if not isinstance(body, dict):
+        return _error(400, 'bad_request', 'Expected a review')
+    row = db.session.execute(select(UnmatchedFolder).where(UnmatchedFolder.id == folder_id)).scalar_one_or_none()
+    if row is None or not row.library_uuid or not row.folder_path or not user_can_access_library(auth.user, row.library_uuid):
+        return _error(404, 'not_found', 'Scan result unavailable')
+    source_key = CatalogMatchReview.key(row.folder_path)
+    db.session.execute(insert(CatalogMatchReview).values(
+        library_uuid=row.library_uuid, source_key=source_key, decision=row.review_decision or {}
+    ).on_conflict_do_nothing())
+    record = db.session.execute(select(CatalogMatchReview).filter_by(
+        library_uuid=row.library_uuid, source_key=source_key
+    ).with_for_update()).scalar_one()
+    saved = record.decision or {}
+    revision = saved.get('revision', 0)
+    if type(body.get('revision')) is not int or body['revision'] != revision:
+        return _error(409, 'conflict', 'The review changed. Refresh this row.')
+    action = body.get('action')
+    history = list(saved.get('history', []))
+    if action == 'undo':
+        if not history:
+            return _error(409, 'conflict', 'No previous decision')
+        decision = history.pop()
+    elif action in ('accept', 'reject'):
+        note = body.get('note')
+        if not isinstance(note, str) or not 1 <= len(note.strip()) <= 500:
+            return _error(400, 'bad_request', 'Enter a reason of up to 500 characters')
+        candidate_id = body.get('candidate') or None
+        if candidate_id is not None and (not isinstance(candidate_id, str) or len(candidate_id) > 36):
+            return _error(400, 'bad_request', 'Invalid candidate')
+        candidate = db.session.execute(select(Game).filter_by(uuid=candidate_id, library_uuid=row.library_uuid)).scalar_one_or_none() if candidate_id else None
+        if (candidate_id or action == 'accept') and (
+            candidate is None or candidate.library_uuid != row.library_uuid or not user_can_access_game(auth.user, candidate)
+        ):
+            return _error(404, 'not_found', 'Candidate unavailable in this library')
+        decision = {'action': action, 'candidate': candidate_id, 'note': note.strip(),
+                    'label': candidate.name if candidate else None,
+                    'provider_id': candidate.igdb_id if candidate else None,
+                    'catalog_updated': candidate.last_updated.isoformat() if candidate and candidate.last_updated else None,
+                    'year': candidate.first_release_date.year if candidate and candidate.first_release_date else None,
+                    'source_name': row.folder_path, 'score': row.match_score,
+                    'reviewed_at': datetime.now(timezone.utc).isoformat(),
+                    'actor': getattr(auth.user, 'id', None)}
+        history = (history + [saved.get('current')])[-16:]
+    else:
+        return _error(400, 'bad_request', 'Unknown review action')
+    record.decision = {'revision': revision + 1, 'current': decision, 'history': history}
+    db.session.execute(update(UnmatchedFolder).where(
+        UnmatchedFolder.library_uuid == row.library_uuid, UnmatchedFolder.folder_path == row.folder_path,
+    ).values(review_decision=record.decision))
+    data.commit()
+    return _ok({'revision': revision + 1, 'current': decision, 'can_undo': bool(history)})
+
+
 async def _flag_bad_match(request, data, auth, *, folder_id, **_):
     row = data.unmatched_folder(folder_id)
     if row is None:
@@ -263,9 +365,12 @@ async def _json_dict(request):
         content_type.startswith('application/') and content_type.endswith('+json')
     ):
         return {}
+    raw = await read_bounded_body(request, 64 * 1024)
+    if raw is BODY_TOO_LARGE:
+        raise _FeedbackTooLarge
     try:
-        payload = await request.json()
-    except Exception:
+        payload = json.loads(raw)
+    except (ValueError, UnicodeDecodeError, RecursionError):
         return {}
     return payload if isinstance(payload, dict) else {}
 

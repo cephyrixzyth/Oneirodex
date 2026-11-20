@@ -3,19 +3,18 @@
 No desktop app is needed to prove the server side of the companion protocol:
 a member queues an install from the web (session), a stand-in companion with a
 Bearer token receives it on heartbeat, acks or nacks it, and reports lifecycle
-state. Everything runs through the real Flask routes and API-token auth.
+state. Both clients use the served ASGI routes with independent cookie jars.
 """
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
 
 from oneirodex.models import Game, Library, User
 from oneirodex.platform import LibraryPlatform
 from oneirodex.utils import client_commands as cc
 from oneirodex.utils import client_lifecycle
-from oneirodex.utils.api_tokens import generate_api_token
-from oneirodex.utils.api_tokens import TOKEN_SCOPE_PRESETS
+from oneirodex.utils.api_tokens import TOKEN_SCOPE_PRESETS, generate_api_token
+from tests.fixtures.native_client import served_client
 
 pytestmark = pytest.mark.integration
 
@@ -37,14 +36,11 @@ def world(app, db_session, tmp_path, monkeypatch):
     return {'user': user, 'game': game, 'token': raw}
 
 
-def _web(client, app, user):
-    from flask_login import login_user
-
+@pytest.fixture
+def web(client, world):
     with client.session_transaction() as sess:
-        sess['_user_id'] = str(user.get_id())
+        sess['_user_id'] = str(world['user'].id)
         sess['_fresh'] = True
-    with app.test_request_context():
-        login_user(user)
     return client
 
 
@@ -52,38 +48,28 @@ class FakeCompanion:
     """The smallest thing that behaves like the desktop app towards the server."""
 
     def __init__(self, app, token, device_id='vdevice-fake-1'):
-        self.http = app.test_client()
+        self.http = served_client(app)
         self.headers = {'Authorization': f'Bearer {token}'}
         self.device_id = device_id
 
-    @staticmethod
-    def _fresh_request():
-        # Requests made inside the test's app context share its `g`; without
-        # this the browser session's cached user hides the Bearer token.
-        from flask import g
-
-        g.pop('_login_user', None)
-        g.pop('api_token', None)
-
-    def heartbeat(self):
-        self._fresh_request()
+    def heartbeat(self, **features):
         return self.http.post(
             '/api/client/heartbeat',
-            json={'device_id': self.device_id, 'device_kind': 'companion', 'client_version': '0.0.0-fake'},
+            json={'device_id': self.device_id, 'device_kind': 'companion', 'client_version': '0.0.0-fake', **features},
             headers=self.headers,
         )
 
-    def ack(self, ids):
-        self._fresh_request()
-        return self.http.post('/api/client/commands/ack', json={'ids': ids}, headers=self.headers)
+    def ack(self, ids, *, lease_id=None):
+        body = {'ids': ids}
+        if lease_id is not None:
+            body.update(device_id=self.device_id, lease_id=lease_id)
+        return self.http.post('/api/client/commands/ack', json=body, headers=self.headers)
 
     def nack(self, ids):
-        self._fresh_request()
         return self.http.post('/api/client/commands/nack', json={'ids': ids}, headers=self.headers)
 
 
-def test_install_command_reaches_the_companion_once_and_is_acked(client, app, world):
-    web = _web(client, app, world['user'])
+def test_install_command_reaches_the_companion_once_and_is_acked(web, app, world):
     queued = web.post('/api/client/commands', json={'game_uuid': world['game'].uuid, 'action': 'install'})
     assert queued.status_code == 201, queued.get_data(as_text=True)[:200]
 
@@ -99,8 +85,30 @@ def test_install_command_reaches_the_companion_once_and_is_acked(client, app, wo
     assert ack.get_json()['removed'] == 1
 
 
-def test_nacked_command_comes_back(client, app, world):
-    _web(client, app, world['user']).post(
+def test_targeted_desktop_install_accepts_only_the_claiming_device_receipt(web, app, world):
+    target = FakeCompanion(app, world['token'], 'den')
+    other = FakeCompanion(app, world['token'], 'office')
+    queued = web.post('/api/client/commands', json={
+        'game_uuid': world['game'].uuid, 'action': 'install', 'target_device_id': target.device_id,
+    })
+    assert queued.status_code == 201
+    command_id = queued.get_json()['command']['id']
+
+    assert other.heartbeat(command_protocol=2).get_json()['commands'] == []
+    [command] = target.heartbeat(command_protocol=2).get_json()['commands']
+    assert command['id'] == command_id
+    lease = command['lease_id']
+    assert lease
+    assert target.heartbeat(command_protocol=2, renew_lease=lease).get_json()['commands'] == []
+    assert other.ack([command_id], lease_id=lease).get_json()['removed'] == 0
+    assert target.ack([command_id]).get_json()['removed'] == 0
+    assert target.ack([command_id], lease_id=lease).get_json()['removed'] == 1
+    assert target.ack([command_id], lease_id=lease).get_json()['removed'] == 0
+    assert target.heartbeat(command_protocol=2).get_json()['commands'] == []
+
+
+def test_nacked_command_comes_back(web, app, world):
+    web.post(
         '/api/client/commands', json={'game_uuid': world['game'].uuid, 'action': 'install'},
     )
     fake = FakeCompanion(app, world['token'])
@@ -111,8 +119,7 @@ def test_nacked_command_comes_back(client, app, world):
     assert [c['game_uuid'] for c in again] == [world['game'].uuid]
 
 
-def test_new_preset_supports_heartbeat_without_widening_existing_tokens(client, app, world, db_session):
-    web = _web(client, app, world['user'])
+def test_new_preset_supports_heartbeat_without_widening_existing_tokens(web, app, world, db_session):
     queued = web.post('/api/client/commands', json={'game_uuid': world['game'].uuid, 'action': 'install'})
     assert queued.status_code == 201
     row, old_raw = generate_api_token(world['user'], 'old-companion', ['read:library', 'write:download'])
@@ -121,7 +128,6 @@ def test_new_preset_supports_heartbeat_without_widening_existing_tokens(client, 
     denied = old_companion.heartbeat()
     assert denied.status_code == 403
     assert denied.get_json()['detail']['required_scope'] == 'write:presence'
-    old_companion._fresh_request()
     delegated = old_companion.http.post(
         '/api/tokens', json={'name': 'no-escalation', 'preset': 'companion'},
         headers=old_companion.headers,
@@ -131,7 +137,6 @@ def test_new_preset_supports_heartbeat_without_widening_existing_tokens(client, 
     db_session.refresh(row)
     assert row.scopes == ['read:library', 'write:download']
 
-    FakeCompanion._fresh_request()
     created = web.post('/api/tokens', json={'name': 'new-companion', 'preset': 'companion'})
     assert created.status_code == 201
     assert set(created.get_json()['token']['scopes']) == {'read:library', 'write:download', 'write:presence'}
@@ -142,8 +147,7 @@ def test_new_preset_supports_heartbeat_without_widening_existing_tokens(client, 
     ]
 
 
-def test_a_browser_session_never_receives_the_install_queue(client, app, world):
-    web = _web(client, app, world['user'])
+def test_a_browser_session_never_receives_the_install_queue(web, world):
     web.post('/api/client/commands', json={'game_uuid': world['game'].uuid, 'action': 'install'})
     # Session cookie only: no companion token, so nothing is delivered or acked.
     assert web.post('/api/client/heartbeat', json={'device_id': 'browser', 'device_kind': 'companion'}).get_json()['commands'] == []
@@ -173,15 +177,12 @@ def test_read_only_companion_token_cannot_ack_or_nack_commands(app, world):
 def test_lifecycle_round_trip_from_the_companion(app, world):
     fake = FakeCompanion(app, world['token'])
     body = {'records': [{'game_uuid': world['game'].uuid, 'state': 'installed'}]}
-    fake._fresh_request()
     saved = fake.http.post('/api/client/lifecycle', json=body, headers=fake.headers)
     assert saved.status_code == 200, saved.get_data(as_text=True)[:200]
-    fake._fresh_request()
     listed = fake.http.get('/api/client/lifecycle', headers=fake.headers).get_json()['records']
     assert (world['game'].uuid, 'installed') in {(r['game_uuid'], r['state']) for r in listed}
 
 
-def test_the_companion_cannot_queue_work_for_a_game_it_cannot_see(client, app, world, db_session):
-    web = _web(client, app, world['user'])
+def test_the_companion_cannot_queue_work_for_a_game_it_cannot_see(web):
     missing = web.post('/api/client/commands', json={'game_uuid': str(uuid4()), 'action': 'install'})
     assert missing.status_code == 404

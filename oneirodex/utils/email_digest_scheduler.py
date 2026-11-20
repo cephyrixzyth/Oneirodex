@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import threading
-import time
+from oneirodex.utils.periodic_worker import PeriodicWorker
 
-_scheduler_started = False
+_scheduler = PeriodicWorker('oneirodex-email-digest')
 
 
 def _is_enabled(app) -> bool:
@@ -23,32 +22,23 @@ def _poll_seconds(app) -> int:
 
 def start_email_digest_scheduler(app):
     """Start a daemon that sends opted-in digests (idempotent)."""
-    global _scheduler_started
-    if _scheduler_started:
-        return
     if not _is_enabled(app):
         print('[EMAIL DIGEST] Disabled (ENABLE_EMAIL_DIGEST=false)')
         return
 
-    _scheduler_started = True
     interval = _poll_seconds(app)
 
-    def _loop():
-        time.sleep(60)
-        while True:
-            try:
-                with app.app_context():
-                    from oneirodex.utils.email_digest import run_email_digest_batch
+    def run_once():
+        try:
+            with app.app_context():
+                from oneirodex.utils.email_digest import run_email_digest_batch
 
-                    stats = run_email_digest_batch()
-                    print(
-                        f"[EMAIL DIGEST] considered={stats.get('considered')} "
-                        f"sent={stats.get('sent')} skipped={stats.get('skipped')}"
-                    )
-            except Exception as exc:
-                print(f'[EMAIL DIGEST] Error: {exc}')
-            time.sleep(interval)
+                stats = run_email_digest_batch()
+                print(
+                    f"[EMAIL DIGEST] considered={stats.get('considered')} "
+                    f"sent={stats.get('sent')} skipped={stats.get('skipped')}"
+                )
+        except Exception as exc:
+            print(f'[EMAIL DIGEST] Error: {exc}')
 
-    thread = threading.Thread(target=_loop, name='oneirodex-email-digest', daemon=True)
-    thread.start()
-    print(f'[EMAIL DIGEST] Started (poll every {max(1, interval // 3600)}h)')
+    return _scheduler.start(run_once, interval=interval, delay=60)

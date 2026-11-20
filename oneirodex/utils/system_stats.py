@@ -3,7 +3,6 @@ import os
 import platform
 
 import psutil
-from config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +38,8 @@ def get_memory_usage():
 def get_disk_usage():
     """Get disk usage for the application's base folder"""
     try:
+        from config import Config
+
         base_path = Config.BASE_FOLDER_WINDOWS if os.name == 'nt' else Config.BASE_FOLDER_POSIX
         if not os.path.exists(base_path):
             return None
@@ -57,6 +58,8 @@ def get_disk_usage():
 def get_games_folder_usage():
     """Get disk usage for the games folder."""
     try:
+        from config import Config
+
         games_path = Config.DATA_FOLDER_GAMES
         if not os.path.exists(games_path):
             return None

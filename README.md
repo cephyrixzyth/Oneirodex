@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.3-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.2.3" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.0-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.3.0" /></a>
   <a href="https://github.com/cephyrixzyth/oneirodex"><img src="https://img.shields.io/badge/github-cephyrixzyth%2Foneirodex-141820?style=flat-square&logo=github&labelColor=0b0d10" alt="GitHub" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/port-5006-141820?style=flat-square&labelColor=0b0d10" alt="Port 5006" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/docker-compose-2496ED?style=flat-square&logo=docker&logoColor=white&labelColor=0b0d10" alt="Docker Compose" /></a>
@@ -44,8 +44,8 @@ Oneirodex is a **FastAPI + React** server you run at home or on a NAS. Point it 
 Every screenshot and clip on this page is **live UI** from a stock install seeded with five legal free ROMs: what you see is what ships.
 
 <table>
-<tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.2.3</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
-<tr><td>🐳 <b>Containers</b></td><td><code>oneirodex-app</code> · <code>oneirodex-db</code> · optional <code>oneirodex-livekit</code></td><td>🖼️ <b>Image</b></td><td>local Compose build <code>oneirodex:1.2.3</code></td></tr>
+<tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.3.0</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
+<tr><td>🐳 <b>Containers</b></td><td><code>oneirodex-app</code> · <code>oneirodex-db</code> · optional <code>oneirodex-livekit</code></td><td>🖼️ <b>Image</b></td><td>local Compose build <code>oneirodex:1.3.0</code></td></tr>
 <tr><td>📦 <b>Package</b></td><td><code>oneirodex/</code> — FastAPI under uvicorn</td><td>🧩 <b>Front ends</b></td><td>member · admin · ops-glance SPAs, Tauri desktop, Quest PWA</td></tr>
 </table>
 
@@ -110,7 +110,7 @@ Every screenshot and clip on this page is **live UI** from a stock install seede
 
 **Optional modules** — most `ENABLE_*` modules are **on** by default; OIDC, AI auto-apply and hardlink apply stay **off** until you opt in
 - 📡 *arr + hardlink pipeline · 🤖 Ollama AI assist · 🔐 OIDC / Authentik SSO
-- 🥽 **VR — any SteamVR / PSVR2-on-PC / Quest seat**: a headset-friendly `/vr` hub, honest *Plays in VR / community profile / plays flat* rows and a per-title headset record ([controllers-and-vr.md](docs/user/controllers-and-vr.md)); the runtime, adapter and streamer stay yours — [vr-byo-runtime.md](docs/runbooks/vr-byo-runtime.md) says which does what
+- 🥽 **VR — any SteamVR / PSVR2-on-PC / Quest seat**: a furnished WebXR library room with a reading desk, favorites and desktop navigation, plus *Plays in VR / community profile / plays flat* rows and a per-title headset record ([controllers-and-vr.md](docs/user/controllers-and-vr.md)); the runtime, adapter and streamer stay yours — [vr-byo-runtime.md](docs/runbooks/vr-byo-runtime.md) says which does what
 - 🔔 **BYO notification bus** — fan in-app alerts out to an Apprise API server or an ntfy topic; nothing bundled, a dead endpoint never breaks the in-app notice
 - 🖌️ Generated cover art against **your own** A1111-compatible endpoint (AUTOMATIC1111 · SD.Next · Forge) — nothing leaves your network; GPU-less NAS? [artwork-gpu-workstation.md](docs/runbooks/artwork-gpu-workstation.md)
 - 🛡️ Login rate limit (app + [proxy runbook](docs/runbooks/login-rate-limit-proxy.md)) · malware scan — heuristics on by default, optional [ClamAV profile](docs/runbooks/docker-compose-deploy.md#clamav-malware-scan)

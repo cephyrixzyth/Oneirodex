@@ -230,3 +230,39 @@ def test_a_lone_copy_reports_its_own_system(
     ][0]
     assert row['edition_platforms'] == ['NES']
     assert row['edition_count'] == 1
+
+
+def test_script_titles_and_edition_picker_follow_same_identity(db_session, group_user, single_settings_row):
+    from werkzeug.datastructures import MultiDict
+    from oneirodex.utils.browse_query import run_browse_query
+    from oneirodex.utils.game_editions import _edition_games
+
+    nes = _library(db_session, LibraryPlatform.NES)
+    pc = _library(db_session, LibraryPlatform.PCWIN)
+    nested = _game(db_session, nes, 'First: Flight')
+    alternate = _game(db_session, pc, 'First Flight')
+    titles = ['星の旅', '海の夢', '!!!', '???', 'نور', 'پرتو']
+    for name in titles:
+        _game(db_session, nes, name)
+    matches = run_browse_query(MultiDict(), group_user)
+    assert matches.total == len(titles) + 1
+    assert set(titles) <= {game.name for game in matches.games}
+    assert {g.uuid for g in _edition_games(nested, group_user)} == {nested.uuid, alternate.uuid}
+    alternate.name = 'Different Flight'
+    db_session.commit()
+    assert [g.uuid for g in _edition_games(nested, group_user)] == [nested.uuid]
+
+
+def test_category_accepts_label_and_enum_and_bounds_page(db_session, group_user, single_settings_row):
+    from werkzeug.datastructures import MultiDict
+    from oneirodex.models import Category
+    from oneirodex.utils.browse_query import run_browse_query
+
+    game = _game(db_session, _library(db_session, LibraryPlatform.NES), 'A game')
+    game.category = Category.MAIN_GAME
+    db_session.commit()
+    for value in (Category.MAIN_GAME.name, Category.MAIN_GAME.value):
+        result = run_browse_query(MultiDict({'category': value, 'page': '0'}), group_user)
+        assert result.page == 1
+        assert [g.uuid for g in result.games] == [game.uuid]
+    assert run_browse_query(MultiDict({'category': 'no such category'}), group_user).total == 0

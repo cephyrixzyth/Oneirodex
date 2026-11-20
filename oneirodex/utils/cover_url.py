@@ -35,7 +35,7 @@ def _default_cover_url(app=None):
 
 
 def _placeholder_slug(title):
-    return hashlib.sha1(title.strip().lower().encode('utf-8')).hexdigest()[:20]
+    return hashlib.sha1(title.strip().lower().encode('utf-8'), usedforsecurity=False).hexdigest()[:20]
 
 
 def _current_theme_era() -> tuple[str, str]:

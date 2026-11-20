@@ -160,7 +160,7 @@ def create_artwork_apply_router(
                                     response = JSONResponse(payload, status_code=status)
                                 elif isinstance(exc, RuntimeError):
                                     payload, status = api_error_payload(
-                                        str(exc), code='unavailable', game_uuid=game_uuid,
+                                        'Artwork provider unavailable', code='unavailable', game_uuid=game_uuid,
                                     )
                                     response = JSONResponse(payload, status_code=status)
                                 else:

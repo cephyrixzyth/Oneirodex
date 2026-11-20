@@ -115,6 +115,8 @@ export function TopBar({
 
   async function handlePreferencesClick(event: any) {
     event.preventDefault()
+    // The menu link disappears when the dialog opens. Restore to its persistent trigger.
+    accountButtonRef.current?.focus()
     setAccountOpen(false)
     await openPreferencesModal()
   }

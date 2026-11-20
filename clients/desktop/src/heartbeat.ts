@@ -4,6 +4,7 @@ import { createAuthStore, type AuthStore } from './auth.js'
 import { createDesktopApi } from './api.js'
 import { isConnectionUnavailable } from './connect.js'
 import type { LifecycleAction } from './lifecycle.js'
+import { sha256Fingerprint } from './offline-shelf.js'
 import { CLIENT_VERSION } from './version.js'
 
 const DEVICE_ID_STORAGE_KEY = 'oneirodex-device-id'
@@ -30,6 +31,8 @@ export function getOrCreateDeviceId(): string {
 }
 
 export interface HeartbeatOptions {
+  renewLease?: string
+
   deviceName?: string
   clientVersion?: string
   deviceId?: string
@@ -54,6 +57,7 @@ export type CompanionCommandAction =
   LifecycleAction | 'apply_patch' | 'apply_mod_pack' | 'open_path'
 
 export interface CompanionCommand {
+  lease_id?: string
   id: string
   /** Present for install lifecycle commands; may be empty for unmatched open_path. */
   game_uuid: string
@@ -87,21 +91,25 @@ function isCompanionCommandAction(value: string): value is CompanionCommandActio
 
 async function postCommandResult(
   auth: AuthStore,
-  endpoint: 'ack' | 'nack',
-  ids: string[],
+  command: CompanionCommand,
+  result: CompanionCommandResult,
+  deviceId: string,
   fetchImpl?: typeof fetch,
 ): Promise<void> {
-  if (ids.length === 0) {
-    return
-  }
-  if (!auth.getBaseUrl() || !auth.getToken()) {
-    return
-  }
   const device = deviceApi(auth, fetchImpl)
-  if (endpoint === 'ack') {
-    await device.ackCommands(ids)
-  } else {
-    await device.nackCommands(ids)
+  const lease = command.lease_id ? { device_id: deviceId, lease_id: command.lease_id } : undefined
+  const response =
+    result === 'ok'
+      ? await device.ackCommands([command.id], lease)
+      : await device.nackCommands([command.id], lease ? { ...lease, result } : undefined)
+  if (
+    lease &&
+    response &&
+    typeof response === 'object' &&
+    (('removed' in response && response.removed === 0) ||
+      ('released' in response && response.released === 0))
+  ) {
+    throw new Error('Command lease changed before acknowledgement')
   }
 }
 
@@ -117,6 +125,8 @@ export async function postClientHeartbeat(
 
   const data = await deviceApi(auth, options.fetchImpl).heartbeat({
     device_id: options.deviceId ?? getOrCreateDeviceId(),
+    command_protocol: 2,
+    ...(options.renewLease ? { renew_lease: options.renewLease } : {}),
     device_kind: options.deviceKind ?? 'companion',
     device_name: options.deviceName ?? 'Oneirodex Desktop',
     client_version: options.clientVersion ?? CLIENT_VERSION,
@@ -132,7 +142,7 @@ export async function postClientHeartbeat(
     const action = String(record.action || '')
     const gameUuid = String(record.game_uuid || '').trim()
     const path = record.path != null ? String(record.path).trim() : ''
-    if (!isCompanionCommandAction(action) || action === 'download') {
+    if (!isCompanionCommandAction(action)) {
       continue
     }
     // Lifecycle commands need a game uuid; open_path needs an absolute path.
@@ -142,6 +152,7 @@ export async function postClientHeartbeat(
       }
       parsed.push({
         id: String(record.id || crypto.randomUUID()),
+        ...(typeof record.lease_id === 'string' ? { lease_id: record.lease_id } : {}),
         game_uuid: gameUuid,
         action,
         path,
@@ -155,6 +166,7 @@ export async function postClientHeartbeat(
     }
     parsed.push({
       id: String(record.id || crypto.randomUUID()),
+      ...(typeof record.lease_id === 'string' ? { lease_id: record.lease_id } : {}),
       game_uuid: gameUuid,
       action,
       created_at: record.created_at ? String(record.created_at) : undefined,
@@ -191,6 +203,35 @@ export function startClientHeartbeat(
   const token = auth.getToken()
   const revision = auth.getRevision()
   const requestAuth = createAuthStore({ baseUrl, token })
+  const deviceId = options.deviceId ?? getOrCreateDeviceId()
+  let runningLease = ''
+  let renewalInFlight = false
+  const outcomes = new Map<string, CompanionCommandResult>()
+  let receiptKey: Promise<string | null> | undefined
+  function receiptStore(): Promise<string | null> {
+    receiptKey ??= sha256Fingerprint(JSON.stringify([baseUrl, token, deviceId]))
+      .then((id) => 'oneirodex-companion-results-v1:' + id)
+      .catch(() => null)
+    return receiptKey
+  }
+  function receipts(key: string | null): Record<string, 'ok' | 'error'> {
+    try {
+      return key ? JSON.parse(localStorage.getItem(key) || '{}') || {} : {}
+    } catch {
+      return {}
+    }
+  }
+  function writeReceipt(key: string | null, id: string, result?: 'ok' | 'error') {
+    if (!key) return
+    try {
+      const rows = receipts(key)
+      if (result) rows[id] = result
+      else delete rows[id]
+      localStorage.setItem(key, JSON.stringify(Object.fromEntries(Object.entries(rows).slice(-64))))
+    } catch {
+      /* An unavailable local store still leaves this session's receipt. */
+    }
+  }
   const isCurrent = () =>
     !stopped &&
     auth.getRevision() === revision &&
@@ -198,12 +239,21 @@ export function startClientHeartbeat(
     auth.getToken() === token
 
   const tick = (): void => {
-    if (inFlight || !isCurrent()) {
+    if (!isCurrent()) return
+    if (inFlight) {
+      if (runningLease && !renewalInFlight) {
+        renewalInFlight = true
+        void postClientHeartbeat(requestAuth, { ...options, deviceId, renewLease: runningLease })
+          .catch(() => undefined)
+          .finally(() => {
+            renewalInFlight = false
+          })
+      }
       return
     }
     inFlight = true
     const fetchImpl = options.fetchImpl
-    void postClientHeartbeat(requestAuth, options)
+    void postClientHeartbeat(requestAuth, { ...options, deviceId })
       .then(async (commands) => {
         if (!isCurrent()) return
         failureStreak = 0
@@ -218,9 +268,15 @@ export function startClientHeartbeat(
         }
         for (const command of commands) {
           if (!isCurrent()) return
+          runningLease = command.lease_id || ''
+          const receipt = command.lease_id ? await receiptStore() : null
+          if (!isCurrent()) return
           let result: CompanionCommandResult = 'ok'
           try {
-            const handlerResult = await options.onCommands(command)
+            const handlerResult =
+              outcomes.get(command.id) ??
+              receipts(receipt)[command.id] ??
+              (await options.onCommands(command))
             if (handlerResult === 'busy' || handlerResult === 'error' || handlerResult === 'ok') {
               result = handlerResult
             }
@@ -229,13 +285,18 @@ export function startClientHeartbeat(
           }
           if (!isCurrent()) return
           try {
-            if (result === 'ok') {
-              await postCommandResult(requestAuth, 'ack', [command.id], fetchImpl)
-            } else {
-              await postCommandResult(requestAuth, 'nack', [command.id], fetchImpl)
+            // A lost acknowledgement may redeliver the same command to this session.
+            if (result !== 'busy') {
+              outcomes.set(command.id, result)
+              writeReceipt(receipt, command.id, result)
             }
+            await postCommandResult(requestAuth, command, result, deviceId, fetchImpl)
+            outcomes.delete(command.id)
+            writeReceipt(receipt, command.id)
           } catch {
-            // Ack/nack is best-effort; stale reclaim recovers in_flight rows.
+            // Retain the completed result until an acknowledgement succeeds.
+          } finally {
+            runningLease = ''
           }
         }
       })

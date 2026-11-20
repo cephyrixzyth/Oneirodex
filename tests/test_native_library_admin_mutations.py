@@ -82,13 +82,6 @@ class FakeLibraryAdminMutations:
         self.calls.append(('scan', library.uuid, folder, options, database_scope))
         return {'status': 'queued', 'job_id': 'scan-job', 'position': 2, 'message': 'queued'}
 
-    def fail_scan_for_legacy_mode(self, *, library, folder, options):
-        self.calls.append(('fail_scan_mode', library.uuid, folder, options))
-        return {
-            'status': 'started', 'job_id': 'failed-scan-job', 'position': None,
-            'message': 'Scan started (job failed-s…).',
-        }
-
     def resolve_scan_path(self, app, folder, library_root):
         self.calls.append(('resolve', folder, library_root))
         resolved = folder or '/safe/root/one'
@@ -497,7 +490,7 @@ def test_batch_scan_keeps_aliases_queue_result_and_partial_rows(native_client):
     runtime, data = native_client
     response = _request(runtime, 'POST', '/api/admin/libraries/batch/scan', json={
         'uuids': ['lib-1', 'missing'], 'remove_missing': 'yes', 'download_missing_images': True,
-        'force_updates_extras': 1,
+        'force_updates_extras': 1, 'fetch_hltb': True, 'force_hltb_refetch': True, 'scan_mode': 'auto',
     })
     assert response.status_code == 200
     body = response.json()
@@ -507,6 +500,8 @@ def test_batch_scan_keeps_aliases_queue_result_and_partial_rows(native_client):
     assert scan[2] == '/safe/root/one'
     assert scan[3]['remove_missing'] is True
     assert scan[3]['download_missing_images'] is True
+    assert scan[3]['scan_mode'] == 'files'
+    assert scan[3]['fetch_hltb'] and scan[3]['force_hltb_refetch']
 
 
 @pytest.mark.parametrize(('body', 'expected_folder'), [
@@ -620,17 +615,15 @@ def test_single_scan_stringifies_legacy_scalar_folder_without_weakening_root_all
     assert scan[2] == '/safe/root/123'
 
 
-def test_single_scan_unknown_mode_preserves_legacy_accepted_then_failed_contract(native_client):
+def test_single_scan_rejects_unknown_mode_without_creating_a_job(native_client):
     runtime, data = native_client
     response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
         'library_uuid': 'lib-1', 'folder': '/safe/root/one', 'scan_mode': 'unknown',
     })
 
-    assert response.status_code == 200
-    assert response.json()['status'] == 'started'
-    assert response.json()['position'] is None
-    assert response.json()['job_id'] == 'failed-scan-job'
-    assert any(call[0] == 'fail_scan_mode' for call in data.calls)
+    assert response.status_code == 400
+    assert response.json()['status'] == 'rejected'
+    assert response.json()['job_id'] is None
     assert not any(call[0] == 'scan' for call in data.calls)
 
 

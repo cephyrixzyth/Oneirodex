@@ -367,3 +367,23 @@ class TestOpsPulse:
             pulse = _library_watch_pulse()
             assert pulse['enabled'] is False
             assert 'running' in pulse
+
+
+def test_reentered_lifespan_binds_a_new_watcher_after_stopping(app, monkeypatch):
+    from oneirodex.utils import library_watch
+
+    monkeypatch.setenv('ONEIRODEX_LIBRARY_WATCH', '1')
+    monkeypatch.setattr(library_watch, '_controller', None)
+    monkeypatch.setattr(library_watch, '_watch_started', False)
+    monkeypatch.setattr(LibraryWatchController, '_ensure_observer', lambda self: None)
+    first = start_library_watch(app)
+    old_thread = first._refresh_thread
+    assert start_library_watch(app) is first
+    first.stop()
+    assert not old_thread.is_alive()
+    second = start_library_watch(app)
+    try:
+        assert second is not first
+        assert second._refresh_thread.is_alive()
+    finally:
+        second.stop()

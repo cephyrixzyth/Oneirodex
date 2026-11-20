@@ -72,7 +72,7 @@ def test_browse_play_fields_computers_no_browser():
     for name in COMPUTER_KEYS:
         game = SimpleNamespace(
             uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-            library=SimpleNamespace(platform=SimpleNamespace(name=name)),
+            full_disk_path='fixture.rom', library=SimpleNamespace(platform=SimpleNamespace(name=name)),
         )
         fields = browse_play_fields(game)
         assert fields['can_play_in_browser'] is False, name

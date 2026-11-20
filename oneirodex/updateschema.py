@@ -1547,11 +1547,7 @@ class DatabaseManager:
         ALTER TABLE unmatched_folders ADD COLUMN IF NOT EXISTS bad_match_at TIMESTAMP;
         ALTER TABLE unmatched_folders ADD COLUMN IF NOT EXISTS bad_match_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 
-        -- Library page size default 20 -> 50 (human 2026-08-03). Only rows still
-        -- sitting on the *old default* are moved; anyone who picked 100/200/etc
-        -- keeps their choice. A member who deliberately chose 20 can set it back
-        -- in Preferences.
-        UPDATE user_preferences SET items_per_page = 50 WHERE items_per_page = 20;
+        -- Defaults apply to new members. Existing choices, including 20, persist.
         ALTER TABLE user_preferences ALTER COLUMN items_per_page SET DEFAULT 50;
 
         -- Storefront shelves for installs that predate them. Derived shelves
@@ -1602,28 +1598,13 @@ class DatabaseManager:
         Clean up duplicate discovery sections created by conflicting initialization code.
         Removes outdated sections with wrong identifiers (latest, random, popular).
         """
-        cleanup_sql = """
-        -- Delete outdated discovery sections with wrong identifiers
-        DELETE FROM discovery_sections
-        WHERE identifier IN ('latest', 'random', 'popular');
-
-        -- Log what was done
-        DO $$
-        DECLARE
-            deleted_count INTEGER;
-        BEGIN
-            GET DIAGNOSTICS deleted_count = ROW_COUNT;
-            IF deleted_count > 0 THEN
-                RAISE NOTICE 'Removed % outdated discovery sections', deleted_count;
-            END IF;
-        END $$;
-        """
-
-        print("Cleaning up duplicate discovery sections...")
         try:
             with self.engine.begin() as connection:
-                connection.execute(text(cleanup_sql))
-                print("Discovery sections cleanup completed successfully.")
+                result = connection.execute(text(
+                    "DELETE FROM discovery_sections WHERE identifier IN ('latest', 'random', 'popular')"
+                ))
+            if result.rowcount:
+                print(f"Removed {result.rowcount} outdated discovery sections.")
         except Exception as e:
             print(f"Warning: Discovery sections cleanup failed: {e}")
             print("Application will continue...")

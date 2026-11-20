@@ -36,9 +36,12 @@ LEGACY_DEFAULT_AVATAR = 'newstyle/avatar_default.jpg'
 STOCK_AVATAR_DIR = 'newstyle/avatars/'
 AVATAR_URL_PREFIX = 'library/images/avatars_users/'
 
-# Six picks spanning how people actually played, not six variations on one era.
-# Ordered roughly by era so the row reads as a timeline.
+# Editorial portraits are full-color artwork; the classic glyphs follow the active theme.
 STOCK_AVATARS = (
+    {'id': 'moss-keeper', 'label': 'Moss Keeper', 'path': f'{STOCK_AVATAR_DIR}moss-keeper.webp'},
+    {'id': 'radio-crab', 'label': 'Radio Crab', 'path': f'{STOCK_AVATAR_DIR}radio-crab.webp'},
+    {'id': 'star-moth', 'label': 'Star Moth', 'path': f'{STOCK_AVATAR_DIR}star-moth.webp'},
+    {'id': 'reel-mechanic', 'label': 'Reel Mechanic', 'path': f'{STOCK_AVATAR_DIR}reel-mechanic.webp'},
     {'id': 'controller', 'label': 'Gamepad', 'path': f'{STOCK_AVATAR_DIR}controller.svg'},
     {'id': 'dpad', 'label': 'D-pad', 'path': f'{STOCK_AVATAR_DIR}dpad.svg'},
     {'id': 'cartridge', 'label': 'Cartridge', 'path': f'{STOCK_AVATAR_DIR}cartridge.svg'},

@@ -47,7 +47,6 @@ import {
   parseTrustedShares,
   saveTrustedShares,
 } from './trusted-shares.js'
-import { buildLocalArchiveName } from './paths.js'
 import {
   installedOfflineGames,
   clearOfflineInstalledShelf,
@@ -264,7 +263,6 @@ function renderLibrary(): void {
       const modBlocked = modApplyBlockedReason({
         connectionOnline: connectionMode === 'online',
         modsTrackingEnabled,
-        hasEnabledMods: gamesWithEnabledMods.has(uuid),
         installed: canLaunchGame(state),
       })
       const modTitle = modBlocked
@@ -810,6 +808,10 @@ async function runApplyPatchCommand(
   busyGames.add(uuid)
   let outcome: 'ok' | 'busy' | 'error' = 'ok'
   try {
+    const romPath = (await loadInstallsFromDisk())[uuid]?.archivePath
+    if (!romPath) {
+      throw new Error('Install the base game in this companion before applying a patch.')
+    }
     setGameActivity(uuid, 'Staging translation patch…')
     const authHeader = auth.authorizationHeader()
     const staged = await stagePatchFile({
@@ -817,33 +819,18 @@ async function runApplyPatchCommand(
       patchUuid: versionUuid,
       apiBase: auth.getBaseUrl() || undefined,
       authHeader: authHeader || undefined,
-      filename: `${versionUuid}.bps`,
     })
     if (!staged.ok) {
       throw new Error(staged.error)
-    }
-    // Prefer a locally downloaded archive as the ROM source when present.
-    const downloadsDir = await (async () => {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core')
-        return await invoke<string>('get_app_subdir', { subdir: 'downloads' })
-      } catch {
-        return ''
-      }
-    })()
-    const romPath = downloadsDir
-      ? `${downloadsDir.replace(/[/\\]+$/, '')}/${buildLocalArchiveName(uuid)}`
-      : ''
-    if (!romPath) {
-      throw new Error(
-        'No local ROM archive found. Download the base game in the companion first, then retry — or apply with Flips manually.',
-      )
     }
     setGameActivity(uuid, 'Applying patch with Flips…')
     const applied = await kickoffApplyPatch({
       gameUuid: uuid,
       patchPath: staged.path,
       romPath,
+    }).finally(async () => {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('remove_path', { path: staged.path }).catch(() => undefined)
     })
     if (!applied.ok) {
       throw new Error(applied.error)

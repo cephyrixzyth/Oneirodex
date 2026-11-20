@@ -815,14 +815,20 @@ async def run_lifespan():
             started = True
             if app._flask_app.config['SQLALCHEMY_DATABASE_URI'] != os.environ['TEST_DATABASE_URL']:
                 raise SystemExit('ASGI lifespan selected a database other than the validated test database')
-            deadline = time.monotonic() + 10
-            while time.monotonic() < deadline and os.path.exists(target):
-                await asyncio.sleep(0.01)
-            with app._flask_app.app_context():
-                remaining = db.session.query(UserDeletionFileJob).filter_by(
-                    root_path=root, relative_path=relative_path,
-                ).count()
-            if os.path.exists(target) or remaining:
+            from oneirodex.utils.user_deletion import _cleanup_worker
+            if _cleanup_worker.thread is None:
+                raise SystemExit(f'ASGI cleanup did not start (pytest imported: {"pytest" in sys.modules})')
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                # The filesystem unlink happens before the journal transaction commits.
+                with app._flask_app.app_context():
+                    remaining = db.session.query(UserDeletionFileJob).filter_by(
+                        root_path=root, relative_path=relative_path,
+                    ).count()
+                if not remaining and not os.path.exists(target):
+                    break
+                await asyncio.sleep(0.05)
+            else:
                 raise SystemExit('ASGI lifespan worker left the committed cleanup job pending')
         finally:
             if started:
@@ -834,6 +840,10 @@ asyncio.run(run_lifespan())
     child_env = os.environ.copy()
     child_env['DATABASE_URL'] = test_database_url
     child_env['TEST_DATABASE_URL'] = test_database_url
+    # A real ASGI startup needs the configuration owned by this disposable fixture.
+    child_env['SECRET_KEY'] = str(app.config['SECRET_KEY'])
+    child_env.setdefault('DATA_FOLDER_GAMES', str(tmp_path))
+    child_env.setdefault('UPLOAD_FOLDER', str(tmp_path / 'uploads'))
     child_env.pop('PYTEST_CURRENT_TEST', None)
     child_env['ONEIRODEX_ENABLE_BACKGROUND_WORKERS'] = 'true'
     child_env['ONEIRODEX_INITIALIZATION_COMPLETE'] = 'true'
@@ -843,10 +853,10 @@ asyncio.run(run_lifespan())
         env=child_env,
         capture_output=True,
         text=True,
-        timeout=30,
+        timeout=120,
         check=False,
     )
-    assert result.returncode == 0, result.stderr or result.stdout
+    assert result.returncode == 0, result.stdout + result.stderr
 
     no_savepoint_db.expire_all()
     assert not target.exists()

@@ -229,6 +229,42 @@ def read_save_bytes(row: EmulatorSave) -> bytes:
     return maybe_decrypt(payload, context=context_for_row(row))
 
 
+def save_history(user_id, game_uuid, slot, before=None):
+    query = select(EmulatorSaveGeneration).join(EmulatorSave).where(
+        EmulatorSave.user_id == user_id, EmulatorSave.game_uuid == game_uuid,
+        EmulatorSave.slot_name == slot,
+    )
+    if before is not None:
+        query = query.where(EmulatorSaveGeneration.id < before)
+    items = list(db.session.execute(query.order_by(EmulatorSaveGeneration.id.desc()).limit(26)).scalars())
+    rows = [{
+        'id': item.id, 'filename': item.filename, 'size_bytes': item.size_bytes,
+        'retained_at': item.created_at.isoformat() if item.created_at else None,
+    } for item in items[:25]]
+    return {'generations': rows, 'next_before': rows[-1]['id'] if len(items) > 25 else None}
+
+
+def restore_save_generation(user_id, game_uuid, slot, generation_id, expected_revision):
+    import io
+    from werkzeug.datastructures import FileStorage
+
+    db.session.execute(select(User.id).where(User.id == user_id).with_for_update()).first()
+    pair = db.session.execute(select(EmulatorSaveGeneration, EmulatorSave).join(EmulatorSave).where(
+        EmulatorSaveGeneration.id == generation_id, EmulatorSave.user_id == user_id,
+        EmulatorSave.game_uuid == game_uuid, EmulatorSave.slot_name == slot,
+    )).first()
+    if not pair:
+        raise FileNotFoundError('Save generation not found')
+    generation, owner = pair
+    if expected_revision != owner.revision:
+        raise SaveRevisionConflict(owner.revision)
+    with open(generation.storage_path, 'rb') as handle:
+        raw = maybe_decrypt(handle.read(), context=context_for_row(generation, owner=owner))
+    return store_save(user_id=user_id, game_uuid=game_uuid, slot_name=slot,
+                      file_storage=FileStorage(stream=io.BytesIO(raw), filename=generation.filename),
+                      expected_revision=expected_revision)
+
+
 def store_save(
     *,
     user_id: int,
@@ -356,7 +392,7 @@ def store_save(
     return current
 
 
-def delete_save(user_id: int, game_uuid: str, slot_name: str) -> bool:
+def delete_save(user_id: int, game_uuid: str, slot_name: str, *, expected_revision: int | None = None) -> bool:
     # Serialize deletion with writes so quota accounting and shared legacy-path
     # reference checks cannot race a replacement.
     db.session.execute(
@@ -371,6 +407,8 @@ def delete_save(user_id: int, game_uuid: str, slot_name: str) -> bool:
     ).scalars().first()
     if not row:
         return False
+    if expected_revision is not None and row.revision != expected_revision:
+        raise SaveRevisionConflict(row.revision)
     paths = [row.storage_path]
     histories = list(db.session.execute(
         select(EmulatorSaveGeneration).filter_by(save_id=row.id),

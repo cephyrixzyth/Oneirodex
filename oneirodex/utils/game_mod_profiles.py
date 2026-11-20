@@ -23,12 +23,16 @@ import json
 import re
 from typing import Any
 
-from oneirodex.utils.game_mods import load_mods, save_mods
+from oneirodex.utils.game_mods import load_mods, loader_conflicts, save_mods
 
 EXPORT_PREFIX = 'od-mod:'
 EXPORT_VERSION = 1
 MAX_CODE_BYTES = 64 * 1024
 _SLUG = re.compile(r'[^a-z0-9]+')
+
+
+class ProfileConflict(ValueError):
+    """A shared profile no longer matches its receiving pack."""
 
 
 def _profile_id(name: str, taken: set[str]) -> str:
@@ -46,7 +50,9 @@ def list_profiles(game_uuid: str) -> dict[str, Any]:
     return {'profiles': pack['profiles'], 'active_profile': pack['active_profile']}
 
 
-def create_profile(game_uuid: str, *, name: str, mod_ids: list[str] | None = None) -> dict[str, Any]:
+def create_profile(game_uuid: str, *, name: str, mod_ids: list[str] | None = None,
+                   requirements: list[dict] | None = None, unresolved: list[str] | None = None,
+                   import_order: list[str] | None = None) -> dict[str, Any]:
     """A new profile. ``mod_ids`` ``None`` means "the rows enabled right now"."""
     pack = load_mods(game_uuid)
     name = (name or '').strip()[:120]
@@ -60,6 +66,12 @@ def create_profile(game_uuid: str, *, name: str, mod_ids: list[str] | None = Non
     else:
         ids = [str(m) for m in mod_ids if str(m) in known]
     profile = {'id': _profile_id(name, {p['id'] for p in pack['profiles']}), 'name': name, 'mod_ids': ids}
+    if requirements:
+        profile['requirements'] = requirements
+    if import_order:
+        profile['import_order'] = import_order
+    if unresolved:
+        profile['unresolved'] = unresolved
     saved = save_mods(game_uuid, pack['mods'], profiles=[*pack['profiles'], profile])
     return next(p for p in saved['profiles'] if p['id'] == profile['id'])
 
@@ -74,6 +86,25 @@ def delete_profile(game_uuid: str, profile_id: str) -> bool:
     return True
 
 
+def _check_import_receipt(profile: dict, mods: list[dict]) -> None:
+    tracked = {row['id']: row for row in mods}
+    if profile.get('unresolved'):
+        raise ProfileConflict('Resolve the missing mods and import the profile again.')
+    for req in profile.get('requirements', []):
+        row = tracked.get(req['id'])
+        if row is None or any(req.get(key) and req[key] != row.get(key)
+                              for key in ('version', 'loader', 'source_url')):
+            raise ProfileConflict('The tracked mods have changed. Check versions, loaders and sources.')
+        if 'requires' in req and set(req['requires']) != set(row.get('requires', [])):
+            raise ProfileConflict('The tracked dependencies have changed. Review the requirements.')
+    expected_order = profile.get('import_order', [])
+    if expected_order:
+        selected = set(expected_order)
+        # load_mods supplies the exact ordered list used by the companion.
+        if [row['id'] for row in mods if row['id'] in selected] != expected_order:
+            raise ProfileConflict('The tracked load order differs from the shared profile.')
+
+
 def activate_profile(game_uuid: str, profile_id: str) -> dict[str, Any]:
     """Enable exactly the profile's rows and remember which profile is on."""
     pack = load_mods(game_uuid)
@@ -82,6 +113,11 @@ def activate_profile(game_uuid: str, profile_id: str) -> dict[str, Any]:
         raise LookupError('Profile not found')
     wanted = set(profile['mod_ids'])
     mods = [{**row, 'enabled': row['id'] in wanted} for row in pack['mods']]
+    _check_import_receipt(profile, mods)
+    if loader_conflicts({**pack, 'mods': mods}) or any(
+        row['enabled'] and not set(row['requires']).issubset(wanted) for row in mods
+    ):
+        raise ValueError('Resolve the profile loader or dependency conflicts before activating.')
     return save_mods(game_uuid, mods, active_profile=profile_id)
 
 
@@ -90,6 +126,7 @@ def export_profile(game_uuid: str, profile_id: str) -> str:
     profile = next((p for p in pack['profiles'] if p['id'] == profile_id), None)
     if profile is None:
         raise LookupError('Profile not found')
+    _check_import_receipt(profile, pack['mods'])
     by_id = {row['id']: row for row in pack['mods']}
     doc = {
         'v': EXPORT_VERSION,
@@ -103,13 +140,17 @@ def export_profile(game_uuid: str, profile_id: str) -> str:
                 'loader': by_id[mid]['loader'],
                 'source_url': by_id[mid]['source_url'],
                 'load_order': by_id[mid]['load_order'],
+                'requires': by_id[mid].get('requires', []),
             }
             for mid in profile['mod_ids']
             if mid in by_id
         ],
     }
     raw = json.dumps(doc, separators=(',', ':'), ensure_ascii=True).encode('utf-8')
-    return EXPORT_PREFIX + base64.urlsafe_b64encode(raw).decode('ascii').rstrip('=')
+    body = base64.urlsafe_b64encode(raw).decode('ascii').rstrip('=')
+    if len(body) > MAX_CODE_BYTES:
+        raise ValueError('Profile is too large for a share code. Split it into smaller profiles.')
+    return EXPORT_PREFIX + body
 
 
 def decode_export(code: str) -> dict[str, Any]:
@@ -139,27 +180,59 @@ def import_profile(game_uuid: str, code: str, *, name: str | None = None) -> dic
     """
     doc = decode_export(code)
     pack = load_mods(game_uuid)
-    by_id = {row['id']: row for row in pack['mods']}
-    by_url = {row['source_url']: row for row in pack['mods'] if row.get('source_url')}
+    requirements = []
+    source_ids = {}
+    entries = []
+    if len(doc['mods']) > 256:
+        raise ValueError('A shared profile supports at most 256 entries')
     matched: list[str] = []
     missing: list[dict[str, Any]] = []
     for entry in doc['mods']:
         if not isinstance(entry, dict):
-            continue
+            raise ValueError('A shared profile entry is invalid')
         mid = str(entry.get('id') or '').strip()
         url = str(entry.get('source_url') or '').strip()
-        row = by_id.get(mid) or (by_url.get(url) if url else None)
+        expected = {key: str(entry.get(key) or '').strip() for key in ('version', 'loader', 'source_url')}
+        candidates = [row for row in pack['mods'] if row['id'] == mid or (url and row['source_url'] == url)]
+        compatible = [row for row in candidates if all(not value or row.get(key) == value
+                                                       for key, value in expected.items())]
+        row = next((row for row in compatible if row['id'] == mid), None)
+        if row is None and len(compatible) == 1:
+            row = compatible[0]
         if row is not None:
-            if row['id'] not in matched:
-                matched.append(row['id'])
+            if row['id'] in matched or (mid and mid in source_ids):
+                raise ValueError('Two shared entries identify the same mod')
+            if mid:
+                source_ids[mid] = row['id']
+            matched.append(row['id'])
+            receipt = {'id': row['id'], **expected}
+            requirements.append(receipt)
+            entries.append((entry, receipt))
         else:
             missing.append({
                 'name': str(entry.get('name') or mid or url)[:256],
                 'version': str(entry.get('version') or '')[:64],
                 'loader': str(entry.get('loader') or '')[:64],
                 'source_url': url[:2048],
+                'load_order': entry.get('load_order'),
+                'requires': entry.get('requires', []),
             })
-    profile = create_profile(game_uuid, name=(name or str(doc.get('name') or 'Imported profile')), mod_ids=matched)
+    unresolved = [item['name'] or 'Unknown mod' for item in missing]
+    ordered = []
+    for entry, receipt in entries:
+        if 'requires' in entry:
+            deps = entry['requires']
+            if not isinstance(deps, list) or len(deps) > 64 or any(not isinstance(dep, str) for dep in deps):
+                raise ValueError('Invalid dependency list in the shared profile')
+            receipt['requires'] = [source_ids[dep] for dep in deps if dep in source_ids]
+            for dep in deps:
+                if dep not in source_ids:
+                    unresolved.append(f"{entry.get('name') or receipt['id']} requires {dep}"[:256])
+        if type(entry.get('load_order')) is int:
+            ordered.append((entry['load_order'], str(entry.get('name') or '').lower(), receipt['id']))
+    import_order = [mid for _, _, mid in sorted(ordered, key=lambda item: item[:2])] if len(ordered) == len(entries) else []
+    profile = create_profile(game_uuid, name=(name or str(doc.get('name') or 'Imported profile')),
+                             mod_ids=matched, requirements=requirements, unresolved=unresolved, import_order=import_order)
     return {
         'profile': profile,
         'matched': len(matched),

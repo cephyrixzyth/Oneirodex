@@ -90,7 +90,7 @@ export function BadgeStack({
 
   if (!hasMain && dismissible && dismissed.length > 0) {
     return (
-      <div className="od-badge-layers" aria-label="Game badges">
+      <div className="od-badge-layers" role="group" aria-label="Game badges">
         <div
           className="od-badge-stack od-badge-stack--top-left od-badge-stack--interactive"
           data-corner="top-left"
@@ -110,7 +110,7 @@ export function BadgeStack({
   }
 
   return (
-    <div className="od-badge-layers" aria-label="Game badges">
+    <div className="od-badge-layers" role="group" aria-label="Game badges">
       {corners.map((slot) => (
         <div
           key={slot.corner}

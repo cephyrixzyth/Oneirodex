@@ -52,7 +52,7 @@ export default [
       // this seat's scope.
       'tests/**',
       // Generated — the source of truth is scripts/gen_loading_motifs.py.
-      'frontend/member-app/src/components/systemMotifCatalogue.ts',
+      'frontend/shared/src/loadingMotifs/systemMotifCatalogue.ts',
     ],
   },
 

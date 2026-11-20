@@ -5,7 +5,7 @@ For each LibraryPlatform: how it is played, which core, whether firmware is
 missing on an empty install, whether a legal free ROM exists, and -- the point
 of the table -- what the virtual-device pass can honestly claim for it:
 
-  game-tested     browser play AND a free ROM: boot test applies
+  boot-eligible   browser play with a free ROM listed for a future boot check
   core-smoke      browser play, no legal ROM: the core can only be smoke-tested
   bios-blocked    browser play, but the core needs firmware we do not ship
   companion-only  played by a desktop emulator; not testable in this container
@@ -23,6 +23,7 @@ import argparse
 import importlib.util
 import os
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -50,7 +51,7 @@ FREE_ROM_PLATFORMS = {
     'vb': 'VB',
 }
 
-STATES = ('game-tested', 'core-smoke', 'bios-blocked', 'companion-only', 'catalog-only')
+STATES = ('boot-eligible', 'core-smoke', 'bios-blocked', 'companion-only', 'catalog-only')
 
 
 def _free_rom_keys() -> set[str]:
@@ -62,26 +63,32 @@ def _free_rom_keys() -> set[str]:
 
 
 def build_rows() -> list[dict]:
-    from oneirodex.platform import LibraryPlatform, mapped_core_ids
+    from oneirodex.platform import LibraryPlatform
     from oneirodex.utils.play_url import browse_play_fields
 
     free = _free_rom_keys()
 
-    def resolve(name: str) -> dict:
-        cores = mapped_core_ids(name)
-        return {'emulators': cores, 'preferred': cores[0] if cores else None}
-
     rows = []
-    # An empty install: no BIOS uploaded, so the firmware column is the honest default.
-    with mock.patch('oneirodex.utils.emulator_bios.list_bios_files', return_value=[]), mock.patch(
-        'oneirodex.utils.emulator_profiles.resolve_emulators_for_platform', resolve
+    # Use the stock core list and settings. An operator's optional cores,
+    # profiles and firmware must not change the published baseline.
+    with (
+        tempfile.TemporaryDirectory(prefix='oneirodex-platform-') as folder,
+        mock.patch('oneirodex.utils.webretro_cores.discover_webretro_cores', return_value=frozenset()),
+        mock.patch('oneirodex.utils.emulator_profiles.get_emulator_profiles', return_value={}),
+        mock.patch('oneirodex.utils.browser_player._settings_row', return_value=None),
+        mock.patch('oneirodex.utils.emulator_bios.list_bios_files', return_value=[]),
     ):
+        sample = Path(folder) / 'sample.bin'
+        sample.write_bytes(b'Oneirodex classification fixture')
         for plat in LibraryPlatform:
             game = SimpleNamespace(
                 uuid='aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-                library=SimpleNamespace(platform=SimpleNamespace(name=plat.name)),
+                library=SimpleNamespace(platform=plat),
+                full_disk_path=str(sample),
             )
             fields = browse_play_fields(game)
+            game.full_disk_path = None
+            unattached = browse_play_fields(game)
             mode = fields['play_mode']
             has_rom = plat.name in free
             if mode == 'catalog':
@@ -91,7 +98,7 @@ def build_rows() -> list[dict]:
             elif fields.get('firmware_missing'):
                 state = 'bios-blocked'
             elif has_rom:
-                state = 'game-tested'
+                state = 'boot-eligible'
             else:
                 state = 'core-smoke'
             rows.append({
@@ -100,6 +107,8 @@ def build_rows() -> list[dict]:
                 'mode': mode,
                 'core': fields.get('emulator_core') or '',
                 'play_url': bool(fields.get('play_url')),
+                'unattached_play_url': bool(unattached.get('play_url')),
+                'unattached_blocker': unattached.get('play_blocker'),
                 'bios_missing': bool(fields.get('firmware_missing')),
                 'free_rom': has_rom,
                 'state': state,
@@ -109,16 +118,22 @@ def build_rows() -> list[dict]:
 
 def to_markdown(rows: list[dict]) -> str:
     counts = {s: sum(1 for r in rows if r['state'] == s) for s in STATES}
+    unattached_links = sum(r['unattached_play_url'] for r in rows)
+    missing_file = sum(r['unattached_blocker'] == 'missing_game_file' for r in rows)
     lines = [
         f'{len(rows)} platforms: ' + ', '.join(f'{counts[s]} {s}' for s in STATES) + '.',
         '',
-        '| Platform | Mode | Core | Free ROM | Firmware | Pass can claim |',
+        f'With no file attached, {unattached_links} of {len(rows)} entries expose a browser Play URL. '
+        f'{missing_file} report `missing_game_file`.',
+        '',
+        '| Platform | Mode with file | Browser core | Free ROM listed | Browser firmware | Applicable check |',
         '|---|---|---|---|---|---|',
     ]
     for r in rows:
+        firmware = ('missing' if r['bios_missing'] else 'no blocker') if r['mode'] == 'browser' else '–'
         lines.append(
             f"| {r['label']} (`{r['key']}`) | {r['mode']} | {r['core'] or '–'} | "
-            f"{'yes' if r['free_rom'] else 'no'} | {'missing' if r['bios_missing'] else 'ok'} | {r['state']} |"
+            f"{'yes' if r['free_rom'] else 'no'} | {firmware} | {r['state']} |"
         )
     return '\n'.join(lines)
 

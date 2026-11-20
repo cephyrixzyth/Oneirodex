@@ -42,3 +42,6 @@ cryptography==50.0.2
 py7zr==1.1.4
 rarfile==4.5
 watchdog==7.1.0
+
+# RSS, Torznab and DAT documents can originate outside the household.
+defusedxml==0.7.1
