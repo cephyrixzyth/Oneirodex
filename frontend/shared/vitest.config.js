@@ -10,6 +10,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // Node 26 exposes its own global localStorage, which shadows jsdom's
+    // Storage. Turn it off so tests see the browser-like environment.
+    execArgv: ['--no-experimental-webstorage'],
     setupFiles: './src/testSetup.ts',
   },
 })

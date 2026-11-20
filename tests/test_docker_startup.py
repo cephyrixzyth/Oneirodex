@@ -144,7 +144,7 @@ def test_docker_build_inputs_are_digest_pinned_and_emit_image_evidence():
     dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
     workflow = (ROOT / '.github' / 'workflows' / 'docker-publish.yml').read_text(encoding='utf-8')
 
-    assert 'node:22-alpine@sha256:' in dockerfile
+    assert 'node:26-alpine@sha256:' in dockerfile
     assert 'python:3.12-slim@sha256:' in dockerfile
     assert 'snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT}' in dockerfile
     assert '--require-hashes -r requirements.lock' in dockerfile

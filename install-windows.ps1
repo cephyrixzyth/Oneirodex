@@ -122,13 +122,13 @@ function Test-Prerequisites {
     $node = Get-CommandPath 'node'
     $npm = Get-CommandPath 'npm'
     if ($null -eq $node -or $null -eq $npm) {
-        Write-Fail 'Node.js 22 and npm were not found on PATH.'
-        Write-Note 'Install Node.js 22 LTS, then re-run this script.'
-        throw 'Node.js 22 is required to build the Oneirodex SPAs'
+        Write-Fail 'Node.js 26 and npm were not found on PATH.'
+        Write-Note 'Install Node.js 26 LTS, then re-run this script.'
+        throw 'Node.js 26 is required to build the Oneirodex SPAs'
     }
     $nodeVersion = (& node -p 'process.versions.node').Trim()
-    if ($nodeVersion -notmatch '^22\.') {
-        Write-Fail "Node.js 22 is required; found $nodeVersion at $node"
+    if ($nodeVersion -notmatch '^26\.') {
+        Write-Fail "Node.js 26 is required; found $nodeVersion at $node"
         throw 'Unsupported Node.js version'
     }
     Write-Ok "Node.js $nodeVersion at $node"

@@ -15,5 +15,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    // Node 26 exposes a global localStorage that the companion tests do not
+    // expect outside a webview. Turn it off.
+    execArgv: ['--no-experimental-webstorage'],
   },
 })

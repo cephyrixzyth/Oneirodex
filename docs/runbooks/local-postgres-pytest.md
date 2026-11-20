@@ -194,7 +194,7 @@ checkout.
 
 ## Independent-review baseline and authentication fixtures
 
-Use Python 3.12 and Node 22 for the independent-review baseline. Select a fresh
+Use Python 3.12 and Node 26 for the independent-review baseline. Select a fresh
 loopback test database and upgrade it with the guarded command above. For a
 run that must not inherit operator configuration, set
 `PYTHON_DOTENV_DISABLED=1` before starting Python and supply synthetic test

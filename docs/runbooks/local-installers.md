@@ -20,7 +20,7 @@ build produced no bundles rather than reporting success over an empty directory.
 
 | Host | Produces | Notes |
 |---|---|---|
-| Windows | `.exe` (NSIS) | Native. Needs Rust + Node 22. |
+| Windows | `.exe` (NSIS) | Native. Needs Rust + Node 26. |
 | Linux | `.deb`, `.AppImage` | Native, or from any host with `--linux`. |
 | macOS | `.dmg`, `.app` | **Mac required** — see below. |
 
@@ -53,7 +53,7 @@ Mac produces a `.dmg` for that Mac's own architecture; add
 ## Prerequisites
 
 - **Rust** — <https://rustup.rs>
-- **Node 22** (pinned in `.nvmrc`; every `package.json` sets `engines: ">=22 <23"`)
+- **Node 26** (pinned in `.nvmrc`; every `package.json` sets `engines: ">=26 <27"`)
 - **Windows**: MSVC build tools + WebView2 (present on Windows 11)
 - **Linux/Docker**: the script installs `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`
   and friends inside the container, and pulls Node from NodeSource (Debian

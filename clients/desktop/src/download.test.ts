@@ -82,12 +82,18 @@ describe('download kickoff helper', () => {
         }),
       }),
     )
+    // Bytes land in a scoped .part checkpoint, then publish to the archive path.
+    const partial = expect.stringMatching(/game-42\.zip\.[0-9a-f]{64}\.part$/)
     expect(invoke).toHaveBeenCalledWith('write_file_bytes', {
-      path: resolveArchivePath('/appdata/downloads', 'game-42'),
+      path: partial,
       bytes: expect.any(Uint8Array),
     })
-    expect(invoke).toHaveBeenCalledWith('append_file_bytes', {
+    expect(invoke).toHaveBeenCalledWith('publish_archive_checkpoint', {
       path: resolveArchivePath('/appdata/downloads', 'game-42'),
+      scope: expect.stringMatching(/^[0-9a-f]{64}$/),
+    })
+    expect(invoke).toHaveBeenCalledWith('append_file_bytes', {
+      path: partial,
       bytes: expect.any(Uint8Array),
     })
     expect(next).toBe('downloaded')
@@ -322,7 +328,9 @@ describe('archive download redirects', () => {
         kickoffDownload(api as never, auth, registry, 'game-7', { fetchImpl }),
       ).rejects.toThrow(/ZIP/)
       expect(registry.get('game-7')).toBe('not_downloaded')
-      expect(invoke).toHaveBeenCalledWith('remove_path', { path: '/appdata/downloads/game-7.zip' })
+      expect(invoke).toHaveBeenCalledWith('remove_path', {
+        path: expect.stringMatching(/game-7\.zip\.[0-9a-f]{64}\.part$/),
+      })
       expect(invoke).not.toHaveBeenCalledWith('save_installs', expect.anything())
     },
   )

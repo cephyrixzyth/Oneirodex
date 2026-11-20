@@ -17,11 +17,11 @@ Use before tagging a release; read the intended version from the root [`VERSION`
 
 ## CI (PR gate)
 
-GitHub Actions [`.github/workflows/ci-tests.yml`](../../.github/workflows/ci-tests.yml) runs on PRs and pushes to `main` / `master` / `feature/**` (and similar). Toolchain is pinned: Python **3.12** (`.python-version`) and Node **22** (`.nvmrc`, `engines: ">=22 <23"` in every `package.json`).
+GitHub Actions [`.github/workflows/ci-tests.yml`](../../.github/workflows/ci-tests.yml) runs on PRs and pushes to `main` / `master` / `feature/**` (and similar). Toolchain is pinned: Python **3.12** (`.python-version`) and Node **26** (`.nvmrc`, `engines: ">=26 <27"` in every `package.json`).
 
 - **Pytest core** (Python 3.12 + Postgres service): builds the member, auth-pilot, and admin React shells, then runs `tests/ -m "not integration"` minus the named exceptions in `ci-tests.yml`, with coverage at a 65% floor and the API-envelope, print, and get-json ratchets. The gate has a 90-minute timeout; inspect the current workflow result rather than relying on historical test counts. See [`ci-gates.md`](../dev/ci-gates.md).
 - **Alembic (upgrade + check)** (Python 3.12 + Postgres service, independent of pytest-core): `pip install -r requirements-dev.txt`, then `python -m alembic upgrade head` and `python -m alembic check`. `check` fails hard on any diff — the baseline is kept clean by the `include_object` allow-list in `alembic/env.py` ([`alembic-baseline-notes.md`](../dev/alembic-baseline-notes.md)), so a new operation means a migration is missing.
-- **Lint & format** (repo root, Node 22): root `npm ci`, then `npm run lint` (ESLint flat config `eslint.config.js`) + `npm run format:check` (Prettier over `frontend/**`).
+- **Lint & format** (repo root, Node 26): root `npm ci`, then `npm run lint` (ESLint flat config `eslint.config.js`) + `npm run format:check` (Prettier over `frontend/**`).
 - **Member-app vitest** (`frontend/member-app`): `npm test -- --run` + `npm run typecheck`.
 - **Admin-app vitest** (`frontend/admin-app`): `npm test -- --run` + `npm run typecheck`, plus classic theme JS harnesses and CSS token lint.
 - **Ops-glance vitest** (`frontend/ops-glance`): `npm test -- --run` + `npm run typecheck` **and `npm run build`** — the glance ships in the Docker image, so a broken bundle fails the gate.

@@ -21,7 +21,7 @@ Thin is not “coming later”: TC-2 shell is buildable today. See [thin-client.
 
 ## Prerequisites
 
-- **Node.js 22** and npm (matches the locked workspace engine requirement)
+- **Node.js 26** and npm (matches the locked workspace engine requirement)
 - **Rust** stable (`rustup`) — required for `tauri dev` / `tauri build`
 - **Tauri system deps** — see [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) (WebView2 on Windows)
 

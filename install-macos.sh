@@ -176,7 +176,7 @@ check_homebrew() {
 }
 
 install_prerequisites() {
-    print_step "Installing prerequisites (Python, PostgreSQL) and checking Node 22..."
+    print_step "Installing prerequisites (Python, PostgreSQL) and checking Node 26..."
 
     if ! brew list --formula "$PYTHON_FORMULA" >/dev/null 2>&1; then
         print_verbose "Installing $PYTHON_FORMULA..."
@@ -185,14 +185,14 @@ install_prerequisites() {
     print_success "Python available"
 
     if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
-        print_error "Node.js 22 and npm are required to build the Oneirodex SPAs."
-        print_info "Install with Homebrew: brew install node@22"
+        print_error "Node.js 26 and npm are required to build the Oneirodex SPAs."
+        print_info "Install with Homebrew: brew install node@26"
         return 1
     fi
     local node_version
     node_version="$(node -p 'process.versions.node')"
-    if [[ "$node_version" != 22.* ]]; then
-        print_error "Node.js 22 is required; found $node_version"
+    if [[ "$node_version" != 26.* ]]; then
+        print_error "Node.js 26 is required; found $node_version"
         return 1
     fi
     print_success "Node.js $node_version available"
@@ -276,7 +276,7 @@ setup_python_environment() {
 }
 
 build_native_spas() {
-    print_step "Building all five native installer SPAs with Node 22..."
+    print_step "Building all five native installer SPAs with Node 26..."
     cd "$SCRIPT_DIR"
     run_quiet npm ci --no-audit --no-fund
     run_quiet npm run build:native-spas
