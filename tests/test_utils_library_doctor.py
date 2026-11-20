@@ -35,10 +35,18 @@ def test_dry_run_folder_fitgirl(tmp_path):
 
 
 def test_dry_run_folder_steam_id(tmp_path):
+    folder = tmp_path / 'barony (Steam 335240)'
+    folder.mkdir()
+    row = dry_run_folder(str(folder))
+    assert row['steam_app_id'] == 335240
+    assert row['cleaned_name'].lower() == 'barony'
+
+
+def test_dry_run_folder_bare_number_is_not_a_steam_id(tmp_path):
     folder = tmp_path / 'barony (89881)'
     folder.mkdir()
     row = dry_run_folder(str(folder))
-    assert row['steam_app_id'] == 89881
+    assert row['steam_app_id'] is None
     assert row['cleaned_name'].lower() == 'barony'
 
 
