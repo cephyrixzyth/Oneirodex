@@ -517,7 +517,7 @@ def test_format_why_unmatched_update_package():
 @pytest.mark.parametrize('raw, cleaned', [
     ('3 Minutes to Midnight v1.1.0a', '3 Minutes To Midnight'),
     ('8bit Adventures 2 (79354)', '8bit Adventures 2'),
-    ('The necromancers tale 1 235 (64bit) (91571) win gog', 'The Necromancers Tale 1 235'),
+    ('The necromancers tale 1 235 (64bit) (91571) win gog', 'The Necromancers Tale'),
     ('Superhot Mind Control Delete [GOG]', 'Superhot Mind Control Delete'),
     ('Call Of Cthulhu Prisoner Of Ice GOG', 'Call Of Cthulhu Prisoner Of Ice'),
     ('ALIEN ABDUCTION EXPERIENCE TiNYiSO', 'ALIEN ABDUCTION EXPERIENCE'),
@@ -545,3 +545,35 @@ def test_bare_paren_number_is_never_a_steam_app_id():
 def test_paren_year_is_not_a_catalog_number():
     r = parse_game_label('1979 Revolution (2016)')
     assert r['catalog_number'] is None
+
+
+@pytest.mark.parametrize('raw, cleaned', [
+    # dates: dd mm yyyy, dd mm.yyyy, (v dd mm yyyy), Vmm mm.yyyy
+    ('Metro Awakening VR 12 12 2024', 'Metro Awakening'),
+    ('Resident Evil Village 10 04.2023', 'Resident Evil Village'),
+    ('Snufkin MoMoomin valley 18 12.2024', 'Snufkin MoMoomin Valley'),
+    ('Swordsman VR (v11 06 2022)', 'Swordsman'),
+    ('Tracks Train Game 30 11.2021', 'Tracks Train Game'),
+    ('Vertigo 1 Remastered V04 04.2023', 'Vertigo 1 Remastered'),
+    # bare version tails
+    ('Dragon Age II 1.04', 'Dragon Age II'),
+    ('Gothic 2 Gold Edition 2.60', 'Gothic 2 Gold Edition'),
+    ('CrossCode 1.4.2-3', 'CrossCode'),
+    ('Book Of Demons 1 04 22689', 'Book Of Demons 1'),
+    ('Beyond Blue 1 4 16124', 'Beyond Blue 1'),
+    ('Larva Mortus 1 0.2 (55857)', 'Larva Mortus'),
+    ('Sifu 1 28.6.720', 'Sifu'),
+    ('Gone Rogue 1 14', 'Gone Rogue'),
+    ('One Punch Man A Hero Nobody Knows 1 300', 'One Punch Man A Hero Nobody Knows'),
+    ('The Legend of Khiimori v0 8 4 Early Acces', 'The Legend Of Khiimori'),
+    ('Dagon by H P. Lovecraft All DLC', 'Dagon By H P. Lovecraft'),
+    # real titles with numbers stay
+    ('Fritz Chess 20', 'Fritz Chess 20'),
+    ('Pixel Ripped 1978', 'Pixel Ripped 1978'),
+    ('Serpent In The Staglands 19', 'Serpent In The Staglands 19'),
+    ('Kingdom Hearts 2.5', 'Kingdom Hearts 2.5'),
+    ('Tony Hawks Pro Skater 3 Plus 4', 'Tony Hawks Pro Skater 3 Plus 4'),
+    ('Worms 2', 'Worms 2'),
+])
+def test_version_and_date_tails_are_peeled(raw, cleaned):
+    assert parse_game_label(raw)['cleaned_name'] == cleaned

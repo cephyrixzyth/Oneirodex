@@ -908,16 +908,33 @@ def retrieve_and_save_game(
 
     from oneirodex.utils.clients.igdb import IgdbUnavailable
 
+    from oneirodex.utils.helpers.platforms import candidate_on_pc_family, is_pc_family_library
+
     igdb_unavailable = None
+    # Pass 1 uses the library's IGDB platform. A PC library gets a second,
+    # unfiltered pass that keeps only PC-family candidates (DOS, PC VR, Linux,
+    # Mac): IGDB lists those games there, not under "PC (Microsoft Windows)".
+    search_passes = [(platform_id, None)]
+    if platform_id is not None and is_pc_family_library(library.platform):
+        search_passes.append((None, candidate_on_pc_family))
+    pending_variants = [
+        (pass_platform, keep, search_name)
+        for pass_platform, keep in search_passes
+        for search_name in search_variants
+    ]
     # Try each variant until we find a high-confidence match
-    for search_name in search_variants:
-        logger.info(f"Trying IGDB search with: '{search_name}'")
+    for pass_platform, keep, search_name in pending_variants:
+        if selected_game is not None:
+            break
+        logger.info(f"Trying IGDB search with: '{search_name}'" + ('' if keep is None else ' (PC family)'))
         try:
-            candidates = search_igdb_for_game(search_name, platform_id, limit=10, raise_on_error=True)
+            candidates = search_igdb_for_game(search_name, pass_platform, limit=10, raise_on_error=True)
         except IgdbUnavailable as exc:
             igdb_unavailable = str(exc)
             logger.warning(f"IGDB unavailable while identifying '{game_name}': {exc}")
             break
+        if candidates and keep is not None:
+            candidates = [c for c in candidates if keep(c)]
         if not candidates:
             logger.info(f"No match found for variant: '{search_name}'")
             continue
@@ -942,7 +959,7 @@ def retrieve_and_save_game(
             response_json = [best]
             high_confidence_candidates = candidates
             logger.info(f"High-confidence match with search variant: '{search_name}' → {best.get('name')}")
-            break
+            continue
 
         last_low_confidence_candidates = candidates
         last_low_confidence_search = search_name
@@ -973,6 +990,11 @@ def retrieve_and_save_game(
         if retry_title:
             logger.info(f"Trying IGDB search with store title: '{retry_title}'")
             candidates = search_igdb_for_game(retry_title, platform_id, limit=10)
+            if not candidates and len(search_passes) > 1:
+                candidates = [
+                    c for c in (search_igdb_for_game(retry_title, None, limit=10) or [])
+                    if candidate_on_pc_family(c)
+                ]
             if candidates:
                 best, confidence = select_best_match(
                     retry_title,

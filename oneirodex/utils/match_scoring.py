@@ -23,11 +23,18 @@ _TRAILING_SEQUEL_TOKEN_RE = re.compile(
 )
 
 
+# Multi-letter roman sequel numerals read as digits, so "Police Quest 3" and
+# "Police Quest III" compare equal. Single I / V / X stay letters ("X-Wing").
+_ROMAN_SEQUELS = {'ii': '2', 'iii': '3', 'iv': '4', 'vi': '6', 'vii': '7', 'viii': '8', 'ix': '9'}
+_ROMAN_TOKEN_RE = re.compile(r'\b(ii|iii|iv|vi|vii|viii|ix)\b')
+
+
 def normalize_for_score(name: str) -> str:
     """Lowercase alphanumeric-only form for similarity comparison."""
     if not name:
         return ''
-    return re.sub(r'[^a-z0-9]+', '', name.lower())
+    lowered = _ROMAN_TOKEN_RE.sub(lambda m: _ROMAN_SEQUELS[m.group(1)], name.lower())
+    return re.sub(r'[^a-z0-9]+', '', lowered)
 
 
 def _sequel_asymmetry_cap(left: str, right: str, score: float) -> float:
@@ -44,6 +51,22 @@ def _sequel_asymmetry_cap(left: str, right: str, score: float) -> float:
         return score
     rest = longer[len(shorter) :]
     if rest and rest[0].isdigit():
+        return min(float(score), _SEQUEL_ASYMMETRY_CAP)
+    return score
+
+
+def _letter_suffix_cap(left: str, right: str, score: float) -> float:
+    """A title that only adds one or two letters is a different word, not a match.
+
+    ``stargaze``/``stargazer``, ``masterpiece``/``masterpieced`` and
+    ``slimelab``/``slimelabs`` sit above the 0.92 threshold on similarity
+    alone; they go to review instead of auto-matching (2026-11-21 scan review).
+    """
+    if not left or not right or left == right:
+        return score
+    shorter, longer = (left, right) if len(left) <= len(right) else (right, left)
+    rest = longer[len(shorter):]
+    if longer.startswith(shorter) and 1 <= len(rest) <= 2 and rest.isalpha():
         return min(float(score), _SEQUEL_ASYMMETRY_CAP)
     return score
 
@@ -104,6 +127,7 @@ def _pair_score(cleaned_name: str, candidate_name: str) -> float:
     # Identify must still force propose-only on soft hits (never invent IGDB ids).
     score = max(score, fandom_soft_score_boost(cleaned_name, candidate_name))
     score = _sequel_asymmetry_cap(left, right, score)
+    score = _letter_suffix_cap(left, right, score)
     return float(score)
 
 
@@ -205,6 +229,29 @@ def select_best_match(
 
     scored.sort(key=lambda item: item[0], reverse=True)
     for_gap = _collapse_equivalent_scores(scored)
+    # An exact title wins over its own subtitled variants ("Jagged Alliance 2"
+    # vs "Jagged Alliance 2: Wildfire"): the head boost lifts those to 1.0 too,
+    # which would otherwise read as a tie. Only one distinct exact title counts.
+    wanted = {normalize_for_score(cleaned_name), normalize_for_score(steam_title or '')} - {''}
+    exact = [
+        (score, candidate) for score, candidate in for_gap
+        if normalize_for_score(candidate.get('name') or '') in wanted
+    ]
+    if len(exact) == 1 and exact[0][0] >= thr:
+        return exact[0][1], "high"
+    # A folder that does not say "Remastered" (or HD, Definitive, ...) means the
+    # original release: when the remaster ties it, the remaster steps aside.
+    if not _REMASTER_PACKAGING_RE.search(cleaned_name or ''):
+        plain = [
+            (score, candidate) for score, candidate in for_gap
+            if not _REMASTER_PACKAGING_RE.search(candidate.get('name') or '')
+        ]
+        if plain and len(plain) < len(for_gap) and classify_confidence(
+            [score for score, _ in for_gap], high_threshold=thr, ambiguous_gap=gap,
+        ) != "high" and classify_confidence(
+            [score for score, _ in plain], high_threshold=thr, ambiguous_gap=gap,
+        ) == "high":
+            return plain[0][1], "high"
     confidence = classify_confidence(
         [s for s, _ in for_gap],
         high_threshold=thr,

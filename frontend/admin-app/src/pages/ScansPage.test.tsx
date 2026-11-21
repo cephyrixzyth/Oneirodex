@@ -799,3 +799,41 @@ describe('ScansPage history', () => {
     ).toBeInTheDocument()
   })
 })
+
+describe('ScansPage notes', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  test('a running scan with a recorded IGDB timeout reads as a note, not a failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => '',
+        json: async () => [
+          {
+            id: 'ffffffff-1111-2222-3333-aaaaaaaaaaaa',
+            library_name: 'PC',
+            status: 'Running',
+            scan_folder: '/storage/_pc',
+            folders_success: 801,
+            folders_failed: 107,
+            total_folders: 2083,
+            current_processing: 'Processing: Jagged Alliance 2 (910/2083)',
+            error_message: 'IGDB unavailable: read timed out',
+          },
+        ],
+      })),
+    )
+    render(
+      <MemoryRouter>
+        <ScansPage />
+      </MemoryRouter>,
+    )
+    const note = await screen.findByText(/IGDB unavailable: read timed out/)
+    expect(note).toHaveClass('od-scan-detail--note')
+    expect(note).not.toHaveClass('od-scan-detail--error')
+    expect(screen.getByText('Processing: Jagged Alliance 2 (910/2083)')).toBeInTheDocument()
+  })
+})

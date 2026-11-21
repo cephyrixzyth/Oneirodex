@@ -277,9 +277,21 @@ export function ScansPage() {
                     // where a reclaimed job now says the owner process is gone,
                     // instead of the operator seeing an idle-looking queue.
                     if (job.error_message) {
+                      // Only a Failed job's message is a failure. On a running or
+                      // completed run it is a note (an IGDB timeout that was
+                      // recorded for retry), so it must not look like one.
+                      const failed = String(job.status || '').toLowerCase() === 'failed'
                       return (
                         <span className="od-scan-detail-stack">
-                          <span className="od-scan-detail od-scan-detail--error">
+                          {!failed && job.current_processing ? (
+                            <span className="od-scan-detail">{String(job.current_processing)}</span>
+                          ) : null}
+                          <span
+                            className={`od-scan-detail ${
+                              failed ? 'od-scan-detail--error' : 'od-scan-detail--note'
+                            }`}
+                          >
+                            {failed ? '' : 'Note: '}
                             {String(job.error_message)}
                           </span>
                           {reasons}

@@ -126,3 +126,28 @@ def igdb_platform_id_for(platform) -> int | None:
         return None
     value = PLATFORM_IDS.get(str(key).upper())
     return None if value is None else int(value)
+
+
+# IGDB files many PC games under a sibling platform: old titles under DOS, VR
+# titles under SteamVR / Oculus / Meta Quest / Windows Mixed Reality, ports under
+# Linux or Mac. A PC library's ``platforms = (6)`` search never sees those, so a
+# second, unfiltered pass keeps only candidates listed on one of these.
+PC_FAMILY_LIBRARY_PLATFORMS = frozenset({'PCWIN', 'PCDOS'})
+_PC_FAMILY_PLATFORM_MARKERS = (
+    'pc (microsoft windows)', 'dos', 'linux', 'mac', 'steamvr', 'oculus',
+    'meta quest', 'windows mixed reality', 'web browser',
+)
+
+
+def is_pc_family_library(platform) -> bool:
+    key = getattr(platform, 'name', None) or str(platform or '').strip()
+    return str(key).upper() in PC_FAMILY_LIBRARY_PLATFORMS
+
+
+def candidate_on_pc_family(candidate) -> bool:
+    """True when an IGDB candidate lists a PC-family platform (by name)."""
+    for platform in (candidate or {}).get('platforms') or ():
+        name = str((platform or {}).get('name') if isinstance(platform, dict) else platform).casefold()
+        if any(marker == name or name.startswith(marker) for marker in _PC_FAMILY_PLATFORM_MARKERS):
+            return True
+    return False

@@ -25,6 +25,33 @@ def _validate_twitch_url(url):
     return validate_outbound_http_url(url, allowed_hostnames={'id.twitch.tv'})
 
 
+# A slow or briefly unreachable IGDB answer is retried before a scan gives up on
+# the folder: one 20 s read timeout used to cost the match until the next scan.
+IGDB_REQUEST_ATTEMPTS = 3
+_IGDB_RETRY_DELAYS = (2.0, 5.0)
+
+
+def _post_igdb_with_retry(endpoint_url, headers, query_params, *, sleep=time.sleep):
+    for attempt in range(IGDB_REQUEST_ATTEMPTS):
+        try:
+            with requests.Session() as session:
+                response = safe_request_limited(
+                    'POST', endpoint_url, validator=_validate_igdb_url,
+                    max_response_bytes=MAX_IGDB_RESPONSE_BYTES, session=session,
+                    headers=headers, data=query_params, timeout=20,
+                )
+        except (requests.Timeout, requests.ConnectionError):
+            if attempt + 1 >= IGDB_REQUEST_ATTEMPTS:
+                raise
+            sleep(_IGDB_RETRY_DELAYS[min(attempt, len(_IGDB_RETRY_DELAYS) - 1)])
+            continue
+        if response.status_code == 429 and attempt + 1 < IGDB_REQUEST_ATTEMPTS:
+            sleep(_IGDB_RETRY_DELAYS[min(attempt, len(_IGDB_RETRY_DELAYS) - 1)])
+            continue
+        return response
+    return response
+
+
 def make_igdb_api_request(endpoint_url, query_params):
     # Get IGDB settings from database
     settings = global_settings_row()
@@ -44,13 +71,7 @@ def make_igdb_api_request(endpoint_url, query_params):
     }
 
     try:
-        # print(f"make_igdb_api_request Attempting to make a request to {endpoint_url} with headers: {headers} and query: {query_params}")
-        with requests.Session() as session:
-            response = safe_request_limited(
-                'POST', endpoint_url, validator=_validate_igdb_url,
-                max_response_bytes=MAX_IGDB_RESPONSE_BYTES, session=session,
-                headers=headers, data=query_params, timeout=20,
-            )
+        response = _post_igdb_with_retry(endpoint_url, headers, query_params)
         response.raise_for_status()
         # print(f"make_igdb_api_request Response from IGDB API: {data}")
         return response.json()

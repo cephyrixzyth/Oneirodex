@@ -184,3 +184,208 @@ def test_steam_cover_lookup_never_reaches_steam_in_tests():
     assert steam_cover_for_app(220, 'tiny.jpg') == 'tiny.jpg'
     assert steam_cover_for_app(220).endswith('/220/header.jpg')
     assert steam_cover_for_app('not-an-id', 'tiny.jpg') == 'tiny.jpg'
+
+
+@pytest.mark.parametrize('folder, candidates, expected', [
+    ('Jagged Alliance 2',
+     ['Jagged Alliance 2', 'Jagged Alliance 2: Wildfire', 'Jagged Alliance 2: Gold Pack'],
+     'Jagged Alliance 2'),
+    ('Heads Will Roll Reforged',
+     ['Heads Will Roll: Reforged', 'Heads Will Roll: Reforged - Not a Hero'],
+     'Heads Will Roll: Reforged'),
+])
+def test_an_exact_title_beats_its_own_subtitled_variants(folder, candidates, expected):
+    from oneirodex.utils.match_scoring import select_best_match
+
+    best, confidence = select_best_match(folder, [{'name': name} for name in candidates])
+    assert confidence == 'high'
+    assert best['name'] == expected
+
+
+def test_a_lone_subtitled_remaster_still_matches_and_two_exacts_stay_ambiguous():
+    from oneirodex.utils.match_scoring import select_best_match
+
+    best, confidence = select_best_match(
+        'Broken Sword 2', [{'name': 'Broken Sword 2 - the Smoking Mirror: Remastered'}],
+    )
+    assert confidence == 'high' and best['name'].startswith('Broken Sword 2')
+    # No exact title among several boosted variants: still a person's call.
+    _, confidence = select_best_match(
+        'Jagged Alliance 2', [{'name': 'Jagged Alliance 2: Wildfire'}, {'name': 'Jagged Alliance 2: Gold Pack'}],
+    )
+    assert confidence == 'low'
+
+
+def test_igdb_request_retries_a_timeout_then_succeeds():
+    import requests
+    from types import SimpleNamespace
+
+    from oneirodex.utils import igdb_api
+
+    calls = []
+
+    def fake(*_args, **_kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise requests.ReadTimeout('slow')
+        return SimpleNamespace(status_code=200)
+
+    with patch.object(igdb_api, 'safe_request_limited', side_effect=fake):
+        response = igdb_api._post_igdb_with_retry('https://api.igdb.com/v4/games', {}, 'q', sleep=lambda _s: None)
+    assert response.status_code == 200 and len(calls) == 2
+
+
+def test_igdb_request_gives_up_after_its_attempts():
+    import requests
+
+    from oneirodex.utils import igdb_api
+
+    with patch.object(igdb_api, 'safe_request_limited', side_effect=requests.ReadTimeout('slow')) as fake:
+        with pytest.raises(requests.ReadTimeout):
+            igdb_api._post_igdb_with_retry('https://api.igdb.com/v4/games', {}, 'q', sleep=lambda _s: None)
+    assert fake.call_count == igdb_api.IGDB_REQUEST_ATTEMPTS
+
+
+@pytest.mark.parametrize('platforms, expected', [
+    (['PC (Microsoft Windows)'], True),
+    (['DOS'], True),
+    (['Meta Quest 2'], True),
+    (['SteamVR'], True),
+    (['Oculus Rift'], True),
+    (['Linux', 'Xbox One'], True),
+    (['PlayStation 4', 'Nintendo Switch'], False),
+    (['Dreamcast'], False),
+    ([], False),
+])
+def test_pc_family_second_pass_keeps_only_pc_family_candidates(platforms, expected):
+    from oneirodex.utils.helpers.platforms import candidate_on_pc_family
+
+    assert candidate_on_pc_family({'platforms': [{'name': name} for name in platforms]}) is expected
+
+
+def test_only_pc_libraries_get_the_second_pass():
+    from oneirodex.platform import LibraryPlatform
+    from oneirodex.utils.helpers.platforms import is_pc_family_library
+
+    assert is_pc_family_library(LibraryPlatform.PCWIN)
+    assert is_pc_family_library(LibraryPlatform.PCDOS)
+    assert not is_pc_family_library(LibraryPlatform.PS2)
+
+
+@pytest.mark.parametrize('folder, candidate', [
+    ('Stargaze', 'Stargazer'),
+    ('Masterpiece', 'Masterpieced'),
+    ('Slime Lab', 'Slime Labs'),
+])
+def test_a_title_that_only_adds_a_letter_or_two_is_not_a_confident_match(folder, candidate):
+    from oneirodex.utils.match_scoring import select_best_match
+
+    _, confidence = select_best_match(folder, [{'name': candidate}])
+    assert confidence == 'low'
+
+
+@pytest.mark.parametrize('folder, candidate', [
+    ('Ghostbusters 2016', 'Ghostbusters'),
+    ('Alone in the Dark 2008', 'Alone in the Dark'),
+])
+def test_a_year_in_the_folder_name_is_not_dropped_for_a_confident_match(folder, candidate):
+    from oneirodex.utils.match_scoring import select_best_match
+
+    _, confidence = select_best_match(folder, [{'name': candidate}])
+    assert confidence == 'low'
+
+
+@pytest.mark.parametrize('folder, candidate', [
+    ('Police Quest 3 The Kindred', 'Police Quest III: The Kindred'),
+    ('Gothic 2 Gold Edition', 'Gothic II: Gold Edition'),
+])
+def test_roman_and_arabic_sequel_numbers_score_alike(folder, candidate):
+    from oneirodex.utils.match_scoring import select_best_match
+
+    best, confidence = select_best_match(folder, [{'name': candidate}])
+    assert confidence == 'high' and best['name'] == candidate
+
+
+def test_single_letter_numerals_are_left_alone():
+    from oneirodex.utils.match_scoring import normalize_for_score
+
+    assert normalize_for_score('Mega Man X') == 'megamanx'
+    assert normalize_for_score('Star Wars X-Wing') == 'starwarsxwing'
+    assert normalize_for_score('Final Fantasy VII') == 'finalfantasy7'
+
+
+@pytest.mark.parametrize('folder, store_title', [
+    ('8bit Adventures 2', '8-Bit Adventures 2'),
+    ('ForgottenSeas', 'Forgotten Seas'),
+    ('Nearmage', 'Near-Mage'),
+    ('Roguefp', 'ROGUE-FP'),
+    ('Lost Diskettes vol1', 'Lost Diskettes Vol.1'),
+    ('ClueCluedo', 'Clue/Cluedo'),
+    ('Gothic 2 Gold Edition', 'Gothic II: Gold Edition'),
+    ('Final Fantasy X-X2 HD Remaster', 'FINAL FANTASY X/X-2 HD Remaster'),
+    ('Rick And Morty Virtual Rickality', 'Rick and Morty: Virtual Rick-ality'),
+    ('Kooring Wonderland VR Mecadinos Attack', "Kooring VR Wonderland:Mecadino's Attack"),
+])
+def test_fuzzy_store_title_matches_spelling_variants(folder, store_title):
+    from oneirodex.utils.software_identify import fuzzy_store_title_hit
+
+    hit = fuzzy_store_title_hit(folder, [{'name': store_title, 'steam_type': 'game'}, {'name': 'Something Else Entirely'}])
+    assert hit is not None and hit['name'] == store_title
+
+
+@pytest.mark.parametrize('folder, hits', [
+    # a subtitle the folder does not have is a different product
+    ("Baldur's Gate 2", [{'name': "Baldur's Gate II: Reflections Of Myth & Valor"}]),
+    ('Broken Sword 2', [{'name': 'Broken Sword 2: Original Version'}]),
+    # DLC, soundtracks and demos are never the game
+    ('Forgotten Seas', [{'name': 'Forgotten Seas Soundtrack'}]),
+    ('Forgotten Seas', [{'name': 'Forgotten Seas', 'steam_type': 'dlc'}]),
+    ('Forgotten Seas', [{'name': 'Forgotten Seas Demo'}]),
+    # two equally close titles: a person decides
+    ('Forgotten Sea', [{'name': 'Forgotten Seas'}, {'name': 'Forgotten Seat'}]),
+])
+def test_fuzzy_store_title_refuses_unsafe_hits(folder, hits):
+    from oneirodex.utils.software_identify import fuzzy_store_title_hit
+
+    assert fuzzy_store_title_hit(folder, hits) is None
+
+
+def test_store_fallback_takes_a_clear_spelling_variant_when_no_title_is_exact():
+    from oneirodex.utils import software_identify as si
+
+    steam_hits = [
+        {'name': '8-Bit Adventures 2', 'steam_app_id': 1234, 'steam_type': 'game'},
+        {'name': '8-Bit Adventures 2 Soundtrack', 'steam_app_id': 1235, 'steam_type': 'music'},
+    ]
+    with patch.object(si, 'search_steam_games', return_value=steam_hits), \
+            patch.object(si, 'search_gog_games', return_value=[]), \
+            patch.object(si, 'search_epic_games', return_value=[]):
+        candidate = si.resolve_stage_d_store_candidate(
+            cleaned_name='8bit Adventures 2', sources=('steam', 'gog', 'epic'),
+        )
+    assert candidate['name'] == '8-Bit Adventures 2'
+    assert candidate['steam_app_id'] == 1234
+    assert candidate['match_mode'] == 'fuzzy_title'
+
+
+def test_store_fallback_still_prefers_an_exact_title_and_refuses_a_subtitled_product():
+    from oneirodex.utils import software_identify as si
+
+    with patch.object(si, 'search_steam_games', return_value=[{'name': 'Broken Sword 2: Original Version', 'steam_app_id': 9}]), \
+            patch.object(si, 'search_gog_games', return_value=[]), \
+            patch.object(si, 'search_epic_games', return_value=[]):
+        assert si.resolve_stage_d_store_candidate(cleaned_name='Broken Sword 2', sources=('steam', 'gog', 'epic')) is None
+
+
+def test_a_demo_with_the_same_name_does_not_make_an_exact_title_ambiguous():
+    from oneirodex.utils import software_identify as si
+
+    hits = [
+        {'name': 'VoidBound', 'steam_app_id': 1, 'steam_type': 'game'},
+        {'name': 'VoidBound', 'steam_app_id': 2, 'steam_type': 'demo'},
+    ]
+    with patch.object(si, 'search_steam_games', return_value=hits), \
+            patch.object(si, 'search_gog_games', return_value=[]), \
+            patch.object(si, 'search_epic_games', return_value=[]):
+        candidate = si.resolve_stage_d_store_candidate(cleaned_name='Voidbound', sources=('steam', 'gog', 'epic'))
+    assert candidate['steam_app_id'] == 1
