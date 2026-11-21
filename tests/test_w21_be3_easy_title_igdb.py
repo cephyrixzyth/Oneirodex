@@ -54,7 +54,16 @@ def test_broken_sword_2_remaster_primary_head():
     ]
     best, confidence = select_best_match(cleaned, candidates)
     assert confidence == 'high'
+    # Roman numerals now score like digits (1.3.2), so the original ties the
+    # remaster; a folder that does not say "Remastered" means the original.
+    assert best['name'] == 'Broken Sword II: The Smoking Mirror'
+    # Without the original among the candidates, the remaster still matches.
+    best, confidence = select_best_match(cleaned, candidates[:2])
+    assert confidence == 'high'
     assert best['name'] == remaster
+    # A folder that names the remaster gets the remaster.
+    best, confidence = select_best_match('Broken Sword 2 Remastered', candidates)
+    assert best is None or best['name'] == remaster
     assert score_candidate(cleaned, 'Broken Sword') <= 0.85
 
 

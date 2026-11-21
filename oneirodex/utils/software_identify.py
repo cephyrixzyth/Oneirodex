@@ -197,6 +197,73 @@ def exact_title_hits(query: str, hits: list[dict] | None) -> list[dict]:
     return out
 
 
+# Store hits that are never the game itself, whatever their title says.
+_NOT_THE_GAME_TYPES = frozenset({'dlc', 'music', 'video', 'mod', 'demo', 'advertising', 'series', 'episode', 'hardware'})
+_NOT_THE_GAME_NAME_RE = re.compile(
+    r'\b(?:soundtrack|ost|dlc|season\s+pass|art\s*book|demo|playtest|dedicated\s+server|sdk|wallpapers?)\b',
+    re.IGNORECASE,
+)
+FUZZY_STORE_THRESHOLD = 0.92
+FUZZY_STORE_GAP = 0.08
+
+
+def game_hits_only(hits, query=None):
+    """Drop DLC, soundtrack, demo and similar store listings (unless the folder names one)."""
+    keep = []
+    for hit in hits or []:
+        if not isinstance(hit, dict):
+            continue
+        if (hit.get('steam_type') or '').strip().lower() in _NOT_THE_GAME_TYPES:
+            continue
+        if _NOT_THE_GAME_NAME_RE.search(hit.get('name') or '') and not _NOT_THE_GAME_NAME_RE.search(query or ''):
+            continue
+        keep.append(hit)
+    return keep
+
+
+def fuzzy_store_title_hit(query, hits, *, threshold=FUZZY_STORE_THRESHOLD, gap=FUZZY_STORE_GAP):
+    """The one store hit whose title is a spelling variant of ``query``, else None.
+
+    For titles a store lists slightly differently from the folder ("8bit
+    Adventures 2" / "8-Bit Adventures 2", "Nearmage" / "Near-Mage", "Gothic 2" /
+    "Gothic II"). Scored on the normalised titles alone, with no subtitle boost,
+    so a subtitle the folder lacks ("Broken Sword 2: Original Version") stays a
+    different product. DLC, soundtracks and demos never count, and two close
+    hits mean a person decides.
+    """
+    from difflib import SequenceMatcher
+
+    from oneirodex.utils.match_scoring import normalize_for_score, _letter_suffix_cap
+
+    needle = normalize_for_score(query or '')
+    if not needle:
+        return None
+    scored = []
+    for hit in hits or []:
+        if not isinstance(hit, dict):
+            continue
+        name = hit.get('name') or ''
+        if (hit.get('steam_type') or '').strip().lower() in _NOT_THE_GAME_TYPES:
+            continue
+        if _NOT_THE_GAME_NAME_RE.search(name) and not _NOT_THE_GAME_NAME_RE.search(query or ''):
+            continue
+        key = normalize_for_score(name)
+        if not key:
+            continue
+        ratio = 1.0 if key == needle else SequenceMatcher(None, needle, key).ratio()
+        scored.append((_letter_suffix_cap(needle, key, ratio), key, hit))
+    if not scored:
+        return None
+    scored.sort(key=lambda item: item[0], reverse=True)
+    best_score, best_key, best = scored[0]
+    if best_score < threshold:
+        return None
+    runner_up = next((score for score, key, _ in scored[1:] if key != best_key), None)
+    if runner_up is not None and best_score - runner_up < gap:
+        return None
+    return best
+
+
 _IDENTITY_NON_ALNUM = re.compile(r'[^a-z0-9]+')
 
 
@@ -425,12 +492,14 @@ def resolve_stage_d_store_candidate(
     sources=None,
 ) -> dict | None:
     """
-    Stage D confidence gate: App ID or exact (casefold) store title only.
+    Stage D confidence gate: App ID, exact store title, then one clear
+    spelling variant (``fuzzy_store_title_hit``).
 
     Ambiguous multi-hit exact titles → None (caller keeps proposal / Unmatched).
-    Fuzzy / near matches are never auto-imported.
     Order: Steam App ID (verified details + title corroboration) → Steam exact
-    title → GOG exact title → Epic exact title.
+    title → GOG exact title → Epic exact title → fuzzy title in the same store
+    order (1.3.2: folders spelled differently from every store were left
+    unmatched although the store had the game).
 
     ``sources`` limits which stores run (operator Integrations toggles). Default
     is all three when the settings module is available.
@@ -473,10 +542,12 @@ def resolve_stage_d_store_candidate(
             continue
         queries.append(text)
 
+    searched: list[tuple[str, str, list]] = []
     if 'steam' in enabled:
         for query in queries:
             hits = search_steam_games(query, limit=10, include_software=True)
-            exact = exact_title_hits(query, hits)
+            searched.append(('steam', query, hits or []))
+            exact = exact_title_hits(query, game_hits_only(hits, query))
             if len(exact) == 1:
                 return _candidate_from_steam_hit(exact[0], match_mode='exact_title')
             if len(exact) > 1:
@@ -485,7 +556,8 @@ def resolve_stage_d_store_candidate(
     if 'gog' in enabled:
         for query in queries:
             hits = search_gog_games(query, limit=10)
-            exact = exact_title_hits(query, hits)
+            searched.append(('gog', query, hits or []))
+            exact = exact_title_hits(query, game_hits_only(hits, query))
             if len(exact) == 1:
                 return _candidate_from_gog_hit(exact[0])
             if len(exact) > 1:
@@ -494,11 +566,27 @@ def resolve_stage_d_store_candidate(
     if 'epic' in enabled:
         for query in queries:
             hits = search_epic_games(query, limit=10)
-            exact = exact_title_hits(query, hits)
+            searched.append(('epic', query, hits or []))
+            exact = exact_title_hits(query, game_hits_only(hits, query))
             if len(exact) == 1:
                 return _candidate_from_epic_hit(exact[0])
             if len(exact) > 1:
                 return None
+
+    # No exact title anywhere: accept one clear spelling variant ("8bit
+    # Adventures 2" / "8-Bit Adventures 2"), in store order, from the searches
+    # already made. See fuzzy_store_title_hit for what it refuses.
+    builders = {
+        'steam': lambda hit: _candidate_from_steam_hit(hit, match_mode='fuzzy_title'),
+        'gog': _candidate_from_gog_hit,
+        'epic': _candidate_from_epic_hit,
+    }
+    for source, query, hits in searched:
+        hit = fuzzy_store_title_hit(query, hits)
+        if hit is not None:
+            candidate = builders[source](hit)
+            candidate['match_mode'] = 'fuzzy_title'
+            return candidate
 
     # Deliberately stops here. TheGamesDB / MobyGames are *not* part of the
     # Stage D auto-cascade — they run in Stage E as propose-only, because a

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] — 2026-11-20
+
+### Fixed
+
+- An exact IGDB title now wins over its own subtitled variants. "Jagged Alliance 2" next to "Jagged Alliance 2: Wildfire" (or "Heads Will Roll: Reforged" next to "… - Not a Hero") scored as a tie and was left unmatched; a lone remastered entry still matches its base folder name, and several variants without an exact title still go to review.
+- IGDB requests retry a read timeout, connection error or rate limit twice (after 2 s and 5 s) before a folder is recorded as *IGDB unavailable*.
+- Scan history shows a running or completed job's message as a note, alongside its current progress, instead of in the colour of a failed scan.
+- PC libraries also find games IGDB lists under DOS, PC VR (SteamVR, Oculus, Meta Quest, Windows Mixed Reality), Linux or Mac: after the "PC (Microsoft Windows)" search, a second search keeps only candidates on those platforms. Day of the Tentacle, Space Quest, Lone Echo II and I Expect You To Die 2/3 were all missed before.
+- Title clean-up peels bare version and date stamps: `1.04`, `2.60`, `1.4.2-3`, `1 0.2`, `1 28.6.720`, `1 14`, runs such as `1 04 22689` (the first number stays as a possible sequel), `12 12 2024`, `10 04.2023`, `(v11 06 2022)`, a misspelled "Early Acces", and "incl DLC" / "All DLC". Titles such as "Kingdom Hearts 2.5", "Fritz Chess 20" and "Pixel Ripped 1978" are unchanged.
+- Roman and arabic sequel numbers score alike ("Police Quest 3" / "Police Quest III"); a folder that does not say "Remastered" (or HD, Definitive, …) prefers the original release when the remaster ties.
+- A title that only adds one or two letters ("Stargaze" / "Stargazer") is held for review instead of matched.
+- When IGDB has no confident match, the store fallback (Steam, GOG, Epic) no longer needs an exact title: one clear spelling variant is accepted ("8bit Adventures 2" / "8-Bit Adventures 2", "Nearmage" / "Near-Mage", "Gothic 2 Gold Edition" / "Gothic II: Gold Edition"). It is scored on the normalised titles without the subtitle boost, so a subtitled product the folder does not name stays unmatched; DLC, soundtracks, demos and similar listings never count, and two close candidates go to review. A same-named demo or DLC no longer makes an exact store title look ambiguous. Unmatched folders are retried this way on every scan.
+
 ## [1.3.1] — 2026-11-20
 
 ### Fixed

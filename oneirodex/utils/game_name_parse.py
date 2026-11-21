@@ -63,9 +63,26 @@ _DOTTED_VERSION_TAIL_RE = re.compile(
 _LETTERED_VERSION_TAIL_RE = re.compile(r'\s+\d+\.\d+[a-z]\s*$', re.IGNORECASE)
 _SPACED_V_DIGITS_TAIL_RE = re.compile(r'\s+v\s+\d+(?:\s+\d+){1,3}\s*$', re.IGNORECASE)
 _GLUED_DOTTED_VERSION_TAIL_RE = re.compile(r'-v?\d+(?:\.\d+){2,}[a-z]?\s*$', re.IGNORECASE)
+# A6 — household version/date stamps without a ``v`` (2026-11-21 unmatched review):
+# dd mm yyyy / dd mm.yyyy / (v dd mm yyyy) / Vmm mm.yyyy dates;
+_DATE_STAMP_SPACED_TAIL_RE = re.compile(
+    r'\s+\(?\s*v?\d{1,2}[ .]\d{1,2}[ .](?:19|20)\d{2}\s*\)?\s*$', re.IGNORECASE,
+)
+# 1.04 / 2.60 (two+ fractional digits; 2.5 stays: Kingdom Hearts 2.5);
+_DOTTED_PAIR_VERSION_TAIL_RE = re.compile(r'\s+\d+\.\d{2,}[a-z]?\s*$', re.IGNORECASE)
+# 1.4.2-3 (dotted triple with a build suffix);
+_DOTTED_BUILD_VERSION_TAIL_RE = re.compile(r'\s+\d+(?:\.\d+){2,}-\d+\s*$')
+# 1 04 22689 / 1 4 16124 (three or more numeric groups): the first number stays,
+# it may be a sequel ("Game 1 2 3" -> "Game 1", the long-standing rule);
+_NUMERIC_RUN_TAIL_RE = re.compile(r'(\s+\d+[a-z]?)(?:\s+\d+[a-z]?){2,}\s*$', re.IGNORECASE)
+# 1 0.2 / 1 28.6.720 / 1 3b.57 (major 0/1 then a dotted rest) and 1 14 / 1 300.
+_SPLIT_MAJOR_VERSION_TAIL_RE = re.compile(
+    r'\s+[01]\s+(?:\d+[a-z]?\.[0-9a-z.]+|\d{2,})\s*$', re.IGNORECASE,
+)
+_DLC_BUNDLE_TAIL_RE = re.compile(r'\s+(?:incl\.?|all)\s+DLCs?\s*$', re.IGNORECASE)
 # A6 — trailing Early Access / EA tokens only.
 _EARLY_ACCESS_TAIL_RE = re.compile(
-    r'\s+\b(?:Early\s+Access|EA)\s*$',
+    r'\s+\b(?:Early\s+Acc?ess?|EA)\s*$',
     re.IGNORECASE,
 )
 # A9 — (Incl Update…) / (Incl. Update N) parentheticals + platform parens.
@@ -232,18 +249,34 @@ def detect_vr_suffix(raw: str) -> bool:
     )
 
 
+def _keep_first_sequel_number(match: re.Match) -> str:
+    """A numeric run keeps its first 1-20 number (a likely sequel), skipping 0."""
+    for token in match.group(0).split():
+        digits = token.rstrip('abcdefghijklmnopqrstuvwxyz')
+        if digits.isdigit() and 1 <= int(digits) <= 20:
+            return ' ' + digits
+    return ''
+
+
 def strip_version_access_tails(raw: str) -> str:
     """A6 — strip trailing spaced/dotted v… versions, x.y.z tails, and Early Access / EA."""
     if not raw:
         return ''
     working = raw
     # Repeat lightly: "Title v0 4 Early Access" → strip version then EA.
-    for _ in range(3):
+    for _ in range(4):
         next_pass = _SPACED_VERSION_TAIL_RE.sub('', working).strip()
+        # Before the dotted rules: '1 28.6.720' must go whole, not leave '1'.
+        next_pass = _SPLIT_MAJOR_VERSION_TAIL_RE.sub('', next_pass).strip()
         next_pass = _DOTTED_VERSION_TAIL_RE.sub('', next_pass).strip()
         next_pass = _LETTERED_VERSION_TAIL_RE.sub('', next_pass).strip()
         next_pass = _SPACED_V_DIGITS_TAIL_RE.sub('', next_pass).strip()
         next_pass = _GLUED_DOTTED_VERSION_TAIL_RE.sub('', next_pass).strip()
+        next_pass = _DATE_STAMP_SPACED_TAIL_RE.sub('', next_pass).strip()
+        next_pass = _DOTTED_PAIR_VERSION_TAIL_RE.sub('', next_pass).strip()
+        next_pass = _DOTTED_BUILD_VERSION_TAIL_RE.sub('', next_pass).strip()
+        next_pass = _NUMERIC_RUN_TAIL_RE.sub(_keep_first_sequel_number, next_pass).strip()
+        next_pass = _DLC_BUNDLE_TAIL_RE.sub('', next_pass).strip()
         next_pass = _EARLY_ACCESS_TAIL_RE.sub('', next_pass).strip()
         if next_pass == working:
             break

@@ -24,3 +24,10 @@
 .od-scan-detail--reasons {
   color: var(--od-text-muted);
 }
+
+/* A note on a running or completed run (e.g. an IGDB timeout recorded for
+   retry): informational, never the danger colour a failed job uses. */
+.od-scan-detail--note {
+  color: var(--od-text-muted);
+  white-space: pre-line;
+}
