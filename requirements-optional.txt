@@ -11,7 +11,7 @@
 # xbox-authenticate utility does use the affected signer. Prefer CSV until an
 # upstream fix or a reviewed replacement is available.
 xbox-webapi>=2.1.0
-psnawp>=3.0.3
+psnawp>=3.1.0
 
 # INSP-44 (v11 H4c): NVIDIA management library bindings for the Ops GPU tile.
 # Only useful where the container can see an NVIDIA device; without it the
