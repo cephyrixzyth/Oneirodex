@@ -1,10 +1,10 @@
 # Direct runtime constraints. The Docker image installs the complete
 # hash-locked requirements.lock generated from this file with pip-tools 7.6.2.
 # Legacy Flask adapters are development-only.
-fastapi==0.162.7
+fastapi==0.165.0
 starlette==1.10.0
-python-multipart==0.0.33
-sqlalchemy==2.1.8
+python-multipart==0.0.34
+sqlalchemy==2.1.9
 werkzeug==3.1.9
 # Flask previously supplied this indirectly; FastAPI signs compatible session,
 # CSRF and token payloads directly, so keep it explicit in the native runtime.
@@ -29,15 +29,15 @@ psycopg2_binary==2.9.13
 python_dotenv==1.2.4
 psutil==7.2.2
 tenacity==9.2.1
-email_validator==2.3.0
+email_validator==2.4.0
 uvicorn[standard]==0.54.0
 aiofiles==25.1.0
 zipstream_new==1.1.8
 howlongtobeatpy==1.0.24
-authlib==1.9.5
+authlib==1.9.9
 # Authlib's Starlette client uses HTTPX2 at runtime (the Flask integration is
 # intentionally absent from the native image).
-httpx2==2.16.0
+httpx2==2.16.2
 cryptography==50.0.2
 py7zr==1.1.4
 rarfile==4.5
