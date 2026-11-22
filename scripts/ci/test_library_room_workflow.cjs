@@ -1,0 +1,13 @@
+const fs=require('node:fs'),assert=require('node:assert/strict'),yaml=require('../../node_modules/js-yaml');
+const workflow=yaml.load(fs.readFileSync('.github/workflows/room-benchmark.yml','utf8'));
+assert.deepEqual(workflow.on.push.branches,['codex/aurora-moonfall-benchmark']);
+assert.equal(workflow.permissions.contents,'read');assert(!workflow.permissions.packages);
+const job=workflow.jobs.qualify;
+assert.deepEqual(job.services.postgres.ports,['127.0.0.1:5432:5432']);
+const db=new URL(job.env.TEST_DATABASE_URL);assert.equal(db.hostname,'127.0.0.1');assert(db.pathname.includes('test'));
+assert.equal(job.env.RELEASE_VISUAL_ALLOWED,'1');
+assert(job.steps.some(s=>s.run?.includes('test_native_room_games.py')&&s.run.includes('test_room_game_progress.py')&&s.run.includes('test_user_deletion_inventory.py')));
+assert(job.steps.some(s=>s.run?.includes('alembic upgrade head')&&s.run.includes('alembic check')));
+assert(job.steps.some(s=>s.run?.includes('release_visual_review.py --run')));
+assert(!job.steps.some(s=>/docker push|gh release|git push|ssh /.test(s.run||'')));
+console.log('Room benchmark workflow: bounded review-branch CI, real migration/HTTP/DB/capture gates, no publication or deployment.');

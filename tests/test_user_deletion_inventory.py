@@ -23,6 +23,7 @@ EXPECTED_USER_FKS = {
     'newsletters.sender_id': None,
     'persistent_login_sessions.user_id': 'CASCADE',
     'reference_sets.uploaded_by_user_id': 'SET NULL',
+    'room_game_progress.user_id': 'CASCADE',
     'saved_filters.user_id': 'CASCADE',
     'store_accounts.user_id': 'CASCADE',
     'store_sync_jobs.user_id': 'CASCADE',
@@ -103,7 +104,7 @@ def test_user_fk_inventory_and_no_action_dispositions_match_database(db_session)
     from oneirodex.models import db
 
     orm_actions = _orm_user_fk_actions(db.Model.metadata)
-    assert len(orm_actions) == 52
+    assert len(orm_actions) == 53
     assert orm_actions == EXPECTED_USER_FKS
     assert _database_user_fk_actions(db_session.connection()) == EXPECTED_USER_FKS
     no_action = {key for key, action in EXPECTED_USER_FKS.items() if action is None}
@@ -119,7 +120,7 @@ def test_deletion_manifest_matches_user_foreign_key_inventory(db_session):
     manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     relations = {item['foreign_key']: item for item in manifest['relations']}
     assert set(relations) == set(EXPECTED_USER_FKS)
-    assert len(relations) == 52
+    assert len(relations) == 53
     assert {
         key: (None if value['on_delete'] == 'NO ACTION' else value['on_delete'])
         for key, value in relations.items()

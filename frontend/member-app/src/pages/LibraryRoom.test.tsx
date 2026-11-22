@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, test, vi } from 'vitest'
 import { LibraryRoom } from './LibraryRoom'
@@ -11,11 +11,19 @@ const room = vi.hoisted(() => ({
   dispose: vi.fn(),
   enter: vi.fn(),
   exit: vi.fn(),
+  theme: '',
 }))
 let choose: RoomAction
 vi.mock('./roomScene', () => ({
-  createRoom: (_: HTMLCanvasElement, select: RoomAction) => {
+  createRoom: (
+    _: HTMLCanvasElement,
+    select: RoomAction,
+    _xr: unknown,
+    _error: unknown,
+    options: { theme?: string },
+  ) => {
     choose = select
+    room.theme = options.theme || ''
     return room
   },
 }))
@@ -83,4 +91,34 @@ test('long titles and unspaced scripts wrap across pages without discarding text
   const lines = wrapReadingText(text, 5, (s) => [...s].length)
   expect(lines.every((line) => [...line].length <= 5)).toBe(true)
   expect(lines.join('').replaceAll(' ', '')).toBe(text.replaceAll(' ', ''))
+})
+
+test('visits last only until closing the room', async () => {
+  const user = userEvent.setup()
+  render(<LibraryRoom {...props} />)
+  await user.click(screen.getByRole('button', { name: 'Open room' }))
+  const selector = await screen.findByLabelText('Visit room')
+  await user.selectOptions(selector, 'oneirodex')
+  await user.click(screen.getByRole('button', { name: 'Close room' }))
+  await user.click(screen.getByRole('button', { name: 'Open room' }))
+  expect(await screen.findByLabelText('Visit room')).toHaveValue('')
+})
+
+test('follows account theme changes while an explicit visit remains independent', async () => {
+  document.documentElement.dataset.theme = 'default'
+  const user = userEvent.setup()
+  const { unmount } = render(<LibraryRoom {...props} initiallyOpen />)
+  await screen.findByLabelText('Visit room')
+  act(() => {
+    document.documentElement.dataset.theme = 'afterglow'
+  })
+  await waitFor(() => expect(room.theme).toBe('afterglow'))
+  await user.selectOptions(screen.getByLabelText('Visit room'), 'oneirodex')
+  await waitFor(() => expect(room.theme).toBe('oneirodex'))
+  act(() => {
+    document.documentElement.dataset.theme = 'tideglass'
+  })
+  await waitFor(() => expect(room.theme).toBe('oneirodex'))
+  unmount()
+  delete document.documentElement.dataset.theme
 })

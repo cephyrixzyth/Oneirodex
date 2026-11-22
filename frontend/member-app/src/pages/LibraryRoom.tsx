@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { createRoom, RoomGame, RoomView, Station } from './roomScene'
+import { createMoonfallSession } from './pinball/session'
+import type { MoonfallSession } from './pinball/session'
+import { MoonfallPanel, moonfallMenu } from './pinball/MoonfallPanel'
+import { MoonfallNavigationGuard } from './pinball/MoonfallNavigationGuard'
 
 const stations: { id: Station; name: string }[] = [
   { id: 'library', name: 'Library wall' },
@@ -88,6 +92,30 @@ export function LibraryRoom({
   const [immersive, setImmersive] = useState(false)
   const [requesting, setRequesting] = useState(false)
   const [problem, setProblem] = useState('')
+  const [visitedRoom, setVisitedRoom] = useState('')
+  const [accountTheme, setAccountTheme] = useState(
+    () => document.documentElement.dataset.theme || 'default',
+  )
+  const effectiveTheme = visitedRoom || accountTheme
+  const [gameView, setGameView] = useState<ReturnType<MoonfallSession['view']> | null>(null)
+  const session = useRef<MoonfallSession | null>(null)
+  const changingRoom = useRef(false)
+  useEffect(() => {
+    if (!open) return
+    const sync = () => {
+      const theme = document.documentElement.dataset.theme || 'default'
+      if (theme === accountTheme) return
+      if (visitedRoom) setAccountTheme(theme)
+      else void leave(() => setAccountTheme(theme))
+    }
+    sync()
+    const observer = new MutationObserver(sync)
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    })
+    return () => observer.disconnect()
+  }, [open, visitedRoom, accountTheme])
   const [shelf, setShelf] = useState(0)
   const canvas = useRef<HTMLCanvasElement>(null)
   const engine = useRef<ReturnType<typeof createRoom> | null>(null)
@@ -121,6 +149,11 @@ export function LibraryRoom({
     next: ready && (index + 1 < shelfCount || page < pages),
   }
   function activate(id: string) {
+    if (id.startsWith('@moonfall-')) {
+      if (id === '@moonfall-open') engine.current?.move('pinball')
+      else void session.current?.command(id.slice('@moonfall-'.length))
+      return
+    }
     if (id === '@text') {
       chooseText(!largeText)
       return
@@ -176,13 +209,36 @@ export function LibraryRoom({
     import('./roomScene')
       .then(({ createRoom }) => {
         if (cancelled) return
+        let owned: ReturnType<typeof createRoom> | null = null
         const scene = createRoom(
           target,
           (id) => latest.current.activate(id),
           setImmersive,
           setProblem,
+          {
+            theme: effectiveTheme,
+            onGameCommand: (action) => {
+              if (!cancelled && owned && engine.current === owned)
+                void session.current?.command(action)
+            },
+            onGameSnapshot: (event) => {
+              if (!cancelled && owned && engine.current === owned) session.current?.observe(event)
+            },
+          },
         )
+        owned = scene
         engine.current = scene
+        if (scene.game) {
+          const ownedSession = createMoonfallSession(scene.game, memberId, () => {
+            if (cancelled || session.current !== ownedSession) return
+            const value = ownedSession.view()
+            setGameView(value)
+            scene.setGameMenu(moonfallMenu(value))
+          })
+          session.current = ownedSession
+          setGameView(ownedSession.view())
+          void ownedSession.initialize()
+        }
         scene.update(latest.current.view)
         setStarted(true)
         navigator.xr
@@ -198,10 +254,13 @@ export function LibraryRoom({
       })
     return () => {
       cancelled = true
+      session.current?.dispose()
+      session.current = null
+      setGameView(null)
       engine.current?.dispose()
       engine.current = null
     }
-  }, [open])
+  }, [open, effectiveTheme, memberId])
   useEffect(() => {
     engine.current?.update(latest.current.view)
   }, [
@@ -232,9 +291,29 @@ export function LibraryRoom({
       setRequesting(false)
     }
   }
+  async function leave(change: () => void) {
+    if (changingRoom.current) return
+    changingRoom.current = true
+    try {
+      const safe = (await session.current?.beforeLeave()) ?? true
+      if (
+        !safe &&
+        !window.confirm(
+          'Your Moonfall progress could not be saved. Leave and lose unsaved changes?',
+        )
+      )
+        return
+      change()
+    } finally {
+      changingRoom.current = false
+    }
+  }
   function close() {
-    setOpen(false)
-    opener.current?.focus()
+    void leave(() => {
+      setOpen(false)
+      setVisitedRoom('')
+      opener.current?.focus()
+    })
   }
   return (
     <section className="od-library-room" aria-labelledby="od-room-title">
@@ -266,6 +345,26 @@ export function LibraryRoom({
           {started && (
             <>
               <div className="od-library-room__controls" role="group" aria-label="Room stations">
+                <label>
+                  Visit room{' '}
+                  <select
+                    value={visitedRoom}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      void leave(() => setVisitedRoom(value))
+                    }}
+                  >
+                    <option value="">Follow my theme</option>
+                    <option value="oneirodex">Aurora Observatory</option>
+                    <option value="greenhouse">Mosslight</option>
+                    <option value="afterglow">Afterglow Arcade</option>
+                    <option value="monochrome">Graphite Studio</option>
+                    <option value="signal">Signal Room</option>
+                    <option value="tape-deck">Tape Deck</option>
+                    <option value="deep-space">Deep Space</option>
+                    <option value="tideglass">Tideglass</option>
+                  </select>
+                </label>
                 <label>
                   Room comfort{' '}
                   <select
@@ -302,6 +401,33 @@ export function LibraryRoom({
                     {s.name}
                   </button>
                 ))}
+                {gameView && (
+                  <button
+                    type="button"
+                    className="od-cbtn"
+                    onClick={() => engine.current?.move('pinball')}
+                  >
+                    Moonfall Pinball
+                  </button>
+                )}
+                {gameView && (
+                  <>
+                    <button
+                      type="button"
+                      className="od-cbtn"
+                      onClick={() => engine.current?.instrument('telescope')}
+                    >
+                      Adjust telescope
+                    </button>
+                    <button
+                      type="button"
+                      className="od-cbtn"
+                      onClick={() => engine.current?.instrument('orrery')}
+                    >
+                      Turn orrery
+                    </button>
+                  </>
+                )}
                 {immersive ? (
                   <button
                     type="button"
@@ -321,6 +447,17 @@ export function LibraryRoom({
                   </button>
                 ) : null}
               </div>
+              {gameView && (
+                <MoonfallPanel
+                  view={gameView}
+                  command={(action) => void session.current?.command(action)}
+                  input={(action, pressed, source) =>
+                    engine.current?.game?.input(action, pressed, source)
+                  }
+                  settings={(value) => engine.current?.game?.setSettings(value)}
+                />
+              )}
+              {gameView && session.current && <MoonfallNavigationGuard session={session.current} />}
               <p className="od-library-room__help">
                 {capable
                   ? 'Point and select in your headset.'

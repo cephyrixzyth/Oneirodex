@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ShellConfigProvider, ViewerProvider, viewerFromConfig } from '@oneirodex/ui'
 import { App } from './App'
@@ -184,17 +184,24 @@ if (memberAppRoot) {
   createRoot(memberAppRoot).render(
     <AuthSessionBoundary>
       <VerifiedMemberBootstrap accountId={memberAppRoot.dataset.accountId}>
-        <BrowserRouter>
-          <AppErrorBoundary>
-            <ViewerProvider value={viewerFromShell}>
-              <ShellConfigProvider value={shellConfig}>
-                <QueryClientProvider client={queryClient}>
-                  <App />
-                </QueryClientProvider>
-              </ShellConfigProvider>
-            </ViewerProvider>
-          </AppErrorBoundary>
-        </BrowserRouter>
+        <RouterProvider
+          router={createBrowserRouter([
+            {
+              path: '*',
+              element: (
+                <AppErrorBoundary>
+                  <ViewerProvider value={viewerFromShell}>
+                    <ShellConfigProvider value={shellConfig}>
+                      <QueryClientProvider client={queryClient}>
+                        <App />
+                      </QueryClientProvider>
+                    </ShellConfigProvider>
+                  </ViewerProvider>
+                </AppErrorBoundary>
+              ),
+            },
+          ])}
+        />
       </VerifiedMemberBootstrap>
     </AuthSessionBoundary>,
   )

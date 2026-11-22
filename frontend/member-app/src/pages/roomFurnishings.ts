@@ -4,6 +4,13 @@ const finishes: Record<
   string,
   { wall: string; wood: string; fabric: string; lamp: string; accent: string }
 > = {
+  oneirodex: {
+    wall: '#163128',
+    wood: '#69442e',
+    fabric: '#164938',
+    lamp: '#ffdc9b',
+    accent: '#a6dfbf',
+  },
   greenhouse: {
     wall: '#213e31',
     wood: '#9b7253',
@@ -54,7 +61,7 @@ const finishes: Record<
     accent: '#69bfee',
   },
 }
-export const roomArtSlug = (slug: string) => (Object.hasOwn(finishes, slug) ? slug : 'greenhouse')
+export const roomArtSlug = (slug: string) => (Object.hasOwn(finishes, slug) ? slug : 'oneirodex')
 export const roomFinish = (slug: string) => finishes[roomArtSlug(slug)]
 
 /** Repeated details share geometry and draw calls, including on standalone headsets. */

@@ -100,7 +100,7 @@ def urllib_url(parsed):
     return urllib.parse.urlunsplit(parsed).replace('postgresql://','postgresql+psycopg2://',1)
 
 
-def browser_review(base, username, password, output, report):
+def browser_review(base, username, password, output, report, room_fixture=None):
     sys.path.insert(0, str(ROOT/'scripts'))
     import capture_common as common
     import capture_docs_media as media
@@ -174,6 +174,8 @@ def browser_review(base, username, password, output, report):
                 report['failed_asset_paths'] = sorted(failed_assets)[:24]
                 raise ProbeFailure('release_visual_missing_static_assets')
             report['themes_verified'] = checked
+            from library_room_review import review_library_room
+            review_library_room(page, output, report, room_fixture)
         finally:
             context.close(); browser.close()
 
@@ -183,7 +185,8 @@ def run():
     work = Path(os.environ['RUNNER_TEMP']).resolve(strict=True)/('release-visual-'+os.environ['GITHUB_RUN_ID'])
     work.mkdir(mode=0o700)
     output = ROOT/'.artifacts/release-visual'; output.mkdir(parents=True)
-    report = {'status':'failed','version':(ROOT/'VERSION').read_text(encoding='ascii').strip(),'phase':'backend_start'}
+    report = {'status':'failed','version':(ROOT/'VERSION').read_text(encoding='ascii').strip(),'phase':'backend_start',
+              'source_sha':os.environ.get('GITHUB_SHA',''), 'run_id':os.environ.get('GITHUB_RUN_ID','')}
     fixture = None
     try:
         fixture = ConnectedServer.open(ROOT,work,report)
@@ -196,7 +199,7 @@ def run():
         if result.returncode or len(result.stdout)>8192: raise ProbeFailure('release_visual_seed_failed')
         data = json.loads(result.stdout)
         report['seeded_games'] = data['games']
-        browser_review(fixture.private_data['base_url'],data['username'],password,output,report)
+        browser_review(fixture.private_data['base_url'],data['username'],password,output,report,fixture)
         report['status'] = 'passed'; report['phase'] = 'complete'
     except Exception as error:
         report['code'] = str(error) if isinstance(error,ProbeFailure) else type(error).__name__

@@ -666,6 +666,17 @@ def _is_native_layout_preset_path(path: str) -> bool:
     )
 
 
+def _is_native_room_game_progress_path(path: str) -> bool:
+    parts = path.split('/')
+    return (
+        len(parts) == 5
+        and parts[:3] == ['', 'api', 'room-games']
+        and 1 <= len(parts[3]) <= 64
+        and all(c in 'abcdefghijklmnopqrstuvwxyz0123456789-' for c in parts[3])
+        and parts[4] == 'progress'
+    )
+
+
 def _is_native_chat_mute_path(path: str) -> bool:
     parts = path.strip('/').split('/')
     return (
@@ -1334,6 +1345,7 @@ class LazyASGIApp:
             from oneirodex.runtime_native.discover_reads import mount_discover_reads_routes
             from oneirodex.runtime_native.account_summary import mount_account_summary_routes
             from oneirodex.runtime_native.account_preferences import mount_account_preferences_routes
+            from oneirodex.runtime_native.room_games import mount_room_games_routes
             from oneirodex.runtime_native.locale import mount_locale_routes
             from oneirodex.runtime_native.account_stock_avatar import mount_account_stock_avatar_routes
             from oneirodex.runtime_native.account_avatar_upload import mount_account_avatar_upload_routes
@@ -2082,6 +2094,15 @@ class LazyASGIApp:
                 database_scope=lambda app: self._native_database_scope(app),
             )
             mount_account_preferences_routes(
+                self._native_read_api_app,
+                self._flask_app,
+                find_user=find_user,
+                find_token=find_token,
+                commit_token_touch=commit_token_touch,
+                login_manager=manager,
+                database_scope=lambda app: self._native_database_scope(app),
+            )
+            mount_room_games_routes(
                 self._native_read_api_app,
                 self._flask_app,
                 find_user=find_user,
@@ -3408,6 +3429,7 @@ class LazyASGIApp:
                     or _is_native_chat_emoji_delete_path(path)
                     or _is_native_chat_voice_room_path(path)
                     or _is_native_layout_preset_path(path)
+                    or _is_native_room_game_progress_path(path)
                     or _is_native_game_read_path(path)
                     or _is_native_playtime_path(path)
                     or _is_native_related_media_path(path)

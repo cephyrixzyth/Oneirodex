@@ -1,0 +1,80 @@
+name: Aurora Moonfall benchmark
+
+on:
+  push:
+    branches: ['codex/aurora-moonfall-benchmark']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: room-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    name: Isolated room, progress and visual qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: room-benchmark-ci-only
+          POSTGRES_DB: oneirodex_room_benchmark_test
+        ports: ['127.0.0.1:5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      RELEASE_VISUAL_ALLOWED: '1'
+      TEST_DATABASE_URL: postgresql://postgres:room-benchmark-ci-only@127.0.0.1:5432/oneirodex_room_benchmark_test
+      ONEIRODEX_CI_CONTROL_DATABASE_URL: postgresql://postgres:room-benchmark-ci-only@127.0.0.1:5432/oneirodex_room_benchmark_test
+      SECRET_KEY: synthetic-room-benchmark-ci-only
+      FLASK_ENV: testing
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Verify focused frontend and build native SPAs
+        run: |
+          npm ci
+          node scripts/ci/test_library_room_workflow.cjs
+          npm test --workspace frontend/member-app -- --run src/pages/pinball src/pages/LibraryRoom.test.tsx src/pages/LibraryRoomGame.test.tsx src/pages/roomSceneGame.test.ts src/buttonLanguage.test.js src/dockerStagedImports.test.ts src/main.test.tsx src/memberBootstrap.test.tsx src/App.test.tsx src/AppSmoke.test.tsx
+          npm run typecheck --workspace frontend/member-app
+          npm run build:native-spas
+      - name: Prepare isolated Python and browser dependencies
+        run: |
+          python -m venv venv
+          venv/bin/python -m pip install --require-hashes -r requirements.lock
+          venv/bin/python -m pip install -r requirements-dev.txt
+          venv/bin/python -m pip install --no-deps playwright==1.65.2 greenlet==3.5.6
+          venv/bin/python -m playwright install --with-deps chromium
+      - name: Verify migration and live progress boundaries
+        run: |
+          venv/bin/python -m alembic upgrade head
+          venv/bin/python -m alembic check
+          venv/bin/python -m pytest tests/test_native_room_games.py tests/test_room_game_progress.py tests/test_user_deletion_inventory.py -q
+          venv/bin/python -m unittest discover -s tests/pure -p 'test_room_game_*.py' -v
+      - name: Verify capture fencing
+        run: |
+          venv/bin/python -m unittest discover -s scripts/ci -p test_release_visual_review.py -v
+          venv/bin/python -m unittest discover -s scripts/ci -p test_library_room_review.py -v
+      - name: Capture actual populated room and gameplay
+        run: venv/bin/python scripts/ci/release_visual_review.py --run
+      - name: Preserve benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: aurora-moonfall-evidence
+          path: .artifacts/release-visual/
+          if-no-files-found: warn
+          retention-days: 14
