@@ -41,7 +41,7 @@
 
 Oneirodex is a **FastAPI + React** server you run at home or on a NAS. Point it at folders of DRM-free games and ROMs, let it identify them against IGDB / Steam / GOG / RAWG, then give the household a modern browser app to **browse, download, play in the browser where a system supports it, and hang out** — with a desktop companion for PC titles and a ten-foot mode for the TV.
 
-Every screenshot and clip on this page is **live UI** from a stock install seeded with five legal free ROMs: what you see is what ships.
+Screenshots show **real Oneirodex UI** with synthetic catalog and chat data. The video walkthroughs were recorded on 2026-10-14 with five legal free ROMs; their visual details predate the 1.3.3 artwork.
 
 <table>
 <tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.3.3</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
@@ -154,7 +154,7 @@ More surfaces — friends dock, collections, calendar, news, help, every admin p
 <details>
 <summary>📷 How these are made</summary>
 
-Stills are shot by [`scripts/capture_docs_media.py`](scripts/capture_docs_media.py) against a throwaway instance that [`scripts/serve_capture.py`](scripts/serve_capture.py) brings up — a scratch database, the five legal sample ROMs, covers from Art studio, a little chat history. Every shot passes a health gate (no error page, not empty, theme stylesheet actually loaded) or the file on disk is left alone. The banners and cards on this page are drawn by [`scripts/render_readme_art.py`](scripts/render_readme_art.py) from the theme tokens and the rail icons the app ships. Recipe: [CAPTURE.md](docs/assets/readme/CAPTURE.md).
+Stills are shot by [`scripts/capture_docs_media.py`](scripts/capture_docs_media.py) against a populated throwaway instance. Release captures can run in isolated CI with a synthetic catalog and two-author chat history. Every shot passes a health gate (no error page, not empty, theme stylesheet actually loaded) or the file on disk is left alone. The hero uses the actual Library capture; section art comes from the shipped theme tokens and rail icons. Recipe and capture evidence: [CAPTURE.md](docs/assets/readme/CAPTURE.md).
 
 </details>
 

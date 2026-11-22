@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-![Oneirodex Discover, captured from the live app](https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/hero-banner.png)
+![Oneirodex Library, captured from the live app](https://raw.githubusercontent.com/cephyrixzyth/Oneirodex/main/docs/assets/readme/hero-banner.png)
 
 Oneirodex is a self-hosted home for the games you already own. Scan mounted game folders, organize a shared catalog, enrich it with metadata and artwork, and give your household a polished place to browse, collect, discuss, download, and play supported titles.
 

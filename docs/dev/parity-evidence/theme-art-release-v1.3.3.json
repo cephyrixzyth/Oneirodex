@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "version": "1.3.3",
+  "status": "visual_scope_passed",
+  "source_commit": "84c48c86e7e7209d97b4446a1f4f0a8eea1956ae",
+  "workflow_run": "https://github.com/cephyrixzyth/Oneirodex/actions/runs/44972917024",
+  "browser": "Playwright 1.65.2 Chromium on disposable Linux CI",
+  "viewport": [
+    1600,
+    900
+  ],
+  "backend_launcher": "startweb.sh",
+  "backend_alembic_head": "25b9de680b91",
+  "seeded_games": 14,
+  "seeded_chat_messages": 3,
+  "themes_saved_reloaded_and_cover_avatar_urls_verified": [
+    "default",
+    "afterglow",
+    "deep-space",
+    "greenhouse",
+    "monochrome",
+    "signal",
+    "tape-deck",
+    "tideglass"
+  ],
+  "default_dark_with_light_os": true,
+  "populated_chat_visible": true,
+  "failed_static_assets": [],
+  "backend_cleanup_verified": true,
+  "readme_stills_inspected": 13,
+  "theme_stills_inspected": 8,
+  "focused_checks_passed": {
+    "shared_ui": 188,
+    "cover_resolution": 15,
+    "request_theme_isolation": 4,
+    "icon_preset_era_template": 53,
+    "native_request_auth": 8,
+    "native_bearer_denial": 9,
+    "member_button_ratchet": 2,
+    "capture_guards": 3,
+    "all_five_spa_builds": true,
+    "private_shipped_bundle_scrub": true,
+    "shared_typescript_and_prettier": true,
+    "eslint": true,
+    "api_envelope_print_css_and_undefined_name_ratchets": true,
+    "release_license_inventory": true
+  },
+  "earlier_capture_attempts": [
+    {
+      "run": 44972025908,
+      "result": "rejected_empty_default_channel_capture",
+      "correction": "Explicitly select the seeded lounge before verifying and capturing messages."
+    },
+    {
+      "run": 44972481070,
+      "result": "passed_four_canonical_views_and_eight_cover_themes"
+    }
+  ],
+  "limits": [
+    "Desktop Chromium scope; mobile, other browsers and accessibility acceptance are not qualified.",
+    "Synthetic catalog/chat; no real game, installer, provider or voice actions are qualified by these stills.",
+    "Long-lived activity/download streams are disabled for capture.",
+    "Existing narrated walkthroughs and their posters retain the 2026-10-14 recording context.",
+    "This is not full route behavior parity or completion of the independent-review program."
+  ],
+  "files": [
+    {
+      "path": "docs/assets/readme/app-icon.png",
+      "sha256": "1077eb23a564672a9f0559dbe1fa4bcf784a13ac60dd68424eaa6b11efa6d5eb"
+    },
+    {
+      "path": "docs/assets/readme/command-palette.png",
+      "sha256": "e2299dacb3fa911c8fe614da82c1da5a1c7cabc6fcdba8ed880f5162660a5b29"
+    },
+    {
+      "path": "docs/assets/readme/hero-banner.png",
+      "sha256": "2c0f7eff23d26437de489d062abd157804a6bdba501c913a5024d95d886eec1d"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-admin-libraries.png",
+      "sha256": "7576698733d0f956acab0c0313b26b19099da53104263b4906207b6840682262"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-admin-ops.png",
+      "sha256": "c9b8de7e93954a317bb041c6da375768069076b15f0d46e024f844e61ecc2d66"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-art-studio.png",
+      "sha256": "e768072c8a5429c20734f7174aac28cc2d20afcec4e07cd784fa95766088a365"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-big-picture.png",
+      "sha256": "76daced40ae29e223393e0ef08e6ca20813ed05dcd2b2adf7cb4c96036864a5d"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-chat.png",
+      "sha256": "886cb387aa8efbaf4e7d925509d8f163807a22c24768cc5aa6362d99cbe8f21a"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-discover.png",
+      "sha256": "420f58628a63402bc42f36b62b94f2545c850123a4010539ff7d78fdaf5d56f6"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-filters.png",
+      "sha256": "f1662925fc0301776672fc670f74340ae4c77589be5cca3cb1e1f3e46e7d6e6a"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-friends.png",
+      "sha256": "6c6792a8caa57315f229d14fafdafc6f0fdd1a21c3b442c29d0ae3e34203fdfb"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-game.png",
+      "sha256": "e61865bf10934457e13cfb22a44c40ef1128e746e438b9052db2fa3b6cc20076"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-library.png",
+      "sha256": "2c0f7eff23d26437de489d062abd157804a6bdba501c913a5024d95d886eec1d"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-preferences.png",
+      "sha256": "c0521f61e9c6ba7dc5e8e7be825b880a8d7936ee1ce19163d8fdbd99e36d1291"
+    },
+    {
+      "path": "docs/assets/readme/screenshot-systems.png",
+      "sha256": "f1d5d9e64913998a92cbccd3b70f2d33911b971f0fb3b758c4f27ad102221367"
+    },
+    {
+      "path": "docs/media/screenshots/admin-art-studio.png",
+      "sha256": "e768072c8a5429c20734f7174aac28cc2d20afcec4e07cd784fa95766088a365"
+    },
+    {
+      "path": "docs/media/screenshots/admin-libraries.png",
+      "sha256": "7576698733d0f956acab0c0313b26b19099da53104263b4906207b6840682262"
+    },
+    {
+      "path": "docs/media/screenshots/admin-ops-services.png",
+      "sha256": "c9b8de7e93954a317bb041c6da375768069076b15f0d46e024f844e61ecc2d66"
+    },
+    {
+      "path": "docs/media/screenshots/big-picture.png",
+      "sha256": "76daced40ae29e223393e0ef08e6ca20813ed05dcd2b2adf7cb4c96036864a5d"
+    },
+    {
+      "path": "docs/media/screenshots/chat-channels.png",
+      "sha256": "886cb387aa8efbaf4e7d925509d8f163807a22c24768cc5aa6362d99cbe8f21a"
+    },
+    {
+      "path": "docs/media/screenshots/command-palette.png",
+      "sha256": "e2299dacb3fa911c8fe614da82c1da5a1c7cabc6fcdba8ed880f5162660a5b29"
+    },
+    {
+      "path": "docs/media/screenshots/discover.png",
+      "sha256": "420f58628a63402bc42f36b62b94f2545c850123a4010539ff7d78fdaf5d56f6"
+    },
+    {
+      "path": "docs/media/screenshots/friends-dock.png",
+      "sha256": "6c6792a8caa57315f229d14fafdafc6f0fdd1a21c3b442c29d0ae3e34203fdfb"
+    },
+    {
+      "path": "docs/media/screenshots/game-details.png",
+      "sha256": "e61865bf10934457e13cfb22a44c40ef1128e746e438b9052db2fa3b6cc20076"
+    },
+    {
+      "path": "docs/media/screenshots/library-filters.png",
+      "sha256": "f1662925fc0301776672fc670f74340ae4c77589be5cca3cb1e1f3e46e7d6e6a"
+    },
+    {
+      "path": "docs/media/screenshots/library.png",
+      "sha256": "2c0f7eff23d26437de489d062abd157804a6bdba501c913a5024d95d886eec1d"
+    },
+    {
+      "path": "docs/media/screenshots/preferences.png",
+      "sha256": "c0521f61e9c6ba7dc5e8e7be825b880a8d7936ee1ce19163d8fdbd99e36d1291"
+    },
+    {
+      "path": "docs/media/screenshots/systems-platforms.png",
+      "sha256": "f1d5d9e64913998a92cbccd3b70f2d33911b971f0fb3b758c4f27ad102221367"
+    },
+    {
+      "path": "docs/media/screenshots/theme-art-afterglow.png",
+      "sha256": "f1492bffa84c6449385a80d0127758313432d6e27b61c39a54295a93648f8e29"
+    },
+    {
+      "path": "docs/media/screenshots/theme-art-deep-space.png",
+      "sha256": "2a2d53bbc3bfa574c55c8554f77bf9587a07730649bcff684e8b60ad977c8609"
+    },
+    {
+      "path": "docs/media/screenshots/theme-art-default.png",
+      "sha256": "9eec324334669e65ccebe06564eb044fb2522794937fade71acfe1522c300ae0"
+    },
+    {
+      "path": "docs/media/screenshots/theme-art-greenhouse.png",
+      "sha256": "3f84d04f20dcb9b82abea94ac284398f8f680fe18dd64807f4c21c41d14a4376"
+    },
+    {
+      "path": "docs/media/screenshots/theme-art-monochrome.png",
+      "sha256": "c69933be3c645aa15efafef4e87de5a6ab7e7d6f8731aba56ede3430ded02db2"
+    },
+    {
+      "path": "docs/media/screenshots/theme-art-signal.png",
+      "sha256": "c2af2ae8f3213135d88c149c1a5e461f0f8ef4322e17bab46994fc9d80ef2258"
+    },
+    {
+      "path": "docs/media/screenshots/theme-art-tape-deck.png",
+      "sha256": "6c67b863d87ff2bec8074b2665adbd6c4605a2569846b964589bf8de5b9bbea5"
+    },
+    {
+      "path": "docs/media/screenshots/theme-art-tideglass.png",
+      "sha256": "1ca5eae41ca564b60ccd056ab806eb086fc41f37e206a5745586bba7d3905752"
+    }
+  ]
+}

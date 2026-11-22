@@ -2,6 +2,17 @@
 
 > **Doc status:** Active
 
+**1.3.3 release refresh — 2026-11-21:** [run 44972917024](https://github.com/cephyrixzyth/Oneirodex/actions/runs/44972917024)
+captured source `84c48c86e7e7209d97b4446a1f4f0a8eea1956ae` with all five rebuilt
+SPAs, 14 synthetic catalog entries and three messages from two synthetic users.
+All 13 README stills and eight theme stills were inspected at 1600×900. Real
+theme saves/reloads verified each member cover and stock-avatar URL; default
+dark mode passed with a light OS preference. No static asset failed, and the
+owned database cleanup passed. README slots, matching docs stills and the app
+icon were refreshed; the hero is the actual Library screenshot. Hashes and
+coverage limits: [theme-art release evidence](../../dev/parity-evidence/theme-art-release-v1.3.3.json).
+Narrated videos and their poster frames retain their 2026-10-14 context.
+
 ## Disposable CI capture
 
 For a release whose verification must stay off the operator workstation, run
@@ -41,8 +52,9 @@ for this type-only correction. See [R2040](../../dev/parity-evidence/bootstrap-f
 **Focused support-preview QA:** R2032 uses populated isolated native staging and fingerprinted candidate assets in headless Chromium, with mandatory preview and configured/unconfigured local-only flows. Desktop and375px mobile captures were inspected after the rail settled off-canvas. Screenshots remain private; hashes and bounds are in [R2032](../../dev/parity-evidence/support-preview-r2032.json). This focused Report-page change does not replace the Library, Systems or Chat README slots. No external issue was sent; all owned staging resources were removed. Delivery/retry acceptance remains open.
 
 Every screenshot, poster, banner and how-to clip under `docs/assets/readme/`
-and `docs/media/` is produced by four scripts against a **throwaway local
-instance**. Nothing here is a mock-up: if a surface cannot be photographed
+and `docs/media/` is produced by the capture scripts against a **throwaway
+instance**, locally or in the explicitly selected disposable CI job above.
+Nothing here is a mock-up: if a surface cannot be photographed
 honestly it is skipped and the run says so.
 
 For a focused parity fix, a screenshot may also come from an isolated local
@@ -136,7 +148,7 @@ hits a store, an AI endpoint or the core CDN.
 
 | Slot | Source | Notes |
 |---|---|---|
-| `hero-banner.png` | `screenshot-discover.png` composited by `render_readme_art.py` | real pixels in a frame on the token background |
+| `hero-banner.png` | actual `screenshot-library.png` (1.3.3) | exact capture pixels |
 | `screenshot-library.png` | `/library`, tile slider pushed to 80 % | |
 | `screenshot-filters.png` | `/library` with Filters open | |
 | `screenshot-game.png` | first tile's game page | `game-details-full.png` in media is the full page |
