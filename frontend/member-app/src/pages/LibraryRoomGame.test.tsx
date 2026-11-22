@@ -126,7 +126,9 @@ test('honors the latest world choice while an exit save is pending', async () =>
   act(() => runtime.tick(1 / 120))
   await user.selectOptions(screen.getByLabelText('Visit room'), 'greenhouse')
   await user.selectOptions(screen.getByLabelText('Visit room'), 'oneirodex')
+  const pendingChoice = (screen.getByLabelText('Visit room') as HTMLSelectElement).value
   release()
   await waitFor(() => expect(screen.getByLabelText('Visit room')).toHaveValue('oneirodex'))
   unmount()
+  expect(pendingChoice).toBe('oneirodex')
 })

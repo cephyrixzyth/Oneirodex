@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { createRoom, RoomGame, RoomView, Station } from './roomScene'
 import { createMoonfallSession } from './pinball/session'
 import type { MoonfallSession } from './pinball/session'
@@ -93,6 +93,7 @@ export function LibraryRoom({
   const [requesting, setRequesting] = useState(false)
   const [problem, setProblem] = useState('')
   const [visitedRoom, setVisitedRoom] = useState('')
+  const [requestedRoom, setRequestedRoom] = useState('')
   const [accountTheme, setAccountTheme] = useState(
     () => document.documentElement.dataset.theme || 'default',
   )
@@ -101,6 +102,36 @@ export function LibraryRoom({
   const session = useRef<MoonfallSession | null>(null)
   const changingRoom = useRef(false)
   const pendingChange = useRef<{ change: () => void; kind: 'user' | 'theme' } | null>(null)
+  const leave = useCallback(
+    async (change: () => void, kind: 'user' | 'theme' = 'user') => {
+      // Keep the latest explicit choice while a save finishes. Background theme
+      // synchronization must not replace a pending user action.
+      if (!pendingChange.current || kind === 'user' || pendingChange.current.kind === 'theme')
+        pendingChange.current = { change, kind }
+      if (changingRoom.current) return
+      changingRoom.current = true
+      try {
+        const safe = (await session.current?.beforeLeave()) ?? true
+        if (!pendingChange.current) return
+        if (
+          !safe &&
+          !window.confirm(
+            'Your Moonfall progress could not be saved. Leave and lose unsaved changes?',
+          )
+        ) {
+          if (pendingChange.current.kind === 'user') setRequestedRoom(visitedRoom)
+          return
+        }
+        const request = pendingChange.current
+        pendingChange.current = null
+        request.change()
+      } finally {
+        pendingChange.current = null
+        changingRoom.current = false
+      }
+    },
+    [visitedRoom],
+  )
   useEffect(() => {
     if (!open) return
     const sync = () => {
@@ -116,7 +147,7 @@ export function LibraryRoom({
       attributeFilter: ['data-theme'],
     })
     return () => observer.disconnect()
-  }, [open, visitedRoom, accountTheme])
+  }, [open, visitedRoom, accountTheme, leave])
   const [shelf, setShelf] = useState(0)
   const canvas = useRef<HTMLCanvasElement>(null)
   const engine = useRef<ReturnType<typeof createRoom> | null>(null)
@@ -293,35 +324,11 @@ export function LibraryRoom({
       setRequesting(false)
     }
   }
-  async function leave(change: () => void, kind: 'user' | 'theme' = 'user') {
-    // Keep the latest explicit choice while a save finishes. Background theme
-    // synchronization must not replace a pending user action.
-    if (!pendingChange.current || kind === 'user' || pendingChange.current.kind === 'theme')
-      pendingChange.current = { change, kind }
-    if (changingRoom.current) return
-    changingRoom.current = true
-    try {
-      const safe = (await session.current?.beforeLeave()) ?? true
-      if (!pendingChange.current) return
-      if (
-        !safe &&
-        !window.confirm(
-          'Your Moonfall progress could not be saved. Leave and lose unsaved changes?',
-        )
-      )
-        return
-      const request = pendingChange.current
-      pendingChange.current = null
-      request.change()
-    } finally {
-      pendingChange.current = null
-      changingRoom.current = false
-    }
-  }
   function close() {
     void leave(() => {
       setOpen(false)
       setVisitedRoom('')
+      setRequestedRoom('')
       opener.current?.focus()
     })
   }
@@ -359,9 +366,13 @@ export function LibraryRoom({
                 <label>
                   Visit room{' '}
                   <select
-                    value={visitedRoom}
+                    value={requestedRoom}
+                    aria-busy={requestedRoom !== visitedRoom}
                     onChange={(event) => {
                       const value = event.target.value
+                      // Controlled inputs need their displayed value updated in
+                      // this event; activating the scene still waits for saving.
+                      setRequestedRoom(value)
                       void leave(() => setVisitedRoom(value))
                     }}
                   >
@@ -458,6 +469,7 @@ export function LibraryRoom({
                   </button>
                 ) : null}
               </div>
+              {requestedRoom !== visitedRoom && <p role="status">Changing rooms…</p>}
               {gameView && (
                 <MoonfallPanel
                   view={gameView}

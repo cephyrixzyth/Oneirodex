@@ -44,6 +44,7 @@ jobs:
           --health-timeout 5s --health-retries 5
     env:
       RELEASE_VISUAL_ALLOWED: '1'
+      ROOM_BENCHMARK_FOCUSED: '1'
       TEST_DATABASE_URL: postgresql://postgres:room-benchmark-ci-only@127.0.0.1:5432/oneirodex_room_benchmark_test
       ONEIRODEX_CI_CONTROL_DATABASE_URL: postgresql://postgres:room-benchmark-ci-only@127.0.0.1:5432/oneirodex_room_benchmark_test
       SECRET_KEY: synthetic-room-benchmark-ci-only

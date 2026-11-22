@@ -47,6 +47,17 @@ def review_library_room(page, output, report, fixture=None):
         page.goto(page.url.split('/library', 1)[0].split('/vr', 1)[0] + '/vr?room=open&vr_compat=collection', wait_until='domcontentloaded')
         page.get_by_role('group', name='Room stations', exact=True).wait_for()
         checkpoint('visiting_observatory')
+        page.evaluate('''() => {
+          const select=document.querySelector('.od-library-room__controls select');
+          const trace={changeObserved:false}; window.__roomChoiceProbe=trace;
+          select.addEventListener('change',()=>{
+            trace.changeObserved=true; trace.observatoryAtEvent=select.value==='oneirodex';
+            queueMicrotask(()=>{
+              trace.observatoryAfterEvent=document.querySelector('.od-library-room__controls select')?.value==='oneirodex';
+              trace.originalSelectConnected=select.isConnected;
+            });
+          },{once:true});
+        }''')
         page.get_by_label('Visit room', exact=True).select_option('oneirodex')
         page.wait_for_function("() => document.querySelector('.od-library-room__controls select')?.value==='oneirodex'")
         checkpoint('observatory_selected')

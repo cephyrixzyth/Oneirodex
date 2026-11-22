@@ -152,16 +152,23 @@ def browser_review(base, username, password, output, report, room_fixture=None):
                 page.get_by_text('The evening collection is ready.',exact=True).first.wait_for(state='visible')
                 report['populated_chat_visible'] = True
             selected = [replace(shot,prepare=chat) if shot.name=='chat-channels' else shot for shot in selected]
-            capture_checkpoint(output,report,'populated_readme_capture')
-            failures = media.capture(page,selected)
-            if failures or not report.get('populated_chat_visible'):
-                raise ProbeFailure('release_visual_readme_capture_failed')
-            media.README_ASSETS.joinpath('hero-banner.png').write_bytes(media.README_ASSETS.joinpath('screenshot-library.png').read_bytes())
+            focused = os.environ.get('ROOM_BENCHMARK_FOCUSED') == '1'
+            if not focused:
+                capture_checkpoint(output,report,'populated_readme_capture')
+                failures = media.capture(page,selected)
+                if failures or not report.get('populated_chat_visible'):
+                    raise ProbeFailure('release_visual_readme_capture_failed')
+                media.README_ASSETS.joinpath('hero-banner.png').write_bytes(media.README_ASSETS.joinpath('screenshot-library.png').read_bytes())
+            else:
+                report['capture_scope'] = 'room-only; general README/eight-theme baseline is separate evidence'
             page.goto(base+'/library',wait_until='domcontentloaded')
             media.prep_preferences(page)
             page.locator('[data-theme-preview]').first.wait_for(state='visible')
             slugs = page.locator('[data-theme-preview]').evaluate_all('(buttons)=>buttons.map(button=>button.dataset.themePreview)')
             if not 8 <= len(set(slugs)) <= 16: raise ProbeFailure('release_visual_theme_cards_missing')
+            if focused:
+                if 'tideglass' not in slugs: raise ProbeFailure('room_fixture_theme_missing')
+                slugs = ['tideglass']
             page.get_by_role('button',name='Close preferences',exact=True).click()
             checked = []
             for raw in slugs:
@@ -200,6 +207,7 @@ def browser_review(base, username, password, output, report, room_fixture=None):
                       renderFallback: document.body.textContent.includes('This browser could not open the 3D room.'),
                       roomExpanded: document.querySelector('.od-library-room__header button')?.getAttribute('aria-expanded')==='true'
                       ,observatorySelected: document.querySelector('.od-library-room__controls select')?.value==='oneirodex'
+                      ,choiceEvents: window.__roomChoiceProbe || null
                     })''')
                     page.screenshot(path=str(output/'room-failure.png'),timeout=15_000)
                 except Exception:
