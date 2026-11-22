@@ -1,4 +1,4 @@
-/* Chip previews — always loaded so unselected packs still show their drawing. */
+/* Chip previews: always loaded so unselected packs still show their drawing. */
 .icon-pack-chip[data-icon-pack="filled"] .od-icon[data-icon="library"] {
   background-color: currentColor;
   -webkit-mask: url("filled/icons/library.svg") center / contain no-repeat;
@@ -237,5 +237,293 @@
   mask: url("mono/icons/favorites.svg") center / contain no-repeat;
 }
 .icon-pack-chip[data-icon-pack="mono"] .od-icon[data-icon="favorites"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="library"] {
+  background-color: currentColor;
+  -webkit-mask: url("sprout/icons/library.svg") center / contain no-repeat;
+  mask: url("sprout/icons/library.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="library"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="discover"] {
+  background-color: currentColor;
+  -webkit-mask: url("sprout/icons/discover.svg") center / contain no-repeat;
+  mask: url("sprout/icons/discover.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="discover"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="systems"] {
+  background-color: currentColor;
+  -webkit-mask: url("sprout/icons/systems.svg") center / contain no-repeat;
+  mask: url("sprout/icons/systems.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="systems"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="download"] {
+  background-color: currentColor;
+  -webkit-mask: url("sprout/icons/download.svg") center / contain no-repeat;
+  mask: url("sprout/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="download"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="downloads"] {
+  background-color: currentColor;
+  -webkit-mask: url("sprout/icons/download.svg") center / contain no-repeat;
+  mask: url("sprout/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="downloads"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="favorites"] {
+  background-color: currentColor;
+  -webkit-mask: url("sprout/icons/favorites.svg") center / contain no-repeat;
+  mask: url("sprout/icons/favorites.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="sprout"] .od-icon[data-icon="favorites"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="library"] {
+  background-color: currentColor;
+  -webkit-mask: url("hairline/icons/library.svg") center / contain no-repeat;
+  mask: url("hairline/icons/library.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="library"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="discover"] {
+  background-color: currentColor;
+  -webkit-mask: url("hairline/icons/discover.svg") center / contain no-repeat;
+  mask: url("hairline/icons/discover.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="discover"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="systems"] {
+  background-color: currentColor;
+  -webkit-mask: url("hairline/icons/systems.svg") center / contain no-repeat;
+  mask: url("hairline/icons/systems.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="systems"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="download"] {
+  background-color: currentColor;
+  -webkit-mask: url("hairline/icons/download.svg") center / contain no-repeat;
+  mask: url("hairline/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="download"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="downloads"] {
+  background-color: currentColor;
+  -webkit-mask: url("hairline/icons/download.svg") center / contain no-repeat;
+  mask: url("hairline/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="downloads"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="favorites"] {
+  background-color: currentColor;
+  -webkit-mask: url("hairline/icons/favorites.svg") center / contain no-repeat;
+  mask: url("hairline/icons/favorites.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="hairline"] .od-icon[data-icon="favorites"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="library"] {
+  background-color: currentColor;
+  -webkit-mask: url("dial/icons/library.svg") center / contain no-repeat;
+  mask: url("dial/icons/library.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="library"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="discover"] {
+  background-color: currentColor;
+  -webkit-mask: url("dial/icons/discover.svg") center / contain no-repeat;
+  mask: url("dial/icons/discover.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="discover"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="systems"] {
+  background-color: currentColor;
+  -webkit-mask: url("dial/icons/systems.svg") center / contain no-repeat;
+  mask: url("dial/icons/systems.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="systems"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="download"] {
+  background-color: currentColor;
+  -webkit-mask: url("dial/icons/download.svg") center / contain no-repeat;
+  mask: url("dial/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="download"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="downloads"] {
+  background-color: currentColor;
+  -webkit-mask: url("dial/icons/download.svg") center / contain no-repeat;
+  mask: url("dial/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="downloads"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="favorites"] {
+  background-color: currentColor;
+  -webkit-mask: url("dial/icons/favorites.svg") center / contain no-repeat;
+  mask: url("dial/icons/favorites.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="dial"] .od-icon[data-icon="favorites"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="library"] {
+  background-color: currentColor;
+  -webkit-mask: url("bubble/icons/library.svg") center / contain no-repeat;
+  mask: url("bubble/icons/library.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="library"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="discover"] {
+  background-color: currentColor;
+  -webkit-mask: url("bubble/icons/discover.svg") center / contain no-repeat;
+  mask: url("bubble/icons/discover.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="discover"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="systems"] {
+  background-color: currentColor;
+  -webkit-mask: url("bubble/icons/systems.svg") center / contain no-repeat;
+  mask: url("bubble/icons/systems.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="systems"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="download"] {
+  background-color: currentColor;
+  -webkit-mask: url("bubble/icons/download.svg") center / contain no-repeat;
+  mask: url("bubble/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="download"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="downloads"] {
+  background-color: currentColor;
+  -webkit-mask: url("bubble/icons/download.svg") center / contain no-repeat;
+  mask: url("bubble/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="downloads"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="favorites"] {
+  background-color: currentColor;
+  -webkit-mask: url("bubble/icons/favorites.svg") center / contain no-repeat;
+  mask: url("bubble/icons/favorites.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="bubble"] .od-icon[data-icon="favorites"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="library"] {
+  background-color: currentColor;
+  -webkit-mask: url("orbit/icons/library.svg") center / contain no-repeat;
+  mask: url("orbit/icons/library.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="library"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="discover"] {
+  background-color: currentColor;
+  -webkit-mask: url("orbit/icons/discover.svg") center / contain no-repeat;
+  mask: url("orbit/icons/discover.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="discover"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="systems"] {
+  background-color: currentColor;
+  -webkit-mask: url("orbit/icons/systems.svg") center / contain no-repeat;
+  mask: url("orbit/icons/systems.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="systems"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="download"] {
+  background-color: currentColor;
+  -webkit-mask: url("orbit/icons/download.svg") center / contain no-repeat;
+  mask: url("orbit/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="download"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="downloads"] {
+  background-color: currentColor;
+  -webkit-mask: url("orbit/icons/download.svg") center / contain no-repeat;
+  mask: url("orbit/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="downloads"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="favorites"] {
+  background-color: currentColor;
+  -webkit-mask: url("orbit/icons/favorites.svg") center / contain no-repeat;
+  mask: url("orbit/icons/favorites.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="orbit"] .od-icon[data-icon="favorites"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="library"] {
+  background-color: currentColor;
+  -webkit-mask: url("engraved/icons/library.svg") center / contain no-repeat;
+  mask: url("engraved/icons/library.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="library"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="discover"] {
+  background-color: currentColor;
+  -webkit-mask: url("engraved/icons/discover.svg") center / contain no-repeat;
+  mask: url("engraved/icons/discover.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="discover"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="systems"] {
+  background-color: currentColor;
+  -webkit-mask: url("engraved/icons/systems.svg") center / contain no-repeat;
+  mask: url("engraved/icons/systems.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="systems"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="download"] {
+  background-color: currentColor;
+  -webkit-mask: url("engraved/icons/download.svg") center / contain no-repeat;
+  mask: url("engraved/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="download"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="downloads"] {
+  background-color: currentColor;
+  -webkit-mask: url("engraved/icons/download.svg") center / contain no-repeat;
+  mask: url("engraved/icons/download.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="downloads"] > * {
+  opacity: 0;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="favorites"] {
+  background-color: currentColor;
+  -webkit-mask: url("engraved/icons/favorites.svg") center / contain no-repeat;
+  mask: url("engraved/icons/favorites.svg") center / contain no-repeat;
+}
+.icon-pack-chip[data-icon-pack="engraved"] .od-icon[data-icon="favorites"] > * {
   opacity: 0;
 }

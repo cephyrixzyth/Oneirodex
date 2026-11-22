@@ -13,6 +13,8 @@ Status: `open` | `in_progress` | `done` | `deferred` | `wontfix`
 
 ## Open / recurring debts (human 2026-08-01 + prior)
 
+| UID-229 | Theme artwork and member identity | Stock avatars and placeholder covers previously used the default artwork; picker cards did not show each design | 1.3.3 adds per-request theme context, eight themed stock avatars, cover lettering and miniature picker cards. Pure cover/context checks and shared UI verification are recorded during release preparation; populated remote browser review is pending. Broader classic-route and theme-pack parity remain under UID-082. | Themes / Preferences | in_progress |
+
 | UID-228 | Cross-tab private browser state | Delayed responses or first mounting of old HTML could show the prior account | R2037 retires mounted member/admin/Ops trees. R2038 verifies the live account before first member render and reuses focused recovery, including timeout and worker-barrier controls. Actual delayed-first-load and fresh-child navigation pass. R2040 corrects full-config typing; 1,266 member checks pass and 65 production files match byte-for-byte. Classic/server-only, frozen/offline, other-engine and full independent acceptance remain open. | Member / Admin / Ops | in_progress |
 | UID-227 | Support forwarding consent | The unchecked opt-in had no destination-specific redacted preview | Mandatory redacted preview, durable receipts, fresh explicit retry after definite rejection/skipping, and exact-match read-only reconciliation implemented. R2034 covers cooldown/budgets, lost replies, concurrency, private mismatch refusal and populated headless recovery. Actual provider permissions/visibility and the whole-program independent acceptance review remain open. | Report / Support inbox | in_progress |
 

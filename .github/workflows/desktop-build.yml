@@ -103,6 +103,59 @@ permissions:
   contents: read
 
 jobs:
+  release-visual-review:
+    if: github.event_name == 'workflow_dispatch' && !inputs.probe_only && !inputs.probe_family && !inputs.packaged_smoke_only && !inputs.windows_user_fixture_only && !inputs.linux_packaged_smoke_only && !inputs.release_tag
+    name: Populated release UI and theme artwork
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: release-visual-ci-only
+          POSTGRES_DB: oneirodex_release_visual_control_test
+        ports: ['127.0.0.1:5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      RELEASE_VISUAL_ALLOWED: '1'
+      ONEIRODEX_CI_CONTROL_DATABASE_URL: postgresql://postgres:release-visual-ci-only@127.0.0.1:5432/oneirodex_release_visual_control_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - name: Build all five native SPAs
+        run: |
+          npm ci
+          npm run build:native-spas
+      - name: Prepare isolated backend and browser
+        run: |
+          python -m venv venv
+          venv/bin/python -m pip install --require-hashes -r requirements.lock
+          venv/bin/python -m pip install --no-deps playwright==1.65.2 greenlet==3.5.6
+          venv/bin/python -m playwright install --with-deps chromium
+      - name: Verify capture guards
+        run: |
+          venv/bin/python -m unittest discover -s scripts/ci -p test_release_visual_review.py -v
+          node scripts/ci/test_release_visual_workflow.cjs
+      - name: Photograph real populated pages and save each member theme
+        run: venv/bin/python scripts/ci/release_visual_review.py --run
+      - name: Preserve visual evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-visual-evidence
+          path: .artifacts/release-visual/
+          if-no-files-found: error
+
   macos-coalition-probe:
     if: github.event_name != 'workflow_dispatch' || (inputs.packaged_smoke_only != true && inputs.windows_user_fixture_only != true && inputs.linux_packaged_smoke_only != true)
     name: macOS coalition API/isolation probe

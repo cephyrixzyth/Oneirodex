@@ -12,13 +12,13 @@ Preferences is organized into **Library**, **Look & density**, **Play in browser
 
 ## Color theme presets
 
-- Pick a preset from the **room-card picker** in Preferences — the six current designs are Mosslight, Afterglow Arcade, Graphite Studio, Signal Room, Tape Deck, and Deep Space Media. Uploaded packs appear under **Installed**. Preferences is the only theme picker. Admins also get **Reset Default Themes** under Look & density (same action as Admin → Themes) after a deploy that changes theme CSS.
+- Pick a preset from the **room-card picker** in Preferences — Mosslight, Afterglow Arcade, Graphite Studio, Signal Room, Tape Deck, Deep Space Media, or Tideglass Observatory. Each card previews the room, avatar, icons and cover frames. Uploaded packs appear under **Installed**. Preferences is the only theme picker. Admins also get **Reset Default Themes** under Look & density (same action as Admin → Themes) after a deploy that changes theme CSS.
 - A theme is a **room**, not a solid colour. Member and admin chrome share atmosphere with browser-play rooms (`html[data-era]`), while each design has its own palette, geometry, icon pack, and material feel.
-- **Default (system)** is the built-in theme id `default` (saved explicitly — not `None`). It keeps the green accent and wood-den scenery.
-- The six new designs vary accent, surfaces, glass/CRT, typography, spacing, geometry and icon style. Ask an admin to **Reset Default Themes** after a deploy so the library volume receives the current designs. Old shipped presets are retired; uploaded themes are kept and old saved selections map to a replacement.
+- **Default (system)** is the built-in theme id `default` (saved explicitly — not `None`). It opens dark with a green accent and an aurora night room, including when your operating system uses light mode.
+- The seven designs vary accent, surfaces, glass/CRT, typography, spacing, geometry and icon style. Ask an admin to **Reset Default Themes** after a deploy so the library volume receives the current designs. Old shipped presets are retired; uploaded themes are kept and old saved selections map to a replacement.
 - Picking a room card also selects that preset’s paired icon pack (still changeable before Save). The live preview repaints the accent **and** switches the room scenery before you save.
 - Selecting a theme or icon pack previews it in the current page. **Cancel**, Escape, or closing Preferences without saving restores the saved theme and icon pack; **Save changes** keeps the selection and reloads the app.
-- The chosen theme applies on the **next page load** — every stylesheet, the brand mark, the tile chrome, the **stock avatars**, and **backup/placeholder covers** follow it. Untitled games get a Pillow placeholder painted in the active decade room (cached per theme). The seven avatars Oneirodex ships are recoloured into each preset's palette. An avatar you uploaded yourself is your picture and is never recoloured.
+- The chosen theme applies on the **next page load** — stylesheets, tile frames, **stock avatars**, and **placeholder covers** follow it. Games without covers show their title in the theme's lettering and artwork, cached separately for each theme. Eight new stock avatars — fox, robot, owl, cat, astronaut, ghost, frog and knight — have drawings for each theme. An avatar you uploaded yourself is your picture and is never recoloured.
 - If cards do nothing, accents look wrong, rooms stay flat, or presets still look accent-only, the library volume may have stale theme files — ask an admin to **Reset Default Themes** after a rebuild.
 
 > **Fixed:** themes used to appear not to save at all — the page came back with
@@ -29,9 +29,9 @@ Preferences is organized into **Library**, **Look & density**, **Play in browser
 
 ## Icon packs (independent of color)
 
-- Preferences → **Icon pack**: Outline, Filled, Duotone, Pixel, Soft, Mono block.
-- Outline is the default stroke set. The other five packs draw SVGs for 17 shared icons, including the download/downloads alias. Other shared icons keep their standard outline shape. Preferences chips preview the five primary-rail drawings.
-- Packs use `currentColor`, so they work with **any** color theme (e.g. Aurora + Pixel).
+- Preferences → **Icon pack**: Outline, Filled, Duotone, Pixel, Soft, Mono block, Sprout, Hairline, Dial, Bubble, Orbit and Engraved.
+- Outline is the default stroke set. Drawing packs supply 17 shared icons, including the download/downloads alias. Other shared icons keep their standard outline shape. Preferences chips preview the five primary-rail drawings.
+- Packs use `currentColor`, so they work with **any** color theme (e.g. Mosslight + Pixel). Presets pair with Sprout (Mosslight), Pixel (Afterglow), Hairline (Graphite), Dial (Signal), Bubble (Tape Deck), Orbit (Deep Space) and Engraved (Tideglass).
 - A preset can also set the icon *silhouette* — stroke weight, corner style, and whether glyphs are outlined or solid. A glyph drawn as a solid shape (the Favorites heart, the play triangle) stays visible under the outline presets rather than being erased by them.
 
 ## Fonts

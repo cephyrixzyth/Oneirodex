@@ -38,6 +38,16 @@ AVATAR_URL_PREFIX = 'library/images/avatars_users/'
 
 # Editorial portraits are full-color artwork; the classic glyphs follow the active theme.
 STOCK_AVATARS = (
+    # Drawn per theme (scripts/generate_theme_art.py): avatar_url serves the
+    # active theme's own drawing of each character.
+    {'id': 'fox', 'label': 'Fox', 'path': f'{STOCK_AVATAR_DIR}fox.svg'},
+    {'id': 'robot', 'label': 'Robot', 'path': f'{STOCK_AVATAR_DIR}robot.svg'},
+    {'id': 'owl', 'label': 'Owl', 'path': f'{STOCK_AVATAR_DIR}owl.svg'},
+    {'id': 'cat', 'label': 'Cat', 'path': f'{STOCK_AVATAR_DIR}cat.svg'},
+    {'id': 'astronaut', 'label': 'Astronaut', 'path': f'{STOCK_AVATAR_DIR}astronaut.svg'},
+    {'id': 'ghost', 'label': 'Ghost', 'path': f'{STOCK_AVATAR_DIR}ghost.svg'},
+    {'id': 'frog', 'label': 'Frog', 'path': f'{STOCK_AVATAR_DIR}frog.svg'},
+    {'id': 'knight', 'label': 'Knight', 'path': f'{STOCK_AVATAR_DIR}knight.svg'},
     {'id': 'moss-keeper', 'label': 'Moss Keeper', 'path': f'{STOCK_AVATAR_DIR}moss-keeper.webp'},
     {'id': 'radio-crab', 'label': 'Radio Crab', 'path': f'{STOCK_AVATAR_DIR}radio-crab.webp'},
     {'id': 'star-moth', 'label': 'Star Moth', 'path': f'{STOCK_AVATAR_DIR}star-moth.webp'},
@@ -153,6 +163,11 @@ def avatar_url(
 
 def _current_theme() -> str:
     """The signed-in member's theme slug, or 'default'."""
+    from oneirodex.utils.request_theme import request_theme
+
+    native = request_theme()
+    if native:
+        return native
     try:
         from flask_login import current_user
 

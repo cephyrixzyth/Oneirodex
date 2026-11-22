@@ -118,7 +118,14 @@ from oneirodex.utils.json_file_store import write_json_atomic
 # the theme JS lives on the volume, so the handler change needs a Reset.
 # 43 = preferences_modal.js restores the paired icon pack after an unsaved
 # theme preview is dismissed; existing theme volumes need Reset.
-GENERATOR_VERSION = 46
+# 47 = per-theme drawn art (setup/theme_art/<slug>): eight characters drawn in
+# each theme's own hand, and the theme's own fallback cover and library hero.
+GENERATOR_VERSION = 47
+
+# Hand-drawn per-theme art, written by scripts/generate_theme_art.py. A preset
+# takes its own folder's files over the recoloured defaults.
+THEME_ART_ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'setup', 'theme_art')
+THEME_PLACEHOLDER_FILES = ('art/placeholders/cover.svg', 'art/placeholders/hero.svg')
 
 # Play-room id used when a theme does not name one (default + uploaded packs).
 DEFAULT_ERA = 'wood_den_80s'
@@ -174,6 +181,13 @@ AVATAR_FILES = (
     'joystick.svg',
 )
 
+# Drawn characters (1.3.3): not recoloured — each preset copies its own
+# drawing of them from THEME_ART_ROOT/<slug>/avatars.
+CHARACTER_AVATAR_FILES = (
+    'fox.svg', 'robot.svg', 'owl.svg', 'cat.svg',
+    'astronaut.svg', 'ghost.svg', 'frog.svg', 'knight.svg',
+)
+
 # Files the generator writes for *every* preset, unconditionally. Two things
 # follow from that: sync_theme_tree must never overwrite them from the source,
 # and a preset missing any of them is stale and gets rebuilt.
@@ -202,7 +216,11 @@ PRESET_ART_FILES = tuple(f'art/era/{name}' for name in ERA_ART_FILES)
 
 # What the sync pass must leave alone: everything the generator owns, whether
 # or not its absence would trigger a rebuild.
-PRESET_PROTECTED_FILES = PRESET_MANAGED_FILES + PRESET_AVATAR_FILES + PRESET_ART_FILES
+PRESET_CHARACTER_FILES = tuple(f'avatars/{name}' for name in CHARACTER_AVATAR_FILES)
+PRESET_PROTECTED_FILES = (
+    PRESET_MANAGED_FILES + PRESET_AVATAR_FILES + PRESET_ART_FILES
+    + PRESET_CHARACTER_FILES + THEME_PLACEHOLDER_FILES
+)
 PRESET_SLUGS = tuple(preset['slug'] for preset in PRESET_THEMES)
 PRESET_BY_SLUG = {preset['slug']: preset for preset in PRESET_THEMES}
 
@@ -302,7 +320,7 @@ def theme_picker_groups(choices) -> list[dict]:
             groups['cabinet']['items'].append({
                 'slug': slug,
                 'name': name,
-                'description': 'System default — wood den scenery, green glass.',
+                'description': 'A dream room at night: aurora sky, crescent moon and green glass.',
                 'era': DEFAULT_ERA,
                 'icon_pack': 'outline',
             })
@@ -362,6 +380,10 @@ def source_fingerprint(root: str) -> str:
     digest.update(f'generator={GENERATOR_VERSION}\n'.encode('utf-8'))
     for rel in sorted(iter_tree_files(root)):
         digest.update(f'{rel}:{file_digest(os.path.join(root, *rel.split("/")))}\n'.encode('utf-8'))
+    # Redrawn per-theme art makes every preset stale too.
+    if os.path.isdir(THEME_ART_ROOT):
+        for rel in sorted(iter_tree_files(THEME_ART_ROOT)):
+            digest.update(f'theme_art/{rel}:{file_digest(os.path.join(THEME_ART_ROOT, *rel.split("/")))}\n'.encode('utf-8'))
     return digest.hexdigest()
 
 
@@ -766,6 +788,28 @@ def build_preset(source_root: str, target: str, preset: dict, fingerprint: str) 
     _write_preset_tokens_css(source_root, target, preset)
     _write_preset_avatars(source_root, target, preset)
     _write_preset_era_art(source_root, target, preset)
+    _write_preset_theme_art(source_root, target, preset)
+
+
+def _write_preset_theme_art(source_root: str, target: str, preset: dict, art_root: str | None = None) -> None:
+    """Copy this preset's own drawn avatars and fallback art over the defaults.
+
+    A preset without a folder keeps what it copied from the default theme. Like
+    the recoloured avatars and room art, a file is only written where the theme
+    source tree ships that folder — otherwise its absence would read as stale.
+    """
+    source = os.path.join(art_root or THEME_ART_ROOT, preset['slug'])
+    if not os.path.isdir(source):
+        return
+    for rel in PRESET_CHARACTER_FILES + THEME_PLACEHOLDER_FILES:
+        src = os.path.join(source, *rel.split('/'))
+        if not os.path.isfile(src):
+            continue
+        if not os.path.isdir(os.path.join(source_root, rel.split('/')[0])):
+            continue
+        dest = os.path.join(target, *rel.split('/'))
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copyfile(src, dest)
 
 
 def install_preset_themes(themes_path: str, default_source: str, *, force: bool = False) -> int:

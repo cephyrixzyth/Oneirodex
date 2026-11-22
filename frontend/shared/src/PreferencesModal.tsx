@@ -4,6 +4,7 @@ import { getPreferences, putPreferences, type PreferencesPayload } from './prefe
 import { csrfHeaders } from './csrf.js'
 import { errorFromResponse } from './envelopeError.js'
 import { RailIcon } from './railIcons.js'
+import { ThemeCardMini } from './ThemeCardMini.js'
 import './PreferencesModal.css'
 
 interface Props {
@@ -393,6 +394,7 @@ export function PreferencesModal({ open, onClose }: Props): ReactNode {
                           <span className="od-era-floor" />
                           <span className="od-era-lamp" />
                           <span className={`theme-swatch-chip theme-swatch-${theme.slug}`} />
+                          <ThemeCardMini slug={theme.slug} iconPack={theme.icon_pack} />
                         </span>
                         <strong>{theme.name}</strong>
                         {theme.description && <small>{theme.description}</small>}

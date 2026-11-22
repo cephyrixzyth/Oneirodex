@@ -44,6 +44,11 @@ def _current_theme_era() -> tuple[str, str]:
     Unauthenticated / no preference falls back to the default wood den so
     untitled tiles still get room scenery rather than a flat green slab.
     """
+    from oneirodex.utils.request_theme import request_theme
+
+    native = request_theme()
+    if native:
+        return native, era_for_theme(native)
     slug = 'default'
     try:
         from flask_login import current_user
@@ -71,11 +76,15 @@ def _placeholder_cover_filename(title, app=None):
     try:
         theme_slug, era = _current_theme_era()
         covers_dir = generated_root(getattr(app, 'root_path', None)) / _PLACEHOLDER_COVER_SUBDIR
-        filename = f'{_placeholder_slug(title)}_{theme_slug}.jpg'
+        from oneirodex.utils.themed_placeholder import PLACEHOLDER_STYLE_VERSION, render_themed_title_cover
+
+        filename = f'{_placeholder_slug(title)}_{theme_slug}_{PLACEHOLDER_STYLE_VERSION}.jpg'
         dest = covers_dir / filename
         if not dest.is_file():
             covers_dir.mkdir(parents=True, exist_ok=True)
-            img = render_cover_art(
+            # The theme's own "no cover" art with this title; the generic era
+            # painter only when the theme art is not installed.
+            img = render_themed_title_cover(title, theme_slug) or render_cover_art(
                 600, 900, title=title, variant='tile', era=era or DEFAULT_ERA,
             )
             img.convert('RGB').save(dest, format='JPEG', quality=88, optimize=True)

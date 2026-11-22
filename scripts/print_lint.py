@@ -65,6 +65,7 @@ EXEMPT = {
     "scripts/migrate_reusable_secrets.py",
     "scripts/migrate_store_credentials.py",
     "scripts/refresh_steam_covers.py",
+    "scripts/generate_theme_art.py",
     "scripts/reset_admin_password.py",
     "scripts/upgrade_test_schema.py",
     "scripts/validate-native-install.py",

@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-**Product version:** 1.3.2 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
+**Product version:** 1.3.3 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
 
 Hub for product, ops, and developer docs. Public name **Oneirodex**. Runtime env is `ONEIRODEX_*` only ([ADR 0003](adr/0003-product-name-oneirodex.md)). Package `oneirodex/`, Compose defaults `oneirodex-*`, preferred Hub image `cephyrixzyth/oneirodex` once published.
 
@@ -103,7 +103,7 @@ Docker and cloud demo operations: [Docker Compose deploy](runbooks/docker-compos
 |---|---|
 | Product (shipped today) | Oneirodex (public string) |
 | Ops / code identifiers | Compose defaults `oneirodex-*`; npm `@oneirodex/api-client`; env `ONEIRODEX_*` only — [ADR 0003](adr/0003-product-name-oneirodex.md) |
-| Version | 1.3.2 |
+| Version | 1.3.3 |
 | GitHub | cephyrixzyth/oneirodex |
 | Containers | oneirodex-app (single-container or app role) · oneirodex-db (optional separate Postgres) |
 | Optional voice | oneirodex-livekit (`--profile livekit`) |

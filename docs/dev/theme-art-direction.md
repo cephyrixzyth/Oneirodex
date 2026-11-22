@@ -69,9 +69,42 @@ Anyone authoring or generating room art works inside that contract:
 - quiet. This is backdrop. Anything with hard contrast in the centre fights the
   catalogue grid that sits on top of it.
 
+## Per-theme drawn art (1.3.3)
+
+Everything below is drawn in code by `scripts/generate_theme_art.py`
+(`scripts/theme_art/`), so a redesign is a code change and one rerun:
+
+- **Icon packs.** One per theme, each a different hand on the same 17 glyphs —
+  outline (Oneirodex), sprout (Mosslight), pixel (Afterglow Arcade), hairline
+  (Graphite Studio), dial (Signal Room), bubble (Tape Deck), orbit (Deep Space
+  Media), engraved (Tideglass). They are CSS masks, so colour comes from the
+  theme; identity is in the shape.
+- **Avatars.** Eight original characters (fox, robot, owl, cat, astronaut,
+  ghost, frog, knight) drawn per theme — pixelated, line art, dial, porthole and
+  so on. Each preset copies its own set from `oneirodex/setup/theme_art/<slug>/`
+  and `avatar_url` serves the signed-in member's theme.
+- **Fallback art.** Each theme has its own "no cover" card and library hero;
+  per-game placeholders set the game's title on the theme's title-less cover
+  (`static/newstyle/covers/<theme>.jpg`) in the theme's lettering
+  (`oneirodex/utils/themed_placeholder.py`).
+- **Brand.** The mark is a crescent dream-moon over a controller; the app icons
+  and favicons are rendered from it. No GameTheca art remains.
+
+## Visible room backdrop
+
+The room stays on screen once a page has loaded. The shell wrappers no longer
+paint the page colour; the rail and top bar are the theme glass; the room sits
+behind everything with one of three treatments chosen per theme — *vignette*
+(Mosslight, Afterglow Arcade, Deep Space Media), *spotlight* (Graphite Studio,
+Tape Deck) or *cinematic* (Oneirodex, Signal Room, Tideglass). Cover tiles get a
+per-theme frame (`--od-tile-frame`) and headings the theme's display face. The
+default theme has its own drawn dream room (`static/newstyle/rooms/oneirodex.webp`).
+The theme picker shows a miniature of each theme (`ThemeCardMini`).
+
 ## Avatars and platform marks
 
-The seven stock avatar SVGs are newly drawn in one matching emblem style. They
+The eight drawn characters above are the main stock set. The seven older emblem
+SVGs are still shipped and recoloured. They are newly drawn in one matching emblem style. They
 use only the accent, panel, and muted source colours so the preset generator can
 recolour the complete set without changing member-uploaded portraits. Platform
 marks use a theme-specific illustration direction in addition to the platform

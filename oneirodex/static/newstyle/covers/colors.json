@@ -1,0 +1,42 @@
+{
+  "default": {
+    "text": "#eafff3",
+    "muted": "#9fcdb6",
+    "accent": "#3ddc84"
+  },
+  "greenhouse": {
+    "text": "#effcf4",
+    "muted": "#9fcdb0",
+    "accent": "#75e6a4"
+  },
+  "afterglow": {
+    "text": "#fff0f6",
+    "muted": "#f6a7c9",
+    "accent": "#ff5b9b"
+  },
+  "monochrome": {
+    "text": "#f3f6f9",
+    "muted": "#a7b1bc",
+    "accent": "#d9e0e8"
+  },
+  "signal": {
+    "text": "#fff3df",
+    "muted": "#e0b87a",
+    "accent": "#f1b85b"
+  },
+  "tape-deck": {
+    "text": "#f6efff",
+    "muted": "#cdb7f2",
+    "accent": "#c4a3ff"
+  },
+  "deep-space": {
+    "text": "#eef8ff",
+    "muted": "#a5cdea",
+    "accent": "#6ac7ff"
+  },
+  "tideglass": {
+    "text": "#effcfa",
+    "muted": "#a8d8d0",
+    "accent": "#81e1d2"
+  }
+}
