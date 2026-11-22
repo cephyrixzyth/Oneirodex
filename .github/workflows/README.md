@@ -1,9 +1,16 @@
 # Workflows
 
+> **Doc status:** Active
+
 | File | Runs on | What it gates |
 |---|---|---|
 | [ci-tests.yml](ci-tests.yml) | push + PR to `main` | The **core** pytest subset, member-app / admin-app / desktop vitest, and the two ratchets. Not the whole `tests/` tree — that is local/release-only, so passing CI is not the same as passing the suite. |
 | [desktop-build.yml](desktop-build.yml) | `v*` tags + manual (+ path-filtered pushes/PRs) | Tauri desktop client: six unsigned installers (full + thin × Windows / macOS / Linux). A tag push or a manual run from the default branch or matching tag attaches them only when the tag matches `VERSION`, points to the build commit reachable from the default branch, and already has a GitHub Release. Unsigned `.exe` is the supported path — see [desktop-code-signing.md](../../docs/runbooks/desktop-code-signing.md). |
+| [docker-publish.yml](docker-publish.yml) | `v*` tags + manual | Normal release mode tests and publishes the multi-architecture image, then syncs the CA feed for stable tags. Explicit manual `preflight_only=true` builds both architectures and checks fresh amd64 startup without publishing, using read-only repository permissions and no release-environment credentials. |
+
+Normal manual Desktop builds also select the populated README/theme visual job.
+Exclusive desktop probes and release-tag builds omit that job. The screenshots
+and image-preflight receipts are diagnostics, separate from release installers.
 
 ## There is no codeql.yml (retired 2026-08-24)
 

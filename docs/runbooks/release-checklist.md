@@ -37,6 +37,16 @@ The CI marker set is the pull-request gate. Follow [local-postgres-pytest.md](lo
 
 Before image publish: rebuild SPA `static/dist` and grep against the private banned list — [scrub-shipped-bundles.md](scrub-shipped-bundles.md) (SCRUB-7).
 
+For an unpublished container check on a disposable runner, manually dispatch
+**Docker publish** on the candidate branch with **preflight_only=true**. This
+mode builds `linux/amd64` and `linux/arm64` without a registry push, then checks
+fresh embedded-database startup, the served app icon and all five packaged SPA
+hash inventories on the native amd64 image. It uses the Docker environment
+template with ephemeral secrets and temporary storage; owned container removal
+is verified. Download `unpublished-image-preflight` for the source/version
+receipt. ARM64 is build-qualified by this mode; its runtime is not exercised.
+Normal tag publication and the final main-commit CI gates remain required.
+
 ## Verify
 
 ```bash

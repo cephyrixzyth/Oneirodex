@@ -227,7 +227,9 @@ jobs:
         run: npm ci
 
       - name: Run ESLint
-        run: npm run lint
+        run: |
+          npm run lint
+          node scripts/ci/test_docker_preflight_workflow.cjs
 
       - name: Run Prettier check
         run: npm run format:check
