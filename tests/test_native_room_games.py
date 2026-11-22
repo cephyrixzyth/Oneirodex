@@ -1,5 +1,6 @@
 """Full native request-auth integration; execute only in authorized disposable CI."""
 import json
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,18 +27,22 @@ class Data:
 def _client():
     data = Data()
     members = {i: SimpleNamespace(id=i, user_id=f'room-member-{i}', name=f'member-{i}', role='user',
-        is_active=True, state=True, is_authenticated=True) for i in (41, 42)}
+        is_active=True, state=True, is_authenticated=True, password_hash=f'synthetic-room-{i}') for i in (41, 42)}
     settings = SimpleNamespace(config={'SECRET_KEY': SECRET, 'TESTING': True, 'CSP_ENABLED': False})
     router = create_room_games_router(settings, find_user=members.get, find_token=lambda _: None,
-        commit_token_touch=lambda _: None, load_user_id=lambda value: members.get(int(value.split(':')[0])), data_access=data)
+        commit_token_touch=lambda _: None, data_access=data)
     app = FastAPI()
     app.include_router(router)
     return TestClient(app), data, members
 
 
 def _session(client, member=41):
-    state = {'_user_id': f'{member}:fp', '_fresh': True}
+    fingerprint = hashlib.sha256(f'synthetic-room-{member}'.encode()).hexdigest()[:16]
+    state = {'_user_id': f'{member}:{fingerprint}', '_fresh': True}
     token = generate_csrf_token(state, SECRET)
+    # Response renewal adds a host-scoped cookie. Clear it before replacing the
+    # test identity so an older scoped cookie cannot override the new one.
+    client.cookies.clear()
     client.cookies.set('session', dump_session_cookie(state, SECRET))
     return {'X-CSRFToken': token}
 

@@ -279,7 +279,7 @@ def test_populated_manifest_relations_follow_owner_dispositions(db_session, tmp_
         'user_owned_titles.id': parent_title.id,
     }
     relations = manifest['relations']
-    assert len(relations) == 52
+    assert len(relations) == 53
     populated = []
     metadata = db.Model.metadata
     for relation in relations:
