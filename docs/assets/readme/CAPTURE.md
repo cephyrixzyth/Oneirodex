@@ -9,8 +9,9 @@ For a release whose verification must stay off the operator workstation, run
 Alongside the six installer builds, **Populated release UI and theme artwork**
 builds all five SPAs, launches the native app through `startweb.sh` against an
 owned temporary PostgreSQL test database, and signs in through the real UI.
-It records Library, Systems, populated Chat and Preferences, then saves and
-reloads every built-in theme and verifies its server-generated cover URLs.
+It records every still with a README slot, including Library, Systems, populated
+Chat, Preferences and admin pages, then saves and reloads every built-in theme
+and verifies its server-generated cover and stock-avatar URLs.
 The default theme is checked with the browser's OS preference set to light.
 
 Download `release-visual-evidence`, inspect the real PNGs, and copy its `readme/`

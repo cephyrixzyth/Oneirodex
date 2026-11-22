@@ -53,8 +53,10 @@ def seed_owned(payload):
             if user is None or user.name != 'SyntheticCIAdult':
                 raise ProbeFailure('release_visual_seed_user_mismatch')
             user.name = 'demo-curator'; user.role = 'admin'; user.set_password(payload['password'])
+            user.avatarpath = 'newstyle/avatars/fox.svg'
             user.preferences = UserPreference(theme='default', icon_pack='outline', items_per_page=50)
             peer = User(name='demo-member', email='demo-member@example.test', role='user', state=True, is_email_verified=True)
+            peer.avatarpath = 'newstyle/avatars/owl.svg'
             peer.set_password(secrets.token_urlsafe(40)); db.add(peer)
             existing = db.execute(select(Game).order_by(Game.id)).scalars().all()
             for game, title in zip(existing, ('Lunar Workshop', 'Evening Notebook')): game.name = title
@@ -130,7 +132,7 @@ def browser_review(base, username, password, output, report):
             if 'dark' not in page.evaluate("getComputedStyle(document.documentElement).colorScheme"):
                 raise ProbeFailure('release_visual_default_not_dark_with_light_os')
             report['default_dark_with_light_os'] = True
-            selected = [shot for shot in media.SHOTS if shot.name in ('library','systems-platforms','chat-channels','preferences')]
+            selected = [shot for shot in media.SHOTS if shot.readme]
             def chat(page):
                 media.prep_chat(page)
                 page.locator('button.od-chat-channel').filter(has_text='The lounge').click()
@@ -164,6 +166,8 @@ def browser_review(base, username, password, output, report):
                 if not common.page_is_healthy(page)[0]: raise ProbeFailure('release_visual_theme_page_unhealthy')
                 if not page.evaluate('(slug)=>Array.from(document.images).some(image=>image.src.includes("_"+slug+"_t2.jpg"))',slug):
                     raise ProbeFailure('release_visual_member_cover_theme_mismatch')
+                if not page.evaluate('(slug)=>Array.from(document.images).some(image=>image.src.includes("/themes/"+slug+"/avatars/fox.svg"))',slug):
+                    raise ProbeFailure('release_visual_member_avatar_theme_mismatch')
                 page.screenshot(path=str(themes/(slug+'.png')))
                 checked.append(slug)
             if failed_assets:

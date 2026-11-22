@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The theme's room stays visible once a page has loaded, gently blurred and darkened per theme (vignette, spotlight or cinematic) so covers and text stand in front of it; the rail and top bar are lighter glass.
 - Cover tiles have a per-theme frame and headings use the theme's display face (bundled pixel, mono and display fonts for Afterglow Arcade, Signal Room, Tape Deck and Deep Space Media).
-- New Oneirodex mark (a crescent dream-moon over a controller) for the app icons and favicons. The last images carrying the old GameTheca name — the default cover, the library hero and the app icons — are replaced.
+- New Oneirodex mark (a crescent dream-moon over a controller) for the app icons and favicons, replacing the former default cover, library hero and app icons.
 
 ### Fixed
 
