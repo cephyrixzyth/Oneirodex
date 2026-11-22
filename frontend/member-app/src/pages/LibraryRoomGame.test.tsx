@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { LibraryRoom } from './LibraryRoom'
@@ -81,5 +81,52 @@ test('owns the game session and requires explicit resume before play', async () 
   )
   expect(runtime.status()).toBe('disposed')
   expect(select).not.toHaveBeenCalled()
+  unmount()
+})
+
+test('honors the latest world choice while an exit save is pending', async () => {
+  progress.load.mockResolvedValue({
+    game_id: 'moonfall-pinball',
+    revision: 3,
+    state: validateMoonfall(savedRun),
+    updated_at: null,
+  })
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  progress.save.mockImplementation(async (revision, state) => {
+    await gate
+    return { game_id: 'moonfall-pinball', revision: revision + 1, state, updated_at: null }
+  })
+  const user = userEvent.setup()
+  const { unmount } = render(
+    <LibraryRoom
+      memberId="member-a"
+      initiallyOpen
+      scope=""
+      onScope={vi.fn()}
+      onFavorites={vi.fn()}
+      games={[]}
+      page={1}
+      pages={1}
+      pageSize={48}
+      total={0}
+      ready
+      error={false}
+      selected={null}
+      detailMessage=""
+      onSelect={vi.fn()}
+      onPage={vi.fn()}
+      onFavorite={vi.fn()}
+      favoriteMessage=""
+    />,
+  )
+  await user.click(await screen.findByRole('button', { name: 'Resume saved run' }))
+  act(() => runtime.tick(1 / 120))
+  await user.selectOptions(screen.getByLabelText('Visit room'), 'greenhouse')
+  await user.selectOptions(screen.getByLabelText('Visit room'), 'oneirodex')
+  release()
+  await waitFor(() => expect(screen.getByLabelText('Visit room')).toHaveValue('oneirodex'))
   unmount()
 })

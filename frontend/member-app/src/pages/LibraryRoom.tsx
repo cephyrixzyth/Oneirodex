@@ -100,13 +100,14 @@ export function LibraryRoom({
   const [gameView, setGameView] = useState<ReturnType<MoonfallSession['view']> | null>(null)
   const session = useRef<MoonfallSession | null>(null)
   const changingRoom = useRef(false)
+  const pendingChange = useRef<{ change: () => void; kind: 'user' | 'theme' } | null>(null)
   useEffect(() => {
     if (!open) return
     const sync = () => {
       const theme = document.documentElement.dataset.theme || 'default'
       if (theme === accountTheme) return
       if (visitedRoom) setAccountTheme(theme)
-      else void leave(() => setAccountTheme(theme))
+      else void leave(() => setAccountTheme(theme), 'theme')
     }
     sync()
     const observer = new MutationObserver(sync)
@@ -254,6 +255,7 @@ export function LibraryRoom({
       })
     return () => {
       cancelled = true
+      pendingChange.current = null
       session.current?.dispose()
       session.current = null
       setGameView(null)
@@ -291,11 +293,16 @@ export function LibraryRoom({
       setRequesting(false)
     }
   }
-  async function leave(change: () => void) {
+  async function leave(change: () => void, kind: 'user' | 'theme' = 'user') {
+    // Keep the latest explicit choice while a save finishes. Background theme
+    // synchronization must not replace a pending user action.
+    if (!pendingChange.current || kind === 'user' || pendingChange.current.kind === 'theme')
+      pendingChange.current = { change, kind }
     if (changingRoom.current) return
     changingRoom.current = true
     try {
       const safe = (await session.current?.beforeLeave()) ?? true
+      if (!pendingChange.current) return
       if (
         !safe &&
         !window.confirm(
@@ -303,8 +310,11 @@ export function LibraryRoom({
         )
       )
         return
-      change()
+      const request = pendingChange.current
+      pendingChange.current = null
+      request.change()
     } finally {
+      pendingChange.current = null
       changingRoom.current = false
     }
   }
@@ -335,6 +345,7 @@ export function LibraryRoom({
       {open && (
         <>
           <canvas
+            key={effectiveTheme + ':' + memberId}
             ref={canvas}
             className="od-library-room__canvas"
             tabIndex={0}

@@ -272,3 +272,19 @@ it('exposes headset comfort and recovery actions through the same guarded sessio
   runtime.tick(1 / 120)
   expect(runtime.snapshot().recoveries).toBe(1)
 })
+
+it('does not delay leaving an unselected saved-run load', async () => {
+  const gate = defer<ReturnType<typeof saved>>()
+  const { session } = setup({ load: () => gate.promise })
+  const loading = session.initialize()
+  let left = false
+  const leaving = session.beforeLeave().then(() => {
+    left = true
+  })
+  await Promise.resolve()
+  await Promise.resolve()
+  const immediate = left
+  gate.resolve(saved())
+  await Promise.all([loading, leaving])
+  expect(immediate).toBe(true)
+})

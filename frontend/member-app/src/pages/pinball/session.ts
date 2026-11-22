@@ -163,6 +163,9 @@ export function createMoonfallSession(
   }
   async function beforeLeave() {
     if (!alive || status === 'denied') return true
+    // Loading metadata is not an active run. Disposal aborts this owned read;
+    // it must not hold up a theme/room transition or overwrite the saved run.
+    if (!chosen && !resetting) return true
     game.pause()
     clearCheckpoint()
     if (inFlight) await inFlight

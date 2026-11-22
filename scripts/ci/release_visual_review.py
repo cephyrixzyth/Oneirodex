@@ -199,6 +199,7 @@ def browser_review(base, username, password, output, report, room_fixture=None):
                       gamePanelPresent: !!document.querySelector('.od-moonfall'),
                       renderFallback: document.body.textContent.includes('This browser could not open the 3D room.'),
                       roomExpanded: document.querySelector('.od-library-room__header button')?.getAttribute('aria-expanded')==='true'
+                      ,observatorySelected: document.querySelector('.od-library-room__controls select')?.value==='oneirodex'
                     })''')
                     page.screenshot(path=str(output/'room-failure.png'),timeout=15_000)
                 except Exception:

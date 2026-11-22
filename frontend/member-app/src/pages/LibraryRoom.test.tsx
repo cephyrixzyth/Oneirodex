@@ -122,3 +122,20 @@ test('follows account theme changes while an explicit visit remains independent'
   unmount()
   delete document.documentElement.dataset.theme
 })
+
+test('replaces the disposed WebGL canvas when visiting another world', async () => {
+  const user = userEvent.setup()
+  render(<LibraryRoom {...props} initiallyOpen />)
+  await screen.findByLabelText('Visit room')
+  const before = screen.getByLabelText(
+    'Interactive library room. Drag to look, or use the station buttons below.',
+  )
+  await user.selectOptions(screen.getByLabelText('Visit room'), 'oneirodex')
+  await waitFor(() =>
+    expect(
+      screen.getByLabelText(
+        'Interactive library room. Drag to look, or use the station buttons below.',
+      ),
+    ).not.toBe(before),
+  )
+})
