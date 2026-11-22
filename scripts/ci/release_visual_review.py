@@ -133,6 +133,7 @@ def browser_review(base, username, password, output, report):
             selected = [shot for shot in media.SHOTS if shot.name in ('library','systems-platforms','chat-channels','preferences')]
             def chat(page):
                 media.prep_chat(page)
+                page.locator('button.od-chat-channel').filter(has_text='The lounge').click()
                 page.get_by_text('The evening collection is ready.',exact=True).first.wait_for(state='visible')
                 report['populated_chat_visible'] = True
             selected = [replace(shot,prepare=chat) if shot.name=='chat-channels' else shot for shot in selected]

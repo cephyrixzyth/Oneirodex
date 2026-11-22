@@ -2,6 +2,26 @@
 
 > **Doc status:** Active
 
+## Disposable CI capture
+
+For a release whose verification must stay off the operator workstation, run
+**Desktop build** manually on the candidate branch with the default inputs.
+Alongside the six installer builds, **Populated release UI and theme artwork**
+builds all five SPAs, launches the native app through `startweb.sh` against an
+owned temporary PostgreSQL test database, and signs in through the real UI.
+It records Library, Systems, populated Chat and Preferences, then saves and
+reloads every built-in theme and verifies its server-generated cover URLs.
+The default theme is checked with the browser's OS preference set to light.
+
+Download `release-visual-evidence`, inspect the real PNGs, and copy its `readme/`
+files into the corresponding slots here. Record the source commit, workflow run
+and limitations before claiming the media is current. Diagnostic artifacts are
+excluded from release installers. Exclusive probes and release-tag builds do
+not select this job. The controller refuses local execution, operator `.env`
+files and unmarked databases; cleanup verifies that its database is gone.
+Long-lived activity/download streams are disabled for capture, so these stills
+do not qualify live streaming or whole-application behavior parity.
+
 **R2040 type correction:** All 65 member production output files match the
 inspected R2038 build byte-for-byte. No UI behavior or layout changed; existing
 populated captures remain applicable. A new screenshot/browser run is skipped
