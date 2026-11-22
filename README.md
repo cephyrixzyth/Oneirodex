@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/readme/hero-banner.png" alt="Oneirodex — Discover, with shelves of the household library" width="960" />
+  <img src="docs/assets/readme/hero-banner.png" alt="Oneirodex Library with themed cover artwork" width="960" />
 </p>
 
 <p align="center">
