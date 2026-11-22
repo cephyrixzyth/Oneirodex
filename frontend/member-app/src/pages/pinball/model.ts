@@ -133,11 +133,11 @@ function launch(state: MoonfallState, input: MoonfallInput) {
   state.features.rampTicks = 0
   state.features.launchAim =
     input.left && input.right
-      ? -2.7
+      ? -0.2
       : input.left
-        ? -3.3
+        ? -0.6
         : input.right
-          ? -0.2
+          ? -3.3
           : -0.65 - (state.seed % 20) / 100
 }
 
@@ -220,7 +220,7 @@ function visitTargets(state: MoonfallState, ball: MoonfallBall) {
 function stepBall(state: MoonfallState, ball: MoonfallBall, input: MoonfallInput) {
   if (ball.cooldown) ball.cooldown--
   const features = state.features
-  if (features.launchAim && ball.y < 0.26 && ball.vy < 0) {
+  if (features.launchAim && ball.y < 0.5 && ball.vy < 0) {
     ball.vx = features.launchAim
     ball.vy = -1.8
     features.launchAim = 0

@@ -75,3 +75,19 @@ test('a short held-flipper loop cannot substitute for the authored mission sessi
   }
   expect(state.phase).not.toBe('complete')
 })
+
+test.each([
+  { left: true, right: false, id: 'orbit' as const },
+  { left: false, right: true, id: 'aurora' as const },
+  { left: true, right: true, id: 'moon' as const },
+])('launch steering reaches $id as its first skill-shot target', ({ left, right, id }) => {
+  const state = newMoonfall(42)
+  for (let tick = 0; tick < 360; tick++) {
+    stepMoonfall(state, { left, right, launch: tick === 0, recover: false }, 1 / 120)
+    if (state.features.skillShots) break
+  }
+  expect(state.features.skillShots).toBe(1)
+  const target = targetPosition(id, state.tick),
+    ball = state.balls[0]
+  expect(Math.hypot(ball.x - target.x, ball.y - target.y)).toBeLessThan(0.21)
+})

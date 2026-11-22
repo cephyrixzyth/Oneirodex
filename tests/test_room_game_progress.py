@@ -1,9 +1,13 @@
 """Real persistence/cascade checks for disposable CI; do not run on operator DBs."""
 import json
+import importlib.util
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from unittest.mock import patch
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 
 from oneirodex.models import RoomGameProgress, User
 from oneirodex.runtime_native.room_game_store import RoomGameProgressData, RoomProgressConflict
@@ -11,6 +15,17 @@ from oneirodex.runtime_native.room_game_store import RoomGameProgressData, RoomP
 
 def _state():
     return json.loads((Path(__file__).parent / 'fixtures' / 'moonfall-save-v1.json').read_text())
+
+
+def test_migration_adopts_progress_created_by_current_metadata(db_session):
+    migration_path = Path(__file__).resolve().parents[1] / 'alembic/versions/6a7b8c9d0e1f_room_game_progress.py'
+    spec = importlib.util.spec_from_file_location('adopt_room_progress', migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    operations = Operations(MigrationContext.configure(db_session.connection()))
+    with patch.object(migration, 'op', operations):
+        migration.upgrade()
+    assert db_session.get(RoomGameProgress, (-1, 'moonfall-pinball')) is None
 
 
 def _member(session):

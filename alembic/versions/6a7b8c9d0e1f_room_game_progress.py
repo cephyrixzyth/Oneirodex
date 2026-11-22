@@ -9,6 +9,9 @@ depends_on = None
 
 
 def upgrade():
+    # startweb creates current ORM tables before adopting the Alembic baseline.
+    if sa.inspect(op.get_bind()).has_table('room_game_progress'):
+        return
     op.create_table(
         'room_game_progress',
         sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),

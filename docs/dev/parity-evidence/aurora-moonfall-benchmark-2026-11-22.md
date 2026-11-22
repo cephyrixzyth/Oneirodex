@@ -17,9 +17,9 @@ The owner approved the [eight-world direction](../../superpowers/specs/2026-11-2
 
 | Check | Observed result | Limit |
 |---|---|---|
-| Focused frontend slice, button and Docker-import ratchets | 107 tests passed across 14 files | Pure model, synthetic DOM and mocked graphics/audio; no actual browser/GPU |
+| Focused frontend slice, button and Docker-import ratchets | 110 tests passed across 14 files | Pure model, synthetic DOM and mocked graphics/audio; no actual browser/GPU |
 | Existing member bootstrap/router/App smoke slice | 28 tests passed across four files | Synthetic DOM; not an authenticated running app |
-| Python schema/model/store/router slice | 23 unittest methods passed | Fake sessions/authentication and direct endpoint invocation; no database/server |
+| Python schema/model/store/router/migration slice | 25 unittest methods passed | Fake sessions/authentication and direct endpoint invocation; no database/server |
 | Production member bundle | Passed | Static compilation only; existing large-chunk warning remains |
 | Member TypeScript | Passed | Includes test source |
 | ESLint / Prettier / CSS tokens | Passed; zero CSS violations | No baseline increase |
@@ -46,6 +46,8 @@ One deterministic replay uses seed 4, both flippers held during the first 27 tic
 Deferred minor: acknowledgement text can say “Progress saved” while a newer checkpoint is already dirty. Dirty-state tracking and exit guards continue to retain that distinction.
 
 ## Remaining acceptance
+
+Qualification attempt [45069505232](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45069505232), source `df5318d6`, passed the migration/drift checks and all nine native request/PostgreSQL/deletion tests. Its actual `startweb.sh` capture startup failed: ORM `create_all` had already created the progress table before the new migration attempted to create it again. The migration now adopts an existing table, with pure regression coverage and an additional real Postgres test awaiting the next run. This failed attempt produced no room screenshots. A separate launch-deflection correction now has all three aim choices covered by physics checks.
 
 1. Run the actual manual disposable-CI visual job and inspect its source-bound captures and report. No local app/database/browser run substitutes for this gate.
 2. Run real native HTTP and PostgreSQL tests, migration/cascade inventory, simultaneous writes and account transitions. Authored integration tests are not recorded as passes.

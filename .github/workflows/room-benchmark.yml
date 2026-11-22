@@ -3,6 +3,20 @@ name: Aurora Moonfall benchmark
 on:
   push:
     branches: ['codex/aurora-moonfall-benchmark']
+    paths:
+      - 'frontend/**'
+      - 'oneirodex/**'
+      - 'alembic/**'
+      - 'tests/**'
+      - 'scripts/ci/**'
+      - 'asgi.py'
+      - 'config.py'
+      - 'startweb*'
+      - 'Dockerfile'
+      - 'package*.json'
+      - 'tsconfig.base.json'
+      - 'requirements*'
+      - '.github/workflows/room-benchmark.yml'
   workflow_dispatch:
 
 permissions:
