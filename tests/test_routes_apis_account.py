@@ -259,9 +259,13 @@ class TestStockAvatars:
         login(client, member)
         body = client.get('/api/account/summary').get_json()
 
-        assert len(body['stock_avatars']) == 10
+        assert len(body['stock_avatars']) == 18
         assert {row['id'] for row in body['stock_avatars'] if row['path'].endswith('.webp')} == {
             'moss-keeper', 'radio-crab', 'star-moth', 'reel-mechanic',
+        }
+        # The eight characters drawn per theme (scripts/generate_theme_art.py).
+        assert {'fox', 'robot', 'owl', 'cat', 'astronaut', 'ghost', 'frog', 'knight'} <= {
+            row['id'] for row in body['stock_avatars']
         }
         assert {entry['id'] for entry in body['stock_avatars']} == {
             entry['id'] for entry in STOCK_AVATARS

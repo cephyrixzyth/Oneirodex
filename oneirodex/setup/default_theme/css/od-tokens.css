@@ -77,7 +77,7 @@
   /* Era room the chrome atmosphere keys on (play rooms + decade themes). */
   --od-era: wood_den_80s;
   /* Style B glass launcher chrome */
-  --od-glass-bg: rgba(20, 24, 32, 0.72);
+  --od-glass-bg: rgba(20, 24, 32, 0.5);
   --od-glass-border: rgba(255, 255, 255, 0.14);
   --od-glass-blur: 12px;
   /* Platform skin overrides these when browsing a single system */

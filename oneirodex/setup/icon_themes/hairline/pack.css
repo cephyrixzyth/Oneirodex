@@ -1,0 +1,147 @@
+html[data-icon-pack="hairline"] .od-icon:is([data-icon="library"], [data-icon="discover"], [data-icon="systems"], [data-icon="download"], [data-icon="downloads"], [data-icon="favorites"], [data-icon="settings"], [data-icon="collections"], [data-icon="wishlist"], [data-icon="updates"], [data-icon="ownership"], [data-icon="calendar"], [data-icon="news"], [data-icon="playtime"], [data-icon="user"], [data-icon="menu"], [data-icon="more"], [data-icon="play"]) {
+  fill: none;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="library"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/library.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/library.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="library"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="discover"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/discover.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/discover.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="discover"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="systems"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/systems.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/systems.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="systems"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="download"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/download.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/download.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="download"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="downloads"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/download.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/download.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="downloads"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="favorites"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/favorites.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/favorites.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="favorites"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="settings"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/settings.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/settings.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="settings"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="collections"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/collections.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/collections.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="collections"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="wishlist"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/wishlist.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/wishlist.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="wishlist"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="updates"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/updates.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/updates.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="updates"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="ownership"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/ownership.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/ownership.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="ownership"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="calendar"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/calendar.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/calendar.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="calendar"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="news"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/news.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/news.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="news"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="playtime"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/playtime.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/playtime.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="playtime"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="user"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/user.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/user.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="user"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="menu"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/menu.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/menu.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="menu"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="more"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/more.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/more.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="more"] > * {
+  opacity: 0;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="play"] {
+  background-color: currentColor;
+  -webkit-mask: url("/static/library/icon-themes/hairline/icons/play.svg") center / contain no-repeat;
+  mask: url("/static/library/icon-themes/hairline/icons/play.svg") center / contain no-repeat;
+}
+html[data-icon-pack="hairline"] .od-icon[data-icon="play"] > * {
+  opacity: 0;
+}

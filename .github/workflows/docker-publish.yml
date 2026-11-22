@@ -10,6 +10,12 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      preflight_only:
+        description: 'Build both image architectures and verify clean startup without publishing.'
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   contents: read
@@ -19,7 +25,56 @@ env:
   IMAGE_NAME: oneirodex
 
 jobs:
+  image-preflight:
+    if: github.event_name == 'workflow_dispatch' && inputs.preflight_only
+    name: Unpublished image build and clean startup
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check disposable build workspace
+        run: |
+          test ! -e .env
+          test "$(df -Pk . | awk 'NR==2 {print $4}')" -gt 8388608
+          python3 scripts/check_release_license_files.py
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build both release architectures without publishing
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          outputs: type=cacheonly
+          build-args: ONEIRODEX_BUILD_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,scope=release-preflight
+      - name: Load the native image for clean startup
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: oneirodex:release-preflight
+          build-args: ONEIRODEX_BUILD_SHA=${{ github.sha }}
+          cache-from: type=gha,scope=release-preflight
+      - name: Verify fresh template startup and packaged assets
+        env:
+          RELEASE_DOCKER_PREFLIGHT_ALLOWED: '1'
+        run: bash scripts/ci/docker_release_preflight.sh
+      - name: Preserve image verification receipt
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: unpublished-image-preflight
+          path: ${{ runner.temp }}/oneirodex-image-preflight.json
+          if-no-files-found: warn
+
   tests:
+    if: github.event_name != 'workflow_dispatch' || inputs.preflight_only != true
     name: Test suite
     uses: ./.github/workflows/ci-tests.yml
 
@@ -28,8 +83,9 @@ jobs:
     # Manual publishes are release operations and must build the default branch.
     # Version tags remain the normal immutable release path.
     if: >-
-      github.event_name != 'workflow_dispatch' ||
-      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      (github.event_name != 'workflow_dispatch' || inputs.preflight_only != true) &&
+      (github.event_name != 'workflow_dispatch' ||
+       github.ref == format('refs/heads/{0}', github.event.repository.default_branch))
     runs-on: ubuntu-latest
     environment: DOCKERHUB
     timeout-minutes: 60

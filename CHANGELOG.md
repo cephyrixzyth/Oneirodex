@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] — 2026-11-21
+
+### Added
+
+- Each theme has its own icon pack, drawn in a different hand: outline (Oneirodex), sprout (Mosslight), pixel (Afterglow Arcade), hairline (Graphite Studio), dial (Signal Room), bubble (Tape Deck), orbit (Deep Space Media) and engraved (Tideglass).
+- Eight new stock avatars (fox, robot, owl, cat, astronaut, ghost, frog, knight), drawn in each theme's own style; your avatar follows your theme.
+- Each theme has its own "no cover" art and library hero, and games without cover art show their title on the theme's art in the theme's lettering.
+- The default theme has its own room: a dream room at night with an aurora sky and the crescent moon from the new mark.
+- The theme picker shows a miniature of each theme — its room, avatar, icons, cover frames and lettering — instead of a colour chip.
+
+### Changed
+
+- The theme's room stays visible once a page has loaded, gently blurred and darkened per theme (vignette, spotlight or cinematic) so covers and text stand in front of it; the rail and top bar are lighter glass.
+- Cover tiles have a per-theme frame and headings use the theme's display face (bundled pixel, mono and display fonts for Afterglow Arcade, Signal Room, Tape Deck and Deep Space Media).
+- New Oneirodex mark (a crescent dream-moon over a controller) for the app icons and favicons, replacing the former default cover, library hero and app icons.
+
+### Fixed
+
+- Stock avatars and per-game placeholder covers followed the default theme for everyone, because the theme lookup depended on a sign-in helper the served app no longer has. They now follow each member's theme.
+
 ## [1.3.2] — 2026-11-20
 
 ### Fixed

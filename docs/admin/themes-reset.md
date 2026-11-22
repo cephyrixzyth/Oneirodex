@@ -2,7 +2,9 @@
 
 > **Doc status:** Active
 
-Themes live on the **library volume** (`/app/oneirodex/static/library/themes/...`), not only in the image. Source of truth for defaults: `oneirodex/setup/default_theme/`. Preset generation uses **`GENERATOR_VERSION` 44** in `oneirodex/utils/preset_themes.py`; the new catalogue replaces the former built-in presets with six redesigned dark themes. On startup, only old folders carrying Oneirodex's own preset marker are retired; uploaded themes remain. **Reset Default Themes** installs the six current designs on the volume.
+Themes live on the **library volume** (`/app/oneirodex/static/library/themes/...`), not only in the image. Source of truth for defaults: `oneirodex/setup/default_theme/`. Preset generation uses **`GENERATOR_VERSION` 47** in `oneirodex/utils/preset_themes.py`; the catalogue includes seven dark presets plus the built-in default. On startup, only old folders carrying Oneirodex's own preset marker are retired; uploaded themes remain. **Reset Default Themes** installs the current designs on the volume.
+
+For 1.3.3, rebuild/update the image and reset default themes so existing volume copies receive the new room artwork, themed stock avatars, cover frames and icon packs. The member/admin SPA bundles also need rebuilding; resetting theme files alone does not update the miniature theme picker. Per-title placeholder covers are cached separately by theme and artwork version.
 
 ## Uploading a theme
 

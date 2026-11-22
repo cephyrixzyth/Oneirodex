@@ -1,13 +1,10 @@
 html[data-icon-pack="pixel"] .od-icon:is([data-icon="library"], [data-icon="discover"], [data-icon="systems"], [data-icon="download"], [data-icon="downloads"], [data-icon="favorites"], [data-icon="settings"], [data-icon="collections"], [data-icon="wishlist"], [data-icon="updates"], [data-icon="ownership"], [data-icon="calendar"], [data-icon="news"], [data-icon="playtime"], [data-icon="user"], [data-icon="menu"], [data-icon="more"], [data-icon="play"]) {
-  stroke-width: var(--od-icon-stroke, 2.75);
-  stroke-linecap: var(--od-icon-linecap, square);
-  stroke-linejoin: var(--od-icon-linejoin, miter);
+  stroke-width: 2.75;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
   shape-rendering: crispEdges;
-  fill: var(--od-icon-fill, none);
-  fill-opacity: var(--od-icon-fill-opacity, 1);
+  fill: none;
 }
-
-/* pack glyph drawings */
 html[data-icon-pack="pixel"] .od-icon[data-icon="library"] {
   background-color: currentColor;
   -webkit-mask: url("/static/library/icon-themes/pixel/icons/library.svg") center / contain no-repeat;

@@ -2,7 +2,7 @@
   "id": "pixel",
   "name": "Pixel",
   "description": "Chunky stroke + crisp edges \u2014 retro-friendly.",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "style": "pixel",
   "icons": {
     "discover": "icons/discover.svg",
@@ -23,7 +23,5 @@
     "calendar": "icons/calendar.svg",
     "ownership": "icons/ownership.svg"
   },
-  "images": {
-    "preview": "preview.png"
-  }
+  "images": {}
 }

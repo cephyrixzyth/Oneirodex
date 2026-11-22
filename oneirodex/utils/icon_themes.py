@@ -23,6 +23,10 @@ CORE_ICON_KEYS = (
 
 # Packs that ship their own SVG drawings (outline keeps the inline stroke glyphs).
 DRAWING_PACKS = ('filled', 'duotone', 'pixel', 'soft', 'mono')
+# One pack per preset theme, each drawn in its own hand by
+# scripts/generate_theme_art.py (masks only: the theme colour comes from CSS).
+THEME_DRAWING_PACKS = ('sprout', 'hairline', 'dial', 'bubble', 'orbit', 'engraved')
+DRAWING_PACKS = DRAWING_PACKS + THEME_DRAWING_PACKS
 # Preferences chip preview set (keep small — chips are dense).
 PACK_GLYPH_KEYS = ('library', 'discover', 'systems', 'download', 'favorites')
 # Every key that ships a pack SVG + mask CSS. ``download`` also masks ``downloads``.
@@ -95,6 +99,42 @@ BUILTIN_PACKS: list[dict[str, Any]] = [
         'name': 'Mono block',
         'description': 'Heavy filled marks for high-contrast accessibility.',
         'style': 'mono',
+    },
+    {
+        'id': 'sprout',
+        'name': 'Sprout',
+        'description': 'Soft strokes with washed-in shapes and a leaf off the corner (Mosslight).',
+        'style': 'mask',
+    },
+    {
+        'id': 'hairline',
+        'name': 'Hairline',
+        'description': 'Drafting hairlines with square ends and registration ticks (Graphite Studio).',
+        'style': 'mask',
+    },
+    {
+        'id': 'dial',
+        'name': 'Dial',
+        'description': 'Each glyph cut out of a solid instrument dial (Signal Room).',
+        'style': 'mask',
+    },
+    {
+        'id': 'bubble',
+        'name': 'Bubble',
+        'description': 'Chunky rounded strokes with half-filled shapes (Tape Deck).',
+        'style': 'mask',
+    },
+    {
+        'id': 'orbit',
+        'name': 'Orbit',
+        'description': 'Fine glyphs inside a tilted orbit ring (Deep Space Media).',
+        'style': 'mask',
+    },
+    {
+        'id': 'engraved',
+        'name': 'Engraved',
+        'description': 'Engraved double lines, like brass instrument plates (Tideglass).',
+        'style': 'mask',
     },
 ]
 
@@ -315,6 +355,9 @@ html[data-icon-pack="mono"] .od-icon [fill="none"] {
 }
 """,
 }
+for _pack in THEME_DRAWING_PACKS:
+    # Drawn masks; the theme colour comes from currentColor.
+    PACK_CSS[_pack] = '__PACK_BASE_SELECTOR__ {\n  fill: none;\n}\n'
 
 PACK_CSS = {
     pack_id: (
