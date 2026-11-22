@@ -111,7 +111,9 @@ def browser_review(base, username, password, output, report, room_fixture=None):
     media.README_ASSETS = output/'readme'; media.README_ASSETS.mkdir()
     themes = output/'themes'; themes.mkdir()
     with sync_playwright() as engine:
-        browser = engine.chromium.launch(headless=True)
+        # Explicit CPU renderer for trusted, disposable CI content. Never infer
+        # desktop/headset GPU performance from this profile.
+        browser = engine.chromium.launch(headless=True,args=['--use-gl=angle','--use-angle=swiftshader'])
         context = browser.new_context(viewport={'width':1600,'height':900},color_scheme='light')
         common.block_streams(context)
         page = context.new_page()
@@ -175,7 +177,22 @@ def browser_review(base, username, password, output, report, room_fixture=None):
                 raise ProbeFailure('release_visual_missing_static_assets')
             report['themes_verified'] = checked
             from library_room_review import review_library_room
-            review_library_room(page, output, report, room_fixture)
+            try:
+                review_library_room(page, output, report, room_fixture)
+            except Exception:
+                try:
+                    report['room_failure_projection'] = page.evaluate('''() => ({
+                      onVrPage: location.pathname==='/vr',
+                      canvasPresent: !!document.querySelector('.od-library-room__canvas'),
+                      controlsPresent: !!document.querySelector('[aria-label="Room stations"]'),
+                      gamePanelPresent: !!document.querySelector('.od-moonfall'),
+                      renderFallback: document.body.textContent.includes('This browser could not open the 3D room.'),
+                      roomExpanded: document.querySelector('.od-library-room__header button')?.getAttribute('aria-expanded')==='true'
+                    })''')
+                    page.screenshot(path=str(output/'room-failure.png'))
+                except Exception:
+                    report['room_failure_capture_unavailable'] = True
+                raise
         finally:
             context.close(); browser.close()
 

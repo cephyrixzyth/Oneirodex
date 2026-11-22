@@ -40,13 +40,17 @@ def review_library_room(page, output, report, fixture=None):
             raise ProbeFailure('room_' + code)
 
     def open_room():
+        result['phase'] = 'opening_room'
         page.goto(page.url.split('/library', 1)[0].split('/vr', 1)[0] + '/vr?room=open&vr_compat=collection', wait_until='domcontentloaded')
         page.get_by_role('group', name='Room stations', exact=True).wait_for()
+        result['phase'] = 'visiting_observatory'
         page.get_by_label('Visit room', exact=True).select_option('oneirodex')
         page.get_by_role('button', name='Moonfall Pinball', exact=True).wait_for()
+        result['phase'] = 'waiting_for_populated_shelf'
         page.wait_for_function("() => document.querySelector('.od-library-room__controls[aria-label=\"Room shelf\"]')?.textContent.includes('Titles ')")
 
     open_room()
+    result['phase'] = 'reading_progress'
     # This fixture belongs to the disposable job; clear any previous synthetic run.
     current = fetch()
     require(current['status'] == 200, 'read_failed')
