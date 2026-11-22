@@ -7,7 +7,7 @@ import json
 import sys
 
 from probe_linux_packaged import ProbeFailure
-from release_visual_review import ROOT, require_capture_ci
+from release_visual_review import ROOT, require_capture_ci, capture_checkpoint
 
 
 def review_library_room(page, output, report, fixture=None):
@@ -18,6 +18,9 @@ def review_library_room(page, output, report, fixture=None):
     output.mkdir()
     result = {'status': 'failed', 'renderer': 'CI Chromium; no hardware performance claim'}
     report['library_room'] = result
+    def checkpoint(phase):
+        result['phase'] = phase
+        capture_checkpoint(output.parent,report,'room_'+phase)
     endpoint = '/api/room-games/moonfall-pinball/progress'
     errors = []
     page.on('pageerror', lambda error: errors.append(type(error).__name__))
@@ -40,17 +43,25 @@ def review_library_room(page, output, report, fixture=None):
             raise ProbeFailure('room_' + code)
 
     def open_room():
-        result['phase'] = 'opening_room'
+        checkpoint('opening_room')
         page.goto(page.url.split('/library', 1)[0].split('/vr', 1)[0] + '/vr?room=open&vr_compat=collection', wait_until='domcontentloaded')
         page.get_by_role('group', name='Room stations', exact=True).wait_for()
-        result['phase'] = 'visiting_observatory'
+        checkpoint('visiting_observatory')
         page.get_by_label('Visit room', exact=True).select_option('oneirodex')
         page.get_by_role('button', name='Moonfall Pinball', exact=True).wait_for()
-        result['phase'] = 'waiting_for_populated_shelf'
+        checkpoint('waiting_for_populated_shelf')
         page.wait_for_function("() => document.querySelector('.od-library-room__controls[aria-label=\"Room shelf\"]')?.textContent.includes('Titles ')")
 
     open_room()
-    result['phase'] = 'reading_progress'
+    checkpoint('reading_progress')
+    result['webgl'] = page.evaluate('''() => {
+      const gl=document.querySelector('.od-library-room__canvas')?.getContext('webgl2');
+      if(!gl) return {supported:false};
+      const debug=gl.getExtension('WEBGL_debug_renderer_info');
+      return {supported:true,software:debug ? /swiftshader/i.test(gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) : null,
+        width:gl.drawingBufferWidth,height:gl.drawingBufferHeight};
+    }''')
+    require(result['webgl']['supported'], 'webgl_context_unavailable')
     # This fixture belongs to the disposable job; clear any previous synthetic run.
     current = fetch()
     require(current['status'] == 200, 'read_failed')
@@ -58,6 +69,7 @@ def review_library_room(page, output, report, fixture=None):
     if current['body']['state'] is not None:
         require(fetch('DELETE', {'revision': current['body']['revision']})['status'] == 200, 'reset_failed')
         open_room()
+    checkpoint('catalog_selection')
     case = page.locator('.od-vr__card').first
     case.wait_for()
     case_name = case.locator('span').inner_text()
@@ -68,10 +80,12 @@ def review_library_room(page, output, report, fixture=None):
     page.get_by_role('button', name='Library wall', exact=True).click()
     result['populated_catalog_selection'] = True
     page.screenshot(path=str(output / 'observatory-library.png'))
+    checkpoint('starting_run')
     page.get_by_role('button', name='New run', exact=True).click()
     page.get_by_role('button', name='Pause', exact=True).wait_for()
     page.get_by_role('button', name='Moonfall Pinball', exact=True).click()
     page.locator('.od-library-room__canvas').focus()
+    checkpoint('launch_and_frames')
     page.keyboard.press('Space')
     timings = page.evaluate('''() => new Promise(resolve => {
       const frames=[]; let last, ticket;
@@ -82,12 +96,14 @@ def review_library_room(page, output, report, fixture=None):
     require(len(timings) >= 2, 'animation_not_advancing')
     timings.sort()
     result['software_frame_intervals_ms'] = {'samples':len(timings),'median':timings[len(timings)//2],'p95':timings[min(len(timings)-1,int(len(timings)*.95))]}
+    checkpoint('pause_and_save')
     page.get_by_role('button', name='Pause', exact=True).click()
     page.get_by_role('button', name='Save progress', exact=True).click()
     page.get_by_role('status').filter(has_text='Progress saved.').wait_for()
     stored = fetch()
     require(stored['status'] == 200 and stored['body']['state']['tick'] > 0, 'real_play_not_saved')
     require(stored['body']['state']['nextBallId'] > 1, 'ball_not_launched')
+    checkpoint('http_denials_and_identity')
     require(fixture is not None, 'owned_fixture_missing')
     tokens = fixture.private_data['tokens']
     require(fixture.api.http(endpoint)[0] == 401, 'anonymous_progress_allowed')
@@ -102,6 +118,7 @@ def review_library_room(page, output, report, fixture=None):
     oversized = page.context.request.put(base+endpoint, headers={'Authorization':'Bearer '+tokens['adult'],'Content-Type':'application/json'},data=' '*70000)
     require(oversized.status == 413, 'oversized_body_accepted')
     result['real_http_identity_scope_and_body_denials'] = True
+    checkpoint('capture_table')
     page.screenshot(path=str(output / 'moonfall-paused.png'))
     canvas_file = output / 'table-canvas.png'
     page.locator('.od-library-room__canvas').screenshot(path=str(canvas_file))
@@ -112,10 +129,12 @@ def review_library_room(page, output, report, fixture=None):
     result['saved_tick'] = stored['body']['state']['tick']
 
     # Reload must offer the actual server run and wait for explicit resume.
+    checkpoint('reload_resume')
     open_room()
     page.get_by_role('button', name='Resume saved run', exact=True).click()
     page.get_by_role('button', name='Pause', exact=True).click()
     result['reload_resume'] = True
+    checkpoint('settings')
     page.get_by_text('How to play and comfort', exact=True).click()
     page.get_by_role('checkbox', name='Reduced motion', exact=True).check()
     page.get_by_role('checkbox', name='High contrast targets', exact=True).check()
@@ -127,6 +146,7 @@ def review_library_room(page, output, report, fixture=None):
     result['settings_saved'] = True
 
     # Real network denial: keep the mounted run and ask before discarding it.
+    checkpoint('network_failure')
     page.route('**' + endpoint, lambda route: route.abort())
     page.get_by_role('button', name='Resume', exact=True).click()
     page.wait_for_timeout(200)
@@ -148,6 +168,7 @@ def review_library_room(page, output, report, fixture=None):
 
     # Force only a supported serialized result through the authenticated API.
     # This is a seeded result display check, not a claim of winning through play.
+    checkpoint('seeded_result')
     saved = fetch()['body']
     terminal = dict(saved['state'])
     terminal.update(phase='game-over', ballsRemaining=0, balls=[], lastLaunch=False, lastRecover=False)
@@ -157,6 +178,7 @@ def review_library_room(page, output, report, fixture=None):
     page.get_by_role('heading', name='Run finished', exact=True).wait_for()
     page.screenshot(path=str(output / 'moonfall-seeded-result.png'))
     result['seeded_result_display'] = True
+    checkpoint('reset')
     page.get_by_role('button', name='Reset progress', exact=True).click()
     page.get_by_role('button', name='Delete saved progress', exact=True).click()
     page.get_by_role('status').filter(has_text='Saved progress reset.').wait_for()
@@ -164,7 +186,10 @@ def review_library_room(page, output, report, fixture=None):
     # A short losing run reached only by normal launches: no save injection.
     import time
     page.get_by_role('button', name='New run', exact=True).click()
-    deadline = time.monotonic()+90
+    checkpoint('played_result')
+    page.get_by_text('How to play and comfort', exact=True).click()
+    page.get_by_label('Quality',exact=True).select_option('low')
+    deadline = time.monotonic()+150
     while time.monotonic() < deadline and page.get_by_role('heading', name='Run finished', exact=True).count() == 0:
         if page.locator('.od-moonfall-phase').inner_text().startswith('Ball ready'):
             page.get_by_role('button', name='Launch ball', exact=True).click()
@@ -172,11 +197,13 @@ def review_library_room(page, output, report, fixture=None):
     page.get_by_role('heading', name='Run finished', exact=True).wait_for(timeout=1000)
     page.screenshot(path=str(output/'moonfall-played-result.png'))
     result['result_through_normal_play'] = True
+    checkpoint('teardown')
     page.get_by_role('button', name='Close room', exact=True).click()
     page.locator('.od-library-room__canvas').wait_for(state='detached')
     require(page.locator('.od-library-room__canvas').count() == 0, 'close_did_not_unmount')
     require(not errors, 'browser_exception')
     # Exercise simultaneous real PostgreSQL CAS through the owned HTTP listener.
+    checkpoint('concurrent_cas')
     from concurrent.futures import ThreadPoolExecutor
     import threading
     import urllib.request
@@ -194,3 +221,4 @@ def review_library_room(page, output, report, fixture=None):
     require(statuses == [200,409], 'concurrent_cas_did_not_reject_stale_writer')
     result['real_concurrent_cas'] = statuses
     result.update(status='passed', reset_and_teardown=True)
+    checkpoint('complete')

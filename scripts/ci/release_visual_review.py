@@ -16,6 +16,15 @@ from linux_connected_server import ConnectedServer, require_backend_ci, validate
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def capture_checkpoint(output, report, phase):
+    """Preserve an explicitly incomplete receipt even if the browser stalls."""
+    report['phase'] = phase
+    temporary = output/'report-in-progress.tmp'
+    temporary.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
+    temporary.replace(output/'report-in-progress.json')
+    print(json.dumps({'phase':phase}),flush=True)
+
+
 def require_capture_ci(root, env, platform, uid):
     require_backend_ci(root, env, platform, uid)
     if env.get('RELEASE_VISUAL_ALLOWED') != '1':
@@ -113,15 +122,17 @@ def browser_review(base, username, password, output, report, room_fixture=None):
     with sync_playwright() as engine:
         # Explicit CPU renderer for trusted, disposable CI content. Never infer
         # desktop/headset GPU performance from this profile.
-        browser = engine.chromium.launch(headless=True,args=['--use-gl=angle','--use-angle=swiftshader'])
+        browser = engine.chromium.launch(headless=True,args=['--enable-unsafe-swiftshader'])
         context = browser.new_context(viewport={'width':1600,'height':900},color_scheme='light')
         common.block_streams(context)
         page = context.new_page()
+        page.set_default_timeout(20_000)
+        page.set_default_navigation_timeout(30_000)
         failed_assets = set()
         page.on('response', lambda response: failed_assets.add(response.url.split('?',1)[0].removeprefix(base))
                 if response.status >= 400 and response.url.startswith(base+'/static/') else None)
         try:
-            report['phase'] = 'real_login'
+            capture_checkpoint(output,report,'real_login')
             page.goto(base+'/login',wait_until='domcontentloaded')
             name = page.locator('#username') if page.locator('#username').count() else page.get_by_label('Username',exact=True)
             field = page.locator('#password') if page.locator('#password').count() else page.get_by_label('Password',exact=True)
@@ -141,7 +152,7 @@ def browser_review(base, username, password, output, report, room_fixture=None):
                 page.get_by_text('The evening collection is ready.',exact=True).first.wait_for(state='visible')
                 report['populated_chat_visible'] = True
             selected = [replace(shot,prepare=chat) if shot.name=='chat-channels' else shot for shot in selected]
-            report['phase'] = 'populated_readme_capture'
+            capture_checkpoint(output,report,'populated_readme_capture')
             failures = media.capture(page,selected)
             if failures or not report.get('populated_chat_visible'):
                 raise ProbeFailure('release_visual_readme_capture_failed')
@@ -155,7 +166,7 @@ def browser_review(base, username, password, output, report, room_fixture=None):
             checked = []
             for raw in slugs:
                 slug = capture_slug(raw)
-                report['phase'] = 'theme_'+slug
+                capture_checkpoint(output,report,'theme_'+slug)
                 page.goto(base+'/library',wait_until='domcontentloaded')
                 media.prep_preferences(page)
                 page.locator('[data-theme-preview="'+slug+'"]').click()
@@ -189,7 +200,7 @@ def browser_review(base, username, password, output, report, room_fixture=None):
                       renderFallback: document.body.textContent.includes('This browser could not open the 3D room.'),
                       roomExpanded: document.querySelector('.od-library-room__header button')?.getAttribute('aria-expanded')==='true'
                     })''')
-                    page.screenshot(path=str(output/'room-failure.png'))
+                    page.screenshot(path=str(output/'room-failure.png'),timeout=15_000)
                 except Exception:
                     report['room_failure_capture_unavailable'] = True
                 raise
