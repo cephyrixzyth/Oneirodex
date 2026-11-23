@@ -135,6 +135,7 @@ RESET_SCOPES: dict[str, tuple[str, ...]] = {
         'user_favorites',
         'user_friendships',
         'user_game_progress',
+        'room_game_progress',
         'user_game_status',
         'user_notifications',
         'user_owned_titles',

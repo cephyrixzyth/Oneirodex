@@ -67,6 +67,14 @@ def test_user_reset_explicitly_covers_save_history_and_login_sessions():
     assert {'emulator_save_generations', 'persistent_login_sessions'} <= set(RESET_SCOPES['users'])
 
 
+def test_room_game_progress_is_reset_with_users_only():
+    plan = plan_reset(['users'])
+    assert 'room_game_progress' in plan['tables']
+    for scope in ('catalog', 'libraries', 'settings'):
+        plan = plan_reset([scope])
+        assert 'room_game_progress' not in (plan['tables'] + plan['cascaded'])
+
+
 def test_reset_refuses_a_cascade_into_committed_file_cleanup(monkeypatch):
     from oneirodex.utils import system_reset
 
