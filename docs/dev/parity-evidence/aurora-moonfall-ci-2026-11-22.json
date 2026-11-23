@@ -1,0 +1,80 @@
+{
+  "status": "passed",
+  "phase": "complete",
+  "source_sha": "8998849586a3f3db5cca6344ddbf64ac8dff0f12",
+  "run_id": "45108321289",
+  "backend_source_commit": "8998849586a3f3db5cca6344ddbf64ac8dff0f12",
+  "backend_launcher": "startweb.sh",
+  "backend_alembic_head": "6a7b8c9d0e1f",
+  "backend_cleanup_verified": true,
+  "default_dark_with_light_os": true,
+  "capture_scope": "room-only; general README/eight-theme baseline is separate evidence",
+  "themes_verified": [
+    "tideglass"
+  ],
+  "library_room": {
+    "status": "passed",
+    "renderer": "CI Chromium; no hardware performance claim",
+    "phase": "complete",
+    "visit_label_matches": 1,
+    "visit_option_present": true,
+    "webgl": {
+      "supported": true,
+      "software": true,
+      "width": 1350,
+      "height": 486
+    },
+    "populated_catalog_selection": true,
+    "software_frame_intervals_ms": {
+      "samples": 4,
+      "median": 1150.0999999999985,
+      "p95": 1849.800000000003
+    },
+    "child_write_status": 403,
+    "real_http_identity_scope_and_body_denials": true,
+    "real_launch_and_save": true,
+    "saved_seed": 2175602261,
+    "saved_tick": 132,
+    "reload_resume": true,
+    "settings_saved": true,
+    "network_failure_keeps_room": true,
+    "seeded_result_display": true,
+    "played_viewport": {
+      "width": 1000,
+      "height": 800
+    },
+    "played_run_limit_seconds": 240,
+    "played_elapsed_seconds": 164.69,
+    "played_checkpoint": {
+      "phase": "game-over",
+      "tick": 5915,
+      "ballsRemaining": 0,
+      "score": 2800
+    },
+    "result_through_normal_play": true,
+    "real_concurrent_cas": [
+      200,
+      409
+    ],
+    "reset_and_teardown": true
+  },
+  "artifact_zip_sha256": "830601fc7d189228a73ebf874bd1d6dd8a66b36f2e35e108863b8e566174c0bc",
+  "published_images": [
+    {
+      "path": "../../media/library-room-benchmark-2026-11-22/observatory-library.png",
+      "sha256": "e99b535a961cd94e9bbcdf8279f3babf7d9d3cbe98711a8e44df74911fba4f9e"
+    },
+    {
+      "path": "../../media/library-room-benchmark-2026-11-22/observatory-reading.png",
+      "sha256": "9a7c96f33f881d0a63e0a5359be55339f51919addf001103da17b9bffcae6dea"
+    },
+    {
+      "path": "../../media/library-room-benchmark-2026-11-22/moonfall-paused.png",
+      "sha256": "5555a629ec883cbc0b4c8a653e9c6f340e7db163379c0edff525a800b0b79f60"
+    },
+    {
+      "path": "../../media/library-room-benchmark-2026-11-22/moonfall-played-result.png",
+      "sha256": "c6473b695e50cb39615bfe3b3a046ac9bf29ae39c7a6370d21dad9663f7e59f0"
+    }
+  ]
+}

@@ -8,7 +8,7 @@
 
 Route: `/library`
 
-The [library room game benchmark](library-room-games.md) documents the unreleased Aurora Observatory and Moonfall Pinball work, including controls, private saves and pending runtime checks.
+The [library room game benchmark](library-room-games.md) documents the unreleased Aurora Observatory and Moonfall Pinball work, including controls, private saves, actual qualified browser captures and pending hardware/human review.
 
 - Dense cover grid with filters (platform, status, freshness, etc.).
 - **One tile per title, not per copy.** A title you hold on several systems is a single tile. The platform chip names **the latest system it was released on** and counts the rest: a game on NES, GBA and SNES reads `GBA +2`. Filtered to a system, the chip names *that* system instead — the same game under the NES filter reads `NES +2`, because that is the copy you are looking at. The other copies are reachable from the tile's **Preview → Available on**, with a launcher per emulator core; they are not separate tiles. Titles pair on their normalised name, because `igdb_id` and `slug` are unique per row and so cannot be shared across systems. Page counts count titles, so pages stay full.

@@ -1,13 +1,17 @@
 # Library room games
 
 > **Doc status:** Reference
-> Development benchmark; not part of the published 1.3.3 release. Initial actual room captures and database checks passed; full browser qualification, hardware measurements and human benchmark acceptance remain pending. See the [source-bound evidence](../dev/parity-evidence/aurora-moonfall-benchmark-2026-11-22.md).
+> Development benchmark; not part of the published 1.3.3 release. Disposable browser and database qualification passed, with actual captures inspected. Hardware measurements and human benchmark acceptance remain pending. See the [source-bound evidence](../dev/parity-evidence/aurora-moonfall-benchmark-2026-11-22.md).
 
 The first redesigned room is **Aurora Observatory**, with the original **Moonfall Pinball** table. The other seven room designs and games are approved concepts; their current rooms retain their existing furnishings and do not offer those new games yet.
 
 Open the library room from the VR Library. **Visit room → Aurora Observatory** visits it without changing your account theme. **Follow my theme** returns to your account's room. Visits last only while the room is open. The normal catalog remains available below the room.
 
 On desktop, **Library wall** provides a raised catalog overview that clears the table's backboard. **Moonfall Pinball** switches to the playfield view. The in-world game menu appears at the table station; the HTML game controls remain available below the room.
+
+![Actual populated Aurora Observatory benchmark](../media/library-room-benchmark-2026-11-22/observatory-library.png)
+
+Actual disposable-CI capture at source `89988495`, using an original synthetic catalog. [Table view](../media/library-room-benchmark-2026-11-22/moonfall-paused.png) · [Result reached through normal launches](../media/library-room-benchmark-2026-11-22/moonfall-played-result.png). These images show the current benchmark, not an accepted final design.
 
 ## Moonfall Pinball
 

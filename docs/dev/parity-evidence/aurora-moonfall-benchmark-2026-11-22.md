@@ -39,28 +39,65 @@ One deterministic replay uses seed 4, both flippers held during the first 27 tic
 | Hardware resume bypassed session/station guards | Fixed; delegated session commands and station-bound simulation |
 | Catalog query changes triggered exit warnings | Fixed; only pathname exits block; Back cancellation covered |
 | Visit lifetime and live account-theme following | Fixed; close resets visit, theme transition uses save-aware flow |
-| Score clipped by fixed camera; target progression unclear | Fixed in pure projection checks for desktop/narrow widths and three comfort modes; symbols/current objectives added; actual captures pending |
+| Score clipped by fixed camera; target progression unclear | Fixed in pure projection checks for desktop/narrow widths and three comfort modes; symbols/current objectives added; actual table captures inspected |
 | Missing authored mechanics/practice | Added, with focused checks and shared mission content; real visual/play review pending |
-| Empty/incomplete capture fixture | Harness expanded to populated collection scope, real selection, HTTP denial/isolation/CAS, saved reload, network failure, reset, seeded and played results; execution pending |
+| Empty/incomplete capture fixture | Passed populated collection selection, HTTP denial/isolation/CAS, saved reload, network failure, reset, seeded and normally played results in disposable CI |
 
 Deferred minor: acknowledgement text can say “Progress saved” while a newer checkpoint is already dirty. Dirty-state tracking and exit guards continue to retain that distinction.
 
+## Engineering decisions and limits
+
+| Decision | Reason and cost if wrong |
+|---|---|
+| Execute inline in the required checkout; preserve history and unrelated files | Honors workspace restrictions; shared-checkout edits require careful file ownership and diff review |
+| Wait for explicit publication authority, then keep this on the review branch | Owner authorized commit/push/CI only; qualification takes longer than local runtime testing, but production remains unchanged |
+| Use a purpose-built fixed-step simulation without another physics dependency | Bounded original table; replacing the model would require save-schema and physics requalification |
+| Keep a null-payload revision tombstone on reset | Prevents stale saves from restoring erased payload; revision metadata persists until account deletion |
+| Use React Router's data router for navigation blocking | Avoids history monkeypatches; broad routing regression risk is covered by the existing bootstrap/router slice, not claimed eliminated |
+| Expand 12 prototype shots to 99 authored steps with ramp/return/skill requirements | Adds session depth; human pacing and difficulty may still need substantial tuning |
+| Use focused disposable CI and retain the separate full page/eight-theme baseline | Limits repeated unrelated work; focused success cannot establish full-repository or all-theme parity |
+| Isolate bearer checks from the browser cookie jar | Exercises the intended restricted identity; no product authentication precedence change was made |
+| Use a fixed raised desktop library overview and station-only game menu | Clears catalog sightlines while preserving table/world coordinates; the camera height remains a visual preference for human review |
+| Bound software-rendered play time and record a smaller gameplay viewport separately | Preserves real input/result assertions within CI limits; these measurements cannot qualify hardware performance |
+
+Missing headset comfort, physical controller and human pacing evidence remains open. Pure geometry, simulation and software-browser checks are not substitutes for those observations.
+
+## Disposable CI qualification
+
+[Run 45108321289](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45108321289) **passed** at source `8998849586a3f3db5cca6344ddbf64ac8dff0f12`. The later evidence commit changes documentation/media only. The [retained receipt](aurora-moonfall-ci-2026-11-22.json) records source identity, measurements, artifact SHA-256 and published image hashes.
+
+| Actual check | Observed result |
+|---|---|
+| Frontend / build | 142 tests across 18 files, member typecheck and all five SPA builds passed |
+| Native / PostgreSQL / deletion | Ten checks passed; Alembic upgrade and drift check passed, including clean-start adoption |
+| Pure / capture safety | 25 Python methods and 18 capture/fixture methods passed; workflow-selection guard passed |
+| Real startup / catalog | Owned startweb.sh listener, authenticated synthetic 14-title catalog selection, observatory visit and reading station |
+| Actual launch / save / reload | Nonzero tick and launched ball persisted; explicit saved-run resume and quality/motion/contrast persistence passed |
+| Denials / isolation | Anonymous 401, restricted read/write 403, peer save isolation, malformed JSON 422, oversized body 413 and session CSRF denial passed |
+| Outage / reset | Aborted requests retained the run; actual leave dialog cancelled; seeded result display and payload reset passed |
+| Normally played result | No result injection: game-over at tick 5915, zero balls, score 2800; 164.69 seconds wall time, 1000x800, Low quality, within the 240-second bound |
+| Teardown / concurrent writes | Canvas detached after close; simultaneous HTTP writes returned 200/409; no page exceptions; owned backend/database cleanup verified |
+| Images | Four actual populated captures retained, hash-checked and inspected; human visual acceptance remains open |
+
+The result checkpoint corresponds to about 49.29 simulation seconds, not human session length. The receipt's saved_seed is the mutable RNG at the earlier saved checkpoint, not the original seed. A separate pure default-seed replay naturally loses after 47.73 simulation seconds; input timing changes moving-target interactions.
+
+Full-size 1600x900 captures used software WebGL. Four sampled frame intervals had median 1150.1 ms and p95 1849.8 ms: poor software-renderer results, not a hardware performance pass. Only the long normal-play probe used the recorded 1000x800 viewport. The focused run checked Tideglass only; the separate full page/eight-theme baseline remains in [45070330759](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45070330759), not counted as a new all-theme pass.
+
+Actual images: [library overview](../../media/library-room-benchmark-2026-11-22/observatory-library.png), [reading desk](../../media/library-room-benchmark-2026-11-22/observatory-reading.png), [paused table](../../media/library-room-benchmark-2026-11-22/moonfall-paused.png), [normally played result](../../media/library-room-benchmark-2026-11-22/moonfall-played-result.png).
+
+## Confirmed follow-ups during qualification
+
+- Clean-start ORM adoption attempted to create an existing table. The migration now adopts it; pure and real PostgreSQL regressions pass.
+- Pending visits and reused disposed canvases had independent synthetic regressions. Latest intent, immediate chooser state and per-world canvas ownership are covered. The live locator timeout also required an explicit accessible name.
+- Bearer controls initially shared the signed-in browser cookie jar. The harness now uses the owned cookie-free transport; no product authentication precedence changed.
+- Autosave failure could pause before the harness clicked Pause. The harness now waits for the actual failed-save state and verifies the leave dialog.
+- Fixed two-second frame sampling and short normal-play wall limits were unreliable on software rendering. Bounded observed-frame sampling and a separately recorded smaller gameplay viewport retain actual input/result assertions.
+- Actual captures exposed catalog covers behind the table and a large game menu in the library view. The corrected desktop overview and station-only menu have ray-cast regression coverage and inspected actual images. Camera height and visual quality still require human acceptance.
+
 ## Remaining acceptance
 
-Qualification [45104376838](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45104376838), source `dc6e10047d0771386fce56b33eee3dacbcfeaf17`, passed frontend/build, migration/drift, all ten native request/PostgreSQL/deletion tests, 25 pure Python checks and capture fencing. Actual `startweb.sh` startup, authenticated populated catalog selection, observatory visit, launch and nonzero-tick progress save succeeded. Earlier clean-start migration adoption and room-selection defects have focused regression coverage.
+1. Human review of the actual room, reading station, table readability and results against the concept. CI does not accept the visual design.
+2. Real desktop/controller/headset frame timing, input usability and comfort. Read-only inventory is retained privately; no local app/browser/game execution was performed.
+3. Human playtest the 15-30 minute pacing target, aiming, difficulty and replay value; accept the first benchmark before the other seven games.
 
-The browser job remains **failed** at its bearer write-scope assertion: it used Playwright's signed-in session cookie jar alongside the restricted token. The shared resolver prefers the valid session, so this did not isolate bearer scope enforcement. The harness now uses the existing owned, cookie-free HTTP transport for those writes; its new body/identity transport regression failed before implementation and passes afterward. Live denial, subsequent reload/failure/result/CAS steps still require a successful run.
-
-Follow-up [45106012467](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45106012467), source `8e6b3b56`, passed those bearer/body denials, saved reload/resume, settings persistence, outage handling with an actual cancelled leave dialog, seeded result display and reset. It failed the 150-second normal-play result bound while still running on the third ball. A pure input-only replay of the recorded seed reaches game-over at 6,088 ticks (50.73 simulation seconds); software rendering stretches wall time because catch-up is bounded. The harness now allows at most 240 seconds and records elapsed time plus a fixed checkpoint projection. Natural browser results, teardown and concurrent HTTP writes remain pending.
-
-Inspection also confirmed that the table backboard and game menu obstructed catalog covers at the library station. A ray-cast regression failed before correcting the desktop overview; it now checks all four cover centers and their top/bottom edges. The game menu is visible and ray-selectable only at the table station. XR eye positioning and the fixed desktop playfield camera remain separate. Actual captures of this layout correction are pending.
-
-This attempt produced actual reading/library room images, not a complete benchmark capture set. The artifact ZIP SHA-256 is `bc7646ab1d6baf0236ea0d11c33a33e246de2308b44fcff14f75ac488f7481a9`; its manifest image hashes were checked before inspection. Chromium reported software rendering; its four frame samples had median 733.2 ms and p95 766.7 ms. Those poor software-renderer measurements do not establish desktop/headset performance. The focused run checked Tideglass only; the earlier separate eight-theme/populated-page baseline is retained in run [45070330759](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45070330759).
-
-1. Run the actual manual disposable-CI visual job and inspect its source-bound captures and report. No local app/database/browser run substitutes for this gate.
-2. Finish browser-driven HTTP denial/isolation, simultaneous writes and account transitions. Ten real native/PostgreSQL/migration/deletion checks have passed; that does not imply these later browser steps passed.
-3. Review the actual room, table readability, results and failure states against the concept direction; revise defects found.
-4. Measure real desktop/headset frame timing and comfort on available hardware. Software-rendered CI metrics do not satisfy hardware targets.
-5. Human playtest mission pacing, aiming and replay value, then accept the first benchmark before starting the other seven games.
-
-No merge, release, version bump or deployment is authorized by this benchmark report.
+These focused checks do not establish full-repository parity/security or a full-suite pass. No merge, release, version bump or deployment is authorized by this benchmark report.
