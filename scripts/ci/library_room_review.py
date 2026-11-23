@@ -218,17 +218,24 @@ def review_library_room(page, output, report, fixture=None):
     page.get_by_role('button', name='Delete saved progress', exact=True).click()
     page.get_by_role('status').filter(has_text='Saved progress reset.').wait_for()
     require(fetch()['body']['state'] is None, 'reset_payload_retained')
-    # A short losing run reached only by normal launches: no save injection.
+    # A losing run reached only by normal launches: no save injection.
     import time
     page.get_by_role('button', name='New run', exact=True).click()
     checkpoint('played_result')
     page.get_by_text('How to play and comfort', exact=True).click()
     page.get_by_label('Quality',exact=True).select_option('low')
-    deadline = time.monotonic()+150
+    played_start = time.monotonic()
+    result['played_run_limit_seconds'] = 240
+    deadline = played_start+240
     while time.monotonic() < deadline and page.get_by_role('heading', name='Run finished', exact=True).count() == 0:
         if page.locator('.od-moonfall-phase').inner_text().startswith('Ball ready'):
             page.get_by_role('button', name='Launch ball', exact=True).click()
         page.wait_for_timeout(500)
+    result['played_elapsed_seconds'] = round(time.monotonic()-played_start,2)
+    observed = fetch()
+    if observed['status'] == 200 and observed['body']['state']:
+        state = observed['body']['state']
+        result['played_checkpoint'] = {key:state[key] for key in ('phase','tick','ballsRemaining','score')}
     page.get_by_role('heading', name='Run finished', exact=True).wait_for(timeout=1000)
     capture('moonfall-played-result.png')
     result['result_through_normal_play'] = True
