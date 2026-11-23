@@ -1,9 +1,78 @@
 import * as THREE from 'three'
 import { describe, expect, it, vi } from 'vitest'
 import { createRoomMaterialLibrary } from './roomMaterials'
-import { disposeRoomGroup, beveledBox } from './roomGeometry'
+import { disposeRoomGroup, beveledBox, batchOwnedStaticGroup } from './roomGeometry'
+import { furnishObservatory } from './roomObservatory'
+import { createPinballTable } from './pinball/render'
 
 describe('owned observatory material assets', () => {
+  it('batches owned static details without moving geometry or consuming interactive meshes', () => {
+    const root = new THREE.Group(),
+      material = new THREE.MeshStandardMaterial()
+    for (const x of [-2, 2]) {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material)
+      mesh.position.x = x
+      root.add(mesh)
+    }
+    const control = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), material)
+    control.userData.action = '@keep'
+    root.add(control)
+    root.updateMatrixWorld(true)
+    const before = new THREE.Box3().setFromObject(root)
+    batchOwnedStaticGroup(root)
+    expect(root.children).toHaveLength(2)
+    expect(root.children).toContain(control)
+    root.updateMatrixWorld(true)
+    const after = new THREE.Box3().setFromObject(root)
+    expect(after.min.distanceTo(before.min)).toBeLessThan(0.00001)
+    expect(after.max.distanceTo(before.max)).toBeLessThan(0.00001)
+    const dispose = vi.spyOn(material, 'dispose')
+    disposeRoomGroup(root)
+    expect(dispose).toHaveBeenCalledOnce()
+  })
+  it('shares one scene-owned walnut set between furniture and cabinet until the scene releases it', () => {
+    const palette = createRoomMaterialLibrary(() => new THREE.Texture())
+    const room = furnishObservatory(new THREE.Scene(), palette)
+    const table = createPinballTable(palette)
+    const desk = room.group.getObjectByName('reading-desk') as THREE.Mesh
+    const cabinet = table.group.getObjectByName('pinball-cabinet') as THREE.Mesh
+    expect(desk.material).toBe(cabinet.material)
+    const dispose = vi.spyOn(palette.surface('walnut').map!, 'dispose')
+    table.dispose()
+    room.dispose()
+    expect(dispose).not.toHaveBeenCalled()
+    palette.dispose()
+    palette.dispose()
+    expect(dispose).toHaveBeenCalledOnce()
+  })
+
+  it('downsamples Low maps once, restores full resolution, and discards late detached images', () => {
+    const pending: (() => void)[] = []
+    const textures: THREE.Texture[] = []
+    const resize = vi.fn(() => ({ width: 512, height: 512 }))
+    const palette = createRoomMaterialLibrary((_url, done) => {
+      const texture = new THREE.Texture()
+      textures.push(texture)
+      pending.push(() => {
+        texture.image = { width: 1024, height: 1024 }
+        done(texture)
+      })
+      return texture
+    }, resize)
+    const material = palette.surface('walnut')
+    palette.setQuality('low')
+    pending[0]()
+    expect(material.map!.image.width).toBe(512)
+    palette.setQuality('standard')
+    expect(material.map!.image.width).toBe(1024)
+    palette.setQuality('low')
+    expect(resize).toHaveBeenCalledTimes(1)
+    const dispose = vi.spyOn(textures[1], 'dispose')
+    palette.dispose()
+    pending[1]()
+    expect(textures[1].image).toBeNull()
+    expect(dispose).toHaveBeenCalledOnce()
+  })
   it('keeps furniture UVs normalized so scanned material scale does not depend on raw world coordinates', () => {
     const geometry = beveledBox(2, 3, 4, 0.08)
     const uv = geometry.getAttribute('uv')

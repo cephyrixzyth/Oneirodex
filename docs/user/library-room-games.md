@@ -8,7 +8,7 @@ The first redesigned room is **Aurora Observatory**, with the original **Moonfal
 
 Open the library room from the VR Library. **Visit room → Aurora Observatory** visits it without changing your account theme. **Follow my theme** returns to your account's room. Visits last only while the room is open. The normal catalog remains available below the room.
 
-On desktop, **Library wall** provides a raised catalog overview that clears the table's backboard. **Moonfall Pinball** switches to the playfield view. The in-world game menu appears at the table station; the HTML game controls remain available below the room.
+**Room overview** gives a view into the observatory. **Library wall** takes you to the shelf aisle at normal eye height, clear of the table's backboard. **Moonfall Pinball** switches to the playfield view. The in-world game menu appears at the table station; the HTML game controls remain available below the room.
 
 ![Actual populated Aurora Observatory benchmark](../media/library-room-benchmark-2026-11-22/observatory-library.png)
 

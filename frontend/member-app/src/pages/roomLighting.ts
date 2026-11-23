@@ -3,7 +3,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 
 export function ownRoomEnvironment(scene: THREE.Scene, target: THREE.WebGLRenderTarget) {
   scene.environment = target.texture
-  scene.environmentIntensity = 0.7
+  scene.environmentIntensity = 0.24
   let disposed = false
   return () => {
     if (disposed) return

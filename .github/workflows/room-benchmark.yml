@@ -69,7 +69,7 @@ jobs:
         run: |
           npm ci
           node scripts/ci/test_library_room_workflow.cjs
-          npm test --workspace frontend/member-app -- --run src/pages/pinball src/pages/LibraryRoom.test.tsx src/pages/LibraryRoomGame.test.tsx src/pages/roomSceneGame.test.ts src/pages/roomMaterials.test.ts src/pages/roomLighting.test.ts src/buttonLanguage.test.js src/dockerStagedImports.test.ts src/main.test.tsx src/memberBootstrap.test.tsx src/App.test.tsx src/AppSmoke.test.tsx
+          npm test --workspace frontend/member-app -- --run src/pages/pinball src/pages/LibraryRoom.test.tsx src/pages/LibraryRoomGame.test.tsx src/pages/roomSceneGame.test.ts src/pages/roomMaterials.test.ts src/pages/roomLighting.test.ts src/pages/roomLettering.test.ts src/buttonLanguage.test.js src/dockerStagedImports.test.ts src/main.test.tsx src/memberBootstrap.test.tsx src/App.test.tsx src/AppSmoke.test.tsx
           npm run typecheck --workspace frontend/member-app
           npm run build:native-spas
       - name: Prepare isolated Python and browser dependencies

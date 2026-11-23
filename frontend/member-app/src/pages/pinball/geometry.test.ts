@@ -7,6 +7,20 @@ import { newMoonfall, stepMoonfall } from './model'
 import { RAILS, TARGETS } from './table'
 
 describe('original observatory and table geometry (no WebGL renderer)', () => {
+  it('keeps baked table grounding above the rug when dynamic shadows are disabled', () => {
+    const scene = new THREE.Scene()
+    const room = furnishObservatory(scene)
+    const table = createPinballTable()
+    scene.add(table.group)
+    scene.updateMatrixWorld(true)
+    const rug = scene.getObjectByName('observatory-rug')!
+    const shadow = scene.getObjectByName('pinball-ground-contact')!
+    const ray = new THREE.Raycaster(new THREE.Vector3(0, 0.2, 0), new THREE.Vector3(0, -1, 0))
+    const hits = ray.intersectObjects([rug, shadow], false)
+    expect(hits[0].object).toBe(shadow)
+    table.dispose()
+    room.dispose()
+  })
   it('gives the default theme its own identity', () => {
     expect(roomArtSlug('default')).toBe('oneirodex')
     expect(roomArtSlug('oneirodex')).toBe('oneirodex')

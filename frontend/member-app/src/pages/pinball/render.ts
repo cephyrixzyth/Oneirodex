@@ -20,17 +20,17 @@ export const boardPosition = (x: number, y: number, height = 0.045) =>
   new THREE.Vector3(x * scale, 0.96 + (4 - y) * 0.035 + height, (y - 2) * scale)
 
 /** Actual game state drives these original meshes. No pre-rendered gameplay/video. */
-export function createPinballTable() {
+export function createPinballTable(sharedMaterials?: ReturnType<typeof createRoomMaterialLibrary>) {
   const group = new THREE.Group()
   group.name = 'moonfall-pinball-table'
-  const materials = createRoomMaterialLibrary()
+  const materials = sharedMaterials || createRoomMaterialLibrary()
   const b = roomBuilder(group, materials.material)
   detailPinballCabinet(group, materials)
   const brass = '#c9a96b',
     walnut = '#573b2e',
     field = '#152e36'
   b.box('pinball-cabinet', 1.65, 0.34, 3.25, 0, 0.73, 0, walnut, 0, 0.07)
-  b.box('pinball-cabinet-apron', 1.72, 0.15, 3.31, 0, 0.9, 0, brass, 0.65)
+  b.box('pinball-cabinet-apron', 1.72, 0.15, 3.31, 0, 0.9, 0, walnut)
   b.box('pinball-playfield', 1.4, 0.09, 2.96, 0, 0.985, 0, field).rotation.x = Math.atan(
     0.035 / scale,
   )
@@ -375,7 +375,8 @@ export function createPinballTable() {
     dispose() {
       if (!disposed) {
         disposed = true
-        disposeRoomGroup(group)
+        disposeRoomGroup(group, materials.owned)
+        if (!sharedMaterials) materials.dispose()
       }
     },
   }

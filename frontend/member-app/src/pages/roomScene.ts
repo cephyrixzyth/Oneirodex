@@ -10,6 +10,9 @@ import type { MoonfallInput } from './pinball/model'
 import { bindPinballControls } from './pinball/controls'
 import { disposeRoomGroup, roomBuilder, beveledBox } from './roomGeometry'
 import { createObservatoryLighting } from './roomLighting'
+import { createRoomMaterialLibrary } from './roomMaterials'
+import { instrumentLabelLayout } from './roomLettering'
+import { drawObservatoryStations } from './roomStations'
 
 export interface RoomGame {
   is_favorite?: boolean
@@ -45,7 +48,13 @@ export interface RoomGameMenu {
   actions: { label: string; action: string; disabled?: boolean }[]
 }
 
-function labelTexture(title: string, subtitle: string, accent: string, ratio: number) {
+function labelTexture(
+  title: string,
+  subtitle: string,
+  accent: string,
+  ratio: number,
+  instrument = false,
+) {
   const canvas = document.createElement('canvas')
   canvas.width = 800
   canvas.height = Math.round(canvas.width / ratio)
@@ -55,6 +64,27 @@ function labelTexture(title: string, subtitle: string, accent: string, ratio: nu
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   ctx.fillStyle = accent
   ctx.fillRect(0, 0, 8, canvas.height)
+  if (instrument) {
+    const layoutTitleSize = Math.min(42, canvas.height * 0.35)
+    const layout = instrumentLabelLayout(
+      title,
+      subtitle,
+      canvas.width,
+      canvas.height,
+      (text, size) => {
+        ctx.font = `${size === layoutTitleSize ? 'bold ' : ''}${size}px sans-serif`
+        return ctx.measureText(text).width
+      },
+    )
+    for (const line of layout.lines) {
+      ctx.font = `${line.kind === 'title' ? 'bold ' : ''}${line.kind === 'title' ? layout.titleSize : layout.bodySize}px sans-serif`
+      ctx.fillStyle = line.kind === 'title' ? '#f5f5eb' : '#c5d4cb'
+      ctx.fillText(line.text, 30, line.y, canvas.width - 60)
+    }
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.colorSpace = THREE.SRGBColorSpace
+    return texture
+  }
   const inset = 30
   const titleSize = Math.min(94, Math.round(canvas.height * 0.27))
   const bodySize = Math.min(56, Math.round(titleSize * 0.68))
@@ -116,7 +146,8 @@ export function createRoom(
   const theme = options.theme || document.documentElement.dataset.theme || 'default'
   const world = roomArtSlug(theme)
   const finish = roomFinish(theme)
-  const observatory = world === 'oneirodex' ? furnishObservatory(scene) : null
+  const sharedMaterials = world === 'oneirodex' ? createRoomMaterialLibrary() : null
+  const observatory = sharedMaterials ? furnishObservatory(scene, sharedMaterials) : null
   const disposeEnvironment = observatory ? createObservatoryLighting(renderer, scene) : null
   if (!observatory) furnishRoom(scene, theme)
   const gallery = new THREE.Group()
@@ -151,7 +182,7 @@ export function createRoom(
         if (!disposed) options.onGameSnapshot?.(snapshot)
       })
     : null
-  const table = observatory ? createPinballTable() : null
+  const table = observatory ? createPinballTable(sharedMaterials!) : null
   if (table) scene.add(table.group)
   const gameTargets = table
     ? [...table.actionMeshes, table.group.getObjectByName('pinball-cabinet') as THREE.Mesh]
@@ -199,6 +230,7 @@ export function createRoom(
       observatory?.setQuality(state.settings.quality)
       if (lastQuality !== state.settings.quality) {
         lastQuality = state.settings.quality
+        sharedMaterials?.setQuality(state.settings.quality)
         renderer.shadowMap.enabled = lastQuality !== 'low'
         if (!renderer.xr.isPresenting)
           renderer.setPixelRatio(
@@ -233,9 +265,9 @@ export function createRoom(
   }
   const positions: Record<Station, [number, number, number]> = {
     overview: [-3.3, 0, 3.8],
-    library: [0, 0, 2.1],
+    library: observatory ? [-3.2, 0, -1] : [0, 0, 2.1],
     reading: [-2.65, 0, -0.95],
-    lounge: [2.65, 0, -0.95],
+    lounge: observatory ? [-1.3, 0, 2.2] : [2.65, 0, -0.95],
     pinball: [0, 0, 2.5],
   }
   function move(next: Station) {
@@ -254,6 +286,9 @@ export function createRoom(
     }
     rig.rotation.y = next === 'reading' ? Math.PI / 2 : next === 'lounge' ? -Math.PI / 2 : 0
     if (next === 'overview') rig.rotation.y = -0.47
+    if (next === 'lounge' && observatory) rig.rotation.y = -1.13
+    if (next === 'library' && observatory)
+      rig.rotation.y = -Math.atan2(-rig.position.x, rig.position.z + 3.55)
     camera.position.set(0, 1.55, 0)
     camera.rotation.set(0, 0, 0)
     if (next === 'overview' && !activeSession) {
@@ -261,9 +296,9 @@ export function createRoom(
       camera.rotation.x = -0.1
     }
     if (next === 'library' && observatory && !activeSession) {
-      // Desktop overview clears the cabinet backboard without moving the XR rig.
-      camera.position.y = 4.2 - rig.position.y
-      camera.rotation.x = -Math.atan2(2.35, rig.position.z + 3.55)
+      // A real aisle position clears the cabinet at a believable eye height.
+      camera.position.y = 1.65 - rig.position.y
+      camera.rotation.x = Math.atan2(0.34, Math.hypot(rig.position.x, rig.position.z + 3.55))
     }
     if (next === 'pinball' && !activeSession) {
       const back = 3.4 + Math.max(0, 1 - camera.aspect) * 1.5
@@ -430,23 +465,42 @@ export function createRoom(
     ) {
       return plane(w, h, x, y, z, a, labelTexture(title, copy, accent, w / h), action)
     }
-    sign(3.4, 0.62, 0, 3.06, -3.78, 0, 'Library wall', next.shelf)
     sign(
-      1.48,
-      0.6,
-      -3.3,
-      3.06,
+      observatory ? 2.4 : 3.4,
+      observatory ? 0.36 : 0.62,
+      0,
+      observatory ? 3.08 : 3.06,
+      -3.78,
+      0,
+      'Library wall',
+      next.shelf,
+    )
+    sign(
+      observatory ? 1.05 : 1.48,
+      observatory ? 0.36 : 0.6,
+      observatory ? -2.6 : -3.3,
+      observatory ? 3.08 : 3.06,
       -3.76,
       0,
       next.collection ? 'VR titles' : 'Full library',
       'Switch catalog',
       '@scope',
     )
-    sign(1.48, 0.6, 3.3, 3.06, -3.76, 0, 'Recenter', 'Reset view', '@home')
+    sign(
+      observatory ? 1.05 : 1.48,
+      observatory ? 0.36 : 0.6,
+      observatory ? 2.6 : 3.3,
+      observatory ? 3.08 : 3.06,
+      -3.76,
+      0,
+      'Recenter',
+      'Reset view',
+      '@home',
+    )
     next.games.forEach((g, i) => {
       const x = (i - (next.games.length - 1) / 2) * 1.48
       const art = sign(
-        1.19,
+        observatory ? 0.86 : 1.19,
         1.32,
         x,
         1.99,
@@ -485,67 +539,98 @@ export function createRoom(
     )
     readingPage = reading.page
     readingPageCount = reading.pages
-    plane(
-      observatory ? 2.9 : 3.9,
-      observatory ? 1.3 : 1.5,
-      -5.24,
-      1.85,
-      -0.95,
-      Math.PI / 2,
-      reading.texture,
-    )
-    sign(1.25, 0.5, -5.18, 0.79, 0.32, Math.PI / 2, 'Library wall', 'Return', '@library')
-    if (next.selected)
-      sign(
-        1.35,
-        0.5,
-        -5.18,
-        0.79,
-        -1,
-        Math.PI / 2,
-        next.selected.is_favorite ? 'Remove favorite' : 'Add favorite',
-        next.favoriteMessage || 'Your library',
-        '@favorite',
+    if (observatory) {
+      drawObservatoryStations(
+        sign,
+        (...args) => {
+          const screen = plane(...args)
+          if (screen.material instanceof THREE.MeshStandardMaterial) {
+            screen.material.emissive = new THREE.Color('#ffffff')
+            screen.material.emissiveMap = args[6]
+            screen.material.emissiveIntensity = 0.16
+          }
+        },
+        reading.texture,
+        next,
+        readingPage,
+        reading.pages,
       )
-    sign(1.2, 0.38, -5.18, 2.9, 0.15, Math.PI / 2, 'Recenter', 'Reset view', '@home')
-    sign(
-      1.2,
-      0.38,
-      -5.18,
-      2.9,
-      -1.35,
-      Math.PI / 2,
-      'Text size',
-      next.largeText ? 'Large' : 'Standard',
-      '@text',
-    )
-    sign(1.2, 0.38, 5.18, 2.9, -1.0, -Math.PI / 2, 'Recenter', 'Reset view', '@home')
-    if (reading.pages > 1) {
-      if (reading.page > 0)
-        sign(0.98, 0.44, -5.18, 0.34, 0.1, Math.PI / 2, 'Previous', 'Page', '@read-back')
-      if (reading.page + 1 < reading.pages)
-        sign(0.98, 0.44, -5.18, 0.34, -1.25, Math.PI / 2, 'Next', 'Page', '@read-next')
-    }
-    if (!observatory) {
-      const art = sign(3.8, 2.0, 5.24, 2, -1, -Math.PI / 2, 'Lounge', '')
-      imagePanel(art, '/static/newstyle/rooms/' + world + '.webp', version)
-    }
-    if (gameRuntime)
       sign(0.8, 0.18, 0, 0.75, 1.71, 0, 'Moonfall Pinball', 'Visit the table', '@moonfall-open')
-    sign(
-      1.45,
-      0.45,
-      5.18,
-      1.42,
-      -1.0,
-      -Math.PI / 2,
-      'Comfort',
-      next.comfort || 'Standard',
-      '@comfort',
-    )
-    if (activeSession) sign(1.1, 0.5, 3.85, 0.48, -3.35, 0, 'Exit XR', 'End session', '@exit')
-    sign(1.48, 0.54, 5.18, 0.72, -1.83, -Math.PI / 2, 'Library wall', 'Return', '@library')
-    sign(1.48, 0.54, 5.18, 0.72, -0.17, -Math.PI / 2, 'Favorite shelf', 'Your titles', '@favorites')
+      if (activeSession)
+        sign(0.85, 0.2, 4.7, 0.84, -0.8, -Math.PI / 2, 'Exit XR', 'End session', '@exit')
+    } else {
+      plane(
+        observatory ? 2.9 : 3.9,
+        observatory ? 1.3 : 1.5,
+        -5.24,
+        1.85,
+        -0.95,
+        Math.PI / 2,
+        reading.texture,
+      )
+      sign(1.25, 0.5, -5.18, 0.79, 0.32, Math.PI / 2, 'Library wall', 'Return', '@library')
+      if (next.selected)
+        sign(
+          1.35,
+          0.5,
+          -5.18,
+          0.79,
+          -1,
+          Math.PI / 2,
+          next.selected.is_favorite ? 'Remove favorite' : 'Add favorite',
+          next.favoriteMessage || 'Your library',
+          '@favorite',
+        )
+      sign(1.2, 0.38, -5.18, 2.9, 0.15, Math.PI / 2, 'Recenter', 'Reset view', '@home')
+      sign(
+        1.2,
+        0.38,
+        -5.18,
+        2.9,
+        -1.35,
+        Math.PI / 2,
+        'Text size',
+        next.largeText ? 'Large' : 'Standard',
+        '@text',
+      )
+      sign(1.2, 0.38, 5.18, 2.9, -1.0, -Math.PI / 2, 'Recenter', 'Reset view', '@home')
+      if (reading.pages > 1) {
+        if (reading.page > 0)
+          sign(0.98, 0.44, -5.18, 0.34, 0.1, Math.PI / 2, 'Previous', 'Page', '@read-back')
+        if (reading.page + 1 < reading.pages)
+          sign(0.98, 0.44, -5.18, 0.34, -1.25, Math.PI / 2, 'Next', 'Page', '@read-next')
+      }
+      if (!observatory) {
+        const art = sign(3.8, 2.0, 5.24, 2, -1, -Math.PI / 2, 'Lounge', '')
+        imagePanel(art, '/static/newstyle/rooms/' + world + '.webp', version)
+      }
+      if (gameRuntime)
+        sign(0.8, 0.18, 0, 0.75, 1.71, 0, 'Moonfall Pinball', 'Visit the table', '@moonfall-open')
+      sign(
+        1.45,
+        0.45,
+        5.18,
+        1.42,
+        -1.0,
+        -Math.PI / 2,
+        'Comfort',
+        next.comfort || 'Standard',
+        '@comfort',
+      )
+      if (activeSession) sign(1.1, 0.5, 3.85, 0.48, -3.35, 0, 'Exit XR', 'End session', '@exit')
+      sign(1.48, 0.54, 5.18, 0.72, -1.83, -Math.PI / 2, 'Library wall', 'Return', '@library')
+      sign(
+        1.48,
+        0.54,
+        5.18,
+        0.72,
+        -0.17,
+        -Math.PI / 2,
+        'Favorite shelf',
+        'Your titles',
+        '@favorites',
+      )
+    }
     render()
   }
   function activate() {
@@ -733,7 +818,7 @@ export function createRoom(
         rig.rotation.y + yaw,
       )
       const next = rig.position.clone().addScaledVector(step, 0.22)
-      if (observatory && !observatory.canStandAt(next.x, next.z)) return
+      if (observatory && !observatory.canStandAt(next.x, next.z, station === 'pinball')) return
       rig.position.copy(next)
       rig.position.x = THREE.MathUtils.clamp(rig.position.x, -4.6, 4.6)
       rig.position.z = THREE.MathUtils.clamp(rig.position.z, -2.9, 4.1)
@@ -904,7 +989,7 @@ export function createRoom(
     const key = JSON.stringify(menu)
     if (gameMenuKey === key) return
     gameMenuKey = key
-    if (gameMenu) disposeRoomGroup(gameMenu)
+    if (gameMenu) disposeRoomGroup(gameMenu, sharedMaterials?.owned)
     gameMenu = new THREE.Group()
     gameMenu.name = 'moonfall-instrument-menu'
     gameMenu.visible = station === 'pinball'
@@ -912,8 +997,8 @@ export function createRoom(
     gameMenu.rotation.y = -0.25
     gameMenuTargets = []
     scene.add(gameMenu)
-    const cabinet = roomBuilder(gameMenu)
-    cabinet.box('moonfall-control-housing', 1.0, 1.14, 0.075, 0, -0.09, -0.065, '#352b21', 0, 0.035)
+    const cabinet = roomBuilder(gameMenu, sharedMaterials?.material)
+    cabinet.box('moonfall-control-housing', 1.0, 1.14, 0.075, 0, -0.09, -0.065, '#573b2e', 0, 0.035)
     cabinet.box(
       'moonfall-control-bezel',
       0.95,
@@ -937,7 +1022,7 @@ export function createRoom(
       subtitle: string,
       action?: string,
     ) {
-      const texture = labelTexture(title, subtitle, accent, w / h)
+      const texture = labelTexture(title, subtitle, accent, w / h, true)
       const item = new THREE.Mesh(
         new THREE.PlaneGeometry(w, h),
         new THREE.MeshBasicMaterial({ map: texture }),
@@ -1027,8 +1112,9 @@ export function createRoom(
       audio?.dispose()
       table?.dispose()
       observatory?.dispose()
+      if (gameMenu) disposeRoomGroup(gameMenu, sharedMaterials?.owned)
+      sharedMaterials?.dispose()
       disposeEnvironment?.()
-      if (gameMenu) disposeRoomGroup(gameMenu)
       void activeSession?.end().catch(() => {})
       controllerCleanups.forEach((f) => f())
       observers.disconnect()

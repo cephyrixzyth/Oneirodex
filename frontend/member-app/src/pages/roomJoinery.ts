@@ -1,13 +1,17 @@
 import * as THREE from 'three'
-import { roomBuilder } from './roomGeometry'
+import { roomBuilder, batchOwnedStaticGroup } from './roomGeometry'
 import type { createRoomMaterialLibrary } from './roomMaterials'
+import { READING_DISPLAY as R, ORRERY_POSITION as O } from './roomLayout'
 
 /** Original architectural profiles, upholstery seams and brass furniture hardware. */
 export function addObservatoryJoinery(
   root: THREE.Group,
   palette: ReturnType<typeof createRoomMaterialLibrary>,
 ) {
-  const b = roomBuilder(root, palette.material),
+  const detail = new THREE.Group()
+  detail.name = 'observatory-architectural-joinery'
+  root.add(detail)
+  const b = roomBuilder(detail, palette.material),
     brass = '#c9a96b',
     wood = '#69442e'
   for (const radius of [5.35, 5.48]) {
@@ -38,7 +42,7 @@ export function addObservatoryJoinery(
     0.57,
     0,
   )
-  wall.material = wall.material.clone()
+  wall.material = palette.own(wall.material.clone())
   wall.material.side = THREE.DoubleSide
   for (let i = 0; i < 12; i++) {
     const angle = (i * Math.PI) / 6,
@@ -84,13 +88,16 @@ export function addObservatoryJoinery(
     )
     for (const dx of [-0.36, 0, 0.36])
       for (const y of [0.81, 1.08]) {
+        const position = new THREE.Vector3(dx, y - 0.92, -0.12 - 0.1 * (dx / 0.625) ** 2 - 0.006)
+          .applyAxisAngle(new THREE.Vector3(1, 0, 0), -0.12)
+          .add(new THREE.Vector3(x, 0.92, z + 0.46))
         const button = b.mesh(
           'velvet-tuft-button',
           new THREE.SphereGeometry(0.024, 8, 6),
           palette.surface('velvet'),
-          x + dx,
-          y,
-          z + 0.31,
+          position.x,
+          position.y,
+          position.z,
         )
         button.scale.z = 0.45
       }
@@ -115,16 +122,53 @@ export function addObservatoryJoinery(
       z,
     )
   }
-  for (const y of [0.78, 0.91])
-    b.box('reading-desk-edge-profile', 1.11, 0.025, 2.35, -4.53, y, -0.95, brass, 0.75, 0.012)
+  for (const y of [0.78, 0.91]) {
+    for (const dx of [-0.545, 0.545])
+      b.box(
+        'reading-desk-edge-profile',
+        0.025,
+        0.025,
+        2.35,
+        -4.53 + dx,
+        y,
+        -0.95,
+        brass,
+        0.75,
+        0.012,
+      )
+    for (const dz of [-1.1625, 1.1625])
+      b.box(
+        'reading-desk-edge-profile',
+        1.11,
+        0.025,
+        0.025,
+        -4.53,
+        y,
+        -0.95 + dz,
+        brass,
+        0.75,
+        0.012,
+      )
+  }
+  b.box('reading-monitor-back', 0.08, 1.09, 1.82, R.x - 0.055, R.y, R.z, wood, 0, 0.025)
+  b.box('reading-monitor-toolbar', 0.08, 0.23, 2.18, R.x - 0.055, R.toolbarY, R.z, wood, 0, 0.025)
+  b.box('reading-monitor-header', 0.08, 0.2, 1.82, R.x - 0.055, R.topY, R.z, wood, 0, 0.025)
+  b.box('reading-monitor-post', 0.08, 1.22, 0.12, -5.02, 1.53, R.z, brass, 0.8, 0.018)
+  b.box('reading-monitor-base', 0.34, 0.035, 0.5, -4.86, 0.925, R.z, brass, 0.8, 0.015)
+  b.box('reading-monitor-base-arm', 0.25, 0.07, 0.1, -4.96, 0.98, R.z, brass, 0.8, 0.015)
+  b.box('lounge-window-console', 0.08, 1.4, 1.0, 4.77, 1.6, -0.8, wood, 0, 0.025)
+  b.box('lounge-console-wall-post', 0.08, 1.36, 0.1, 5.4, 1.7, -0.8, wood, 0, 0.015)
+  for (const y of [1.1, 2.1])
+    b.box('lounge-console-wall-bracket', 0.72, 0.05, 0.08, 5.06, y, -0.8, brass, 0.8, 0.012)
   const rim = b.mesh(
     'orrery-pedestal-reeded-rim',
     new THREE.TorusGeometry(0.42, 0.024, 8, 64),
     palette.material(brass, 0.8, 0.25, 0),
-    -3.5,
+    O.x,
     1.03,
-    2.1,
+    O.z,
     Math.PI / 2,
   )
   rim.castShadow = false
+  batchOwnedStaticGroup(detail)
 }

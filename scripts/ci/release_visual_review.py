@@ -49,7 +49,7 @@ def seed_owned(payload):
     sys.path.insert(0, str(ROOT))
     from sqlalchemy import create_engine, select, text
     from oneirodex.runtime_native.db_session import native_db, native_engine_session_scope
-    from oneirodex.models import (User, UserPreference, Library, Game, GlobalSettings,
+    from oneirodex.models import (User, UserPreference, Library, Game, Image, GlobalSettings,
                                  ChatSpace, ChatSpaceMember, ChatChannel, ChatChannelMember, ChatMessage)
     from oneirodex.platform import LibraryPlatform
     engine = create_engine(urllib_url(parsed))
@@ -73,12 +73,44 @@ def seed_owned(payload):
                       'Paper Voyager','Signal Grove','Star Orchard','Tidal Library','Night Lantern','Dream Atlas')
             platforms = (LibraryPlatform.PCWIN, LibraryPlatform.NES, LibraryPlatform.GB,
                          LibraryPlatform.SNES, LibraryPlatform.N64, LibraryPlatform.MAC)
+            from PIL import Image as RasterImage, ImageDraw, ImageFont
+            cover_root = Path(os.environ['ONEIRODEX_LIBRARY_DIR']).resolve()/'images'
+            if cover_root.parent.parent.name != 'server' or cover_root.parent.parent.parent.name != 'release-visual-'+os.environ['GITHUB_RUN_ID']:
+                raise ProbeFailure('release_visual_cover_root_not_owned')
+            cover_root.mkdir(exist_ok=True)
+            cover_font = ImageFont.truetype('DejaVuSans.ttf',40)
+            cover_colors = [(28,65,78),(91,46,70),(36,74,56),(96,61,31),(39,50,100),(65,49,87)]
+            def paint_cover(game,title,index):
+                # Distinct original fixture artwork through the normal member cover resolver.
+                # This is synthetic test data, not a branded placeholder or a claimed real game.
+                art = RasterImage.new('RGB',(600,900)); draw = ImageDraw.Draw(art)
+                color = cover_colors[index%len(cover_colors)]
+                for y in range(900):
+                    strength = 0.45+0.55*y/900
+                    draw.line((0,y,600,y),fill=tuple(int(channel*strength) for channel in color))
+                draw.ellipse((160,150,440,430),fill=(210,184,117),outline=(240,228,192),width=5)
+                draw.polygon([(0,540),(120,340+index*12),(280,590),(440,390),(600,530),(600,900),(0,900)],fill=(13,28,35))
+                draw.rectangle((25,25,574,874),outline=(214,190,139),width=3)
+                words=title.split(); lines=[]; line=''
+                for word in words:
+                    candidate=(line+' '+word).strip()
+                    if draw.textlength(candidate,font=cover_font)>510 and line: lines.append(line);line=word
+                    else: line=candidate
+                lines.append(line)
+                draw.multiline_text((45,680),'\n'.join(lines),font=cover_font,fill=(245,234,209),spacing=12)
+                filename='synthetic-room-cover-'+game.uuid+'.png'
+                art.save(cover_root/filename,format='PNG')
+                db.add(Image(game_uuid=game.uuid,image_type='cover',url=filename,is_downloaded=True,is_generated=True,generated_by='synthetic-ci'))
             for index, platform in enumerate(platforms):
                 library = Library(name=('Evening Collection','Pocket Adventures','Small Worlds','Garden Arcade','Star Maps','Studio Shelf')[index], platform=platform)
                 db.add(library); db.flush()
                 for title in titles[index*2:index*2+2]:
-                    db.add(Game(uuid=str(uuid.uuid4()), name=title, library_uuid=library.uuid,
-                                summary='An original synthetic catalog entry for release screenshots.'))
+                    game = Game(uuid=str(uuid.uuid4()), name=title, library_uuid=library.uuid,
+                                summary='An original synthetic catalog entry for release screenshots.')
+                    db.add(game); db.flush()
+                    paint_cover(game,title,index)
+            for index,game in enumerate(existing):paint_cover(game,game.name,index+6)
+            db.add(Game(uuid=str(uuid.uuid4()),name="Zebra Placeholder Study",library_uuid=library.uuid,summary="An intentionally uncovered synthetic title for theme fallback checks."))
             settings = db.execute(select(GlobalSettings)).scalars().one()
             settings.smtp_enabled = False; settings.oidc_enabled = False
             space = db.execute(select(ChatSpace).filter_by(visibility='household').order_by(ChatSpace.id)).scalars().first()
@@ -99,7 +131,7 @@ def seed_owned(payload):
                                  (user,'The new artwork keeps every shelf feeling at home.')):
                 db.add(ChatMessage(channel_id=channel.id,user_id=person.id,body=body))
             db.commit()
-            return {'username':user.name,'games':len(existing)+len(titles),'chat_message':'The evening collection is ready.'}
+            return {'username':user.name,'games':len(existing)+len(titles)+1,'cover_images':len(existing)+len(titles),'chat_message':'The evening collection is ready.'}
     finally:
         engine.dispose()
 
@@ -236,6 +268,7 @@ def run():
         if result.returncode or len(result.stdout)>8192: raise ProbeFailure('release_visual_seed_failed')
         data = json.loads(result.stdout)
         report['seeded_games'] = data['games']
+        report['seeded_cover_images'] = data['cover_images']
         browser_review(fixture.private_data['base_url'],data['username'],password,output,report,fixture)
         report['status'] = 'passed'; report['phase'] = 'complete'
     except Exception as error:

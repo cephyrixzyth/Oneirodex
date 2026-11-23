@@ -1,27 +1,38 @@
 import * as THREE from 'three'
-import { roomBuilder } from '../roomGeometry'
+import { roomBuilder, batchOwnedStaticGroup } from '../roomGeometry'
 import type { createRoomMaterialLibrary } from '../roomMaterials'
+import { OBSERVATORY_SURFACES } from '../roomLayout'
 
 /** Original cabinet joinery and engraved playfield, outside the simulation boundary. */
 export function detailPinballCabinet(
   group: THREE.Group,
   materials: ReturnType<typeof createRoomMaterialLibrary>,
 ) {
-  const b = roomBuilder(group, materials.material)
+  const detail = new THREE.Group()
+  detail.name = 'moonfall-cabinet-joinery'
+  group.add(detail)
+  const b = roomBuilder(detail, materials.material)
   const brass = '#c9a96b'
-  const art = new THREE.TextureLoader().load('/static/newstyle/rooms/aurora/moonfall-playfield.svg')
+  const art = materials.publicTexture(
+    '/static/newstyle/rooms/aurora/moonfall-playfield.svg',
+    true,
+    1024,
+  )
   art.colorSpace = THREE.SRGBColorSpace
   art.anisotropy = 4
   const surface = new THREE.Mesh(
     new THREE.PlaneGeometry(1.38, 2.9),
-    new THREE.MeshPhysicalMaterial({
-      map: art,
-      color: new THREE.Color('#e6eee3'),
-      roughness: 0.36,
-      metalness: 0.08,
-      clearcoat: 0.55,
-      clearcoatRoughness: 0.22,
-    }),
+    materials.own(
+      new THREE.MeshPhysicalMaterial({
+        map: art,
+        color: new THREE.Color('#e6eee3'),
+        roughness: 0.36,
+        metalness: 0.08,
+        clearcoat: 0.2,
+        clearcoatRoughness: 0.3,
+        userData: { roomClearcoat: 0.2 },
+      }),
+    ),
   )
   surface.name = 'pinball-engraved-playfield'
   surface.rotation.x = -Math.PI / 2 + Math.atan(0.035 / 0.72)
@@ -98,6 +109,7 @@ export function detailPinballCabinet(
   )
   shadow.name = 'pinball-ground-contact'
   shadow.rotation.x = -Math.PI / 2
-  shadow.position.y = 0.012
+  shadow.position.y = OBSERVATORY_SURFACES.rug + 0.0015
   group.add(shadow)
+  batchOwnedStaticGroup(detail)
 }

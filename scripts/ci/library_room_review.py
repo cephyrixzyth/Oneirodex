@@ -23,17 +23,22 @@ def review_library_room(page, output, report, fixture=None):
         capture_checkpoint(output.parent,report,'room_'+phase)
     endpoint = '/api/room-games/moonfall-pinball/progress'
     errors = []
+    shader_errors = []
     page.on('pageerror', lambda error: errors.append(type(error).__name__))
+    page.on('console',lambda message: shader_errors.append('shader_compile') if message.type=='error' and 'Shader Error' in message.text else None)
     visual_only = os.environ.get('ROOM_BENCHMARK_VISUAL_ONLY') == '1'
     expected_materials = {role+'-'+kind+'.jpg' for role in ('walnut','floor','velvet') for kind in ('color','normal','roughness')}
     expected_materials.add('moonfall-playfield.svg')
     material_responses = {}
+    cover_responses = {}
     def observe_material(response):
         from urllib.parse import urlsplit
         path = urlsplit(response.url).path
         name = path.rsplit('/',1)[-1]
         if path.startswith('/static/newstyle/rooms/aurora/') and name in expected_materials:
             material_responses[name] = response.status
+        if path.startswith('/static/library/images/synthetic-room-cover-'):
+            cover_responses[name] = response.status
     page.on('response',observe_material)
     if visual_only:
         report['capture_scope'] = 'visual-preview-only; no full game lifecycle qualification on this source'
@@ -109,11 +114,35 @@ def review_library_room(page, output, report, fixture=None):
         require(fetch('DELETE', {'revision': current['body']['revision']})['status'] == 200, 'reset_failed')
         open_room()
     checkpoint('catalog_selection')
+    page.wait_for_load_state('networkidle',timeout=60000)
+    cover_urls = page.locator('.od-vr__card img').evaluate_all("images=>images.slice(0,4).map(image=>image.src)")
+    require(len(cover_urls)==4 and all('/static/library/images/synthetic-room-cover-' in url for url in cover_urls),'synthetic_covers_missing')
+    for url in cover_urls:
+        response = page.context.request.get(url)
+        require(response.status==200 and response.headers.get('content-type','').startswith('image/'),'synthetic_cover_http_failed')
+        cover_responses[url.split('?',1)[0].rsplit('/',1)[-1]] = response.status
+    result['authorized_synthetic_cover_count'] = len(cover_responses)
     case = page.locator('.od-vr__card').first
     case.wait_for()
     case_name = case.locator('span').inner_text()
-    case.click()
+    page.get_by_role('button',name='Library wall',exact=True).click()
+    canvas = page.locator('.od-library-room__canvas')
+    canvas.evaluate("element=>element.scrollIntoView({block:'center',behavior:'instant'})")
+    box = canvas.bounding_box()
+    # Project the first mounted cover through the actual authored library camera.
+    # This uses ordinary pointer input, not a product debug route or selection hook.
+    point = page.evaluate('''({width,height})=>{
+      const yaw=-Math.atan2(3.2,2.55),pitch=Math.atan2(0.34,Math.hypot(3.2,2.55));
+      const x=-2.22+3.2,y=1.99-1.65,z=-3.55+1;
+      const viewX=Math.cos(yaw)*x-Math.sin(yaw)*z,rotatedZ=Math.sin(yaw)*x+Math.cos(yaw)*z;
+      const viewY=y*Math.cos(pitch)+rotatedZ*Math.sin(pitch),viewZ=-y*Math.sin(pitch)+rotatedZ*Math.cos(pitch);
+      const f=Math.tan(55*Math.PI/360);
+      return {x:(viewX/(-viewZ*f*(width/height))+1)*width/2,y:(1-viewY/(-viewZ*f))*height/2};
+    }''',{'width':box['width'],'height':box['height']})
+    page.mouse.click(box['x']+point['x'],box['y']+point['y'])
     page.locator('.od-vr__detail h2').filter(has_text=case_name).wait_for()
+    result['in_world_case_selection'] = True
+    page.wait_for_load_state('networkidle',timeout=60000)
     page.get_by_role('button', name='Reading desk', exact=True).click()
     capture('observatory-reading.png')
     page.get_by_role('button', name='Library wall', exact=True).click()
@@ -140,7 +169,34 @@ def review_library_room(page, output, report, fixture=None):
             })''')
             capture(name+'.png')
             page.locator('.od-library-room__canvas').screenshot(path=str(output/(name+'-canvas.png')))
+        checkpoint('visual_low_and_help')
+        page.get_by_role('button',name='Help',exact=True).click()
+        capture('moonfall-in-world-help.png')
+        page.locator('.od-library-room__canvas').screenshot(path=str(output/'moonfall-in-world-help-canvas.png'))
+        page.get_by_role('button',name='Back to game',exact=True).click()
+        page.get_by_text('How to play and comfort',exact=True).click()
+        page.evaluate('''()=>{
+          const gl=document.querySelector('.od-library-room__canvas').getContext('webgl2');
+          window.__roomTierUploads=[];window.__roomTierOriginals={};
+          for(const name of ['texImage2D','texSubImage2D']){
+            const original=gl[name];window.__roomTierOriginals[name]=original;
+            gl[name]=function(...args){const image=args[args.length-1];if(image?.width&&image?.height&&window.__roomTierUploads.length<64)window.__roomTierUploads.push({width:image.width,height:image.height});return original.apply(this,args)};
+          }
+        }''')
+        page.get_by_label('Quality',exact=True).select_option('low')
+        page.evaluate('''()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))''')
+        result['low_texture_uploads'] = page.evaluate('''()=>{
+          const gl=document.querySelector('.od-library-room__canvas').getContext('webgl2');
+          for(const [name,original] of Object.entries(window.__roomTierOriginals))gl[name]=original;
+          return window.__roomTierUploads;
+        }''')
+        result['low_gl_error'] = page.evaluate("()=>document.querySelector('.od-library-room__canvas').getContext('webgl2').getError()")
+        require(result['low_gl_error']==0,'low_texture_gl_error')
+        require(sum(max(image['width'],image['height'])<=512 for image in result['low_texture_uploads'])>=9,'low_texture_sizes_not_applied')
+        capture('moonfall-low.png')
+        page.locator('.od-library-room__canvas').screenshot(path=str(output/'moonfall-low-canvas.png'))
         require(not errors,'browser_exception')
+        require(not shader_errors,'shader_compile_failed')
         result['status'] = 'preview-captured'
         checkpoint('visual_preview_complete')
         return

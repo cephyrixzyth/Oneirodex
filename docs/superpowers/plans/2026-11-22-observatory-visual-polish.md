@@ -3,7 +3,7 @@
 > **Doc status:** Active
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans inline. Preserve the current checkout and unrelated files.
 
-**Goal:** Correct the rejected Aurora/Moonfall visual benchmark to meet the already approved rich 3D environment standard.
+**Goal:** Correct the rejected Aurora/Moonfall visual benchmark to deliver realistic-looking architecture, furniture, instruments, table hardware, materials, lighting and shadows throughout. The owner explicitly clarified that everything should look more realistic.
 
 **Architecture:** Keep the approved Three.js/WebXR world and functioning game/progress contracts. Add a locally bundled, provenance-recorded material set, reflection lighting, detailed original hero geometry and furniture-integrated displays. Judge actual in-engine renders before repeating the long gameplay qualification.
 
@@ -57,4 +57,4 @@
 
 ## Execution record
 
-Private working ledger remains `.artifacts/library-rooms-20261122/execution.md`. This pass treats polished stylized realism as the implementation direction within the approved cozy observatory; the owner has not accepted a finished visual result. A material/model pipeline alone is not acceptance.
+Private working ledger remains `.artifacts/library-rooms-20261122/execution.md`. The owner's clarification replaces the initial stylized-realism assumption with a realistic finish throughout the approved cozy observatory. Fantasy is in the aurora setting; objects, materials, proportions, mounts and illumination must be physically convincing. The owner has not accepted a finished visual result. A material/model pipeline alone is not acceptance.
