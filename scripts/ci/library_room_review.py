@@ -128,12 +128,16 @@ def review_library_room(page, output, report, fixture=None):
     peer_code, peer_body, _ = fixture.api.http(endpoint,tokens['child'])
     require(peer_code == 200 and json.loads(peer_body)['state'] is None, 'cross_member_disclosure')
     base = fixture.private_data['base_url']
-    child_write = page.context.request.put(base+endpoint, headers={'Authorization':'Bearer '+tokens['child']}, data={'revision':0,'state':stored['body']['state']})
-    require(child_write.status == 403, 'write_scope_not_enforced')
-    malformed = page.context.request.put(base+endpoint, headers={'Authorization':'Bearer '+tokens['adult'],'Content-Type':'application/json'},data='{broken')
-    require(malformed.status == 422, 'malformed_body_accepted')
-    oversized = page.context.request.put(base+endpoint, headers={'Authorization':'Bearer '+tokens['adult'],'Content-Type':'application/json'},data=' '*70000)
-    require(oversized.status == 413, 'oversized_body_accepted')
+    # Browser request contexts share the signed-in cookie jar; bearer controls
+    # must use the fixture's owned, cookie-free transport instead.
+    child_write = fixture.api.http(endpoint, tokens['child'], method='PUT', headers={'Content-Type':'application/json'},
+                                   data=json.dumps({'revision':0,'state':stored['body']['state']}).encode())[0]
+    result['child_write_status'] = child_write
+    require(child_write == 403, 'write_scope_not_enforced')
+    malformed = fixture.api.http(endpoint, tokens['adult'], method='PUT', headers={'Content-Type':'application/json'},data=b'{broken')[0]
+    require(malformed == 422, 'malformed_body_accepted')
+    oversized = fixture.api.http(endpoint, tokens['adult'], method='PUT', headers={'Content-Type':'application/json'},data=b' '*70000)[0]
+    require(oversized == 413, 'oversized_body_accepted')
     result['real_http_identity_scope_and_body_denials'] = True
     checkpoint('capture_table')
     page.screenshot(path=str(output / 'moonfall-paused.png'))

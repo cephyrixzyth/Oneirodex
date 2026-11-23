@@ -83,6 +83,7 @@ jobs:
         run: |
           venv/bin/python -m unittest discover -s scripts/ci -p test_release_visual_review.py -v
           venv/bin/python -m unittest discover -s scripts/ci -p test_library_room_review.py -v
+          venv/bin/python -m unittest discover -s scripts/ci -p test_linux_connected_server.py -v
       - name: Capture actual populated room and gameplay
         timeout-minutes: 8
         run: venv/bin/python scripts/ci/release_visual_review.py --run

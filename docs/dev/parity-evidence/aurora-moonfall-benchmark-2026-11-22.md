@@ -17,14 +17,14 @@ The owner approved the [eight-world direction](../../superpowers/specs/2026-11-2
 
 | Check | Observed result | Limit |
 |---|---|---|
-| Focused frontend slice, button and Docker-import ratchets | 110 tests passed across 14 files | Pure model, synthetic DOM and mocked graphics/audio; no actual browser/GPU |
+| Focused frontend slice, button and Docker-import ratchets | 113 tests passed across 14 files | Pure model, synthetic DOM and mocked graphics/audio; no actual browser/GPU |
 | Existing member bootstrap/router/App smoke slice | 28 tests passed across four files | Synthetic DOM; not an authenticated running app |
 | Python schema/model/store/router/migration slice | 25 unittest methods passed | Fake sessions/authentication and direct endpoint invocation; no database/server |
 | Production member bundle | Passed | Static compilation only; existing large-chunk warning remains |
 | Member TypeScript | Passed | Includes test source |
 | ESLint / Prettier / CSS tokens | Passed; zero CSS violations | No baseline increase |
 | API-envelope / Python undefined names / syntax compile | Passed | No runtime qualification inferred |
-| Disposable-capture fencing | Four pure tests and workflow-selection guard passed | Actual manual job pending |
+| Disposable-capture fencing and backend fixture | 18 pure tests and workflow-selection guard passed | Local checks use fake transports; actual capture status below |
 
 The primary frontend command scopes Vitest to `src/pages/pinball`, `LibraryRoom.test.tsx`, `LibraryRoomGame.test.tsx`, `roomSceneGame.test.ts`, `buttonLanguage.test.js` and `dockerStagedImports.test.ts`. Python uses `python -m unittest discover -s tests/pure -p 'test_room_game_*.py' -v`. The production bundle was written to an ignored evidence directory, without replacing served assets.
 
@@ -47,10 +47,14 @@ Deferred minor: acknowledgement text can say “Progress saved” while a newer 
 
 ## Remaining acceptance
 
-Qualification attempt [45069505232](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45069505232), source `df5318d6`, passed the migration/drift checks and all nine native request/PostgreSQL/deletion tests. Its actual `startweb.sh` capture startup failed: ORM `create_all` had already created the progress table before the new migration attempted to create it again. The migration now adopts an existing table, with pure regression coverage and an additional real Postgres test awaiting the next run. This failed attempt produced no room screenshots. A separate launch-deflection correction now has all three aim choices covered by physics checks.
+Qualification [45104376838](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45104376838), source `dc6e10047d0771386fce56b33eee3dacbcfeaf17`, passed frontend/build, migration/drift, all ten native request/PostgreSQL/deletion tests, 25 pure Python checks and capture fencing. Actual `startweb.sh` startup, authenticated populated catalog selection, observatory visit, launch and nonzero-tick progress save succeeded. Earlier clean-start migration adoption and room-selection defects have focused regression coverage.
+
+The browser job remains **failed** at its bearer write-scope assertion: it used Playwright's signed-in session cookie jar alongside the restricted token. The shared resolver prefers the valid session, so this did not isolate bearer scope enforcement. The harness now uses the existing owned, cookie-free HTTP transport for those writes; its new body/identity transport regression failed before implementation and passes afterward. Live denial, subsequent reload/failure/result/CAS steps still require a successful run.
+
+This attempt produced actual reading/library room images, not a complete benchmark capture set. The artifact ZIP SHA-256 is `bc7646ab1d6baf0236ea0d11c33a33e246de2308b44fcff14f75ac488f7481a9`; its manifest image hashes were checked before inspection. Chromium reported software rendering; its four frame samples had median 733.2 ms and p95 766.7 ms. Those poor software-renderer measurements do not establish desktop/headset performance. The focused run checked Tideglass only; the earlier separate eight-theme/populated-page baseline is retained in run [45070330759](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45070330759).
 
 1. Run the actual manual disposable-CI visual job and inspect its source-bound captures and report. No local app/database/browser run substitutes for this gate.
-2. Run real native HTTP and PostgreSQL tests, migration/cascade inventory, simultaneous writes and account transitions. Authored integration tests are not recorded as passes.
+2. Finish browser-driven HTTP denial/isolation, simultaneous writes and account transitions. Ten real native/PostgreSQL/migration/deletion checks have passed; that does not imply these later browser steps passed.
 3. Review the actual room, table readability, results and failure states against the concept direction; revise defects found.
 4. Measure real desktop/headset frame timing and comfort on available hardware. Software-rendered CI metrics do not satisfy hardware targets.
 5. Human playtest mission pacing, aiming and replay value, then accept the first benchmark before starting the other seven games.

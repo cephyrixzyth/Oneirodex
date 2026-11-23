@@ -187,14 +187,14 @@ class NativeServerAPI:
                                       stdout=self.log,stderr=self.log,start_new_session=True)
         self.progress['backend_launcher']='startweb.sh'
 
-    def http(self,path,token=None,method='GET',headers=None):
+    def http(self,path,token=None,method='GET',headers=None,data=None):
         from linux_packaged_native import listener_owned
         if not listener_owned(self.port,self.process.pid,allow_wildcard=True):
             raise ProbeFailure('linux_backend_listener_not_owned')
         selected={'Accept':'application/json',**(headers or {})}
         if token:
             selected['Authorization']='Bearer '+token
-        request=urllib.request.Request(self.base_url+path,method=method,headers=selected)
+        request=urllib.request.Request(self.base_url+path,method=method,headers=selected,data=data)
         try:
             with self.opener.open(request,timeout=3) as response:
                 return response.status,response.read(1024*1024),dict(response.headers)
