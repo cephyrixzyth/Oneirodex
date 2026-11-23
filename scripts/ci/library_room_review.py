@@ -44,6 +44,10 @@ def review_library_room(page, output, report, fixture=None):
         report['capture_scope'] = 'visual-preview-only; no full game lifecycle qualification on this source'
         result['qualification_scope'] = 'visual-preview-only'
         page.set_default_timeout(60000)
+    else:
+        result['gameplay_viewport'] = {'width': 1000, 'height': 800}
+        page.set_viewport_size(result['gameplay_viewport'])
+        page.set_default_timeout(45000)
 
     def fetch(method='GET', body=None, csrf=True):
         return page.evaluate('''async ({path,method,body,csrf}) => {
@@ -101,7 +105,7 @@ def review_library_room(page, output, report, fixture=None):
           },{once:true});
         }''')
         page.get_by_label('Visit room', exact=True).select_option('oneirodex')
-        page.wait_for_function("() => document.querySelector('.od-library-room__controls select')?.value==='oneirodex'")
+        page.wait_for_function("() => document.querySelector('.od-library-room__controls select')?.value==='oneirodex'", polling=250)
         checkpoint('observatory_selected')
         page.get_by_role('button', name='Moonfall Pinball', exact=True).wait_for()
         checkpoint('waiting_for_populated_shelf')
@@ -218,8 +222,6 @@ def review_library_room(page, output, report, fixture=None):
         checkpoint('visual_preview_complete')
         return
     checkpoint('starting_run')
-    result['gameplay_viewport'] = {'width':1000,'height':800}
-    page.set_viewport_size(result['gameplay_viewport'])
     wait_for_game_action('New run').click()
     page.get_by_role('button', name='Pause', exact=True).wait_for()
     page.get_by_role('button', name='Moonfall Pinball', exact=True).click()
