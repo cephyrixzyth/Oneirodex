@@ -10,8 +10,57 @@ from probe_linux_packaged import ProbeFailure
 from release_visual_review import ROOT, require_capture_ci, capture_checkpoint
 
 
+def review_themed_worlds(page, output, report):
+    require_capture_ci(ROOT, os.environ, sys.platform, getattr(os, 'geteuid', lambda: -1)())
+    from PIL import Image, ImageStat
+
+    room_output = output / 'room'
+    room_output.mkdir()
+    report['capture_scope'] = 'seven-room visual preview'
+    report['themed_worlds'] = {}
+    errors = []
+    page.on('pageerror', lambda error: errors.append(type(error).__name__))
+    page.on('console', lambda message: errors.append('shader_compile')
+            if message.type == 'error' and 'Shader Error' in message.text else None)
+    page.set_default_timeout(60000)
+    page.goto(page.url.split('/library', 1)[0].split('/vr', 1)[0] + '/vr?room=open&vr_compat=collection',
+              wait_until='domcontentloaded')
+    selector = page.get_by_label('Visit room', exact=True)
+    for world in ('afterglow', 'monochrome', 'greenhouse', 'signal', 'tape-deck', 'deep-space', 'tideglass'):
+        capture_checkpoint(output, report, 'room_preview_' + world)
+        before = page.locator('.od-library-room__canvas').element_handle()
+        selector.select_option(world)
+        page.wait_for_function('(old) => !old.isConnected', arg=before, polling=250)
+        page.get_by_role('group', name='Room stations', exact=True).wait_for()
+        page.wait_for_function(
+            "() => document.querySelector('[aria-label=\"Room shelf\"]')?.textContent.includes('Titles ')",
+            polling=250)
+        page.wait_for_load_state('networkidle', timeout=30000)
+        canvas = page.locator('.od-library-room__canvas')
+        images = []
+        for station, angle in (('Room overview', 'overview'), ('Library wall', 'library'), ('Lounge', 'lounge')):
+            page.get_by_role('button', name=station, exact=True).click()
+            canvas.evaluate("element => element.scrollIntoView({block:'center',behavior:'instant'})")
+            path = room_output / (world + '-' + angle + '.png')
+            canvas.screenshot(path=str(path), timeout=60000)
+            with Image.open(path) as rendered:
+                if max(ImageStat.Stat(rendered.convert('RGB')).stddev) <= 8:
+                    raise ProbeFailure('themed_room_blank_render')
+            images.append(path.name)
+        if page.get_by_role('heading', name='Moonfall Pinball', exact=True).count():
+            raise ProbeFailure('themed_room_has_wrong_game')
+        if errors:
+            raise ProbeFailure('themed_room_browser_error')
+        report['themed_worlds'][world] = {'images': images, 'populated_shelf': True}
+    page.get_by_role('button', name='Close room', exact=True).click()
+    page.locator('.od-library-room__canvas').wait_for(state='detached')
+    capture_checkpoint(output, report, 'themed_room_preview_complete')
+
+
 def review_library_room(page, output, report, fixture=None):
     require_capture_ci(ROOT, os.environ, sys.platform, getattr(os, 'geteuid', lambda: -1)())
+    if os.environ.get('ROOM_WORLDS_PREVIEW') == '1':
+        return review_themed_worlds(page, output, report)
     from PIL import Image, ImageStat
 
     output = output / 'room'

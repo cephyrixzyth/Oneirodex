@@ -122,9 +122,19 @@ describe('scene and pinball integration with a fake renderer (no app or GPU)', (
     expect(engine.game!.status()).toBe('paused')
   })
 
-  it('does not advertise a new game on the seven legacy rooms', () => {
+  it('mounts the conservatory through the normal room engine with the catalog and overview', () => {
     const engine = createRoom(canvas, vi.fn(), vi.fn(), vi.fn(), { theme: 'greenhouse' })
     cleanup.push(engine.dispose)
+    engine.update({
+      ...view,
+      games: [{ uuid: 'synthetic-cover', name: 'Synthetic catalog title' }],
+    })
+    engine.move('overview')
+    expect(mock.scene?.getObjectByName('room-greenhouse')).toBeDefined()
+    expect(mock.scene?.getObjectByName('planting-trough')).toBeDefined()
+    expect(mock.scene?.getObjectByName('physical-catalog-case')?.userData.action).toBe(
+      'synthetic-cover',
+    )
     expect(engine.game).toBeNull()
     expect(mock.scene?.getObjectByName('observatory-dome')).toBeUndefined()
   })

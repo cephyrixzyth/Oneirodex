@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it, vi } from 'vitest'
-import { roomArtSlug } from '../roomFurnishings'
+import { roomArtSlug } from '../roomWorlds'
 import { furnishObservatory } from '../roomObservatory'
 import { createPinballTable, boardPosition } from './render'
 import { newMoonfall, stepMoonfall } from './model'

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { createMoonfallAudio } from './pinball/audio'
 import { readingTexture } from './roomReading'
-import { furnishRoom, roomFinish, roomArtSlug } from './roomFurnishings'
+import { buildThemedRoom, roomArtSlug } from './roomWorlds'
 import { furnishObservatory } from './roomObservatory'
 import { createPinballTable } from './pinball/render'
 import { createPinballRuntime } from './pinball/runtime'
@@ -145,11 +145,10 @@ export function createRoom(
   scene.add(rig)
   const theme = options.theme || document.documentElement.dataset.theme || 'default'
   const world = roomArtSlug(theme)
-  const finish = roomFinish(theme)
   const sharedMaterials = world === 'oneirodex' ? createRoomMaterialLibrary() : null
   const observatory = sharedMaterials ? furnishObservatory(scene, sharedMaterials) : null
-  const disposeEnvironment = observatory ? createObservatoryLighting(renderer, scene) : null
-  if (!observatory) furnishRoom(scene, theme)
+  const themed = observatory ? null : buildThemedRoom(scene, world)
+  const disposeEnvironment = createObservatoryLighting(renderer, scene)
   const gallery = new THREE.Group()
   scene.add(gallery)
   const targets: THREE.Mesh[] = []
@@ -265,14 +264,13 @@ export function createRoom(
     else render()
   }
   const positions: Record<Station, [number, number, number]> = {
-    overview: [-3.3, 0, 3.8],
+    overview: observatory ? [-3.3, 0, 3.8] : [-2, 0, 0.85],
     library: observatory ? [-3.2, 0, -1] : [0, 0, 2.1],
     reading: [-2.65, 0, -0.95],
-    lounge: observatory ? [-1.3, 0, 2.2] : [2.65, 0, -0.95],
+    lounge: observatory ? [-1.3, 0, 2.2] : [1.2, 0, -1.25],
     pinball: [0, 0, 2.5],
   }
   function move(next: Station) {
-    if (next === 'overview' && !observatory) return
     if (next === 'pinball' && !gameRuntime) return
     if (next !== 'pinball') gameRuntime?.pause()
     station = next
@@ -283,11 +281,12 @@ export function createRoom(
     if (mode === 'Seated') rig.position.y += 0.38
     if (mode === 'Close reach') {
       if (next === 'library') rig.position.z -= 0.8
-      else if (next !== 'pinball') rig.position.x += next === 'reading' ? -0.65 : 0.65
+      else if (next === 'reading' || next === 'lounge')
+        rig.position.x += next === 'reading' ? -0.65 : 0.65
     }
     rig.rotation.y = next === 'reading' ? Math.PI / 2 : next === 'lounge' ? -Math.PI / 2 : 0
-    if (next === 'overview') rig.rotation.y = -0.47
-    if (next === 'lounge' && observatory) rig.rotation.y = -1.13
+    if (next === 'overview') rig.rotation.y = observatory ? -0.47 : -2.55
+    if (next === 'lounge') rig.rotation.y = observatory ? -1.13 : -1.85
     if (next === 'library' && observatory)
       rig.rotation.y = -Math.atan2(-rig.position.x, rig.position.z + 3.55)
     camera.position.set(0, 1.55, 0)
@@ -309,44 +308,13 @@ export function createRoom(
     }
     render()
   }
-  const box = (w: number, h: number, d: number, x: number, y: number, z: number, color: string) => {
-    const obj = new THREE.Mesh(
-      new THREE.BoxGeometry(w, h, d),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.85 }),
-    )
-    obj.position.set(x, y, z)
-    scene.add(obj)
-    return obj
-  }
-  if (observatory) {
-    renderer.shadowMap.enabled = true
-    // The directional map is architectural. Moving game pieces carry their own
-    // visible contact cues and should not redraw the entire room's shadow pass.
-    renderer.shadowMap.autoUpdate = false
-    renderer.shadowMap.needsUpdate = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.1
-  } else {
-    const light = new THREE.HemisphereLight('#ecf6e9', '#716049', 2.2)
-    scene.add(light)
-    const lamp = new THREE.DirectionalLight('#ffdcab', 2)
-    lamp.position.set(1, 4, 2)
-    scene.add(lamp)
-    box(11, 0.1, 10, 0, -0.05, 0, '#55473d')
-    box(11, 4.6, 0.12, 0, 2.3, -4, finish.wall)
-    box(0.15, 4.6, 10, -5.4, 2.3, 0, finish.wall)
-    box(0.15, 4.6, 10, 5.4, 2.3, 0, finish.wall)
-    box(11, 0.14, 10, 0, 4.65, 0, '#31302a')
-    box(11, 4.6, 0.1, 0, 2.3, 5, '#303731')
-    for (const x of [-4.7, -2.3, 0, 2.3, 4.7]) box(0.065, 4.5, 0.12, x, 2.25, -3.85, '#79644f')
-    box(9.4, 0.1, 0.45, 0, 0.82, -3.42, finish.wood)
-    box(9.4, 0.08, 0.3, 0, 3.55, -3.65, accent)
-    box(2.3, 0.5, 0.85, 2.7, 0.25, 1.2, '#796450')
-    box(2.3, 0.62, 0.18, 2.7, 0.65, 1.62, '#796450')
-    box(1.0, 0.08, 0.66, -2.5, 0.72, 1, '#aa8262')
-    box(0.2, 0.7, 0.25, -2.5, 0.35, 1, '#554336')
-  }
+  renderer.shadowMap.enabled = true
+  // Architectural shadows are refreshed only when their casters change.
+  renderer.shadowMap.autoUpdate = false
+  renderer.shadowMap.needsUpdate = true
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
+  renderer.toneMappingExposure = observatory ? 1.1 : 1
   const loader = new THREE.TextureLoader()
   function plane(
     w: number,
@@ -360,14 +328,14 @@ export function createRoom(
   ) {
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(w, h),
-      observatory
+      observatory || themed
         ? new THREE.MeshStandardMaterial({ map: texture, roughness: 0.72, metalness: 0.02 })
         : new THREE.MeshBasicMaterial({ map: texture }),
     )
     mesh.position.set(x, y, z)
     mesh.rotation.y = angle
     gallery.add(mesh)
-    if (observatory) {
+    if (observatory || themed) {
       const isCase = Boolean(action && !action.startsWith('@') && h > 1)
       const frame = new THREE.Mesh(
         beveledBox(w + 0.035, h + 0.035, isCase ? 0.12 : 0.045, 0.012),
@@ -377,7 +345,7 @@ export function createRoom(
           roughness: 0.42,
         }),
       )
-      frame.name = isCase ? 'physical-catalog-case' : 'observatory-mounted-plaque'
+      frame.name = isCase ? 'physical-catalog-case' : 'mounted-room-plaque'
       frame.position.set(
         x - Math.sin(angle) * (isCase ? 0.065 : 0.028),
         y,
@@ -451,7 +419,7 @@ export function createRoom(
     gallery.clear()
   }
   function update(next: RoomView) {
-    if (observatory) renderer.shadowMap.needsUpdate = true
+    renderer.shadowMap.needsUpdate = true
     if (currentView?.selected?.uuid !== next.selected?.uuid) readingPage = 0
     const comfortChanged = currentView?.comfort !== next.comfort
     currentView = next
@@ -506,7 +474,7 @@ export function createRoom(
     next.games.forEach((g, i) => {
       const x = (i - (next.games.length - 1) / 2) * 1.48
       const art = sign(
-        observatory ? 0.86 : 1.19,
+        0.86,
         1.32,
         x,
         1.99,
@@ -518,17 +486,7 @@ export function createRoom(
       )
       if (g.cover_url && !g.cover_url.endsWith('default_cover.jpg'))
         imagePanel(art, g.cover_url, version)
-      sign(
-        1.34,
-        observatory ? 0.24 : 0.59,
-        x,
-        1.03,
-        -3.48,
-        0,
-        g.name,
-        observatory ? '' : 'Read details',
-        g.uuid,
-      )
+      sign(1.34, 0.24, x, 1.03, -3.48, 0, g.name, '', g.uuid)
     })
     sign(1.15, 0.5, -2.6, 0.48, -3.35, 0, 'Reading desk', 'Visit', '@reading')
     if (next.previous) sign(1.05, 0.47, -1.05, 0.48, -3.35, 0, 'Previous', 'Shelf', '@previous')
@@ -545,98 +503,25 @@ export function createRoom(
     )
     readingPage = reading.page
     readingPageCount = reading.pages
-    if (observatory) {
-      drawObservatoryStations(
-        sign,
-        (...args) => {
-          const screen = plane(...args)
-          if (screen.material instanceof THREE.MeshStandardMaterial) {
-            screen.material.emissive = new THREE.Color('#ffffff')
-            screen.material.emissiveMap = args[6]
-            screen.material.emissiveIntensity = 0.16
-          }
-        },
-        reading.texture,
-        next,
-        readingPage,
-        reading.pages,
-      )
+    drawObservatoryStations(
+      sign,
+      (...args) => {
+        const screen = plane(...args)
+        if (screen.material instanceof THREE.MeshStandardMaterial) {
+          screen.material.emissive.set('#ffffff')
+          screen.material.emissiveMap = args[6]
+          screen.material.emissiveIntensity = 0.16
+        }
+      },
+      reading.texture,
+      next,
+      readingPage,
+      reading.pages,
+    )
+    if (gameRuntime)
       sign(0.8, 0.18, 0, 0.75, 1.71, 0, 'Moonfall Pinball', 'Visit the table', '@moonfall-open')
-      if (activeSession)
-        sign(0.85, 0.2, 4.7, 0.84, -0.8, -Math.PI / 2, 'Exit XR', 'End session', '@exit')
-    } else {
-      plane(
-        observatory ? 2.9 : 3.9,
-        observatory ? 1.3 : 1.5,
-        -5.24,
-        1.85,
-        -0.95,
-        Math.PI / 2,
-        reading.texture,
-      )
-      sign(1.25, 0.5, -5.18, 0.79, 0.32, Math.PI / 2, 'Library wall', 'Return', '@library')
-      if (next.selected)
-        sign(
-          1.35,
-          0.5,
-          -5.18,
-          0.79,
-          -1,
-          Math.PI / 2,
-          next.selected.is_favorite ? 'Remove favorite' : 'Add favorite',
-          next.favoriteMessage || 'Your library',
-          '@favorite',
-        )
-      sign(1.2, 0.38, -5.18, 2.9, 0.15, Math.PI / 2, 'Recenter', 'Reset view', '@home')
-      sign(
-        1.2,
-        0.38,
-        -5.18,
-        2.9,
-        -1.35,
-        Math.PI / 2,
-        'Text size',
-        next.largeText ? 'Large' : 'Standard',
-        '@text',
-      )
-      sign(1.2, 0.38, 5.18, 2.9, -1.0, -Math.PI / 2, 'Recenter', 'Reset view', '@home')
-      if (reading.pages > 1) {
-        if (reading.page > 0)
-          sign(0.98, 0.44, -5.18, 0.34, 0.1, Math.PI / 2, 'Previous', 'Page', '@read-back')
-        if (reading.page + 1 < reading.pages)
-          sign(0.98, 0.44, -5.18, 0.34, -1.25, Math.PI / 2, 'Next', 'Page', '@read-next')
-      }
-      if (!observatory) {
-        const art = sign(3.8, 2.0, 5.24, 2, -1, -Math.PI / 2, 'Lounge', '')
-        imagePanel(art, '/static/newstyle/rooms/' + world + '.webp', version)
-      }
-      if (gameRuntime)
-        sign(0.8, 0.18, 0, 0.75, 1.71, 0, 'Moonfall Pinball', 'Visit the table', '@moonfall-open')
-      sign(
-        1.45,
-        0.45,
-        5.18,
-        1.42,
-        -1.0,
-        -Math.PI / 2,
-        'Comfort',
-        next.comfort || 'Standard',
-        '@comfort',
-      )
-      if (activeSession) sign(1.1, 0.5, 3.85, 0.48, -3.35, 0, 'Exit XR', 'End session', '@exit')
-      sign(1.48, 0.54, 5.18, 0.72, -1.83, -Math.PI / 2, 'Library wall', 'Return', '@library')
-      sign(
-        1.48,
-        0.54,
-        5.18,
-        0.72,
-        -0.17,
-        -Math.PI / 2,
-        'Favorite shelf',
-        'Your titles',
-        '@favorites',
-      )
-    }
+    if (activeSession)
+      sign(0.85, 0.2, 4.7, 0.84, -0.8, -Math.PI / 2, 'Exit XR', 'End session', '@exit')
     render()
   }
   function activate() {
@@ -825,6 +710,7 @@ export function createRoom(
       )
       const next = rig.position.clone().addScaledVector(step, 0.22)
       if (observatory && !observatory.canStandAt(next.x, next.z, station === 'pinball')) return
+      if (themed && !themed.canStandAt(next.x, next.z)) return
       rig.position.copy(next)
       rig.position.x = THREE.MathUtils.clamp(rig.position.x, -4.6, 4.6)
       rig.position.z = THREE.MathUtils.clamp(rig.position.z, -2.9, 4.1)
@@ -1119,6 +1005,7 @@ export function createRoom(
       audio?.dispose()
       table?.dispose()
       observatory?.dispose()
+      themed?.dispose()
       if (gameMenu) disposeRoomGroup(gameMenu, sharedMaterials?.owned)
       sharedMaterials?.dispose()
       disposeEnvironment?.()

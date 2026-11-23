@@ -9,6 +9,7 @@ const stations: { id: Station; name: string }[] = [
   { id: 'library', name: 'Library wall' },
   { id: 'reading', name: 'Reading desk' },
   { id: 'lounge', name: 'Lounge' },
+  { id: 'overview', name: 'Room overview' },
 ]
 const shelfSize = 4
 const comfortModes = ['Standard', 'Seated', 'Close reach'] as const
@@ -424,15 +425,6 @@ export function LibraryRoom({
                     {s.name}
                   </button>
                 ))}
-                {gameView && (
-                  <button
-                    type="button"
-                    className="od-cbtn"
-                    onClick={() => engine.current?.move('overview')}
-                  >
-                    Room overview
-                  </button>
-                )}
                 {gameView && (
                   <button
                     type="button"
