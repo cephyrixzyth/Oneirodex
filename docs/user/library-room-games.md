@@ -1,7 +1,7 @@
 # Library room games
 
 > **Doc status:** Reference
-> Development benchmark; not part of the published 1.3.3 release. Actual browser captures, database qualification and headset measurements remain pending.
+> Development benchmark; not part of the published 1.3.3 release. Initial actual room captures and database checks passed; full browser qualification, hardware measurements and human benchmark acceptance remain pending. See the [source-bound evidence](../dev/parity-evidence/aurora-moonfall-benchmark-2026-11-22.md).
 
 The first redesigned room is **Aurora Observatory**, with the original **Moonfall Pinball** table. The other seven room designs and games are approved concepts; their current rooms retain their existing furnishings and do not offer those new games yet.
 

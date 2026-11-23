@@ -105,10 +105,17 @@ def review_library_room(page, output, report, fixture=None):
     checkpoint('launch_and_frames')
     page.keyboard.press('Space')
     timings = page.evaluate('''() => new Promise(resolve => {
-      const frames=[]; let last, ticket;
-      function frame(now) { if(last!==undefined) frames.push(now-last); last=now; ticket=requestAnimationFrame(frame); }
+      const frames=[]; let last, ticket, timer, finished=false;
+      function finish() {
+        if(finished) return; finished=true;
+        cancelAnimationFrame(ticket); clearTimeout(timer); resolve(frames);
+      }
+      function frame(now) {
+        if(last!==undefined) frames.push(now-last); last=now;
+        if(frames.length>=4) finish(); else ticket=requestAnimationFrame(frame);
+      }
+      timer=setTimeout(finish,15000);
       ticket=requestAnimationFrame(frame);
-      setTimeout(()=>{cancelAnimationFrame(ticket); resolve(frames)},2000);
     })''')
     require(len(timings) >= 2, 'animation_not_advancing')
     timings.sort()

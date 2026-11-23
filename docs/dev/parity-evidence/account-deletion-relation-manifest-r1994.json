@@ -2,7 +2,7 @@
   "review_id": "R1994",
   "title": "Classify public and private game collections during account deletion",
   "policy_source": "ADR 0013 and owner policy summarized in docs/dev/behavior-parity-review.md.",
-  "schema_basis": "Inventory declaration extended for original room-game progress through Alembic 6a7b8c9d0e1f; 53 user foreign-key columns across 87 current ORM tables. Original R1994 evidence remains in its historical commit. Runtime verification of the new relation is pending disposable CI.",
+  "schema_basis": "Inventory declaration extended for original room-game progress through Alembic 6a7b8c9d0e1f; 53 user foreign-key columns across 87 current ORM tables. Original R1994 evidence remains in its historical commit. The added relation passed real PostgreSQL inventory/cascade checks in disposable CI run 45104376838 at dc6e10047d0771386fce56b33eee3dacbcfeaf17; this does not requalify unrelated historical acceptance.",
   "relations": [
     {
       "foreign_key": "room_game_progress.user_id",
@@ -10,7 +10,7 @@
       "disposition": "delete_account_linked_row",
       "policy": "Delete the departing account original-game progress, personal scores, settings, unlocks and revision tombstones; retain other members' progress.",
       "synthetic_fixture": "covered",
-      "verification_status": "Fixture implemented via populated inventory test; real database deletion check pending disposable CI."
+      "verification_status": "Passed real populated inventory and two-member cascade tests in disposable CI run 45104376838 at dc6e10047d0771386fce56b33eee3dacbcfeaf17."
     },
     {
       "foreign_key": "announcements.author_user_id",
