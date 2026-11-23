@@ -237,7 +237,7 @@ export function createRoom(
           renderer.setPixelRatio(
             Math.min(
               window.devicePixelRatio || 1,
-              lastQuality === 'low' ? 1 : lastQuality === 'high' ? 1.6 : 1.3,
+              lastQuality === 'low' ? 0.6 : lastQuality === 'high' ? 1.6 : 1.3,
             ),
           )
       }
