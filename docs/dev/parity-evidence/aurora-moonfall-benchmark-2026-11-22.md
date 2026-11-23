@@ -17,7 +17,7 @@ The owner approved the [eight-world direction](../../superpowers/specs/2026-11-2
 
 | Check | Observed result | Limit |
 |---|---|---|
-| Focused frontend slice, button and Docker-import ratchets | 113 tests passed across 14 files | Pure model, synthetic DOM and mocked graphics/audio; no actual browser/GPU |
+| Focused frontend slice, button and Docker-import ratchets | 114 tests passed across 14 files | Pure model, synthetic DOM and mocked graphics/audio; no actual browser/GPU |
 | Existing member bootstrap/router/App smoke slice | 28 tests passed across four files | Synthetic DOM; not an authenticated running app |
 | Python schema/model/store/router/migration slice | 25 unittest methods passed | Fake sessions/authentication and direct endpoint invocation; no database/server |
 | Production member bundle | Passed | Static compilation only; existing large-chunk warning remains |
@@ -50,6 +50,10 @@ Deferred minor: acknowledgement text can say “Progress saved” while a newer 
 Qualification [45104376838](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45104376838), source `dc6e10047d0771386fce56b33eee3dacbcfeaf17`, passed frontend/build, migration/drift, all ten native request/PostgreSQL/deletion tests, 25 pure Python checks and capture fencing. Actual `startweb.sh` startup, authenticated populated catalog selection, observatory visit, launch and nonzero-tick progress save succeeded. Earlier clean-start migration adoption and room-selection defects have focused regression coverage.
 
 The browser job remains **failed** at its bearer write-scope assertion: it used Playwright's signed-in session cookie jar alongside the restricted token. The shared resolver prefers the valid session, so this did not isolate bearer scope enforcement. The harness now uses the existing owned, cookie-free HTTP transport for those writes; its new body/identity transport regression failed before implementation and passes afterward. Live denial, subsequent reload/failure/result/CAS steps still require a successful run.
+
+Follow-up [45106012467](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45106012467), source `8e6b3b56`, passed those bearer/body denials, saved reload/resume, settings persistence, outage handling with an actual cancelled leave dialog, seeded result display and reset. It failed the 150-second normal-play result bound while still running on the third ball. A pure input-only replay of the recorded seed reaches game-over at 6,088 ticks (50.73 simulation seconds); software rendering stretches wall time because catch-up is bounded. The harness now allows at most 240 seconds and records elapsed time plus a fixed checkpoint projection. Natural browser results, teardown and concurrent HTTP writes remain pending.
+
+Inspection also confirmed that the table backboard and game menu obstructed catalog covers at the library station. A ray-cast regression failed before correcting the desktop overview; it now checks all four cover centers and their top/bottom edges. The game menu is visible and ray-selectable only at the table station. XR eye positioning and the fixed desktop playfield camera remain separate. Actual captures of this layout correction are pending.
 
 This attempt produced actual reading/library room images, not a complete benchmark capture set. The artifact ZIP SHA-256 is `bc7646ab1d6baf0236ea0d11c33a33e246de2308b44fcff14f75ac488f7481a9`; its manifest image hashes were checked before inspection. Chromium reported software rendering; its four frame samples had median 733.2 ms and p95 766.7 ms. Those poor software-renderer measurements do not establish desktop/headset performance. The focused run checked Tideglass only; the earlier separate eight-theme/populated-page baseline is retained in run [45070330759](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45070330759).
 

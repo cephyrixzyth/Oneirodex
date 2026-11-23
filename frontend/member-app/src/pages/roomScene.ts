@@ -239,6 +239,7 @@ export function createRoom(
     if (next === 'pinball' && !gameRuntime) return
     if (next !== 'pinball') gameRuntime?.pause()
     station = next
+    if (gameMenu) gameMenu.visible = next === 'pinball'
     yaw = 0
     rig.position.set(...positions[next])
     const mode = currentView?.comfort
@@ -250,6 +251,11 @@ export function createRoom(
     rig.rotation.y = next === 'reading' ? Math.PI / 2 : next === 'lounge' ? -Math.PI / 2 : 0
     camera.position.set(0, 1.55, 0)
     camera.rotation.set(0, 0, 0)
+    if (next === 'library' && observatory && !activeSession) {
+      // Desktop overview clears the cabinet backboard without moving the XR rig.
+      camera.position.y = 4.2 - rig.position.y
+      camera.rotation.x = -Math.atan2(2.35, rig.position.z + 3.55)
+    }
     if (next === 'pinball' && !activeSession) {
       const back = 3.4 + Math.max(0, 1 - camera.aspect) * 1.5
       rig.position.z = back
@@ -490,7 +496,12 @@ export function createRoom(
   }
   function activate() {
     const hit = ray.intersectObjects(
-      [...targets, ...gameTargets, ...gameMenuTargets, ...instrumentTargets],
+      [
+        ...targets,
+        ...gameTargets,
+        ...(station === 'pinball' ? gameMenuTargets : []),
+        ...instrumentTargets,
+      ],
       false,
     )[0]?.object.userData.action as string | undefined
     if (!hit) return
@@ -545,8 +556,10 @@ export function createRoom(
       (e.button === 0 || e.button === 2)
     ) {
       if (!pointerRay(e)) return
-      const hit = ray.intersectObjects([...targets, ...gameTargets, ...gameMenuTargets], false)[0]
-        ?.object.userData.action as string | undefined
+      const hit = ray.intersectObjects(
+        [...targets, ...gameTargets, ...(station === 'pinball' ? gameMenuTargets : [])],
+        false,
+      )[0]?.object.userData.action as string | undefined
       const menu = hit?.startsWith('@moonfall-') && hit !== '@moonfall-open'
       if (!menu) {
         e.preventDefault()
@@ -739,7 +752,7 @@ export function createRoom(
       controller.updateWorldMatrix(true, false)
       ray.setFromXRController(controller)
       const action = ray.intersectObjects(
-        [...targets, ...gameTargets, ...gameMenuTargets],
+        [...targets, ...gameTargets, ...(station === 'pinball' ? gameMenuTargets : [])],
         false,
       )[0]?.object.userData.action as string | undefined
       if (
@@ -840,6 +853,7 @@ export function createRoom(
     if (gameMenu) disposeRoomGroup(gameMenu)
     gameMenu = new THREE.Group()
     gameMenu.name = 'moonfall-instrument-menu'
+    gameMenu.visible = station === 'pinball'
     gameMenuTargets = []
     scene.add(gameMenu)
     function panel(

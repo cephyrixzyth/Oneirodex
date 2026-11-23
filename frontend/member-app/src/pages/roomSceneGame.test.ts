@@ -272,3 +272,37 @@ it.each(['Standard', 'Seated', 'Close reach'] as const)(
     }
   },
 )
+
+it('keeps the cabinet below catalog sightlines at the desktop library station', async () => {
+  const THREE = await import('three')
+  const room = createRoom(canvas, vi.fn(), vi.fn(), vi.fn())
+  cleanup.push(room.dispose)
+  room.update(view)
+  room.move('library')
+  room.setGameMenu({ title: 'Moonfall', message: 'Ready', actions: [] })
+  expect(mock.scene!.getObjectByName('moonfall-instrument-menu')!.visible).toBe(false)
+  const camera = mock.scene!.getObjectByProperty(
+    'type',
+    'PerspectiveCamera',
+  ) as import('three').PerspectiveCamera
+  const cabinet = mock.scene!.getObjectByName('moonfall-pinball-table')!
+  const origin = new THREE.Vector3()
+  camera.getWorldPosition(origin)
+  for (const x of [-2.22, -0.74, 0.74, 2.22])
+    for (const y of [1.33, 1.99, 2.65]) {
+      const target = new THREE.Vector3(x, y, -3.55)
+      const ray = new THREE.Raycaster(
+        origin,
+        target.clone().sub(origin).normalize(),
+        0,
+        origin.distanceTo(target),
+      )
+      expect(
+        ray
+          .intersectObject(cabinet, true)
+          .map((hit) => ({ name: hit.object.name, y: hit.point.y, z: hit.point.z })),
+      ).toEqual([])
+    }
+  room.move('pinball')
+  expect(mock.scene!.getObjectByName('moonfall-instrument-menu')!.visible).toBe(true)
+})

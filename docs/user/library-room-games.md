@@ -7,6 +7,8 @@ The first redesigned room is **Aurora Observatory**, with the original **Moonfal
 
 Open the library room from the VR Library. **Visit room → Aurora Observatory** visits it without changing your account theme. **Follow my theme** returns to your account's room. Visits last only while the room is open. The normal catalog remains available below the room.
 
+On desktop, **Library wall** provides a raised catalog overview that clears the table's backboard. **Moonfall Pinball** switches to the playfield view. The in-world game menu appears at the table station; the HTML game controls remain available below the room.
+
 ## Moonfall Pinball
 
 Choose **New run**, or explicitly **Resume saved run**. Nothing starts automatically. Launch the ball, use the flippers and hit the named targets in the displayed order. The three authored routes have 18, 36 and 45 target steps. Each also needs the displayed ramp, return-lane and skill-shot achievements before its closing shot. You start with three balls and two stuck-ball recoveries. One extra ball can be awarded during a run.
