@@ -16,6 +16,15 @@ from linux_connected_server import ConnectedServer, require_backend_ci, validate
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def capture_checkpoint(output, report, phase):
+    """Preserve an explicitly incomplete receipt even if the browser stalls."""
+    report['phase'] = phase
+    temporary = output/'report-in-progress.tmp'
+    temporary.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
+    temporary.replace(output/'report-in-progress.json')
+    print(json.dumps({'phase':phase}),flush=True)
+
+
 def require_capture_ci(root, env, platform, uid):
     require_backend_ci(root, env, platform, uid)
     if env.get('RELEASE_VISUAL_ALLOWED') != '1':
@@ -40,7 +49,7 @@ def seed_owned(payload):
     sys.path.insert(0, str(ROOT))
     from sqlalchemy import create_engine, select, text
     from oneirodex.runtime_native.db_session import native_db, native_engine_session_scope
-    from oneirodex.models import (User, UserPreference, Library, Game, GlobalSettings,
+    from oneirodex.models import (User, UserPreference, Library, Game, Image, GlobalSettings,
                                  ChatSpace, ChatSpaceMember, ChatChannel, ChatChannelMember, ChatMessage)
     from oneirodex.platform import LibraryPlatform
     engine = create_engine(urllib_url(parsed))
@@ -64,12 +73,44 @@ def seed_owned(payload):
                       'Paper Voyager','Signal Grove','Star Orchard','Tidal Library','Night Lantern','Dream Atlas')
             platforms = (LibraryPlatform.PCWIN, LibraryPlatform.NES, LibraryPlatform.GB,
                          LibraryPlatform.SNES, LibraryPlatform.N64, LibraryPlatform.MAC)
+            from PIL import Image as RasterImage, ImageDraw, ImageFont
+            cover_root = Path(os.environ['ONEIRODEX_LIBRARY_DIR']).resolve()/'images'
+            if cover_root.parent.parent.name != 'server' or cover_root.parent.parent.parent.name != 'release-visual-'+os.environ['GITHUB_RUN_ID']:
+                raise ProbeFailure('release_visual_cover_root_not_owned')
+            cover_root.mkdir(exist_ok=True)
+            cover_font = ImageFont.truetype('DejaVuSans.ttf',40)
+            cover_colors = [(28,65,78),(91,46,70),(36,74,56),(96,61,31),(39,50,100),(65,49,87)]
+            def paint_cover(game,title,index):
+                # Distinct original fixture artwork through the normal member cover resolver.
+                # This is synthetic test data, not a branded placeholder or a claimed real game.
+                art = RasterImage.new('RGB',(600,900)); draw = ImageDraw.Draw(art)
+                color = cover_colors[index%len(cover_colors)]
+                for y in range(900):
+                    strength = 0.45+0.55*y/900
+                    draw.line((0,y,600,y),fill=tuple(int(channel*strength) for channel in color))
+                draw.ellipse((160,150,440,430),fill=(210,184,117),outline=(240,228,192),width=5)
+                draw.polygon([(0,540),(120,340+index*12),(280,590),(440,390),(600,530),(600,900),(0,900)],fill=(13,28,35))
+                draw.rectangle((25,25,574,874),outline=(214,190,139),width=3)
+                words=title.split(); lines=[]; line=''
+                for word in words:
+                    candidate=(line+' '+word).strip()
+                    if draw.textlength(candidate,font=cover_font)>510 and line: lines.append(line);line=word
+                    else: line=candidate
+                lines.append(line)
+                draw.multiline_text((45,680),'\n'.join(lines),font=cover_font,fill=(245,234,209),spacing=12)
+                filename='synthetic-room-cover-'+game.uuid+'.png'
+                art.save(cover_root/filename,format='PNG')
+                db.add(Image(game_uuid=game.uuid,image_type='cover',url=filename,is_downloaded=True,is_generated=True,generated_by='synthetic-ci'))
             for index, platform in enumerate(platforms):
                 library = Library(name=('Evening Collection','Pocket Adventures','Small Worlds','Garden Arcade','Star Maps','Studio Shelf')[index], platform=platform)
                 db.add(library); db.flush()
                 for title in titles[index*2:index*2+2]:
-                    db.add(Game(uuid=str(uuid.uuid4()), name=title, library_uuid=library.uuid,
-                                summary='An original synthetic catalog entry for release screenshots.'))
+                    game = Game(uuid=str(uuid.uuid4()), name=title, library_uuid=library.uuid,
+                                summary='An original synthetic catalog entry for release screenshots.')
+                    db.add(game); db.flush()
+                    paint_cover(game,title,index)
+            for index,game in enumerate(existing):paint_cover(game,game.name,index+6)
+            db.add(Game(uuid=str(uuid.uuid4()),name="Zebra Placeholder Study",library_uuid=library.uuid,summary="An intentionally uncovered synthetic title for theme fallback checks."))
             settings = db.execute(select(GlobalSettings)).scalars().one()
             settings.smtp_enabled = False; settings.oidc_enabled = False
             space = db.execute(select(ChatSpace).filter_by(visibility='household').order_by(ChatSpace.id)).scalars().first()
@@ -90,7 +131,7 @@ def seed_owned(payload):
                                  (user,'The new artwork keeps every shelf feeling at home.')):
                 db.add(ChatMessage(channel_id=channel.id,user_id=person.id,body=body))
             db.commit()
-            return {'username':user.name,'games':len(existing)+len(titles),'chat_message':'The evening collection is ready.'}
+            return {'username':user.name,'games':len(existing)+len(titles)+1,'cover_images':len(existing)+len(titles),'chat_message':'The evening collection is ready.'}
     finally:
         engine.dispose()
 
@@ -100,7 +141,7 @@ def urllib_url(parsed):
     return urllib.parse.urlunsplit(parsed).replace('postgresql://','postgresql+psycopg2://',1)
 
 
-def browser_review(base, username, password, output, report):
+def browser_review(base, username, password, output, report, room_fixture=None):
     sys.path.insert(0, str(ROOT/'scripts'))
     import capture_common as common
     import capture_docs_media as media
@@ -111,15 +152,19 @@ def browser_review(base, username, password, output, report):
     media.README_ASSETS = output/'readme'; media.README_ASSETS.mkdir()
     themes = output/'themes'; themes.mkdir()
     with sync_playwright() as engine:
-        browser = engine.chromium.launch(headless=True)
+        # Explicit CPU renderer for trusted, disposable CI content. Never infer
+        # desktop/headset GPU performance from this profile.
+        browser = engine.chromium.launch(headless=True,args=['--enable-unsafe-swiftshader'])
         context = browser.new_context(viewport={'width':1600,'height':900},color_scheme='light')
         common.block_streams(context)
         page = context.new_page()
+        page.set_default_timeout(20_000)
+        page.set_default_navigation_timeout(30_000)
         failed_assets = set()
         page.on('response', lambda response: failed_assets.add(response.url.split('?',1)[0].removeprefix(base))
                 if response.status >= 400 and response.url.startswith(base+'/static/') else None)
         try:
-            report['phase'] = 'real_login'
+            capture_checkpoint(output,report,'real_login')
             page.goto(base+'/login',wait_until='domcontentloaded')
             name = page.locator('#username') if page.locator('#username').count() else page.get_by_label('Username',exact=True)
             field = page.locator('#password') if page.locator('#password').count() else page.get_by_label('Password',exact=True)
@@ -139,21 +184,28 @@ def browser_review(base, username, password, output, report):
                 page.get_by_text('The evening collection is ready.',exact=True).first.wait_for(state='visible')
                 report['populated_chat_visible'] = True
             selected = [replace(shot,prepare=chat) if shot.name=='chat-channels' else shot for shot in selected]
-            report['phase'] = 'populated_readme_capture'
-            failures = media.capture(page,selected)
-            if failures or not report.get('populated_chat_visible'):
-                raise ProbeFailure('release_visual_readme_capture_failed')
-            media.README_ASSETS.joinpath('hero-banner.png').write_bytes(media.README_ASSETS.joinpath('screenshot-library.png').read_bytes())
+            focused = os.environ.get('ROOM_BENCHMARK_FOCUSED') == '1'
+            if not focused:
+                capture_checkpoint(output,report,'populated_readme_capture')
+                failures = media.capture(page,selected)
+                if failures or not report.get('populated_chat_visible'):
+                    raise ProbeFailure('release_visual_readme_capture_failed')
+                media.README_ASSETS.joinpath('hero-banner.png').write_bytes(media.README_ASSETS.joinpath('screenshot-library.png').read_bytes())
+            else:
+                report['capture_scope'] = 'room-only; general README/eight-theme baseline is separate evidence'
             page.goto(base+'/library',wait_until='domcontentloaded')
             media.prep_preferences(page)
             page.locator('[data-theme-preview]').first.wait_for(state='visible')
             slugs = page.locator('[data-theme-preview]').evaluate_all('(buttons)=>buttons.map(button=>button.dataset.themePreview)')
             if not 8 <= len(set(slugs)) <= 16: raise ProbeFailure('release_visual_theme_cards_missing')
+            if focused:
+                if 'tideglass' not in slugs: raise ProbeFailure('room_fixture_theme_missing')
+                slugs = ['tideglass']
             page.get_by_role('button',name='Close preferences',exact=True).click()
             checked = []
             for raw in slugs:
                 slug = capture_slug(raw)
-                report['phase'] = 'theme_'+slug
+                capture_checkpoint(output,report,'theme_'+slug)
                 page.goto(base+'/library',wait_until='domcontentloaded')
                 media.prep_preferences(page)
                 page.locator('[data-theme-preview="'+slug+'"]').click()
@@ -174,6 +226,25 @@ def browser_review(base, username, password, output, report):
                 report['failed_asset_paths'] = sorted(failed_assets)[:24]
                 raise ProbeFailure('release_visual_missing_static_assets')
             report['themes_verified'] = checked
+            from library_room_review import review_library_room
+            try:
+                review_library_room(page, output, report, room_fixture)
+            except Exception:
+                try:
+                    report['room_failure_projection'] = page.evaluate('''() => ({
+                      onVrPage: location.pathname==='/vr',
+                      canvasPresent: !!document.querySelector('.od-library-room__canvas'),
+                      controlsPresent: !!document.querySelector('[aria-label="Room stations"]'),
+                      gamePanelPresent: !!document.querySelector('.od-moonfall'),
+                      renderFallback: document.body.textContent.includes('This browser could not open the 3D room.'),
+                      roomExpanded: document.querySelector('.od-library-room__header button')?.getAttribute('aria-expanded')==='true'
+                      ,observatorySelected: document.querySelector('.od-library-room__controls select')?.value==='oneirodex'
+                      ,choiceEvents: window.__roomChoiceProbe || null
+                    })''')
+                    page.screenshot(path=str(output/'room-failure.png'),timeout=15_000)
+                except Exception:
+                    report['room_failure_capture_unavailable'] = True
+                raise
         finally:
             context.close(); browser.close()
 
@@ -183,7 +254,8 @@ def run():
     work = Path(os.environ['RUNNER_TEMP']).resolve(strict=True)/('release-visual-'+os.environ['GITHUB_RUN_ID'])
     work.mkdir(mode=0o700)
     output = ROOT/'.artifacts/release-visual'; output.mkdir(parents=True)
-    report = {'status':'failed','version':(ROOT/'VERSION').read_text(encoding='ascii').strip(),'phase':'backend_start'}
+    report = {'status':'failed','version':(ROOT/'VERSION').read_text(encoding='ascii').strip(),'phase':'backend_start',
+              'source_sha':os.environ.get('GITHUB_SHA',''), 'run_id':os.environ.get('GITHUB_RUN_ID','')}
     fixture = None
     try:
         fixture = ConnectedServer.open(ROOT,work,report)
@@ -196,7 +268,8 @@ def run():
         if result.returncode or len(result.stdout)>8192: raise ProbeFailure('release_visual_seed_failed')
         data = json.loads(result.stdout)
         report['seeded_games'] = data['games']
-        browser_review(fixture.private_data['base_url'],data['username'],password,output,report)
+        report['seeded_cover_images'] = data['cover_images']
+        browser_review(fixture.private_data['base_url'],data['username'],password,output,report,fixture)
         report['status'] = 'passed'; report['phase'] = 'complete'
     except Exception as error:
         report['code'] = str(error) if isinstance(error,ProbeFailure) else type(error).__name__

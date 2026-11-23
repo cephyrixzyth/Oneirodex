@@ -2,6 +2,8 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import json
+import tempfile
 from unittest import mock
 
 from probe_linux_packaged import ProbeFailure
@@ -11,6 +13,15 @@ visual = __import__('release_visual_review') if spec else None
 
 
 class ReleaseVisualGuards(unittest.TestCase):
+    def test_checkpoint_persists_an_incomplete_source_bound_report(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
+            report = {'status':'failed','source_sha':'a'*40}
+            visual.capture_checkpoint(Path(directory),report,'room_opening')
+            value = json.loads((Path(directory)/'report-in-progress.json').read_text())
+            self.assertEqual(value['phase'],'room_opening')
+            self.assertEqual(value['source_sha'],'a'*40)
+            self.assertEqual(value['status'],'failed')
+
     def setUp(self): self.assertIsNotNone(visual, 'release visual guards must exist')
 
     def test_local_execution_is_refused_before_paths_or_processes(self):

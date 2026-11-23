@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "seed": 1234,
+  "phase": "playing",
+  "tick": 1500,
+  "score": 500,
+  "best": 500,
+  "ballsRemaining": 3,
+  "balls": [
+    {
+      "id": 1,
+      "x": 0.2,
+      "y": 2,
+      "vx": 0.4,
+      "vy": 1,
+      "cooldown": 5,
+      "captureTicks": 0
+    }
+  ],
+  "nextBallId": 2,
+  "missionHits": [
+    1,
+    0,
+    0
+  ],
+  "combo": 2,
+  "comboTicks": 200,
+  "extraBallAwarded": false,
+  "recoveries": 2,
+  "lastLaunch": false,
+  "lastRecover": false,
+  "settings": {
+    "quality": "standard",
+    "reducedMotion": false,
+    "muted": true,
+    "volume": 0.5,
+    "highContrast": false
+  },
+  "flippers": {
+    "left": 0.24,
+    "right": 2.901592653589793
+  },
+  "features": {
+    "ramps": 0,
+    "returns": 0,
+    "skillShots": 0,
+    "rampTicks": 0,
+    "rampSide": 1,
+    "skillTicks": 0,
+    "returnTicks": 0,
+    "launchAim": 0
+  }
+}

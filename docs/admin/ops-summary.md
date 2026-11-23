@@ -154,7 +154,7 @@ rebuilds the catalog from the media still sitting on disk.
 |---|---|---|
 | `catalog` | Games, matches, unmatched folders, scan jobs, artwork records, reference sets | Library definitions — rescan immediately |
 | `libraries` | The configured libraries, their filters and access grants. **Implies `catalog`** | — |
-| `users` | Members, invites, favorites, collections, playtime, chat, saves | **Your own admin account**, so you stay signed in |
+| `users` | Members, invites, favorites, collections, playtime, chat, saves including original room-game progress | **Your own admin account**, so you stay signed in |
 | `settings` | Server settings, IGDB/SMTP/API credentials, themes, discovery sections, announcements | — |
 
 Two steps, enforced by the API rather than by the UI:

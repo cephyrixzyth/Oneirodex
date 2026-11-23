@@ -31,6 +31,22 @@ class FakeAPI:
 
 
 class ConnectedServerContracts(unittest.TestCase):
+    def test_bearer_put_uses_owned_cookie_free_transport_and_exact_body(self):
+        api = server.NativeServerAPI.__new__(server.NativeServerAPI)
+        api.port, api.process, api.base_url = 6121, SimpleNamespace(pid=123), 'http://127.0.0.1:6121'
+        response = mock.MagicMock()
+        response.__enter__.return_value = SimpleNamespace(status=403, read=lambda limit: b'{}', headers={})
+        api.opener = mock.Mock()
+        api.opener.open.return_value = response
+        with mock.patch('linux_packaged_native.listener_owned', return_value=True):
+            status, _, _ = api.http('/api/room-games/moonfall-pinball/progress', 'synthetic-child', method='PUT',
+                                    headers={'Content-Type':'application/json'}, data=b'{"revision":0}')
+        request = api.opener.open.call_args.args[0]
+        self.assertEqual(status, 403)
+        self.assertEqual(request.data, b'{"revision":0}')
+        self.assertEqual(request.get_header('Authorization'), 'Bearer synthetic-child')
+        self.assertIsNone(request.get_header('Cookie'))
+
     def setUp(self):
         self.assertIsNotNone(server,'real connected backend needs ownership guards before execution')
 

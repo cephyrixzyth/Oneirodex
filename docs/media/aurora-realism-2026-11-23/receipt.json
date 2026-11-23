@@ -1,0 +1,125 @@
+{
+  "source_sha": "1dc551520b1f0484d68f158d9a0b5d5bb84c0cc9",
+  "run_id": "45211222499",
+  "status": "passed",
+  "capture_scope": "visual-preview-only; no full game lifecycle qualification on this source",
+  "backend_cleanup_verified": true,
+  "library_room": {
+    "status": "preview-captured",
+    "renderer": "CI Chromium; no hardware performance claim",
+    "qualification_scope": "visual-preview-only",
+    "phase": "visual_preview_complete",
+    "visit_label_matches": 1,
+    "visit_option_present": true,
+    "webgl": {
+      "supported": true,
+      "software": true,
+      "width": 1350,
+      "height": 486
+    },
+    "authorized_synthetic_cover_count": 14,
+    "in_world_case_selection": true,
+    "populated_catalog_selection": true,
+    "material_assets": {
+      "walnut-color.jpg": 200,
+      "walnut-normal.jpg": 200,
+      "walnut-roughness.jpg": 200,
+      "velvet-color.jpg": 200,
+      "velvet-normal.jpg": 200,
+      "velvet-roughness.jpg": 200,
+      "floor-color.jpg": 200,
+      "floor-normal.jpg": 200,
+      "moonfall-playfield.svg": 200,
+      "floor-roughness.jpg": 200
+    },
+    "visual_progress_retried": true,
+    "preview_render_samples": {
+      "observatory-overview": {
+        "draw_calls": 228,
+        "frame_interval_ms": 2533.300000000003
+      },
+      "observatory-lounge": {
+        "draw_calls": 180,
+        "frame_interval_ms": 2499.9000000000233
+      },
+      "moonfall-detail": {
+        "draw_calls": 210,
+        "frame_interval_ms": 2583.3000000000175
+      }
+    },
+    "low_texture_uploads": [
+      {
+        "width": 512,
+        "height": 512
+      },
+      {
+        "width": 512,
+        "height": 512
+      },
+      {
+        "width": 512,
+        "height": 512
+      },
+      {
+        "width": 512,
+        "height": 493
+      },
+      {
+        "width": 512,
+        "height": 493
+      },
+      {
+        "width": 512,
+        "height": 493
+      },
+      {
+        "width": 512,
+        "height": 512
+      },
+      {
+        "width": 512,
+        "height": 512
+      },
+      {
+        "width": 512,
+        "height": 512
+      },
+      {
+        "width": 512,
+        "height": 1024
+      }
+    ],
+    "low_gl_error": 0
+  },
+  "artifact_zip_sha256": "55b85d43dde84c15a719381207cdf3f3b4b4ade733ca045414ff9c3746c91133",
+  "images": [
+    {
+      "file": "observatory-overview-canvas.png",
+      "sha256": "eee809cc463339766fa4e0561855a59bada53ccfad782b7301bd783b308cc691"
+    },
+    {
+      "file": "observatory-lounge-canvas.png",
+      "sha256": "aeae671385a1b16a7d4df652b8661c2441647a0147620208cf16225b61c9fdf6"
+    },
+    {
+      "file": "observatory-library.png",
+      "sha256": "7e74bf0f05c12d20f4d62fada647aceddc30ca8a0ea3c8b893d2f06ae3092c4e"
+    },
+    {
+      "file": "observatory-reading.png",
+      "sha256": "dfd3d1280c7a2f1602d1b38457a01c2b93525be00d3f07b8d2aa189c5c618328"
+    },
+    {
+      "file": "moonfall-detail-canvas.png",
+      "sha256": "552e6cbf3cfb0ec47e30c8182c033d9f950397be6531108e0da7dbc456405ef6"
+    },
+    {
+      "file": "moonfall-low-canvas.png",
+      "sha256": "08384e8b0a070426be10f875691ca767bc88a251d037d68fc10f83c565712464"
+    },
+    {
+      "file": "moonfall-in-world-help-canvas.png",
+      "sha256": "6c968d0b267306d0068709b3b27856c64452ebdc863d79225976ba787a3309de"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+# Library room games
+
+> **Doc status:** Active
+> Available in Oneirodex 1.4.0 and later. Room browsing and Moonfall were exercised in a disposable browser and database. Physical headset qualification is still open.
+
+**Aurora Observatory** has the original **Moonfall Pinball** table. The other seven rooms are open for catalog browsing. Afterglow has an arcade cabinet row, Graphite a precision workbench, Mosslight a planted conservatory, Signal a receiver rack, Tape Deck a mixing console, Deep Space a projection table, and Tideglass an undersea chart table. Their respective games remain planned.
+
+Open the library room from the VR Library. **Visit room → Aurora Observatory** visits it without changing your account theme. **Follow my theme** returns to your account's room. Visits last only while the room is open. The normal catalog remains available below the room.
+
+**Room overview** shows the room's featured furniture. **Library wall** takes you to the cover display, with the same titles available in the HTML catalog below. In Aurora, **Moonfall Pinball** switches to the playfield, with game controls at the table and below the room.
+
+![Actual room overviews for Aurora, Afterglow, Graphite, Mosslight, Signal, Tape Deck, Deep Space and Tideglass](../media/aurora-realism-2026-11-23/themed-room-overviews.webp)
+
+[View the capture and qualification evidence](../media/aurora-realism-2026-11-23/README.md).
+
+The [previous benchmark captures](../media/library-room-benchmark-2026-11-22/README.md) retain the result reached through normal launches on the earlier source.
+
+## Moonfall Pinball
+
+Choose **New run**, or explicitly **Resume saved run**. Nothing starts automatically. Launch the ball, use the flippers and hit the named targets in the displayed order. The three authored routes have 18, 36 and 45 target steps. Each also needs the displayed ramp, return-lane and skill-shot achievements before its closing shot. You start with three balls and two stuck-ball recoveries. One extra ball can be awarded during a run.
+
+**Guided practice** starts a separate disposable run. It explains the launch, flippers, moving targets and raised crescent ramps as you play. **Finish practice** returns to the saved-run choice; practice never changes your server save or personal best. The ring means Orbit, the crescent Moon, and the star Aurora. Hold the left flipper while launching to aim toward Orbit, right toward Aurora, or both toward Moon. A target hit shortly after launch earns a skill shot. A rising shot into a crescent ramp follows its raised path and returns to the opposite flipper; side return lanes feed falling balls back toward the flippers.
+
+| Input | Flippers | Launch | Pause | Recover |
+|---|---|---|---|---|
+| Keyboard, with room focused | Z / Left Arrow; X / Right Arrow | Space | Escape | R |
+| Mouse | Left / right buttons over table | Launch button | Pause button | Recover button |
+| Touch or accessible HTML controls | Hold Left / Right flipper | Launch ball | Pause | Recover stuck ball |
+| Standard gamepad | Shoulder buttons / triggers | A | Start | Right stick button |
+| WebXR controllers | Left / right triggers | A / X | B / Y | In-world / HTML controls |
+
+Leaving focus or moving to another station pauses play. Resume explicitly. Close the room when finished to release its graphics resources. Quality, reduced motion, target contrast, mute and volume are under **How to play and comfort**, with matching **Comfort and sound** in-world menus. **Recover ball** is also available in-world during play. Sound begins muted and requires an explicit gesture to enable it. The observatory's **Adjust telescope** and **Turn orrery** controls provide optional instrument interactions, including with reduced motion enabled.
+
+## Progress and privacy
+
+Runs, settings and personal bests belong to your signed-in account. They are saved on the household server, not in browser storage. Scores are personal and client generated; they are not competitive or server verified.
+
+The game saves at checkpoints and periodically, with one write in flight. **Save progress** saves explicitly. Closing the room or navigating away first attempts to save the latest paused state. If that fails, choose whether to remain or discard unsaved changes. Closing the browser may show its own unsaved-work warning.
+
+- **Connection failure:** the current run stays in memory; **Continue without saving** resumes after a pause. If the initial save could not be loaded, **Play without saving** never overwrites an unknown server revision.
+- **Changed elsewhere:** retry reads the server save without replacing your local run. Choose **Load server run** or explicitly **Replace server run**.
+- **Access denied:** gameplay stops and private in-memory progress is cleared. Reauthenticate and reopen the room.
+- **New run:** replacing a saved/current run requires confirmation; the personal best and settings carry over.
+- **Reset progress:** requires confirmation and erases the run, settings and personal best. A payload-free revision record remains to prevent stale sessions from restoring the erased save. Account deletion removes that record too.
+
+Low quality reduces desktop render resolution and texture sizes to improve responsiveness. It retains the same rules and controls. Real desktop frame rates, controller usability and headset comfort still need hardware qualification. The 15–30 minute session target needs a human pacing review.

@@ -1,0 +1,118 @@
+# Aurora Observatory / Moonfall benchmark
+
+> **Doc status:** Reference
+> Review implementation; not a release or accepted visual/gameplay benchmark.
+> **Visual review:** The owner rejected the initial renders as too basic. The [visual correction plan](../../superpowers/plans/2026-11-22-observatory-visual-polish.md) is in progress. Previous functional CI and retained images describe source `89988495`; they do not qualify the new art revision or imply visual acceptance.
+
+The first art preview at `a6bb01f` rendered all ten local material and playfield assets. The overview still looked washed out, and the actual images showed floating displays, bright brass covering the walnut desk, and glare across the playfield. The review also found clipped in-world instructions and a contact shadow hidden beneath the rug. The owner clarified that the entire scene should look more realistic. Source `e98822e1` revised the lighting, mounted displays, furniture, shared materials, and Low-quality texture sizes.
+
+[Preview 45209510825](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45209510825) rendered the revised room and table, loaded the authorized synthetic cover art, and selected a case with a real canvas click. Its artifact ZIP and image hashes matched. The run timed out at the Help and Low-quality checks with the progress connection error visible. Its measured software-rendered intervals were approximately 2.4–2.5 seconds. Source `1dc55152` caches architectural shadows between scene changes and checks progress readiness before collecting these captures. [Follow-up preview](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45211222499).
+
+The follow-up preview passed after one progress initialization retry. It observed fourteen authorized synthetic cover responses, a successful in-world case click, all ten local art assets, and smaller Low-quality uploads with no WebGL error. Sampled draw calls fell from 420/372/405 to 228/180/210 for overview/lounge/table. Software frame intervals remained around 2.5 seconds. The [seven retained images](../../media/aurora-realism-2026-11-23/README.md) show the improved finish. Some geometry still reads as stylized in close-ups, and physical hardware and human review remain open.
+
+Full gameplay [run 45212856790](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45212856790) passed initial launch, save and HTTP denial checks, then stopped on the saved-run reload. The failure screenshot showed the populated room and a progress error. The harness now uses the existing retry control once on progress initialization. [Run 45214943661](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45214943661) timed out at entry even though the failure projection showed the selected world and game panel. [Run 45215732536](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45215732536) uses the smaller viewport from entry, with an explicit bound and timer-based selection check. The full-size visual evidence stays separate.
+
+Run 45215732536 passed reload/resume, settings persistence, network outage and cancelled leave, seeded results and reset. The overall capture step expired during ordinary play. The final rerun budgets 14 minutes for capture and allows up to 360 seconds for ordinary play at 800×700, at Low quality. [Run 45217899757](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45217899757).
+
+Run 45217899757 reached the third ball after 3,648 saved simulation ticks in 361.69 wall seconds. The run was still playing and did not qualify an ordinary result. Source `32212680` lowers desktop render resolution in Low quality to reduce raster work. The prior Low capture represents `1dc55152`. [Follow-up qualification](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45220750752).
+
+**The full follow-up passed.** Run 45220750752 passed room selection, launch, save and explicit saved-run resume, scope and isolation checks, comfort settings, outage recovery, seeded result, reset, normally played result, teardown and concurrent writes (200/409). Two progress initializations required retry. At 800×700 with desktop Low quality, normal play ended at tick 5,975 with zero balls and score 2,800 after 302.87 wall seconds. The artifact ZIP and all listed image hashes matched. See the [result and exact-source receipt](../../media/aurora-realism-2026-11-23/README.md).
+
+The owner approved the [eight-world direction](../../superpowers/specs/2026-11-22-library-room-worlds-design.md) and implementation of the first room/game. The [execution plan](../../superpowers/plans/2026-11-22-aurora-moonfall.md) retains human benchmark review before the other seven games. The existing 1.3.3 deployment is unchanged.
+
+## Implemented scope
+
+- Original procedural observatory architecture, aurora, instruments and actual catalog cases; temporary world visits preserve account theme preferences.
+- Original deterministic pinball physics, moving targets, elevated crescent ramps, return lanes, aimed-launch skill shots, three authored mission routes and terminal results.
+- Desktop, gamepad and XR input adapters, explicit pause/resume, practice, HTML/in-world comfort controls, optional original synthesized audio and resource cleanup.
+- Account-owned server progress, strict matching TypeScript/Pydantic schema, bounded requests, session CSRF, bearer scopes, optimistic revisions, reset tombstones and account-deletion cascade mapping.
+- Explicit save/resume choices, conflict handling, memory-only continuation, stale-response cancellation and save-aware room/browser navigation.
+
+## Local verification
+
+| Check | Observed result | Limit |
+|---|---|---|
+| Focused frontend slice, button and Docker-import ratchets | 114 tests passed across 14 files | Pure model, synthetic DOM and mocked graphics/audio; no actual browser/GPU |
+| Existing member bootstrap/router/App smoke slice | 28 tests passed across four files | Synthetic DOM; not an authenticated running app |
+| Python schema/model/store/router/migration slice | 25 unittest methods passed | Fake sessions/authentication and direct endpoint invocation; no database/server |
+| Production member bundle | Passed | Static compilation only; existing large-chunk warning remains |
+| Member TypeScript | Passed | Includes test source |
+| ESLint / Prettier / CSS tokens | Passed; zero CSS violations | No baseline increase |
+| API-envelope / Python undefined names / syntax compile | Passed | No runtime qualification inferred |
+| Disposable-capture fencing and backend fixture | 18 pure tests and workflow-selection guard passed | Local checks use fake transports; actual capture status below |
+
+The primary frontend command scopes Vitest to `src/pages/pinball`, `LibraryRoom.test.tsx`, `LibraryRoomGame.test.tsx`, `roomSceneGame.test.ts`, `buttonLanguage.test.js` and `dockerStagedImports.test.ts`. Python uses `python -m unittest discover -s tests/pure -p 'test_room_game_*.py' -v`. The production bundle was written to an ignored evidence directory, without replacing served assets.
+
+One deterministic replay uses seed 4, both flippers held during the first 27 ticks of each 60-tick period, and a launch whenever ready. It reaches the 99-step finale through ordinary simulation inputs, without positioning balls or injecting progress. This is a reachability check, not a measurement of human session length or real frame rate. The 15–30 minute pacing target remains subject to human playtesting.
+
+## Independent review follow-up
+
+| Finding | Disposition |
+|---|---|
+| Retry-read race could overwrite an existing save | Fixed; pending-load commands gated, busy notification emitted, current local-run choice evaluated at fulfillment |
+| Offline pause could strand a memory-only run | Fixed; explicit continuation preserves the persistence block |
+| Hardware resume bypassed session/station guards | Fixed; delegated session commands and station-bound simulation |
+| Catalog query changes triggered exit warnings | Fixed; only pathname exits block; Back cancellation covered |
+| Visit lifetime and live account-theme following | Fixed; close resets visit, theme transition uses save-aware flow |
+| Score clipped by fixed camera; target progression unclear | Fixed in pure projection checks for desktop/narrow widths and three comfort modes; symbols/current objectives added; actual table captures inspected |
+| Missing authored mechanics/practice | Added, with focused checks and shared mission content; real visual/play review pending |
+| Empty/incomplete capture fixture | Passed populated collection selection, HTTP denial/isolation/CAS, saved reload, network failure, reset, seeded and normally played results in disposable CI |
+
+Deferred minor: acknowledgement text can say “Progress saved” while a newer checkpoint is already dirty. Dirty-state tracking and exit guards continue to retain that distinction.
+
+## Engineering decisions and limits
+
+| Decision | Reason and cost if wrong |
+|---|---|
+| Execute inline in the required checkout; preserve history and unrelated files | Honors workspace restrictions; shared-checkout edits require careful file ownership and diff review |
+| Wait for explicit publication authority, then keep this on the review branch | Owner authorized commit/push/CI only; qualification takes longer than local runtime testing, but production remains unchanged |
+| Use a purpose-built fixed-step simulation without another physics dependency | Bounded original table; replacing the model would require save-schema and physics requalification |
+| Keep a null-payload revision tombstone on reset | Prevents stale saves from restoring erased payload; revision metadata persists until account deletion |
+| Use React Router's data router for navigation blocking | Avoids history monkeypatches; broad routing regression risk is covered by the existing bootstrap/router slice, not claimed eliminated |
+| Expand 12 prototype shots to 99 authored steps with ramp/return/skill requirements | Adds session depth; human pacing and difficulty may still need substantial tuning |
+| Use focused disposable CI and retain the separate full page/eight-theme baseline | Limits repeated unrelated work; focused success cannot establish full-repository or all-theme parity |
+| Isolate bearer checks from the browser cookie jar | Exercises the intended restricted identity; no product authentication precedence change was made |
+| Use a fixed raised desktop library overview and station-only game menu | Clears catalog sightlines while preserving table/world coordinates; the camera height remains a visual preference for human review |
+| Bound software-rendered play time and record a smaller gameplay viewport separately | Preserves real input/result assertions within CI limits; these measurements cannot qualify hardware performance |
+
+Missing headset comfort, physical controller and human pacing evidence remains open. Pure geometry, simulation and software-browser checks are not substitutes for those observations.
+
+## Disposable CI qualification
+
+[Run 45108321289](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45108321289) **passed** at source `8998849586a3f3db5cca6344ddbf64ac8dff0f12`. The later evidence commit changes documentation/media only. The [retained receipt](aurora-moonfall-ci-2026-11-22.json) records source identity, measurements, artifact SHA-256 and published image hashes.
+
+| Actual check | Observed result |
+|---|---|
+| Frontend / build | 142 tests across 18 files, member typecheck and all five SPA builds passed |
+| Native / PostgreSQL / deletion | Ten checks passed; Alembic upgrade and drift check passed, including clean-start adoption |
+| Pure / capture safety | 25 Python methods and 18 capture/fixture methods passed; workflow-selection guard passed |
+| Real startup / catalog | Owned startweb.sh listener, authenticated synthetic 14-title catalog selection, observatory visit and reading station |
+| Actual launch / save / reload | Nonzero tick and launched ball persisted; explicit saved-run resume and quality/motion/contrast persistence passed |
+| Denials / isolation | Anonymous 401, restricted read/write 403, peer save isolation, malformed JSON 422, oversized body 413 and session CSRF denial passed |
+| Outage / reset | Aborted requests retained the run; actual leave dialog cancelled; seeded result display and payload reset passed |
+| Normally played result | No result injection: game-over at tick 5915, zero balls, score 2800; 164.69 seconds wall time, 1000x800, Low quality, within the 240-second bound |
+| Teardown / concurrent writes | Canvas detached after close; simultaneous HTTP writes returned 200/409; no page exceptions; owned backend/database cleanup verified |
+| Images | Four actual populated captures retained, hash-checked and inspected; human visual acceptance remains open |
+
+The result checkpoint corresponds to about 49.29 simulation seconds, not human session length. The receipt's saved_seed is the mutable RNG at the earlier saved checkpoint, not the original seed. A separate pure default-seed replay naturally loses after 47.73 simulation seconds; input timing changes moving-target interactions.
+
+Full-size 1600x900 captures used software WebGL. Four sampled frame intervals had median 1150.1 ms and p95 1849.8 ms: poor software-renderer results, not a hardware performance pass. Only the long normal-play probe used the recorded 1000x800 viewport. The focused run checked Tideglass only; the separate full page/eight-theme baseline remains in [45070330759](https://github.com/cephyrixzyth/Oneirodex/actions/runs/45070330759), not counted as a new all-theme pass.
+
+Actual images: [library overview](../../media/library-room-benchmark-2026-11-22/observatory-library.png), [reading desk](../../media/library-room-benchmark-2026-11-22/observatory-reading.png), [paused table](../../media/library-room-benchmark-2026-11-22/moonfall-paused.png), [normally played result](../../media/library-room-benchmark-2026-11-22/moonfall-played-result.png).
+
+## Confirmed follow-ups during qualification
+
+- Clean-start ORM adoption attempted to create an existing table. The migration now adopts it; pure and real PostgreSQL regressions pass.
+- Pending visits and reused disposed canvases had independent synthetic regressions. Latest intent, immediate chooser state and per-world canvas ownership are covered. The live locator timeout also required an explicit accessible name.
+- Bearer controls initially shared the signed-in browser cookie jar. The harness now uses the owned cookie-free transport; no product authentication precedence changed.
+- Autosave failure could pause before the harness clicked Pause. The harness now waits for the actual failed-save state and verifies the leave dialog.
+- Fixed two-second frame sampling and short normal-play wall limits were unreliable on software rendering. Bounded observed-frame sampling and a separately recorded smaller gameplay viewport retain actual input/result assertions.
+- Actual captures exposed catalog covers behind the table and a large game menu in the library view. The corrected desktop overview and station-only menu have ray-cast regression coverage and inspected actual images. Camera height and visual quality still require human acceptance.
+
+## Remaining acceptance
+
+1. Human review of the actual room, reading station, table readability and results against the concept. CI does not accept the visual design.
+2. Real desktop/controller/headset frame timing, input usability and comfort. Read-only inventory is retained privately; no local app/browser/game execution was performed.
+3. Human playtest the 15-30 minute pacing target, aiming, difficulty and replay value; accept the first benchmark before the other seven games.
+
+These focused checks do not establish full-repository parity/security or a full-suite pass. No merge, release, version bump or deployment is authorized by this benchmark report.

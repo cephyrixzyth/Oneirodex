@@ -2,7 +2,7 @@
 
 > **Doc status:** Active
 
-**Product version:** 1.3.3 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
+**Product version:** 1.4.0 — see root [CHANGELOG.md](../CHANGELOG.md) and [VERSION](../VERSION).
 
 Hub for product, ops, and developer docs. Public name **Oneirodex**. Runtime env is `ONEIRODEX_*` only ([ADR 0003](adr/0003-product-name-oneirodex.md)). Package `oneirodex/`, Compose defaults `oneirodex-*`, preferred Hub image `cephyrixzyth/oneirodex` once published.
 
@@ -12,7 +12,7 @@ Root [README.md](../README.md) includes badges, feature tour, screenshots (`docs
 
 | Audience | Go to |
 |---|---|
-| End users | [user/getting-started.md](user/getting-started.md) · [faq.md](user/faq.md) · [troubleshooting.md](user/troubleshooting.md) · [browser-play.md](user/browser-play.md) · [desktop-companion.md](user/desktop-companion.md) · [controllers-and-vr.md](user/controllers-and-vr.md) · [translation-patches.md](user/translation-patches.md) · [free-games.md](user/free-games.md) · [social-and-voice.md](user/social-and-voice.md) · [library-and-systems.md](user/library-and-systems.md) · [preferences-themes.md](user/preferences-themes.md) · [downloads.md](user/downloads.md) |
+| End users | [user/getting-started.md](user/getting-started.md) · [faq.md](user/faq.md) · [troubleshooting.md](user/troubleshooting.md) · [browser-play.md](user/browser-play.md) · [desktop-companion.md](user/desktop-companion.md) · [controllers-and-vr.md](user/controllers-and-vr.md) · [translation-patches.md](user/translation-patches.md) · [free-games.md](user/free-games.md) · [social-and-voice.md](user/social-and-voice.md) · [library-and-systems.md](user/library-and-systems.md) · [library-room-games.md](user/library-room-games.md) · [preferences-themes.md](user/preferences-themes.md) · [downloads.md](user/downloads.md) |
 | Operators / native install | [runbooks/install-native.md](runbooks/install-native.md) — Linux · macOS · Windows installers, service units, upgrade; standalone preview with a bundled PostgreSQL ([ADR 0011](adr/0011-standalone-bundled-postgres.md)) |
 | Operators / standalone to server | [runbooks/standalone-move.md](runbooks/standalone-move.md) — move a standalone install onto a Docker/Unraid server: export, import into an empty database, verified row for row, protected save key IDs |
 | Operators / standalone backups | [runbooks/backup-restore.md](runbooks/backup-restore.md) — offline standalone backup bundle, protected keyring recovery and verified restore |
@@ -103,7 +103,7 @@ Docker and cloud demo operations: [Docker Compose deploy](runbooks/docker-compos
 |---|---|
 | Product (shipped today) | Oneirodex (public string) |
 | Ops / code identifiers | Compose defaults `oneirodex-*`; npm `@oneirodex/api-client`; env `ONEIRODEX_*` only — [ADR 0003](adr/0003-product-name-oneirodex.md) |
-| Version | 1.3.3 |
+| Version | 1.4.0 |
 | GitHub | cephyrixzyth/oneirodex |
 | Containers | oneirodex-app (single-container or app role) · oneirodex-db (optional separate Postgres) |
 | Optional voice | oneirodex-livekit (`--profile livekit`) |

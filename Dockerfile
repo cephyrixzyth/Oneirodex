@@ -40,6 +40,7 @@ COPY scripts/native-spa-generation.mjs scripts/
 COPY oneirodex/setup/default_theme/js/stageECandidates.js oneirodex/setup/default_theme/js/
 COPY oneirodex/setup/default_theme/js/unmatchedTriage.js oneirodex/setup/default_theme/js/
 COPY oneirodex/setup/default_theme/js/scanJobsDom.js oneirodex/setup/default_theme/js/
+COPY oneirodex/data/room_games/moonfall-v1.json oneirodex/data/room_games/
 
 # Use the same Node 26 five-target build contract as native installers. The
 # orchestrator stages, inventories and hashes all output before promotion.

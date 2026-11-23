@@ -1,0 +1,65 @@
+{
+  "source_sha": "32212680dc64afaa612ce36cc291aa5c586bb1e7",
+  "run_id": "45220750752",
+  "status": "passed",
+  "capture_scope": "room-only; general README/eight-theme baseline is separate evidence",
+  "backend_cleanup_verified": true,
+  "library_room": {
+    "status": "passed",
+    "renderer": "CI Chromium; no hardware performance claim",
+    "gameplay_viewport": {
+      "width": 1000,
+      "height": 800
+    },
+    "phase": "complete",
+    "visit_label_matches": 1,
+    "visit_option_present": true,
+    "webgl": {
+      "supported": true,
+      "software": true,
+      "width": 750,
+      "height": 432
+    },
+    "authorized_synthetic_cover_count": 14,
+    "in_world_case_selection": true,
+    "populated_catalog_selection": true,
+    "software_frame_intervals_ms": {
+      "samples": 4,
+      "median": 1333.199999999997,
+      "p95": 2599.899999999994
+    },
+    "child_write_status": 403,
+    "real_http_identity_scope_and_body_denials": true,
+    "real_launch_and_save": true,
+    "saved_seed": 2175602261,
+    "saved_tick": 180,
+    "progress_initialization_retries": 2,
+    "reload_resume": true,
+    "settings_saved": true,
+    "network_failure_keeps_room": true,
+    "seeded_result_display": true,
+    "played_viewport": {
+      "width": 800,
+      "height": 700
+    },
+    "played_run_limit_seconds": 360,
+    "played_elapsed_seconds": 302.87,
+    "played_checkpoint": {
+      "phase": "game-over",
+      "tick": 5975,
+      "ballsRemaining": 0,
+      "score": 2800
+    },
+    "result_through_normal_play": true,
+    "real_concurrent_cas": [
+      200,
+      409
+    ],
+    "reset_and_teardown": true
+  },
+  "artifact_zip_sha256": "b0263c44ee3c79db9ef65aac71a509e2976fa6afcceabe409718181a7836c14e",
+  "image": {
+    "file": "moonfall-played-result.png",
+    "sha256": "aae3c677d38bf5b013bedcbd0b81c070bcf635dbc4d0a7485aeeccb87675b2c7"
+  }
+}

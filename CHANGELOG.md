@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-11-23
+
+### Added
+
+- Explore eight themed 3D library rooms with physical catalog cases, mounted displays and distinct furniture. Visit any room without changing your account theme.
+- Play Moonfall Pinball in Aurora Observatory with three mission routes, guided practice, pause and resume, and graphics and comfort controls.
+- Save Moonfall progress and personal bests to your account. Conflicting revisions prompt you to choose which run to keep.
+
+The seven other rooms open for browsing. Moonfall is the playable room game in this release.
+
 ## [1.3.3] — 2026-11-21
 
 ### Added
