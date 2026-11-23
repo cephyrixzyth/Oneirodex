@@ -177,10 +177,10 @@ def review_library_room(page, output, report, fixture=None):
     checkpoint('network_failure')
     page.route('**' + endpoint, lambda route: route.abort())
     page.get_by_role('button', name='Resume', exact=True).click()
-    page.wait_for_timeout(200)
-    page.get_by_role('button', name='Pause', exact=True).click()
-    page.get_by_role('button', name='Save progress', exact=True).click()
-    page.get_by_role('status').filter(has_text='could not be saved').wait_for()
+    # The real checkpoint/autosave can fail and pause before the next click.
+    # Wait for that outcome instead of racing a now-removed Pause button.
+    page.get_by_role('status').filter(has_text='could not be saved').wait_for(timeout=30000)
+    page.get_by_role('button', name='Continue without saving', exact=True).wait_for()
     dialogs = []
     def cancel_leave(dialog):
         dialogs.append('unsaved' in dialog.message.lower())
