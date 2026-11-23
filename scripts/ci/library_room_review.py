@@ -42,6 +42,13 @@ def review_library_room(page, output, report, fixture=None):
         if not value:
             raise ProbeFailure('room_' + code)
 
+    def capture(name):
+        # Playwright's visibility scrolling does not account for sticky chrome.
+        # Center the real canvas so its top is not obscured in review images.
+        page.locator('.od-library-room__canvas').evaluate(
+            "element => element.scrollIntoView({block:'center',behavior:'instant'})")
+        page.screenshot(path=str(output / name))
+
     def open_room():
         checkpoint('opening_room')
         page.goto(page.url.split('/library', 1)[0].split('/vr', 1)[0] + '/vr?room=open&vr_compat=collection', wait_until='domcontentloaded')
@@ -93,10 +100,10 @@ def review_library_room(page, output, report, fixture=None):
     case.click()
     page.locator('.od-vr__detail h2').filter(has_text=case_name).wait_for()
     page.get_by_role('button', name='Reading desk', exact=True).click()
-    page.screenshot(path=str(output / 'observatory-reading.png'))
+    capture('observatory-reading.png')
     page.get_by_role('button', name='Library wall', exact=True).click()
     result['populated_catalog_selection'] = True
-    page.screenshot(path=str(output / 'observatory-library.png'))
+    capture('observatory-library.png')
     checkpoint('starting_run')
     page.get_by_role('button', name='New run', exact=True).click()
     page.get_by_role('button', name='Pause', exact=True).wait_for()
@@ -147,7 +154,7 @@ def review_library_room(page, output, report, fixture=None):
     require(oversized == 413, 'oversized_body_accepted')
     result['real_http_identity_scope_and_body_denials'] = True
     checkpoint('capture_table')
-    page.screenshot(path=str(output / 'moonfall-paused.png'))
+    capture('moonfall-paused.png')
     canvas_file = output / 'table-canvas.png'
     page.locator('.od-library-room__canvas').screenshot(path=str(canvas_file))
     with Image.open(canvas_file) as image:
@@ -204,7 +211,7 @@ def review_library_room(page, output, report, fixture=None):
     open_room()
     page.get_by_role('button', name='Resume saved run', exact=True).click()
     page.get_by_role('heading', name='Run finished', exact=True).wait_for()
-    page.screenshot(path=str(output / 'moonfall-seeded-result.png'))
+    capture('moonfall-seeded-result.png')
     result['seeded_result_display'] = True
     checkpoint('reset')
     page.get_by_role('button', name='Reset progress', exact=True).click()
@@ -223,7 +230,7 @@ def review_library_room(page, output, report, fixture=None):
             page.get_by_role('button', name='Launch ball', exact=True).click()
         page.wait_for_timeout(500)
     page.get_by_role('heading', name='Run finished', exact=True).wait_for(timeout=1000)
-    page.screenshot(path=str(output/'moonfall-played-result.png'))
+    capture('moonfall-played-result.png')
     result['result_through_normal_play'] = True
     checkpoint('teardown')
     page.get_by_role('button', name='Close room', exact=True).click()
