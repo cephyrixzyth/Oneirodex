@@ -341,15 +341,15 @@ def review_library_room(page, output, report, fixture=None):
     import time
     # Reduce software-rasterizer work for the long gameplay probe; full-size
     # room/table visual evidence was captured above. This is not a hardware FPS test.
-    result['played_viewport'] = {'width':1000,'height':800}
+    result['played_viewport'] = {'width':800,'height':700}
     page.set_viewport_size(result['played_viewport'])
     page.get_by_role('button', name='New run', exact=True).click()
     checkpoint('played_result')
     page.get_by_text('How to play and comfort', exact=True).click()
     page.get_by_label('Quality',exact=True).select_option('low')
     played_start = time.monotonic()
-    result['played_run_limit_seconds'] = 240
-    deadline = played_start+240
+    result['played_run_limit_seconds'] = 360
+    deadline = played_start+360
     while time.monotonic() < deadline and page.get_by_role('heading', name='Run finished', exact=True).count() == 0:
         if page.locator('.od-moonfall-phase').inner_text().startswith('Ball ready'):
             page.get_by_role('button', name='Launch ball', exact=True).click()

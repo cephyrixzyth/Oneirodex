@@ -91,7 +91,7 @@ jobs:
           venv/bin/python -m unittest discover -s scripts/ci -p test_library_room_review.py -v
           venv/bin/python -m unittest discover -s scripts/ci -p test_linux_connected_server.py -v
       - name: Capture actual populated room and gameplay
-        timeout-minutes: 8
+        timeout-minutes: 14
         run: venv/bin/python scripts/ci/release_visual_review.py --run
       - name: Preserve benchmark evidence
         if: always()
