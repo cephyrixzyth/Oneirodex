@@ -220,6 +220,10 @@ def review_library_room(page, output, report, fixture=None):
     require(fetch()['body']['state'] is None, 'reset_payload_retained')
     # A losing run reached only by normal launches: no save injection.
     import time
+    # Reduce software-rasterizer work for the long gameplay probe; full-size
+    # room/table visual evidence was captured above. This is not a hardware FPS test.
+    result['played_viewport'] = {'width':1000,'height':800}
+    page.set_viewport_size(result['played_viewport'])
     page.get_by_role('button', name='New run', exact=True).click()
     checkpoint('played_result')
     page.get_by_text('How to play and comfort', exact=True).click()
