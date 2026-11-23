@@ -366,6 +366,7 @@ export function LibraryRoom({
                 <label>
                   Visit room{' '}
                   <select
+                    aria-label="Visit room"
                     value={requestedRoom}
                     aria-busy={requestedRoom !== visitedRoom}
                     onChange={(event) => {

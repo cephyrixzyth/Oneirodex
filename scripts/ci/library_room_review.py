@@ -47,6 +47,10 @@ def review_library_room(page, output, report, fixture=None):
         page.goto(page.url.split('/library', 1)[0].split('/vr', 1)[0] + '/vr?room=open&vr_compat=collection', wait_until='domcontentloaded')
         page.get_by_role('group', name='Room stations', exact=True).wait_for()
         checkpoint('visiting_observatory')
+        result['visit_label_matches'] = page.get_by_label('Visit room',exact=True).count()
+        result['visit_option_present'] = page.evaluate("() => Array.from(document.querySelector('.od-library-room__controls select')?.options || []).some(option=>option.value==='oneirodex')")
+        require(result['visit_label_matches'] == 1, 'visit_control_label_not_unique')
+        require(result['visit_option_present'], 'observatory_option_missing')
         page.evaluate('''() => {
           const select=document.querySelector('.od-library-room__controls select');
           const trace={changeObserved:false}; window.__roomChoiceProbe=trace;

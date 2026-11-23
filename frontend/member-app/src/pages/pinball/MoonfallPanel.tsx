@@ -227,6 +227,7 @@ export function MoonfallPanel({
               <label>
                 Quality{' '}
                 <select
+                  aria-label="Quality"
                   value={view.state.settings.quality}
                   onChange={(event) =>
                     settings({ quality: event.target.value as MoonfallSettings['quality'] })
