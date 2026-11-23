@@ -42,4 +42,4 @@ The game saves at checkpoints and periodically, with one write in flight. **Save
 - **New run:** replacing a saved/current run requires confirmation; the personal best and settings carry over.
 - **Reset progress:** requires confirmation and erases the run, settings and personal best. A payload-free revision record remains to prevent stale sessions from restoring the erased save. Account deletion removes that record too.
 
-Actual desktop rendering, controller usability, frame rates and headset comfort still require the benchmark qualification. The 15–30 minute session target needs human pacing review; deterministic controller replays establish reachability, not that duration or enjoyment. A successful simulation or build does not establish those results.
+Low quality reduces desktop render resolution and texture sizes to improve responsiveness. It retains the same rules and controls. Real desktop frame rates, controller usability and headset comfort still need hardware qualification. The 15–30 minute session target needs a human pacing review.
