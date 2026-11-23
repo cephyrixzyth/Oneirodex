@@ -1,0 +1,110 @@
+{
+  "sources": [
+    {
+      "role": "walnut",
+      "source_url": "https://polyhaven.com/a/american_walnut_veneer",
+      "maps": [
+        {
+          "resolution": "1k",
+          "path": "walnut-color.jpg",
+          "sha256": "10d983003bb686db4af3d35d91197fdb6144dcd15d3dcea2ef315600f51b1af5",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/american_walnut_veneer/american_walnut_veneer_diff_1k.jpg",
+          "provider_md5": "748b39ed2ba9dce314104055f18837f0",
+          "bytes": 579182
+        },
+        {
+          "resolution": "1k",
+          "path": "walnut-normal.jpg",
+          "sha256": "f54890d8dd352c8668d643adaa0ad66bd5a3b62995198b7dfb518fa59efebca2",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/american_walnut_veneer/american_walnut_veneer_nor_gl_1k.jpg",
+          "provider_md5": "4bd673f87d8aef1fcce85625d748fa0e",
+          "bytes": 414945
+        },
+        {
+          "resolution": "1k",
+          "path": "walnut-roughness.jpg",
+          "sha256": "a13cd23228a4cb1bf0e342b4602d636123699cde61a2ff16bec1ce45a33ac62e",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/american_walnut_veneer/american_walnut_veneer_rough_1k.jpg",
+          "provider_md5": "d9fa24afc4790122e9ba3c535af8b615",
+          "bytes": 691712
+        }
+      ],
+      "authors": {
+        "Jenelle van Heerden": "All"
+      },
+      "asset": "american_walnut_veneer"
+    },
+    {
+      "role": "floor",
+      "source_url": "https://polyhaven.com/a/diagonal_parquet",
+      "maps": [
+        {
+          "resolution": "1k",
+          "path": "floor-color.jpg",
+          "sha256": "dd19af5da746c15c68192dea8ad8374111cc5dd04bc8d715c70dc50de0f48022",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/diagonal_parquet/diagonal_parquet_diff_1k.jpg",
+          "provider_md5": "1002740fbfd775158885e8118b844fc0",
+          "bytes": 734933
+        },
+        {
+          "resolution": "1k",
+          "path": "floor-normal.jpg",
+          "sha256": "a6b94b86714547d9dbbc0b040939d541857a200d610144e55ce935635925f193",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/diagonal_parquet/diagonal_parquet_nor_gl_1k.jpg",
+          "provider_md5": "6861bec7aa92f6c3145f412ec3341622",
+          "bytes": 455051
+        },
+        {
+          "resolution": "1k",
+          "path": "floor-roughness.jpg",
+          "sha256": "94ea3f7a0a08cac23ab010522a86cd80b70ceb494833d49772e8b11811c54fc9",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/diagonal_parquet/diagonal_parquet_rough_1k.jpg",
+          "provider_md5": "a63d469fc2bac8e3ca62301cd408dc28",
+          "bytes": 269275
+        }
+      ],
+      "authors": {
+        "Jenelle van Heerden": "Processing",
+        "Sergej Majboroda": "Photography"
+      },
+      "asset": "diagonal_parquet"
+    },
+    {
+      "role": "velvet",
+      "source_url": "https://polyhaven.com/a/velour_velvet",
+      "maps": [
+        {
+          "resolution": "1k",
+          "path": "velvet-color.jpg",
+          "sha256": "e6e92d808b3456deb892ff17905f3b44717fcfbcbce9fcf03ad7abcabda799df",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/velour_velvet/velour_velvet_diff_1k.jpg",
+          "provider_md5": "fa3a7ef3606bf7591b8f8577992e7228",
+          "bytes": 735556
+        },
+        {
+          "resolution": "1k",
+          "path": "velvet-normal.jpg",
+          "sha256": "046c92c48c1cb36656d394addf21dea9582f563479b73f2c0b16f356128e872b",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/velour_velvet/velour_velvet_nor_gl_1k.jpg",
+          "provider_md5": "41009a399cb4d45e44636a515cd4c8c8",
+          "bytes": 695985
+        },
+        {
+          "resolution": "1k",
+          "path": "velvet-roughness.jpg",
+          "sha256": "82b6f22e9a225af76dc8960dab3ed4a936ad8a8061e9272137c3367af2970952",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/velour_velvet/velour_velvet_rough_1k.jpg",
+          "provider_md5": "fac679bf7a69501a7402d832667fbc06",
+          "bytes": 943960
+        }
+      ],
+      "authors": {
+        "colormass": "Photography",
+        "Rico Cilliers": "Processing"
+      },
+      "asset": "velour_velvet"
+    }
+  ],
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license"
+}

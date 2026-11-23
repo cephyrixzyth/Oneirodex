@@ -2,6 +2,7 @@
 
 > **Doc status:** Reference
 > Review implementation; not a release or accepted visual/gameplay benchmark.
+> **Visual review:** The owner rejected the initial renders as too basic. The [visual correction plan](../../superpowers/plans/2026-11-22-observatory-visual-polish.md) is in progress. Previous functional CI and retained images describe source `89988495`; they do not qualify the new art revision or imply visual acceptance.
 
 The owner approved the [eight-world direction](../../superpowers/specs/2026-11-22-library-room-worlds-design.md) and implementation of the first room/game. The [execution plan](../../superpowers/plans/2026-11-22-aurora-moonfall.md) retains human benchmark review before the other seven games. The existing 1.3.3 deployment is unchanged.
 

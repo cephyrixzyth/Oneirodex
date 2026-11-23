@@ -24,6 +24,21 @@ def review_library_room(page, output, report, fixture=None):
     endpoint = '/api/room-games/moonfall-pinball/progress'
     errors = []
     page.on('pageerror', lambda error: errors.append(type(error).__name__))
+    visual_only = os.environ.get('ROOM_BENCHMARK_VISUAL_ONLY') == '1'
+    expected_materials = {role+'-'+kind+'.jpg' for role in ('walnut','floor','velvet') for kind in ('color','normal','roughness')}
+    expected_materials.add('moonfall-playfield.svg')
+    material_responses = {}
+    def observe_material(response):
+        from urllib.parse import urlsplit
+        path = urlsplit(response.url).path
+        name = path.rsplit('/',1)[-1]
+        if path.startswith('/static/newstyle/rooms/aurora/') and name in expected_materials:
+            material_responses[name] = response.status
+    page.on('response',observe_material)
+    if visual_only:
+        report['capture_scope'] = 'visual-preview-only; no full game lifecycle qualification on this source'
+        result['qualification_scope'] = 'visual-preview-only'
+        page.set_default_timeout(60000)
 
     def fetch(method='GET', body=None, csrf=True):
         return page.evaluate('''async ({path,method,body,csrf}) => {
@@ -104,6 +119,31 @@ def review_library_room(page, output, report, fixture=None):
     page.get_by_role('button', name='Library wall', exact=True).click()
     result['populated_catalog_selection'] = True
     capture('observatory-library.png')
+    if visual_only:
+        checkpoint('visual_materials')
+        page.wait_for_load_state('networkidle',timeout=60000)
+        result['material_assets'] = material_responses
+        require(all(200 <= material_responses.get(name,0) < 300 or material_responses.get(name)==304 for name in expected_materials),'material_assets_missing')
+        for station,name in [('Room overview','observatory-overview'),('Lounge','observatory-lounge'),('Moonfall Pinball','moonfall-detail')]:
+            checkpoint('visual_'+name)
+            page.get_by_role('button',name=station,exact=True).click()
+            page.evaluate('''() => new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))''')
+            result.setdefault('preview_render_samples',{})[name] = page.evaluate('''() => new Promise(resolve=>{
+              const gl=document.querySelector('.od-library-room__canvas').getContext('webgl2');
+              const names=['drawArrays','drawElements','drawArraysInstanced','drawElementsInstanced'];
+              const originals={}; let calls=0,lastCalls=0,lastTime;
+              for(const name of names){originals[name]=gl[name];gl[name]=function(...args){calls++;return originals[name].apply(this,args)}}
+              let complete=false;
+              function finish(value){if(complete)return;complete=true;clearTimeout(timer);for(const name of names)gl[name]=originals[name];resolve(value)}
+              const timer=setTimeout(()=>finish({timed_out:true}),15000);
+              requestAnimationFrame(time=>{lastTime=time;lastCalls=calls;requestAnimationFrame(next=>finish({draw_calls:calls-lastCalls,frame_interval_ms:next-lastTime}))});
+            })''')
+            capture(name+'.png')
+            page.locator('.od-library-room__canvas').screenshot(path=str(output/(name+'-canvas.png')))
+        require(not errors,'browser_exception')
+        result['status'] = 'preview-captured'
+        checkpoint('visual_preview_complete')
+        return
     checkpoint('starting_run')
     page.get_by_role('button', name='New run', exact=True).click()
     page.get_by_role('button', name='Pause', exact=True).wait_for()

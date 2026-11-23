@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="2048" viewBox="0 0 1024 2048">
+  <defs>
+    <linearGradient id="enamel" x2=".2" y2="1"><stop stop-color="#071c29"/><stop offset=".55" stop-color="#124238"/><stop offset="1" stop-color="#071c20"/></linearGradient>
+    <radialGradient id="nebula"><stop stop-color="#7fdcc1" stop-opacity=".2"/><stop offset="1" stop-color="#224b52" stop-opacity="0"/></radialGradient>
+    <pattern id="stars" width="179" height="221" patternUnits="userSpaceOnUse"><circle cx="23" cy="41" r="1.5" fill="#ede1b1"/><circle cx="121" cy="153" r="1" fill="#bdded4"/><path d="M74 89v10m-5-5h10" stroke="#8bb9ab" stroke-width="1"/></pattern>
+  </defs>
+  <rect width="1024" height="2048" rx="45" fill="url(#enamel)"/>
+  <ellipse cx="430" cy="450" rx="560" ry="620" fill="url(#nebula)"/>
+  <rect x="45" y="32" width="934" height="1980" rx="38" fill="url(#stars)" stroke="#a68b57" stroke-width="3"/>
+  <rect x="58" y="45" width="908" height="1954" rx="31" fill="none" stroke="#4f8275" stroke-width="1"/>
+  <g fill="none" stroke="#c2a367">
+    <path d="M130 1010C-45 330 117 127 485 120C861 117 1059 341 901 1010" stroke-width="6"/>
+    <path d="M155 1014C-10 350 147 153 487 148C837 142 1024 353 875 1014" stroke-width="1.5"/>
+    <ellipse cx="512" cy="566" rx="289" ry="384" transform="rotate(20 512 566)" stroke-width="1.5"/>
+    <ellipse cx="512" cy="566" rx="337" ry="287" transform="rotate(-27 512 566)" stroke-width="1.5"/>
+    <path d="M112 1150L284 1367L512 1450L740 1367L912 1150M126 1178L280 1389L512 1477L744 1389L898 1178" opacity=".7"/>
+    <path d="M94 1480Q220 1670 345 1785M930 1480Q804 1670 679 1785" stroke-width="7"/>
+  </g>
+  <g stroke="#9acbb7" stroke-width="2" fill="#12382f">
+    <circle cx="512" cy="550" r="120"/><circle cx="512" cy="550" r="106"/>
+    <path d="M512 449L537 518L610 519L552 563L573 633L512 591L451 633L472 563L414 519L487 518Z" fill="#8bbca2" fill-opacity=".14"/>
+  </g>
+  <g fill="#d1b77c" text-anchor="middle" font-family="Georgia,serif">
+    <text x="512" y="241" font-size="30" letter-spacing="10">AURORA OBSERVATORY</text>
+    <text x="512" y="1210" font-size="67" letter-spacing="9">MOONFALL</text>
+    <text x="512" y="1255" font-size="23" letter-spacing="8">ORBIT · LUNAR · AURORA</text>
+    <text x="512" y="1536" font-size="20" letter-spacing="5">FOLLOW THE LIGHT</text>
+    <text x="512" y="1940" font-size="23" letter-spacing="7">ORIGINAL CELESTIAL PINBALL</text>
+  </g>
+  <g fill="#b69b66" opacity=".75"><circle cx="115" cy="118" r="5"/><circle cx="909" cy="118" r="5"/><circle cx="115" cy="1925" r="5"/><circle cx="909" cy="1925" r="5"/></g>
+</svg>

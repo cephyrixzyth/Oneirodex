@@ -18,6 +18,11 @@ on:
       - 'requirements*'
       - '.github/workflows/room-benchmark.yml'
   workflow_dispatch:
+    inputs:
+      visual_only:
+        description: Capture the visual revision without repeating the long game lifecycle
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -45,6 +50,7 @@ jobs:
     env:
       RELEASE_VISUAL_ALLOWED: '1'
       ROOM_BENCHMARK_FOCUSED: '1'
+      ROOM_BENCHMARK_VISUAL_ONLY: ${{ github.event_name == 'push' && '1' || inputs.visual_only && '1' || '0' }}
       TEST_DATABASE_URL: postgresql://postgres:room-benchmark-ci-only@127.0.0.1:5432/oneirodex_room_benchmark_test
       ONEIRODEX_CI_CONTROL_DATABASE_URL: postgresql://postgres:room-benchmark-ci-only@127.0.0.1:5432/oneirodex_room_benchmark_test
       SECRET_KEY: synthetic-room-benchmark-ci-only
@@ -63,7 +69,7 @@ jobs:
         run: |
           npm ci
           node scripts/ci/test_library_room_workflow.cjs
-          npm test --workspace frontend/member-app -- --run src/pages/pinball src/pages/LibraryRoom.test.tsx src/pages/LibraryRoomGame.test.tsx src/pages/roomSceneGame.test.ts src/buttonLanguage.test.js src/dockerStagedImports.test.ts src/main.test.tsx src/memberBootstrap.test.tsx src/App.test.tsx src/AppSmoke.test.tsx
+          npm test --workspace frontend/member-app -- --run src/pages/pinball src/pages/LibraryRoom.test.tsx src/pages/LibraryRoomGame.test.tsx src/pages/roomSceneGame.test.ts src/pages/roomMaterials.test.ts src/pages/roomLighting.test.ts src/buttonLanguage.test.js src/dockerStagedImports.test.ts src/main.test.tsx src/memberBootstrap.test.tsx src/App.test.tsx src/AppSmoke.test.tsx
           npm run typecheck --workspace frontend/member-app
           npm run build:native-spas
       - name: Prepare isolated Python and browser dependencies

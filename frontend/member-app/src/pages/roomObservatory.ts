@@ -1,9 +1,10 @@
 import * as THREE from 'three'
 import { disposeRoomGroup, roomBuilder, beveledBox } from './roomGeometry'
+import { createRoomMaterialLibrary } from './roomMaterials'
+import { addObservatoryJoinery } from './roomJoinery'
 
 const brass = '#c9a96b',
   wood = '#69442e',
-  darkWood = '#38271f',
   velvet = '#164938'
 
 /** First authored world. The shader sky and geometry are original project assets. */
@@ -11,7 +12,9 @@ export function furnishObservatory(scene: THREE.Scene) {
   const root = new THREE.Group()
   root.name = 'aurora-observatory'
   scene.add(root)
-  const b = roomBuilder(root)
+  const materials = createRoomMaterialLibrary()
+  const b = roomBuilder(root, materials.material)
+  addObservatoryJoinery(root, materials)
   const sky = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -49,35 +52,16 @@ export function furnishObservatory(scene: THREE.Scene) {
   b.mesh(
     'observatory-floor',
     new THREE.CylinderGeometry(5.65, 5.65, 0.12, 64),
-    b.material(darkWood),
+    materials.surface('floor'),
     0,
     -0.08,
     0,
   )
-  const boards: THREE.Matrix4[] = [],
-    object = new THREE.Object3D()
-  for (let i = -10; i <= 10; i++) {
-    const x = i * 0.5,
-      half = Math.sqrt(Math.max(0, 5.5 ** 2 - (Math.abs(x) + 0.25) ** 2))
-    const count = Math.max(1, Math.ceil((half * 2) / 1.8)),
-      length = (half * 2) / count
-    for (let j = 0; j < count; j++) {
-      object.position.set(x, -0.005, -half + length * (j + 0.5))
-      object.scale.set(0.49, 0.025, Math.max(0.02, length - 0.012))
-      object.updateMatrix()
-      boards.push(object.matrix.clone())
-    }
-  }
-  const floor = new THREE.InstancedMesh(
-    beveledBox(1, 1, 1, 0.01),
-    b.material('#765039'),
-    boards.length,
-  )
+  const object = new THREE.Object3D()
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(5.55, 96), materials.surface('floor'))
   floor.name = 'observatory-walnut-boards'
-  boards.forEach((matrix, i) => {
-    floor.setMatrixAt(i, matrix)
-    floor.setColorAt(i, new THREE.Color(i % 3 ? '#d1bda3' : '#e4caa3'))
-  })
+  floor.rotation.x = -Math.PI / 2
+  floor.position.y = 0.001
   floor.receiveShadow = true
   root.add(floor)
   const carpet = b.mesh(
@@ -149,8 +133,8 @@ export function furnishObservatory(scene: THREE.Scene) {
   const library = new THREE.Group()
   library.name = 'observatory-library'
   root.add(library)
-  const lb = roomBuilder(library)
-  lb.box('library-back-panel', 9.5, 3.55, 0.2, 0, 1.8, -4.03, '#163128')
+  const lb = roomBuilder(library, materials.material)
+  lb.box('library-back-panel', 6.7, 3.55, 0.2, 0, 1.8, -4.03, '#163128')
   for (const x of [-4.65, -3.2, 3.2, 4.65])
     lb.box('library-fluted-pier', 0.16, 3.6, 0.5, x, 1.8, -3.85, wood)
   for (const y of [0.62, 1.32, 2.08, 2.82, 3.58]) {
@@ -191,7 +175,7 @@ export function furnishObservatory(scene: THREE.Scene) {
   const seating = new THREE.Group()
   seating.name = 'observatory-seating'
   root.add(seating)
-  const sb = roomBuilder(seating)
+  const sb = roomBuilder(seating, materials.material)
   for (const side of [-1, 1]) {
     const x = side * 3.15,
       z = 2.8
@@ -211,7 +195,7 @@ export function furnishObservatory(scene: THREE.Scene) {
   const telescope = new THREE.Group()
   telescope.name = 'observatory-telescope'
   root.add(telescope)
-  const tb = roomBuilder(telescope)
+  const tb = roomBuilder(telescope, materials.material)
   telescope.position.set(3.7, 0, -2.4)
   telescope.rotation.y = -0.4
   tb.mesh(
@@ -264,7 +248,7 @@ export function furnishObservatory(scene: THREE.Scene) {
     0.44,
     2.1,
   )
-  const ob = roomBuilder(orrery)
+  const ob = roomBuilder(orrery, materials.material)
   for (let i = 0; i < 3; i++) {
     const radius = 0.2 + i * 0.115
     ob.mesh(

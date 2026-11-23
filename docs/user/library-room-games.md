@@ -2,6 +2,7 @@
 
 > **Doc status:** Reference
 > Development benchmark; not part of the published 1.3.3 release. Disposable browser and database qualification passed, with actual captures inspected. Hardware measurements and human benchmark acceptance remain pending. See the [source-bound evidence](../dev/parity-evidence/aurora-moonfall-benchmark-2026-11-22.md).
+> The owner rejected the initial visual finish. The captures below are the earlier prototype; a richer 3D art revision is in progress and requires new in-engine capture and review.
 
 The first redesigned room is **Aurora Observatory**, with the original **Moonfall Pinball** table. The other seven room designs and games are approved concepts; their current rooms retain their existing furnishings and do not offer those new games yet.
 

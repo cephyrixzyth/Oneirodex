@@ -8,7 +8,8 @@ import { createPinballRuntime } from './pinball/runtime'
 import type { MoonfallSnapshot } from './pinball/runtime'
 import type { MoonfallInput } from './pinball/model'
 import { bindPinballControls } from './pinball/controls'
-import { disposeRoomGroup } from './roomGeometry'
+import { disposeRoomGroup, roomBuilder, beveledBox } from './roomGeometry'
+import { createObservatoryLighting } from './roomLighting'
 
 export interface RoomGame {
   is_favorite?: boolean
@@ -32,7 +33,7 @@ export interface RoomView {
   next: boolean
 }
 export type RoomAction = (id: string) => void
-export type Station = 'library' | 'reading' | 'lounge' | 'pinball'
+export type Station = 'overview' | 'library' | 'reading' | 'lounge' | 'pinball'
 export interface RoomOptions {
   theme?: string
   onGameSnapshot?: (snapshot: MoonfallSnapshot) => void
@@ -116,6 +117,7 @@ export function createRoom(
   const world = roomArtSlug(theme)
   const finish = roomFinish(theme)
   const observatory = world === 'oneirodex' ? furnishObservatory(scene) : null
+  const disposeEnvironment = observatory ? createObservatoryLighting(renderer, scene) : null
   if (!observatory) furnishRoom(scene, theme)
   const gallery = new THREE.Group()
   scene.add(gallery)
@@ -139,7 +141,7 @@ export function createRoom(
   let currentView: RoomView | undefined
   let readingPage = 0
   let readingPageCount = 1
-  let station: Station = 'library'
+  let station: Station = observatory ? 'overview' : 'library'
   let yaw = 0
   const audio = observatory ? createMoonfallAudio() : null
   const gameRuntime = observatory
@@ -230,12 +232,14 @@ export function createRoom(
     else render()
   }
   const positions: Record<Station, [number, number, number]> = {
+    overview: [-3.3, 0, 3.8],
     library: [0, 0, 2.1],
     reading: [-2.65, 0, -0.95],
     lounge: [2.65, 0, -0.95],
     pinball: [0, 0, 2.5],
   }
   function move(next: Station) {
+    if (next === 'overview' && !observatory) return
     if (next === 'pinball' && !gameRuntime) return
     if (next !== 'pinball') gameRuntime?.pause()
     station = next
@@ -249,8 +253,13 @@ export function createRoom(
       else if (next !== 'pinball') rig.position.x += next === 'reading' ? -0.65 : 0.65
     }
     rig.rotation.y = next === 'reading' ? Math.PI / 2 : next === 'lounge' ? -Math.PI / 2 : 0
+    if (next === 'overview') rig.rotation.y = -0.47
     camera.position.set(0, 1.55, 0)
     camera.rotation.set(0, 0, 0)
+    if (next === 'overview' && !activeSession) {
+      camera.position.y = 1.95 - rig.position.y
+      camera.rotation.x = -0.1
+    }
     if (next === 'library' && observatory && !activeSession) {
       // Desktop overview clears the cabinet backboard without moving the XR rig.
       camera.position.y = 4.2 - rig.position.y
@@ -311,11 +320,38 @@ export function createRoom(
   ) {
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(w, h),
-      new THREE.MeshBasicMaterial({ map: texture }),
+      observatory
+        ? new THREE.MeshStandardMaterial({ map: texture, roughness: 0.72, metalness: 0.02 })
+        : new THREE.MeshBasicMaterial({ map: texture }),
     )
     mesh.position.set(x, y, z)
     mesh.rotation.y = angle
     gallery.add(mesh)
+    if (observatory) {
+      const isCase = Boolean(action && !action.startsWith('@') && h > 1)
+      const frame = new THREE.Mesh(
+        beveledBox(w + 0.035, h + 0.035, isCase ? 0.12 : 0.045, 0.012),
+        new THREE.MeshStandardMaterial({
+          color: isCase ? '#293a34' : '#96784a',
+          metalness: isCase ? 0.08 : 0.65,
+          roughness: 0.42,
+        }),
+      )
+      frame.name = isCase ? 'physical-catalog-case' : 'observatory-mounted-plaque'
+      frame.position.set(
+        x - Math.sin(angle) * (isCase ? 0.065 : 0.028),
+        y,
+        z - Math.cos(angle) * (isCase ? 0.065 : 0.028),
+      )
+      frame.rotation.y = angle
+      frame.castShadow = true
+      frame.receiveShadow = true
+      gallery.add(frame)
+      if (isCase && action) {
+        frame.userData.action = action
+        targets.push(frame)
+      }
+    }
     if (action) {
       mesh.userData.action = action
       targets.push(mesh)
@@ -323,7 +359,7 @@ export function createRoom(
     return mesh
   }
   function imagePanel(
-    mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>,
+    mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial | THREE.MeshStandardMaterial>,
     url: string,
     version: number,
   ) {
@@ -422,7 +458,17 @@ export function createRoom(
       )
       if (g.cover_url && !g.cover_url.endsWith('default_cover.jpg'))
         imagePanel(art, g.cover_url, version)
-      sign(1.34, 0.59, x, 1.03, -3.48, 0, g.name, 'Read details', g.uuid)
+      sign(
+        1.34,
+        observatory ? 0.24 : 0.59,
+        x,
+        1.03,
+        -3.48,
+        0,
+        g.name,
+        observatory ? '' : 'Read details',
+        g.uuid,
+      )
     })
     sign(1.15, 0.5, -2.6, 0.48, -3.35, 0, 'Reading desk', 'Visit', '@reading')
     if (next.previous) sign(1.05, 0.47, -1.05, 0.48, -3.35, 0, 'Previous', 'Shelf', '@previous')
@@ -439,7 +485,15 @@ export function createRoom(
     )
     readingPage = reading.page
     readingPageCount = reading.pages
-    plane(3.9, 1.5, -5.24, 1.85, -0.95, Math.PI / 2, reading.texture)
+    plane(
+      observatory ? 2.9 : 3.9,
+      observatory ? 1.3 : 1.5,
+      -5.24,
+      1.85,
+      -0.95,
+      Math.PI / 2,
+      reading.texture,
+    )
     sign(1.25, 0.5, -5.18, 0.79, 0.32, Math.PI / 2, 'Library wall', 'Return', '@library')
     if (next.selected)
       sign(
@@ -477,7 +531,7 @@ export function createRoom(
       imagePanel(art, '/static/newstyle/rooms/' + world + '.webp', version)
     }
     if (gameRuntime)
-      sign(1.45, 0.48, 0, 2.4, -1.57, 0, 'Moonfall Pinball', 'Visit the table', '@moonfall-open')
+      sign(0.8, 0.18, 0, 0.75, 1.71, 0, 'Moonfall Pinball', 'Visit the table', '@moonfall-open')
     sign(
       1.45,
       0.45,
@@ -842,7 +896,7 @@ export function createRoom(
       throw error
     }
   }
-  move('library')
+  move(station)
   resize()
   refreshLoop()
   function setGameMenu(menu: RoomGameMenu) {
@@ -854,8 +908,27 @@ export function createRoom(
     gameMenu = new THREE.Group()
     gameMenu.name = 'moonfall-instrument-menu'
     gameMenu.visible = station === 'pinball'
+    gameMenu.position.set(1.25, 1.15, 0.35)
+    gameMenu.rotation.y = -0.25
     gameMenuTargets = []
     scene.add(gameMenu)
+    const cabinet = roomBuilder(gameMenu)
+    cabinet.box('moonfall-control-housing', 1.0, 1.14, 0.075, 0, -0.09, -0.065, '#352b21', 0, 0.035)
+    cabinet.box(
+      'moonfall-control-bezel',
+      0.95,
+      1.09,
+      0.02,
+      0,
+      -0.09,
+      -0.018,
+      '#a28a58',
+      0.65,
+      0.025,
+    )
+    cabinet.box('moonfall-control-screen', 0.91, 1.04, 0.015, 0, -0.09, -0.001, '#102724', 0, 0.015)
+    cabinet.box('moonfall-control-stand', 0.09, 0.55, 0.11, 0, -0.92, -0.12, '#a28a58', 0.7, 0.02)
+    cabinet.box('moonfall-control-foot', 0.6, 0.06, 0.45, 0, -1.1, -0.02, '#352b21', 0, 0.025)
     function panel(
       w: number,
       h: number,
@@ -869,22 +942,21 @@ export function createRoom(
         new THREE.PlaneGeometry(w, h),
         new THREE.MeshBasicMaterial({ map: texture }),
       )
-      item.position.set(1.4, y, 0.35)
-      item.rotation.y = -0.25
+      item.position.set(0, y, 0.012)
       gameMenu!.add(item)
       if (action) {
         item.userData.action = action
         gameMenuTargets.push(item)
       }
     }
-    panel(1.12, 0.85, 2.05, menu.title, menu.message)
+    panel(0.87, 0.35, 0.3, menu.title, menu.message)
     menu.actions
       .slice(0, 5)
       .forEach((action, i) =>
         panel(
-          1.12,
-          0.24,
-          1.48 - i * 0.28,
+          0.87,
+          0.115,
+          0.025 - i * 0.14,
           action.label,
           action.disabled ? 'Unavailable' : '',
           action.disabled ? undefined : action.action,
@@ -955,6 +1027,7 @@ export function createRoom(
       audio?.dispose()
       table?.dispose()
       observatory?.dispose()
+      disposeEnvironment?.()
       if (gameMenu) disposeRoomGroup(gameMenu)
       void activeSession?.end().catch(() => {})
       controllerCleanups.forEach((f) => f())

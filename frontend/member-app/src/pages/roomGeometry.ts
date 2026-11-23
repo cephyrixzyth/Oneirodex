@@ -1,37 +1,25 @@
 import * as THREE from 'three'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 /** Original rounded furniture profiles; no model download or renderer required. */
 export function beveledBox(width: number, height: number, depth: number, rounding = 0.035) {
   const r = Math.min(rounding, width / 4, height / 4, depth / 4)
-  const x = -width / 2,
-    y = -height / 2
-  const shape = new THREE.Shape()
-  shape.moveTo(x + r, y)
-  shape.lineTo(x + width - r, y)
-  shape.quadraticCurveTo(x + width, y, x + width, y + r)
-  shape.lineTo(x + width, y + height - r)
-  shape.quadraticCurveTo(x + width, y + height, x + width - r, y + height)
-  shape.lineTo(x + r, y + height)
-  shape.quadraticCurveTo(x, y + height, x, y + height - r)
-  shape.lineTo(x, y + r)
-  shape.quadraticCurveTo(x, y, x + r, y)
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: Math.max(0.001, depth - r * 2),
-    bevelEnabled: true,
-    bevelThickness: r,
-    bevelSize: r * 0.4,
-    bevelSegments: 2,
-    steps: 1,
-    curveSegments: 4,
-  })
-  geometry.center()
-  return geometry
+  return new RoundedBoxGeometry(width, height, depth, 3, r)
 }
 
-export function roomBuilder(root: THREE.Group) {
+export function roomBuilder(
+  root: THREE.Group,
+  resolveMaterial?: (
+    color: string,
+    metalness: number,
+    roughness: number,
+    glow: number,
+  ) => THREE.MeshStandardMaterial,
+) {
   const materials = new Map<string, THREE.MeshStandardMaterial>()
   const geometry = new Map<string, THREE.BufferGeometry>()
   function material(color: string, metalness = 0, roughness = 0.65, glow = 0) {
+    if (resolveMaterial) return resolveMaterial(color, metalness, roughness, glow)
     const key = [color, metalness, roughness, glow].join(':')
     let found = materials.get(key)
     if (!found) {

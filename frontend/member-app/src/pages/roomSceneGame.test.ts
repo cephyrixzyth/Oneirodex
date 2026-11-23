@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRoom } from './roomScene'
+vi.mock('./roomLighting', () => ({ createObservatoryLighting: () => vi.fn() }))
 
 const mock = vi.hoisted(() => ({
   loop: null as ((time: number) => void) | null,

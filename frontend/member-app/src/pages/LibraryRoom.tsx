@@ -428,6 +428,15 @@ export function LibraryRoom({
                   <button
                     type="button"
                     className="od-cbtn"
+                    onClick={() => engine.current?.move('overview')}
+                  >
+                    Room overview
+                  </button>
+                )}
+                {gameView && (
+                  <button
+                    type="button"
+                    className="od-cbtn"
                     onClick={() => engine.current?.move('pinball')}
                   >
                     Moonfall Pinball

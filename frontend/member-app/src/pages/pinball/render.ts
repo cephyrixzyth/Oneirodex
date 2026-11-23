@@ -12,6 +12,8 @@ import {
 } from './table'
 import type { MoonfallState } from './model'
 import { disposeRoomGroup, roomBuilder } from '../roomGeometry'
+import { createRoomMaterialLibrary } from '../roomMaterials'
+import { detailPinballCabinet } from './tableDetail'
 
 const scale = 0.72
 export const boardPosition = (x: number, y: number, height = 0.045) =>
@@ -21,7 +23,9 @@ export const boardPosition = (x: number, y: number, height = 0.045) =>
 export function createPinballTable() {
   const group = new THREE.Group()
   group.name = 'moonfall-pinball-table'
-  const b = roomBuilder(group)
+  const materials = createRoomMaterialLibrary()
+  const b = roomBuilder(group, materials.material)
+  detailPinballCabinet(group, materials)
   const brass = '#c9a96b',
     walnut = '#573b2e',
     field = '#152e36'
