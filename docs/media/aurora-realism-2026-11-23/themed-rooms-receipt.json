@@ -1,0 +1,97 @@
+{
+  "source_commit": "3c833a0e6f64a9cabdb30e207540de461fde891c",
+  "github_run_id": 45226122413,
+  "artifact_sha256": "1618a673c50cd42d7a38a67a62bc39de13858a050572a5220ca57c0b11ab7e42",
+  "backend_cleanup_verified": true,
+  "files": [
+    {
+      "path": "room/tideglass-lounge.png",
+      "sha256": "bb5332480a426c3c0d782948adb899d222085db17bcf2d96094c48e7647feb55"
+    },
+    {
+      "path": "room/greenhouse-library.png",
+      "sha256": "af5abaa6cf78a994fe9d5abf6c7083af75bf06a6db49994f0a9fe63d8f6cd074"
+    },
+    {
+      "path": "room/monochrome-library.png",
+      "sha256": "5d6afb03b0c6afcffb6d7513dd798a7b562e7243ba253617b7702dec077b751d"
+    },
+    {
+      "path": "room/afterglow-lounge.png",
+      "sha256": "38d685a57f0df97d34442ad4dd825b92a1f6364ff8b95281128b5ae1dc566e8b"
+    },
+    {
+      "path": "room/greenhouse-lounge.png",
+      "sha256": "5e1c6ebbd66042bad551f44cae95ba063e4b2f9834aa1a362a7e7fb63ce9f824"
+    },
+    {
+      "path": "room/deep-space-lounge.png",
+      "sha256": "8a37ad276b6717468b1219f23da4acfc08f8993eb6b6887b3918c23d4d412638"
+    },
+    {
+      "path": "room/deep-space-overview.png",
+      "sha256": "e2c78e58e85a9a966a9f210751d00cd801e8827e4052f1eb87a0ce7a3715ca0a"
+    },
+    {
+      "path": "room/tape-deck-lounge.png",
+      "sha256": "39af569b0161e6a3191b225d089a8d14af5485dd4786b4d1f6a44ca76a795491"
+    },
+    {
+      "path": "room/tideglass-overview.png",
+      "sha256": "fa59a9d447b0125951b836439a42a7f576b981482620829302f484aa96a17e89"
+    },
+    {
+      "path": "room/monochrome-overview.png",
+      "sha256": "033cb5843982ff7f4931d57b32c31bf6784c766d95241ed7b19e882076eca108"
+    },
+    {
+      "path": "room/signal-lounge.png",
+      "sha256": "26e090f4790bc0ee72a6abc3b4099afbafd109b17779cee25ff16581451fb3cf"
+    },
+    {
+      "path": "room/greenhouse-overview.png",
+      "sha256": "3f3dfb6d331ec3e15c8d4bbf626dda28c8cb7c208ce0b245cc03f31c0594618a"
+    },
+    {
+      "path": "room/afterglow-overview.png",
+      "sha256": "6d4bc49f44e08dca46434bc0d57afb97e1af32feed2688a222e10711f288d1a9"
+    },
+    {
+      "path": "room/monochrome-lounge.png",
+      "sha256": "c47e603aed304b98127230febd0aff9989b6d155b79f74bdcfc0d8d44a20f69d"
+    },
+    {
+      "path": "room/signal-library.png",
+      "sha256": "33ca1b98af6d0b0df9cf568f2187760460ea038e4c1e0aa729272cdc4d42993c"
+    },
+    {
+      "path": "room/deep-space-library.png",
+      "sha256": "5e45cdc54bc4a9edfbd25f233c155fc04fbc3be75fd5fb6919cc5352714e36bc"
+    },
+    {
+      "path": "room/tape-deck-library.png",
+      "sha256": "aefe1a6c54514d4fdb02b17aef33529a6ae73fb1dcaae30d65c22f63bda3cbad"
+    },
+    {
+      "path": "room/signal-overview.png",
+      "sha256": "ebb85e5e1879be9242bf949fd9ad8ed032256bcd1b6edee02858ba416d7f5f3a"
+    },
+    {
+      "path": "room/tideglass-library.png",
+      "sha256": "183a8a98e581cfe91e1bba64f25122c74f254092f59465583480f7fe9ab56cf2"
+    },
+    {
+      "path": "room/tape-deck-overview.png",
+      "sha256": "dcfefac3c56a951327c42c27e29edf9dc693116ae3a91f48be95f829eee39690"
+    },
+    {
+      "path": "room/afterglow-library.png",
+      "sha256": "9ec435552bda1c21ca5e6ab96af36b70ccd09c5b240f58e5c963294d950f8456"
+    },
+    {
+      "path": "themes/tideglass.png",
+      "sha256": "bdcec8ad872171a6013f8a448c0193424e537735096490309001cc99b338176e"
+    }
+  ],
+  "overview_sheet_sha256": "a0c83b87cdf65c742edf8a1c6e6fd0119c9a3005158c24cfdb166745e6cf8027"
+}

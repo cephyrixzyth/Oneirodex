@@ -1,16 +1,17 @@
 # Library room games
 
-> **Doc status:** Reference
-> Development benchmark; not part of the published 1.3.3 release. Disposable browser and database qualification passed, with actual captures inspected. Hardware measurements and human benchmark acceptance remain pending. See the [source-bound evidence](../dev/parity-evidence/aurora-moonfall-benchmark-2026-11-22.md).
-> The realism revision is available for visual review. [See the current in-engine captures](../media/aurora-realism-2026-11-23/README.md).
+> **Doc status:** Active
+> Available in Oneirodex 1.4.0 and later. Room browsing and Moonfall were exercised in a disposable browser and database. Physical headset qualification is still open.
 
-**Aurora Observatory** has the original **Moonfall Pinball** table. The other seven environments now have themed 3D previews in the development checkout. Afterglow has an arcade cabinet row, Graphite a precision workbench, Mosslight a planted conservatory, Signal a receiver rack, Tape Deck a mixing console, Deep Space a projection table, and Tideglass an undersea chart table. Their respective games remain planned.
+**Aurora Observatory** has the original **Moonfall Pinball** table. The other seven rooms are open for catalog browsing. Afterglow has an arcade cabinet row, Graphite a precision workbench, Mosslight a planted conservatory, Signal a receiver rack, Tape Deck a mixing console, Deep Space a projection table, and Tideglass an undersea chart table. Their respective games remain planned.
 
 Open the library room from the VR Library. **Visit room → Aurora Observatory** visits it without changing your account theme. **Follow my theme** returns to your account's room. Visits last only while the room is open. The normal catalog remains available below the room.
 
 **Room overview** shows the room's featured furniture. **Library wall** takes you to the cover display, with the same titles available in the HTML catalog below. In Aurora, **Moonfall Pinball** switches to the playfield, with game controls at the table and below the room.
 
-![Aurora Observatory realism preview](../media/aurora-realism-2026-11-23/observatory-overview-canvas.png)
+![Actual room overviews for Aurora, Afterglow, Graphite, Mosslight, Signal, Tape Deck, Deep Space and Tideglass](../media/aurora-realism-2026-11-23/themed-room-overviews.webp)
+
+[View the capture and qualification evidence](../media/aurora-realism-2026-11-23/README.md).
 
 The [previous benchmark captures](../media/library-room-benchmark-2026-11-22/README.md) retain the result reached through normal launches on the earlier source.
 
