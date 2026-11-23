@@ -232,6 +232,7 @@ export function createRoom(
         lastQuality = state.settings.quality
         sharedMaterials?.setQuality(state.settings.quality)
         renderer.shadowMap.enabled = lastQuality !== 'low'
+        renderer.shadowMap.needsUpdate = lastQuality !== 'low'
         if (!renderer.xr.isPresenting)
           renderer.setPixelRatio(
             Math.min(
@@ -319,6 +320,10 @@ export function createRoom(
   }
   if (observatory) {
     renderer.shadowMap.enabled = true
+    // The directional map is architectural. Moving game pieces carry their own
+    // visible contact cues and should not redraw the entire room's shadow pass.
+    renderer.shadowMap.autoUpdate = false
+    renderer.shadowMap.needsUpdate = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.1
@@ -446,6 +451,7 @@ export function createRoom(
     gallery.clear()
   }
   function update(next: RoomView) {
+    if (observatory) renderer.shadowMap.needsUpdate = true
     if (currentView?.selected?.uuid !== next.selected?.uuid) readingPage = 0
     const comfortChanged = currentView?.comfort !== next.comfort
     currentView = next
@@ -1095,6 +1101,7 @@ export function createRoom(
     instrument(kind: 'telescope' | 'orrery') {
       gameRuntime?.pause()
       observatory?.interact(kind)
+      if (observatory) renderer.shadowMap.needsUpdate = true
       render()
     },
     setGameMenu,

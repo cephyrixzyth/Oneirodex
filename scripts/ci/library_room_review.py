@@ -153,6 +153,12 @@ def review_library_room(page, output, report, fixture=None):
         page.wait_for_load_state('networkidle',timeout=60000)
         result['material_assets'] = material_responses
         require(all(200 <= material_responses.get(name,0) < 300 or material_responses.get(name)==304 for name in expected_materials),'material_assets_missing')
+        menu = page.get_by_role('region',name='Moonfall Pinball controls')
+        retry = menu.get_by_role('button',name='Retry connection',exact=True)
+        if retry.is_visible():
+            result['visual_progress_retried'] = True
+            retry.click()
+        menu.get_by_role('button',name='Help',exact=True).wait_for(timeout=30000)
         for station,name in [('Room overview','observatory-overview'),('Lounge','observatory-lounge'),('Moonfall Pinball','moonfall-detail')]:
             checkpoint('visual_'+name)
             page.get_by_role('button',name=station,exact=True).click()
@@ -170,7 +176,7 @@ def review_library_room(page, output, report, fixture=None):
             capture(name+'.png')
             page.locator('.od-library-room__canvas').screenshot(path=str(output/(name+'-canvas.png')))
         checkpoint('visual_low_and_help')
-        page.get_by_role('button',name='Help',exact=True).click()
+        menu.get_by_role('button',name='Help',exact=True).click()
         capture('moonfall-in-world-help.png')
         page.locator('.od-library-room__canvas').screenshot(path=str(output/'moonfall-in-world-help-canvas.png'))
         page.get_by_role('button',name='Back to game',exact=True).click()
