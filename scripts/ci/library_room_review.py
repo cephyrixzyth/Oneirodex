@@ -62,6 +62,17 @@ def review_library_room(page, output, report, fixture=None):
         if not value:
             raise ProbeFailure('room_' + code)
 
+    def wait_for_game_action(name):
+        menu = page.get_by_role('region', name='Moonfall Pinball controls')
+        action = menu.get_by_role('button', name=name, exact=True)
+        retry = menu.get_by_role('button', name='Retry connection', exact=True)
+        action.or_(retry).first.wait_for(timeout=45000)
+        if retry.is_visible():
+            result['progress_initialization_retries'] = result.get('progress_initialization_retries', 0) + 1
+            retry.click()
+        action.wait_for(timeout=45000)
+        return action
+
     def capture(name):
         # Playwright's visibility scrolling does not account for sticky chrome.
         # Center the real canvas so its top is not obscured in review images.
@@ -207,7 +218,9 @@ def review_library_room(page, output, report, fixture=None):
         checkpoint('visual_preview_complete')
         return
     checkpoint('starting_run')
-    page.get_by_role('button', name='New run', exact=True).click()
+    result['gameplay_viewport'] = {'width':1000,'height':800}
+    page.set_viewport_size(result['gameplay_viewport'])
+    wait_for_game_action('New run').click()
     page.get_by_role('button', name='Pause', exact=True).wait_for()
     page.get_by_role('button', name='Moonfall Pinball', exact=True).click()
     page.locator('.od-library-room__canvas').focus()
@@ -268,7 +281,8 @@ def review_library_room(page, output, report, fixture=None):
     # Reload must offer the actual server run and wait for explicit resume.
     checkpoint('reload_resume')
     open_room()
-    page.get_by_role('button', name='Resume saved run', exact=True).click()
+    checkpoint('resuming_saved_run')
+    wait_for_game_action('Resume saved run').click()
     page.get_by_role('button', name='Pause', exact=True).click()
     result['reload_resume'] = True
     checkpoint('settings')
@@ -311,7 +325,8 @@ def review_library_room(page, output, report, fixture=None):
     terminal.update(phase='game-over', ballsRemaining=0, balls=[], lastLaunch=False, lastRecover=False)
     require(fetch('PUT', {'revision': saved['revision'], 'state': terminal})['status'] == 200, 'seeded_result_rejected')
     open_room()
-    page.get_by_role('button', name='Resume saved run', exact=True).click()
+    checkpoint('resuming_seeded_result')
+    wait_for_game_action('Resume saved run').click()
     page.get_by_role('heading', name='Run finished', exact=True).wait_for()
     capture('moonfall-seeded-result.png')
     result['seeded_result_display'] = True
