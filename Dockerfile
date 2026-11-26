@@ -96,14 +96,18 @@ RUN sed -i \
     util-linux \
     && rm -rf /var/lib/apt/lists/*
 
+# Install the hash-locked Python dependencies before copying the source tree, so
+# an ordinary source change reuses this layer instead of reinstalling every
+# package.
+COPY requirements.lock ./
+RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock
+
 COPY . .
 COPY --from=frontend-build /build/oneirodex/static/dist /app/oneirodex/static/dist
 
 # Runtime storage belongs to the non-root app identity used by Unraid and the
 # Docker entrypoint. Empty named volumes inherit this ownership on first mount.
 RUN chown -R 99:100 /app/oneirodex/static/library
-
-RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock
 ARG EMULATORJS_VERSION="4.2.3"
 ARG EMULATORJS_SHA256="07d451bc06fa3ad04ab30d9b94eb63ac34ad0babee52d60357b002bde8f3850b"
 RUN EMULATORJS_DATA_DIR=/app/oneirodex/static/vendor/emulatorjs/data \
