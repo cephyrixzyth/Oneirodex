@@ -50,6 +50,11 @@ node scripts/component_size_lint.mjs    # non-test .tsx over 600 lines — 0; sp
 
 Each records a per-file baseline. `--update` only after a genuine reduction — never to make a red gate green.
 
+Two more gates run inside pytest and CI:
+
+- `python scripts/async_blocking_lint.py` counts synchronous database calls (`request_auth_context(...)`, `data.*(...)`) made directly inside `async def` native handlers, which block the event loop. Await them through `run_in_threadpool`, or make the handler a plain `def`.
+- `tests/test_large_files.py` refuses any new tracked file over 512 KB, and any growth of the files listed in `scripts/large_files.baseline`. Git keeps every committed file forever, so release captures, benchmark screenshots and videos go to workflow or release artifacts, not `docs/media`.
+
 ## API changes
 
 - JSON replies: `api_ok` / `api_error` from `oneirodex/utils/api_response.py`; pick `error_code` from `ERROR_CODES`. **`detail` is passed to the browser as given** — no secrets, tokens, raw `.env` values, or filesystem paths. Do not shrink the envelope keep-list ([api-envelope-keeps.md](docs/dev/api-envelope-keeps.md)).
