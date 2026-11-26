@@ -147,6 +147,7 @@ def upsert_stage_d_custom_game(
         cover = steam_cover_for_app(steam_app_id, cover)
     gog_url = candidate.get('url') if candidate.get('source') == 'gog' else None
     epic_url = candidate.get('url') if candidate.get('source') == 'epic' else None
+    meta_url = candidate.get('url') if candidate.get('source') == 'meta_quest' else None
 
     existing = db.session.execute(
         select(Game).filter(
@@ -185,6 +186,7 @@ def upsert_stage_d_custom_game(
             _attach_store_url(existing, url_type='gog', url=store_url)
         if epic_url:
             _attach_store_url(existing, url_type='epic', url=epic_url)
+        _apply_meta_store_details(existing, candidate, meta_url)
         try:
             from oneirodex.utils.rom_language import apply_rom_language_fields
 
@@ -207,8 +209,34 @@ def upsert_stage_d_custom_game(
         cover=cover,
         size=size,
     )
+    _apply_meta_store_details(created, candidate, meta_url)
     _hydrate_steam_content(created, steam_app_id)
     return created
+
+
+def _apply_meta_store_details(game, candidate: dict, meta_url: str | None) -> None:
+    """Store link, developer, publisher and genres from a Meta Quest store page.
+
+    Fills only what is empty, through the same mapper the Steam path uses.
+    """
+    if not game or candidate.get('source') != 'meta_quest':
+        return
+    if meta_url:
+        _attach_store_url(game, url_type='meta_quest', url=meta_url)
+    details = {
+        key: candidate.get(key)
+        for key in ('developer', 'publisher', 'genres')
+        if candidate.get(key)
+    }
+    # Every Meta Quest store title is a VR title; this is what the VR hub reads.
+    details['player_perspectives'] = ['Virtual Reality']
+    try:
+        from oneirodex.utils.steam_metadata import apply_steam_metadata_to_game
+
+        with db.session.begin_nested():
+            apply_steam_metadata_to_game(game, details)
+    except Exception as exc:  # noqa: BLE001 -- metadata must not undo an identification
+        logger.warning('Meta store details for %r not applied: %s', getattr(game, 'name', '?'), exc)
 
 
 def hydrate_steam_for_game(game, steam_app_id, *, fast: bool = False) -> dict:

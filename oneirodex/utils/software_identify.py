@@ -54,6 +54,7 @@ from oneirodex.utils.software_identify_store import (  # noqa: F401
     _candidate_from_steam_details,
     _candidate_from_steam_hit,
     _enabled_stage_d_sources,
+    candidate_from_meta_store,
     _stage_d_titles_corroborate,
 )
 from oneirodex.utils.tgdb_platform_match import (  # noqa: F401
@@ -68,7 +69,14 @@ def build_software_search_queries(raw_label: str) -> list[str]:
     parsed = parse_game_label(raw_label)
     cleaned = (parsed.get('cleaned_name') or '').strip()
     queries: list[str] = []
-    if cleaned:
+    vr_form = (parsed.get('vr_title_form') or '').strip() if parsed.get('vr_title') else ''
+    if vr_form:
+        # A VR edition ("Green Hell VR") is a different product from the flat
+        # game, so the flat title is not a query here.
+        queries.append(vr_form)
+        if f'{cleaned} VR' != vr_form:
+            queries.append(f'{cleaned} VR')
+    elif cleaned:
         queries.append(cleaned)
         if parsed.get('had_vr_suffix'):
             vr_form = f'{cleaned} VR'
@@ -268,9 +276,18 @@ _IDENTITY_NON_ALNUM = re.compile(r'[^a-z0-9]+')
 
 
 def _identity_key(value: str | None) -> str:
-    """Punctuation-tolerant title key: 'Half-Life 2' and 'Half Life 2' agree."""
-    text = _IDENTITY_NON_ALNUM.sub(' ', (value or '').casefold()).strip()
-    return ' '.join(text.split())
+    """Punctuation-, spacing- and accent-tolerant title key.
+
+    'Half-Life 2' / 'Half Life 2', 'Brütal Legend' / 'Brutal Legend' and
+    'D.E.C.A.Y' / 'DECAY' agree. Accents used to split a word in two
+    ('br tal legend'), so a store's plain spelling read as a disagreement with
+    IGDB's accented one and sent the game to review (2026-11-26 scan review).
+    """
+    import unicodedata
+
+    text = unicodedata.normalize('NFKD', (value or '').casefold())
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    return _IDENTITY_NON_ALNUM.sub('', text)
 
 
 def titles_identify_agree(left: str | None, right: str | None) -> bool:
@@ -490,6 +507,7 @@ def resolve_stage_d_store_candidate(
     steam_app_id: int | None = None,
     steam_title: str | None = None,
     sources=None,
+    meta_app_id: str | None = None,
 ) -> dict | None:
     """
     Stage D confidence gate: App ID, exact store title, then one clear
@@ -506,7 +524,17 @@ def resolve_stage_d_store_candidate(
 
     Paren digits that fail Steam details (wrong namespace) do **not** stamp a
     bogus steam_app_id — fall through to exact-title search instead.
+
+    ``meta_app_id`` comes from the folder itself (a ``[meta <id>]`` tag or a
+    store-link file): the person said which product it is, so the Meta Quest
+    store page is read first and wins when it answers. Quest-only games are on
+    none of the stores below.
     """
+    if meta_app_id:
+        candidate = resolve_meta_store_candidate(meta_app_id)
+        if candidate is not None:
+            return candidate
+
     enabled = _enabled_stage_d_sources(sources)
     if not enabled:
         return None
@@ -596,6 +624,22 @@ def resolve_stage_d_store_candidate(
     return None
 
 
+def resolve_meta_store_candidate(meta_app_id: str | None) -> dict | None:
+    """Stage D candidate for a Meta Quest store app id, when that source is on."""
+    if not meta_app_id:
+        return None
+    try:
+        from oneirodex.utils.metadata_providers import meta_store_enabled
+
+        if not meta_store_enabled():
+            return None
+    except Exception:
+        pass
+    from oneirodex.utils.meta_store import fetch_meta_store_app
+
+    return candidate_from_meta_store(fetch_meta_store_app(meta_app_id))
+
+
 def try_stage_d_store_identify(
     *,
     raw_label: str,
@@ -608,6 +652,7 @@ def try_stage_d_store_identify(
     size: int = 0,
     candidate: dict | None = None,
     sources=None,
+    meta_app_id: str | None = None,
 ) -> Game | None:
     """
     IGDB-miss Stage D entry: resolve exact/App-ID store hit and commit custom Game.
@@ -625,6 +670,7 @@ def try_stage_d_store_identify(
             steam_app_id=steam_app_id,
             steam_title=steam_title,
             sources=sources,
+            meta_app_id=meta_app_id,
         )
     if not candidate:
         return None

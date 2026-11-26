@@ -30,7 +30,7 @@ class ManualIdentifyBody(BaseModel):
     platform_ids: list[int] = Field(default_factory=list, max_length=100)
     player_perspective_ids: list[int] = Field(default_factory=list, max_length=100)
     item_kind: str = Field(default='', max_length=32)
-    provider_urls: dict[str, str] = Field(default_factory=dict, max_length=9)
+    provider_urls: dict[str, str] = Field(default_factory=dict, max_length=10)
 
     @field_validator('url')
     @classmethod
@@ -54,7 +54,7 @@ class ManualIdentifyBody(BaseModel):
     @field_validator('provider_urls')
     @classmethod
     def valid_provider_urls(cls, value: dict[str, str]) -> dict[str, str]:
-        allowed = {'steam', 'gog', 'epicgames', 'itch', 'rawg', 'mobygames', 'thegamesdb', 'official', 'wikipedia'}
+        allowed = {'steam', 'gog', 'epicgames', 'itch', 'meta_quest', 'rawg', 'mobygames', 'thegamesdb', 'official', 'wikipedia'}
         if set(value) - allowed:
             raise ValueError('Provider link type is not supported')
         for url in value.values():

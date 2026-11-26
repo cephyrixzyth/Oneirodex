@@ -21,6 +21,8 @@ _MIN_INTERVAL_SEC = {
     'thegamesdb': 1.0,
     # CheapShark public deals API — keep polite spacing.
     'cheapshark': 1.0,
+    # Meta Quest store product pages (public HTML, one page per lookup).
+    'meta_store': 1.5,
 }
 
 

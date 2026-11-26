@@ -198,7 +198,7 @@ export function ManualIdentifyPage() {
             <Button variant="primary" size="lg" type="submit" disabled={customIdMode || searchBusy}>
               {searchBusy ? `Searching ${searchSource}…` : 'Search IGDB'}
             </Button>
-            {['steam', 'gog', 'rawg', 'mobygames', 'thegamesdb'].map((source) => (
+            {['steam', 'gog', 'meta_quest', 'rawg', 'mobygames', 'thegamesdb'].map((source) => (
               <Button
                 key={source}
                 variant="primary"
@@ -429,6 +429,7 @@ export function ManualIdentifyPage() {
                 ['gog', 'GOG'],
                 ['epicgames', 'Epic Games'],
                 ['itch', 'itch.io'],
+                ['meta_quest', 'Meta Quest'],
                 ['rawg', 'RAWG'],
                 ['mobygames', 'MobyGames'],
                 ['thegamesdb', 'TheGamesDB'],

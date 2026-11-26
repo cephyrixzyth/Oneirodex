@@ -1,5 +1,9 @@
 """Meta / Quest metadata + cover search (artwork / identify only — never downloads games).
 
+A Meta Quest store link or app id as the search text reads that product's public
+store page instead (``oneirodex.utils.meta_store``) — the way to identify a
+Quest-only game IGDB does not list.
+
 Identify modes (``META_QUEST_API_MODE``):
   - ``igdb`` (default) — search IGDB games on Quest platform IDs (practical catalog).
   - ``csv_only`` — no live catalog search; empty list (ownership uses CSV register).
@@ -199,7 +203,32 @@ def search_meta_quest_games(game_name: str, limit: int = 10) -> list[dict]:
     """
     limit = max(1, min(int(limit or 10), 20))
     mode = get_meta_quest_api_mode()
-    if mode == 'disabled' or mode == 'csv_only':
+    if mode == 'disabled':
+        return []
+    # A pasted store link (or bare app id) reads that product page directly —
+    # the way to identify Quest-only games IGDB does not list.
+    from oneirodex.utils.meta_store import fetch_meta_store_app, parse_meta_app_id
+
+    app_id = parse_meta_app_id(game_name)
+    if app_id:
+        details = fetch_meta_store_app(app_id)
+        if not details:
+            return []
+        hit = _hit_dict(
+            hit_id=details.get('meta_quest_id'),
+            name=details.get('name'),
+            url=details.get('url'),
+            cover_url=details.get('cover_url'),
+            summary=details.get('summary'),
+            platforms=details.get('platforms'),
+            release_date=details.get('release_date'),
+        )
+        hit['developer'] = details.get('developer')
+        hit['publisher'] = details.get('publisher')
+        hit['genres'] = details.get('genres') or []
+        hit['match_mode'] = 'store_link'
+        return [hit]
+    if mode == 'csv_only':
         return []
     if mode == 'unofficial_graphql':
         return _search_unofficial_graphql(game_name, limit)

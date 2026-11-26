@@ -13,6 +13,11 @@ const FIELDS = [
     'Hash identify',
     'Keyless console ROM identity lookup after IGDB and local DAT miss. Never enrichment or a download.',
   ],
+  [
+    'meta_quest',
+    'Meta Quest store',
+    'Reads the public Meta store page a folder links to: a [meta <app id>] tag in the folder name, or a store-link .url or .txt file inside it. Metadata only.',
+  ],
 ] as const
 
 type Providers = Record<(typeof FIELDS)[number][0], boolean>

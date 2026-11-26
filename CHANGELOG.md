@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Quest-only games can be identified from the Meta Quest store. Tag the folder with its store id (`Golden Gloves Boxing VR [meta 5682829115084320]`) or put the store link in the folder as a `.url` or `.txt` file, and the scan imports it with the store's title, art, developer and genres. Manual Identify has a Meta Quest button that takes a pasted store link.
+
+### Fixed
+
+- VR editions are no longer matched to, or filed as duplicates of, their flat game (Green Hell VR is not Green Hell). Scans search the VR title first and accept the flat title only for VR products.
+- VR games no longer go to review because a store lists the flat game under the same name.
+- Folders with a series number the catalogue leaves out now match (Leisure Suit Larry 9 Box Office Bust is Leisure Suit Larry: Box Office Bust).
+- A folder is no longer called a duplicate because an existing game was matched to the wrong title, or because a name filter cut "Remastered" from its name.
+- Accented and dotted titles (Brütal Legend, D.E.C.A.Y) no longer read as a store disagreement.
+
 ## [1.4.0] — 2026-11-23
 
 ### Added

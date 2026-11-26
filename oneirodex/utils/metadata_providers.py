@@ -21,7 +21,9 @@ STORAGE_KEY = 'metadata_providers'
 # Storefront sources feed Stage D *and* enrichment; hash_identify (INSP-31) is
 # an identify-only source with the same on/off switch and no Stage D role.
 STORE_PROVIDER_IDS = ('steam', 'gog', 'epic')
-PROVIDER_IDS = STORE_PROVIDER_IDS + ('hash_identify',)
+# meta_quest reads a Meta Quest store page for a folder that links to one
+# (folder tag or store-link file); like hash_identify it has no search role.
+PROVIDER_IDS = STORE_PROVIDER_IDS + ('hash_identify', 'meta_quest')
 DEFAULTS = {provider: True for provider in PROVIDER_IDS}
 
 
@@ -56,7 +58,7 @@ def _boolish(value: Any, default: bool) -> bool:
 
 
 def resolve_metadata_providers(settings: Any = None) -> dict[str, bool]:
-    """Return ``{steam,gog,epic: bool}`` with defaults filled."""
+    """Return ``{steam,gog,epic,hash_identify,meta_quest: bool}`` with defaults filled."""
     fragment: dict = {}
     try:
         if settings is None:
@@ -102,6 +104,14 @@ def stage_d_source_ids() -> tuple[str, ...]:
     return tuple(key for key in STORE_PROVIDER_IDS if flags.get(key))
 
 
+def meta_store_enabled() -> bool:
+    """Whether scans may read a linked Meta Quest store page."""
+    try:
+        return bool(resolve_metadata_providers().get('meta_quest', True))
+    except Exception:
+        return True
+
+
 def disabled_enrich_sources() -> frozenset[str]:
     """Source ids the enrichment cascade should skip."""
     flags = resolve_metadata_providers()
@@ -117,6 +127,11 @@ def get_metadata_providers_config() -> dict:
             'steam': 'Stage D App ID / exact title + PC enrichment. Never a download queue.',
             'gog': 'Stage D exact title + PC enrichment. DRM-free catalogue only.',
             'epic': 'Stage D exact title + PC enrichment. Ownership/register links only.',
+            'meta_quest': (
+                'Quest-only games: reads the public Meta store page a folder links to '
+                '(a [meta <app id>] tag in the folder name, or a store-link .url/.txt '
+                'file inside it). Metadata only; never a download.'
+            ),
             'hash_identify': "Console identify after an IGDB and local-DAT miss: the file's own hashes against a keyless community lookup. Identity only, never enrichment; never a download.",
         },
     }

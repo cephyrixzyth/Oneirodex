@@ -32,6 +32,7 @@ from oneirodex.utils.fandom_alias import (
     is_fandom_soft_propose,
 )
 from oneirodex.utils.match_scoring import select_best_match, rank_candidates
+from oneirodex.utils.vr_catalog import candidate_is_vr
 from oneirodex.utils.match_proposal import (
     MATCH_REASON_CATALOG_DISAGREEMENT,
     MATCH_REASON_INSUFFICIENT_AGREEMENT,
@@ -53,6 +54,7 @@ from oneirodex.utils.software_identify import (
     apply_catalog_identity_to_game,
     corroborate_igdb_with_catalogs,
     igdb_retry_title_from_store,
+    resolve_meta_store_candidate,
     resolve_stage_d_store_candidate,
     try_stage_d_store_identify,
 )
@@ -834,6 +836,29 @@ def retrieve_and_save_game(
             )
         return None
 
+    # A Meta Quest store link the person attached to the folder (name tag or a
+    # store-link file inside it) names the product outright. Quest-only games
+    # are in no other catalogue, so read that page before searching anything.
+    meta_app_id = None
+    meta_candidate = None
+    if not use_console_rom_peel:
+        meta_app_id = parsed_label.get('meta_app_id')
+        if not meta_app_id:
+            try:
+                from oneirodex.utils.meta_store import meta_app_id_from_folder
+
+                meta_app_id = meta_app_id_from_folder(full_disk_path)
+            except Exception as meta_err:  # noqa: BLE001
+                logger.warning(f"⚠️ [Meta store] Folder link read failed for {full_disk_path}: {meta_err}")
+        if meta_app_id and allow_store_identify:
+            try:
+                meta_candidate = resolve_meta_store_candidate(meta_app_id)
+            except Exception as meta_err:  # noqa: BLE001
+                logger.warning(f"⚠️ [Meta store] Lookup failed for app {meta_app_id}: {meta_err}")
+                meta_candidate = None
+            if meta_candidate:
+                logger.info(f"Meta store app {meta_app_id} is '{meta_candidate.get('name')}'")
+
     steam_title = None
     if parsed_label.get('steam_app_id'):
         steam_title = fetch_steam_title_by_app_id(parsed_label['steam_app_id'])
@@ -860,9 +885,27 @@ def retrieve_and_save_game(
     if rom_propose_only:
         bare_franchise = True
     search_variants = generate_goty_variants(variant_base, policy=match_policy)
-    # Re-attach spaced " VR" when Stage A peeled a VR suffix (helps Steam/IGDB
-    # titles like "3DSen VR" after glued 3DSenVR → 3DSen).
-    if parsed_label.get('had_vr_suffix') and variant_base:
+    # A VR edition is its own product: "Green Hell VR" is not "Green Hell". Search
+    # the VR form first; the flat forms stay as a fallback for VR-only games
+    # catalogued without the suffix ("A Fishermans Tale VR" → "A Fisherman's
+    # Tale"), and there they may only match a VR product (see vr_only_variants).
+    vr_form = (parsed_label.get('vr_title_form') or '').strip() if parsed_label.get('vr_title') else ''
+    vr_only_variants: set[str] = set()
+    store_variants = None
+    if vr_form:
+        vr_forms = [vr_form]
+        if parsed_label.get('had_vr_suffix') and variant_base and f'{variant_base} VR' not in vr_forms:
+            vr_forms.append(f'{variant_base} VR')
+        for extra in generate_goty_variants(vr_form, policy=match_policy):
+            if extra not in vr_forms:
+                vr_forms.append(extra)
+        vr_only_variants = {v for v in search_variants if v not in vr_forms}
+        search_variants = vr_forms + [v for v in search_variants if v not in vr_forms]
+        # Stores carry no VR flag on a search hit, so they only get the VR forms.
+        store_variants = list(vr_forms)
+    elif parsed_label.get('had_vr_suffix') and variant_base:
+        # A "VR MOD" / MotherVR tail is a mod for the flat game: keep the old
+        # behaviour of also trying the spaced VR form second.
         vr_variant = f'{variant_base} VR'
         if vr_variant not in search_variants:
             search_variants.insert(1 if search_variants else 0, vr_variant)
@@ -870,8 +913,17 @@ def retrieve_and_save_game(
         for extra in generate_goty_variants(game_name, policy=match_policy):
             if extra not in search_variants:
                 search_variants.append(extra)
+                if vr_form:
+                    vr_only_variants.add(extra)
     if steam_title and steam_title not in search_variants:
         search_variants = [steam_title] + [v for v in search_variants if v != steam_title]
+    if meta_candidate:
+        # The linked store page's title is the name to look up on IGDB, and only
+        # an exact IGDB title counts (select_best_match scores against it).
+        meta_title = meta_candidate['name']
+        search_variants = [meta_title]
+        vr_only_variants = set()
+        store_variants = [meta_title]
     logger.info(f"Generated search variants for '{variant_base}': {search_variants}")
     if bare_franchise:
         reason_bits = []
@@ -935,6 +987,8 @@ def retrieve_and_save_game(
             break
         if candidates and keep is not None:
             candidates = [c for c in candidates if keep(c)]
+        if candidates and search_name in vr_only_variants:
+            candidates = [c for c in candidates if candidate_is_vr(c)]
         if not candidates:
             logger.info(f"No match found for variant: '{search_name}'")
             continue
@@ -976,9 +1030,9 @@ def retrieve_and_save_game(
         and not is_propose_only_scan(settings)
     ):
         try:
-            store_candidate = resolve_stage_d_store_candidate(
-                cleaned_name=variant_base,
-                search_variants=search_variants,
+            store_candidate = meta_candidate or resolve_stage_d_store_candidate(
+                cleaned_name=vr_form or variant_base,
+                search_variants=store_variants if store_variants is not None else search_variants,
                 steam_app_id=parsed_label.get('steam_app_id'),
                 steam_title=steam_title,
                 sources=stage_d_source_ids(),
@@ -1026,7 +1080,9 @@ def retrieve_and_save_game(
             platform_key = getattr(getattr(library, 'platform', None), 'name', None)
             catalog = corroborate_igdb_with_catalogs(
                 igdb_name=selected_game.get('name'),
-                cleaned_name=variant_base,
+                # A VR edition is checked under its VR title: Steam's exact
+                # "The Talos Principle" must not veto IGDB's "The Talos Principle VR".
+                cleaned_name=(successful_search_name or vr_form) if vr_form else variant_base,
                 library_platform=platform_key,
             )
         except Exception as catalog_err:
@@ -1320,15 +1376,16 @@ def retrieve_and_save_game(
                         stage_d_size = 0
                 stage_d_game = try_stage_d_store_identify(
                     raw_label=raw_folder_label or game_name,
-                    cleaned_name=variant_base,
-                    search_variants=search_variants,
+                    cleaned_name=vr_form or variant_base,
+                    search_variants=store_variants if store_variants is not None else search_variants,
                     full_disk_path=full_disk_path,
                     library_uuid=library.uuid,
                     steam_app_id=parsed_label.get('steam_app_id'),
                     steam_title=steam_title,
                     size=stage_d_size,
-                    candidate=store_candidate,
+                    candidate=store_candidate or meta_candidate,
                     sources=stage_d_source_ids(),
+                    meta_app_id=meta_app_id,
                 )
                 if stage_d_game is not None:
                     logger.info(

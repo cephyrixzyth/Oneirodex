@@ -38,7 +38,9 @@ _CATALOG_NUMBER_RE = re.compile(r'\s*\(\s*(\d{4,7})\s*\)\s*$')
 # A5b — packaging tails peeled together with the catalogue number, in any order:
 # [GOG] / (GOG) / (64bit) / (x64) / (Win) and bare trailing "win", "gog", "win64".
 _PACKAGING_PAREN_RE = re.compile(
-    r'\s*[\(\[]\s*(?:gog(?:\.com)?|(?:32|64)\s*-?\s*bit|x(?:64|86)|win(?:dows)?(?:\s*(?:32|64))?|multi\d*|en(?:glish)?)\s*[\)\]]\s*$',
+    r'\s*[\(\[]\s*(?:gog(?:\.com)?|(?:32|64)\s*-?\s*bit|x(?:64|86)|win(?:dows)?(?:\s*(?:32|64))?|multi\d*|en(?:glish)?'
+    # Storefront / headset tails on VR rips: (Oculus), [Quest], (SteamVR), (PCVR).
+    r'|oculus(?:\s*(?:rift|quest))?|quest\s*\d?|meta(?:\s*quest\s*\d?)?|steam\s*vr|pc\s*vr)\s*[\)\]]\s*$',
     re.IGNORECASE,
 )
 _PACKAGING_WORD_TAIL_RE = re.compile(r'\s+(?:gog|win(?:32|64)?|x64|x86)\s*$', re.IGNORECASE)
@@ -234,6 +236,33 @@ def strip_vr_noise_tail(raw: str) -> str:
     working = _TRAILING_VR_RE.sub('', working)
     working = _GLUED_TRAILING_VR_RE.sub('', working)
     return working.strip()
+
+
+def detect_vr_title_suffix(raw: str) -> str | None:
+    """How the label names a VR *edition*: ``'spaced'``, ``'glued'`` or None.
+
+    ``Green Hell VR`` and ``cyubeVR`` are separate products from ``Green Hell`` /
+    ``cyube``, so their VR is part of the title. A ``VR MOD`` / ``MotherVR`` tail
+    is a mod for the flat game and returns None.
+    """
+    if not raw:
+        return None
+    text = raw.strip()
+    if _VR_MOD_TAIL_RE.search(text) or _MOTHERVR_TAIL_RE.search(text):
+        return None
+    if _TRAILING_VR_RE.search(text):
+        return 'spaced'
+    if _GLUED_TRAILING_VR_RE.search(text):
+        return 'glued'
+    return None
+
+
+def vr_title_form(cleaned_name: str, style: str | None) -> str | None:
+    """The VR edition's title rebuilt on a cleaned name (``Green Hell VR``)."""
+    cleaned = (cleaned_name or '').strip()
+    if not cleaned or style not in ('spaced', 'glued'):
+        return None
+    return f'{cleaned}VR' if style == 'glued' else f'{cleaned} VR'
 
 
 def detect_vr_suffix(raw: str) -> bool:
@@ -562,6 +591,9 @@ def _empty_parse_result(raw: str = '') -> dict:
         'catalog_number': None,
         'bare_franchise': False,
         'had_vr_suffix': False,
+        'meta_app_id': None,
+        'vr_title': False,
+        'vr_title_form': None,
         'transforms': [],
         'peel_profile': 'conservative',
         'update_folder_hint': False,
@@ -625,6 +657,15 @@ def parse_game_label(raw: str, *, peel_profile: str | None = None) -> dict:
     working = _record_transform(
         transforms, 'A0', before, working, reason='basename_trim',
     )
+    # A0b — a Meta Quest store tag the person added ("[meta 5682829115084320]")
+    from oneirodex.utils.meta_store import meta_app_id_from_label, strip_meta_label_tag
+
+    meta_app_id = meta_app_id_from_label(working)
+    if meta_app_id:
+        working = _record_transform(
+            transforms, 'A0', working, strip_meta_label_tag(working),
+            reason='meta_store_tag',
+        )
     # A1
     working = _record_transform(
         transforms, 'A1', working, strip_repack_tags(working),
@@ -641,8 +682,10 @@ def parse_game_label(raw: str, *, peel_profile: str | None = None) -> dict:
         reason='build_paren',
     )
     # A4
+    vr_style = None
     if detect_vr_suffix(working):
         had_vr_suffix = True
+        vr_style = detect_vr_title_suffix(working)
     working = _record_transform(
         transforms, 'A4', working, strip_vr_noise_tail(working),
         reason='vr_mod_tail',
@@ -689,6 +732,7 @@ def parse_game_label(raw: str, *, peel_profile: str | None = None) -> dict:
     # A14 — VR re-pass after version strip (Title VR v… → Title VR → Title)
     if detect_vr_suffix(working):
         had_vr_suffix = True
+        vr_style = vr_style or detect_vr_title_suffix(working)
     working = _record_transform(
         transforms, 'A14', working, strip_vr_noise_tail(working),
         reason='vr_repass',
@@ -768,6 +812,11 @@ def parse_game_label(raw: str, *, peel_profile: str | None = None) -> dict:
         'catalog_number': catalog_number,
         'bare_franchise': is_bare_franchise(cleaned),
         'had_vr_suffix': had_vr_suffix,
+        # The label named a VR edition (not a VR mod): identify must treat the
+        # VR form as the title and only accept the flat name for VR products.
+        'meta_app_id': meta_app_id,
+        'vr_title': bool(vr_title_form(cleaned, vr_style)),
+        'vr_title_form': vr_title_form(cleaned, vr_style),
         'transforms': transforms,
         'peel_profile': profile,
         'update_folder_hint': bool(update_meta.get('update_folder_hint')),
