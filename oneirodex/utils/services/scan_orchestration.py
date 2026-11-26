@@ -872,6 +872,15 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
         except (OSError, RuntimeError) as exc:
             logger.warning("Could not verify game path during scan: %s", type(exc).__name__)
 
+    # Re-check games whose folder disagrees with their title and re-match the
+    # ones a fresh identify gets clearly right (see utils/match_audit).
+    if not (settings_dict.get('propose_only_scan') or match_policy.get('propose_only_scan')):
+        _recheck_wrong_matches(
+            games_in_library, root, library, scan_job_id,
+            match_policy=match_policy, settings=settings_dict,
+            fetch_hltb=fetch_hltb, app=app, database_scope=database_scope,
+        )
+
     # If download_missing_images is enabled, check for and queue missing images
     if download_missing_images:
         logger.info("🔍 Download missing images option enabled - checking for missing images...")
@@ -939,6 +948,95 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
     # FIFO: promote next Queued scan once this job is no longer Running/Stopping.
     _drain_scan_queue_safe(app, database_scope)
     return scan_job_id
+
+
+def _recheck_wrong_matches(games, root, library, scan_job_id, *, match_policy, settings, fetch_hltb=False, app=None, database_scope=None):
+    """Scan tail: re-match wrongly matched games under ``root``; never fails the scan."""
+    from pathlib import Path
+
+    from oneirodex.utils.match_audit import audit_library_matches
+    from oneirodex.utils.scanning import delete_game_images, process_game_with_fallback
+    from oneirodex.utils.services.game_enrich import queue_post_identify_enrichment
+
+    allowed_bases = None
+    if app is not None:
+        try:
+            from oneirodex.utils.security import get_allowed_base_directories
+
+            allowed_bases = get_allowed_base_directories(app)
+        except Exception:  # noqa: BLE001
+            allowed_bases = None
+
+    in_scope = []
+    for game in games:
+        path = getattr(game, 'full_disk_path', None)
+        if not path or not os.path.isabs(path) or getattr(game, 'path_status', None) == 'missing':
+            continue
+        try:
+            if root in Path(path).resolve().parents:
+                in_scope.append(game)
+        except (OSError, RuntimeError):
+            continue
+
+    def _after(change):
+        game_uuid = change['game_uuid']
+        result = change['result']
+        try:
+            delete_game_images(game_uuid, config=app.config if app is not None else None)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Match check: old images not removed for {game_uuid}: {exc}")
+        payload = result.get('payload') if result.get('kind') == 'igdb' else {}
+        queue_post_identify_enrichment(
+            game_uuid,
+            fetch_hltb=fetch_hltb,
+            cover_data=(payload or {}).get('cover'),
+            screenshots_data=(payload or {}).get('screenshots') or [],
+            app=app,
+            database_scope=database_scope,
+            compute_folder_size=False,
+        )
+        if settings.get('write_local_metadata'):
+            try:
+                from oneirodex.utils.local_metadata import write_local_metadata
+
+                game = db.session.execute(select(Game).filter_by(uuid=game_uuid)).scalar_one_or_none()
+                if game is not None:
+                    write_local_metadata(
+                        full_disk_path=game.full_disk_path,
+                        igdb_id=game.igdb_id,
+                        game_title=game.name,
+                        manually_verified=False,
+                        filename=settings.get('local_metadata_filename', 'oneirodex.json'),
+                        allowed_bases=allowed_bases,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"Match check: local metadata not rewritten for {game_uuid}: {exc}")
+        # Folders that were "duplicates" of the wrong title get identified now.
+        for path in change.get('released') or ():
+            try:
+                process_game_with_fallback(
+                    os.path.basename(path.rstrip('\\/')), path, scan_job_id, library.uuid,
+                    fetch_hltb=fetch_hltb, settings=settings,
+                    app=app if database_scope is not None else None,
+                    database_scope=database_scope,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(f"Match check: released folder not identified: {exc}")
+
+    try:
+        changes = audit_library_matches(
+            in_scope, library,
+            match_policy=match_policy,
+            allowed_bases=allowed_bases,
+            on_rematched=_after,
+        )
+    except Exception as exc:  # noqa: BLE001 — a re-check must never fail a scan
+        db.session.rollback()
+        logger.error(f"Match check failed: {exc}")
+        return []
+    for change in changes:
+        logger.info(f"Match check re-matched '{change['old']}' → '{change['new']}'")
+    return changes
 
 
 def handle_auto_scan(auto_form):

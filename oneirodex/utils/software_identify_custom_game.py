@@ -118,12 +118,17 @@ def upsert_stage_d_custom_game(
     full_disk_path: str,
     library_uuid: str,
     size: int = 0,
+    replace_game: Game | None = None,
 ) -> Game:
     """
     Create or update a custom-range Game from a Stage D store candidate.
 
     Update applies only when a custom Game already exists for the same path
     (and matching store id when present). Never attaches DRM install URLs.
+
+    ``replace_game`` re-points an existing Game (a wrong match found on rescan,
+    see ``match_audit``) at this store product: its old catalogue identity is
+    cleared and the row is kept, with everything people attached to it.
     """
     candidate = scrub_stage_d_payload(candidate or {})
     name = (candidate.get('name') or '').strip() or 'Untitled'
@@ -149,13 +154,24 @@ def upsert_stage_d_custom_game(
     epic_url = candidate.get('url') if candidate.get('source') == 'epic' else None
     meta_url = candidate.get('url') if candidate.get('source') == 'meta_quest' else None
 
-    existing = db.session.execute(
-        select(Game).filter(
-            Game.full_disk_path == full_disk_path,
-            Game.library_uuid == library_uuid,
-            Game.igdb_id >= CUSTOM_IGDB_BASE,
-        )
-    ).scalar_one_or_none()
+    if replace_game is not None:
+        existing = replace_game
+        clear_catalog_identity(existing)
+        if existing.igdb_id is None or existing.igdb_id < CUSTOM_IGDB_BASE:
+            existing.igdb_id = _next_custom_igdb_id()
+        existing.slug = f"custom-{existing.igdb_id}-{uuid4().hex[:8]}"
+        existing.steam_app_id = None
+        existing.steam_url = None
+        existing.summary = None
+        existing.cover = None
+    else:
+        existing = db.session.execute(
+            select(Game).filter(
+                Game.full_disk_path == full_disk_path,
+                Game.library_uuid == library_uuid,
+                Game.igdb_id >= CUSTOM_IGDB_BASE,
+            )
+        ).scalar_one_or_none()
 
     if existing is None and steam_app_id is not None:
         existing = db.session.execute(
@@ -212,6 +228,32 @@ def upsert_stage_d_custom_game(
     _apply_meta_store_details(created, candidate, meta_url)
     _hydrate_steam_content(created, steam_app_id)
     return created
+
+
+def clear_catalog_identity(game) -> None:
+    """Drop what a previous match attached: taxonomy, companies, links, ratings.
+
+    Used before re-pointing a Game at a different product, so nothing from the
+    wrong title survives. User data (favourites, play state, downloads) hangs
+    off the Game row and is untouched.
+    """
+    from sqlalchemy import delete
+
+    for relation in ('genres', 'themes', 'game_modes', 'platforms', 'player_perspectives'):
+        if hasattr(game, relation):
+            setattr(game, relation, [])
+    game.developer = None
+    game.publisher = None
+    for column in (
+        'storyline', 'url', 'url_igdb', 'video_urls', 'first_release_date',
+        'aggregated_rating', 'aggregated_rating_count', 'rating', 'rating_count',
+        'total_rating', 'total_rating_count', 'status', 'category',
+    ):
+        if hasattr(game, column):
+            setattr(game, column, None)
+    if game.uuid:
+        db.session.execute(delete(GameURL).where(GameURL.game_uuid == game.uuid))
+        db.session.expire(game, ['urls'])
 
 
 def _apply_meta_store_details(game, candidate: dict, meta_url: str | None) -> None:

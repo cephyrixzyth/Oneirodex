@@ -1023,6 +1023,14 @@ def retrieve_and_save_game(
     # an exact title and re-search IGDB once with that canonical name. Raises
     # hit-rate without fuzzy auto-import; Stage D still owns custom-range create.
     store_candidate = None
+    # Quest-only games live on the Meta store alone: search it by title for
+    # PC-family folders once every other store has missed.
+    meta_search = bool(
+        allow_store_identify
+        and not use_console_rom_peel
+        and is_pc_family_library(library.platform)
+    )
+    meta_search_done = False
     if (
         selected_game is None
         and igdb_unavailable is None
@@ -1030,12 +1038,14 @@ def retrieve_and_save_game(
         and not is_propose_only_scan(settings)
     ):
         try:
+            meta_search_done = meta_search and not meta_candidate
             store_candidate = meta_candidate or resolve_stage_d_store_candidate(
                 cleaned_name=vr_form or variant_base,
                 search_variants=store_variants if store_variants is not None else search_variants,
                 steam_app_id=parsed_label.get('steam_app_id'),
                 steam_title=steam_title,
                 sources=stage_d_source_ids(),
+                meta_search=meta_search,
             )
         except Exception as store_err:
             logger.warning(f"⚠️ [Stage D] Store resolve failed for {full_disk_path}: {store_err}")
@@ -1049,6 +1059,10 @@ def retrieve_and_save_game(
                     c for c in (search_igdb_for_game(retry_title, None, limit=10) or [])
                     if candidate_on_pc_family(c)
                 ]
+            if candidates and (store_candidate or {}).get('source') == 'meta_quest':
+                # A Meta store title is a VR product; a flat IGDB game of the same
+                # name ("Golden Gloves") is a different one.
+                candidates = [c for c in candidates if candidate_is_vr(c)]
             if candidates:
                 best, confidence = select_best_match(
                     retry_title,
@@ -1386,6 +1400,7 @@ def retrieve_and_save_game(
                     candidate=store_candidate or meta_candidate,
                     sources=stage_d_source_ids(),
                     meta_app_id=meta_app_id,
+                    meta_search=meta_search and not meta_search_done,
                 )
                 if stage_d_game is not None:
                     logger.info(

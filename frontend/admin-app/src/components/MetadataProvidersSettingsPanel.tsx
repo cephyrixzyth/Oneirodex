@@ -16,7 +16,7 @@ const FIELDS = [
   [
     'meta_quest',
     'Meta Quest store',
-    'Reads the public Meta store page a folder links to: a [meta <app id>] tag in the folder name, or a store-link .url or .txt file inside it. Metadata only.',
+    "Searches the Meta Quest store for PC and VR folders no other store has, using Meta's store search (and Brave Search when BRAVE_SEARCH_API_KEY is set). Metadata only.",
   ],
 ] as const
 

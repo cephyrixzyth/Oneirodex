@@ -23,7 +23,20 @@ _MIN_INTERVAL_SEC = {
     'cheapshark': 1.0,
     # Meta Quest store product pages (public HTML, one page per lookup).
     'meta_store': 1.5,
+    # Brave Search API (Meta store search fallback): free plans allow 1 req/sec.
+    'brave_search': 1.1,
 }
+
+
+def throttle(host_key):
+    """Wait out the per-host minimum interval (for callers that are not GETs)."""
+    min_interval = _MIN_INTERVAL_SEC.get(host_key, 0.5)
+    with _lock:
+        now = time.monotonic()
+        wait = min_interval - (now - _last_request_at.get(host_key, 0.0))
+        if wait > 0:
+            time.sleep(wait)
+        _last_request_at[host_key] = time.monotonic()
 
 
 def request_with_backoff(url, *, host_key, params=None, timeout=5, max_retries=3, headers=None):

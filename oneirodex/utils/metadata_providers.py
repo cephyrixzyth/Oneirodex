@@ -21,8 +21,8 @@ STORAGE_KEY = 'metadata_providers'
 # Storefront sources feed Stage D *and* enrichment; hash_identify (INSP-31) is
 # an identify-only source with the same on/off switch and no Stage D role.
 STORE_PROVIDER_IDS = ('steam', 'gog', 'epic')
-# meta_quest reads a Meta Quest store page for a folder that links to one
-# (folder tag or store-link file); like hash_identify it has no search role.
+# meta_quest searches the Meta Quest store by title for PC-family folders every
+# other store missed (meta_store_search), and reads a linked store page.
 PROVIDER_IDS = STORE_PROVIDER_IDS + ('hash_identify', 'meta_quest')
 DEFAULTS = {provider: True for provider in PROVIDER_IDS}
 
@@ -105,7 +105,7 @@ def stage_d_source_ids() -> tuple[str, ...]:
 
 
 def meta_store_enabled() -> bool:
-    """Whether scans may read a linked Meta Quest store page."""
+    """Whether scans may search the Meta Quest store and read its pages."""
     try:
         return bool(resolve_metadata_providers().get('meta_quest', True))
     except Exception:
