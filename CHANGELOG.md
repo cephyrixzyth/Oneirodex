@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-11-26
+
 ### Added
 
 - Scans find Quest-only games on the Meta Quest store by themselves. When IGDB, Steam, GOG and Epic have nothing, a PC or VR folder is searched on the Meta store and imported under the store's title, with its art, developer and genres ("Golden Gloves Boxing VR" becomes "Golden Gloves"). Meta's own store search is used first; set `BRAVE_SEARCH_API_KEY` to fall back to Brave Search when Meta's search is unavailable. A store link in the folder name or in a `.url` file still works, and Manual Identify has a Meta Quest button that takes a pasted store link.
