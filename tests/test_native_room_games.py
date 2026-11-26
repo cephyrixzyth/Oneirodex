@@ -83,3 +83,27 @@ def test_anonymous_and_invalid_authorization_do_not_redirect_to_html():
         assert response.json()['error_code'] == 'unauthorized'
         assert response.headers['cache-control'] == 'private, no-store'
     assert data.writes == []
+
+
+def test_progress_storage_runs_off_the_event_loop():
+    import asyncio
+    import threading
+
+    client, data, _ = _client()
+    seen = []
+    original_read, original_write = data.read, data.write
+
+    def on_loop():
+        try:
+            asyncio.get_running_loop()
+            return True
+        except RuntimeError:
+            return False
+
+    data.read = lambda *a: (seen.append(('read', on_loop(), threading.current_thread().name)), original_read(*a))[1]
+    data.write = lambda *a: (seen.append(('write', on_loop(), threading.current_thread().name)), original_write(*a))[1]
+    headers = _session(client)
+    assert client.put('/api/room-games/moonfall-pinball/progress', json=_save(), headers=headers).status_code == 200
+    assert client.get('/api/room-games/moonfall-pinball/progress').status_code == 200
+    assert [kind for kind, _, _ in seen] == ['write', 'read']
+    assert not any(loop for _, loop, _ in seen)

@@ -1,9 +1,11 @@
 """Native, authenticated progress API for original library-room games."""
 from contextlib import nullcontext
+from functools import partial
 import json
 
 from fastapi import APIRouter, Request
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 
 from oneirodex.schemas.room_games import (
@@ -33,11 +35,15 @@ def create_room_games_router(
     async def progress(request: Request, game_id: str):
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
-            auth = request_auth_context(
+            # Sign-in and progress storage query the database synchronously.
+            # Run them on the threadpool so a slow query never stalls this
+            # worker's event loop; the request's session context is copied.
+            auth = await run_in_threadpool(partial(
+                request_auth_context,
                 request, flask_app.config, find_user=find_user, find_token=find_token,
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
                 login_manager=login_manager,
-            )
+            ))
             response = None
             mutating = request.method in ('PUT', 'DELETE')
             if auth.user is None:
@@ -51,7 +57,8 @@ def create_room_games_router(
             if response is None:
                 try:
                     if not mutating:
-                        response = JSONResponse(api_ok_payload(data.read(auth.user, game_id)))
+                        response = JSONResponse(api_ok_payload(
+                            await run_in_threadpool(data.read, auth.user, game_id)))
                     elif request.headers.get('content-type', '').split(';')[0].strip().lower() != 'application/json':
                         response = _error('Send game progress as application/json.', 'bad_request')
                     else:
@@ -66,7 +73,7 @@ def create_room_games_router(
                                 response = _error('This game save is unsupported or invalid.', 'unprocessable')
                             else:
                                 state = body.state.model_dump() if isinstance(body, RoomGameSaveBody) else None
-                                result = data.write(auth.user, game_id, body.revision, state)
+                                result = await run_in_threadpool(data.write, auth.user, game_id, body.revision, state)
                                 response = JSONResponse(api_ok_payload(result))
                 except RoomProgressConflict:
                     response = _error('Your saved game changed elsewhere. Reload it before saving again.', 'conflict')
