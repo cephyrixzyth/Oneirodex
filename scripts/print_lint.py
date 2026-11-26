@@ -57,6 +57,7 @@ SCRIPT_GLOB = "scripts/*.py"
 EXEMPT = {
     "oneirodex/updateschema.py",  # operator-run migration; progress print is UX
     "scripts/get_json_lint.py",  # CLI ratchet; stdout is the report
+    "scripts/async_blocking_lint.py",  # CLI ratchet; stdout is the report
     # These tools are CLI reports consumed directly by operators and scripts.
     "scripts/audit_emulator_saves.py",
     "scripts/check_release_license_files.py",
