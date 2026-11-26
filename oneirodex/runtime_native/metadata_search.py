@@ -88,6 +88,10 @@ class MetadataSearchData:
         if source == 'meta_quest':
             payload['api_mode'] = get_meta_quest_api_mode()
             payload['unofficial_graphql'] = unofficial_graphql_enabled()
+            payload['note'] = (
+                'Searches Quest titles listed on IGDB. For a Quest-only game, paste its '
+                'Meta store link (meta.com/experiences/…) as the name to read that store page.'
+            )
         return payload
 
 

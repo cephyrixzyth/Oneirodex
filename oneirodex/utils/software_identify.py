@@ -54,6 +54,7 @@ from oneirodex.utils.software_identify_store import (  # noqa: F401
     _candidate_from_steam_details,
     _candidate_from_steam_hit,
     _enabled_stage_d_sources,
+    candidate_from_meta_store,
     _stage_d_titles_corroborate,
 )
 from oneirodex.utils.tgdb_platform_match import (  # noqa: F401
@@ -68,7 +69,14 @@ def build_software_search_queries(raw_label: str) -> list[str]:
     parsed = parse_game_label(raw_label)
     cleaned = (parsed.get('cleaned_name') or '').strip()
     queries: list[str] = []
-    if cleaned:
+    vr_form = (parsed.get('vr_title_form') or '').strip() if parsed.get('vr_title') else ''
+    if vr_form:
+        # A VR edition ("Green Hell VR") is a different product from the flat
+        # game, so the flat title is not a query here.
+        queries.append(vr_form)
+        if f'{cleaned} VR' != vr_form:
+            queries.append(f'{cleaned} VR')
+    elif cleaned:
         queries.append(cleaned)
         if parsed.get('had_vr_suffix'):
             vr_form = f'{cleaned} VR'
@@ -233,7 +241,11 @@ def fuzzy_store_title_hit(query, hits, *, threshold=FUZZY_STORE_THRESHOLD, gap=F
     """
     from difflib import SequenceMatcher
 
-    from oneirodex.utils.match_scoring import normalize_for_score, _letter_suffix_cap
+    from oneirodex.utils.match_scoring import (
+        _letter_suffix_cap,
+        _sequel_asymmetry_cap,
+        normalize_for_score,
+    )
 
     needle = normalize_for_score(query or '')
     if not needle:
@@ -251,7 +263,9 @@ def fuzzy_store_title_hit(query, hits, *, threshold=FUZZY_STORE_THRESHOLD, gap=F
         if not key:
             continue
         ratio = 1.0 if key == needle else SequenceMatcher(None, needle, key).ratio()
-        scored.append((_letter_suffix_cap(needle, key, ratio), key, hit))
+        # "Golden Gloves 2" is not "Golden Gloves": a sequel number on one side only caps it.
+        ratio = _sequel_asymmetry_cap(needle, key, _letter_suffix_cap(needle, key, ratio))
+        scored.append((ratio, key, hit))
     if not scored:
         return None
     scored.sort(key=lambda item: item[0], reverse=True)
@@ -268,9 +282,18 @@ _IDENTITY_NON_ALNUM = re.compile(r'[^a-z0-9]+')
 
 
 def _identity_key(value: str | None) -> str:
-    """Punctuation-tolerant title key: 'Half-Life 2' and 'Half Life 2' agree."""
-    text = _IDENTITY_NON_ALNUM.sub(' ', (value or '').casefold()).strip()
-    return ' '.join(text.split())
+    """Punctuation-, spacing- and accent-tolerant title key.
+
+    'Half-Life 2' / 'Half Life 2', 'Brütal Legend' / 'Brutal Legend' and
+    'D.E.C.A.Y' / 'DECAY' agree. Accents used to split a word in two
+    ('br tal legend'), so a store's plain spelling read as a disagreement with
+    IGDB's accented one and sent the game to review (2026-11-26 scan review).
+    """
+    import unicodedata
+
+    text = unicodedata.normalize('NFKD', (value or '').casefold())
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    return _IDENTITY_NON_ALNUM.sub('', text)
 
 
 def titles_identify_agree(left: str | None, right: str | None) -> bool:
@@ -490,6 +513,8 @@ def resolve_stage_d_store_candidate(
     steam_app_id: int | None = None,
     steam_title: str | None = None,
     sources=None,
+    meta_app_id: str | None = None,
+    meta_search: bool = False,
 ) -> dict | None:
     """
     Stage D confidence gate: App ID, exact store title, then one clear
@@ -506,9 +531,22 @@ def resolve_stage_d_store_candidate(
 
     Paren digits that fail Steam details (wrong namespace) do **not** stamp a
     bogus steam_app_id — fall through to exact-title search instead.
+
+    ``meta_app_id`` comes from the folder itself (a ``[meta <id>]`` tag or a
+    store-link file): the person said which product it is, so the Meta Quest
+    store page is read first and wins when it answers. Quest-only games are on
+    none of the stores below.
+
+    ``meta_search`` (PC / VR libraries) searches the Meta Quest store by title
+    after every other store missed — see ``resolve_meta_store_search_candidate``.
     """
+    if meta_app_id:
+        candidate = resolve_meta_store_candidate(meta_app_id)
+        if candidate is not None:
+            return candidate
+
     enabled = _enabled_stage_d_sources(sources)
-    if not enabled:
+    if not enabled and not meta_search:
         return None
 
     fallback_name = (cleaned_name or steam_title or '').strip()
@@ -588,11 +626,200 @@ def resolve_stage_d_store_candidate(
             candidate['match_mode'] = 'fuzzy_title'
             return candidate
 
+    # Quest-only games are on none of the stores above: ask the Meta Quest
+    # store last, scored the same way (exact title, one clear spelling variant)
+    # plus a guarded "store title + a word the store page backs up" rule.
+    if meta_search:
+        candidate = resolve_meta_store_search_candidate(queries)
+        if candidate is not None:
+            return candidate
+
     # Deliberately stops here. TheGamesDB / MobyGames are *not* part of the
     # Stage D auto-cascade — they run in Stage E as propose-only, because a
     # catalogue title match has no store identity to corroborate it and the
     # score gates for auto-import have not been proven. Adding them here would
     # auto-create games from a single fuzzy-adjacent title match.
+    return None
+
+
+def resolve_meta_store_candidate(meta_app_id: str | None) -> dict | None:
+    """Stage D candidate for a Meta Quest store app id, when that source is on."""
+    if not meta_app_id:
+        return None
+    try:
+        from oneirodex.utils.metadata_providers import meta_store_enabled
+
+        if not meta_store_enabled():
+            return None
+    except Exception:
+        pass
+    from oneirodex.utils.meta_store import fetch_meta_store_app
+
+    return candidate_from_meta_store(fetch_meta_store_app(meta_app_id))
+
+
+_WORD_RE = re.compile(r'[a-z0-9]+')
+# Words a store title may not silently drop from a folder title: a number, a
+# roman numeral or an edition word names a different product.
+_PREFIX_TAIL_BLOCK = re.compile(
+    r'^(?:\d+|[ivxlc]+|remaster(?:ed)?|remake|definitive|deluxe|complete|goty|'
+    r'edition|collection|anthology|trilogy|episode|chapter|part|season|dlc|demo|'
+    r'prologue|origins?|returns?|reloaded|redux|hd|classic|gold|ultimate)$'
+)
+_PREFIX_TAIL_MAX_WORDS = 2
+_PREFIX_TOP_HITS = 3
+
+
+def _title_words(value: str | None) -> list[str]:
+    import unicodedata
+
+    text = unicodedata.normalize('NFKD', (value or '').casefold())
+    text = ''.join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.replace("'", '').replace('\u2019', '')
+    words = _WORD_RE.findall(text)
+    if words and words[0] == 'the':
+        words = words[1:]
+    return words
+
+
+def _without_vr_token(value: str) -> str:
+    from oneirodex.utils.vr_catalog import _VR_TOKEN_RE
+
+    return re.sub(r'\s+', ' ', _VR_TOKEN_RE.sub(' ', value or '')).strip(' -:')
+
+
+def meta_search_forms(queries) -> list[str]:
+    """Folder title forms to score Meta hits against: each as given, then without "VR".
+
+    Meta lists Quest games without a VR suffix (everything there is VR), so
+    "Green Hell VR" and "Golden Gloves Boxing VR" are also tried as "Green Hell"
+    and "Golden Gloves Boxing".
+    """
+    forms: list[str] = []
+    seen: set[str] = set()
+    for query in queries or ():
+        for form in (query, _without_vr_token(query or '')):
+            text = (form or '').strip()
+            key = title_match_key(text)
+            if text and key and key not in seen:
+                seen.add(key)
+                forms.append(text)
+    return forms
+
+
+def match_meta_store_hits(queries, hits) -> tuple[dict, str, list[str]] | None:
+    """The one Meta store hit that is the folder's game, as ``(hit, mode, tail)``.
+
+    Same bar as the other stores: one exact title, else one clear spelling
+    variant (``fuzzy_store_title_hit``). Then one more rule, because Quest
+    folders often add a word the store title lacks ("Golden Gloves Boxing VR" /
+    "Golden Gloves"): a top-ranked hit whose title is the start of the folder
+    title, at least two words long, with at most two extra folder words that are
+    not a number or edition word. ``tail`` lists those words; the caller must
+    find them on the store page before accepting the hit.
+    """
+    hits = [h for h in (hits or []) if isinstance(h, dict) and (h.get('name') or '').strip()]
+    if not hits:
+        return None
+    forms = meta_search_forms(queries)
+    if not forms:
+        return None
+
+    form_keys = {title_match_key(f) for f in forms}
+    exact = {}
+    for hit in hits:
+        if title_match_key(hit['name']) in form_keys:
+            exact.setdefault(str(hit.get('id')), hit)
+    if len(exact) == 1:
+        return next(iter(exact.values())), 'exact_title', []
+    if len(exact) > 1:
+        return None
+
+    for form in forms:
+        hit = fuzzy_store_title_hit(form, hits)
+        if hit is not None:
+            return hit, 'fuzzy_title', []
+
+    prefix: dict[str, tuple[dict, list[str]]] = {}
+    for form in forms:
+        folder_words = _title_words(_without_vr_token(form))
+        for hit in hits[:_PREFIX_TOP_HITS]:
+            store_words = _title_words(hit['name'])
+            extra = len(folder_words) - len(store_words)
+            if len(store_words) < 2 or not 0 < extra <= _PREFIX_TAIL_MAX_WORDS:
+                continue
+            if folder_words[:len(store_words)] != store_words:
+                continue
+            tail = folder_words[len(store_words):]
+            if any(_PREFIX_TAIL_BLOCK.match(word) for word in tail):
+                continue
+            prefix.setdefault(str(hit.get('id')), (hit, tail))
+    if len(prefix) == 1:
+        hit, tail = next(iter(prefix.values()))
+        return hit, 'title_prefix', tail
+    return None
+
+
+def meta_tail_corroborated(tail: list[str], details: dict | None) -> bool:
+    """Every extra folder word appears on the store page (description, genres, title)."""
+    if not isinstance(details, dict):
+        return False
+    text = ' '.join(
+        str(part) for part in (
+            details.get('name'),
+            details.get('summary'),
+            details.get('application_category'),
+            *(details.get('genres') or []),
+        ) if part
+    )
+    words = set(_title_words(text))
+    stems = {word.rstrip('s') for word in words}
+    for word in tail:
+        if word in words or word.rstrip('s') in stems:
+            continue
+        return False
+    return True
+
+
+def resolve_meta_store_search_candidate(queries) -> dict | None:
+    """Stage D candidate from a Meta Quest store title search, or None.
+
+    Searches with the folder title minus any "VR" token (at most two distinct
+    searches), picks a hit with :func:`match_meta_store_hits` and reads its
+    store page for the details. Off when the Meta Quest source is switched off.
+    """
+    try:
+        from oneirodex.utils.metadata_providers import meta_store_enabled
+
+        if not meta_store_enabled():
+            return None
+    except Exception:
+        pass
+    from oneirodex.utils.meta_store import fetch_meta_store_app
+    from oneirodex.utils.meta_store_search import search_meta_store
+
+    terms: list[str] = []
+    for query in queries or ():
+        term = _without_vr_token(query or '') or (query or '').strip()
+        if term and title_match_key(term) not in {title_match_key(t) for t in terms}:
+            terms.append(term)
+        if len(terms) >= 2:
+            break
+    for term in terms:
+        try:
+            hits = search_meta_store(term)
+        except Exception:  # noqa: BLE001 — a search miss must not break a scan
+            hits = []
+        matched = match_meta_store_hits(queries, hits)
+        if matched is None:
+            continue
+        hit, mode, tail = matched
+        details = hit.get('details') or fetch_meta_store_app(hit.get('id'))
+        if not details:
+            continue
+        if mode == 'title_prefix' and not meta_tail_corroborated(tail, details):
+            continue
+        return candidate_from_meta_store(details, match_mode=f'meta_search_{mode}')
     return None
 
 
@@ -608,6 +835,8 @@ def try_stage_d_store_identify(
     size: int = 0,
     candidate: dict | None = None,
     sources=None,
+    meta_app_id: str | None = None,
+    meta_search: bool = False,
 ) -> Game | None:
     """
     IGDB-miss Stage D entry: resolve exact/App-ID store hit and commit custom Game.
@@ -625,6 +854,8 @@ def try_stage_d_store_identify(
             steam_app_id=steam_app_id,
             steam_title=steam_title,
             sources=sources,
+            meta_app_id=meta_app_id,
+            meta_search=meta_search,
         )
     if not candidate:
         return None

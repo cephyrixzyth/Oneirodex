@@ -18,6 +18,7 @@ PROVIDER_URL_FIELDS: tuple[tuple[str, str], ...] = (
     ('gog', 'GOG'),
     ('epicgames', 'Epic Games'),
     ('itch', 'itch.io'),
+    ('meta_quest', 'Meta Quest'),
     ('rawg', 'RAWG'),
     ('mobygames', 'MobyGames'),
     ('thegamesdb', 'TheGamesDB'),

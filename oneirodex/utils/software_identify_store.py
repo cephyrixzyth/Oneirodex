@@ -188,6 +188,35 @@ def _candidate_from_epic_hit(hit: dict) -> dict:
     })
 
 
+def candidate_from_meta_store(details: dict | None, *, match_mode: str = 'store_link') -> dict | None:
+    """Stage D candidate from a parsed Meta Quest store page."""
+    if not isinstance(details, dict) or not (details.get('name') or '').strip():
+        return None
+    name = details['name'].strip()
+    kind = DEFAULT_ITEM_KIND
+    category = (details.get('application_category') or '').strip().lower()
+    if category and category not in ('games', 'game'):
+        kind = 'app'
+    if is_denied_auto_game_match(name) and kind == DEFAULT_ITEM_KIND:
+        kind = 'tool'
+    return scrub_stage_d_payload({
+        'source': 'meta_quest',
+        'name': name,
+        'summary': details.get('summary'),
+        'cover_url': details.get('cover_url'),
+        'meta_quest_id': details.get('meta_quest_id'),
+        'developer': details.get('developer'),
+        'publisher': details.get('publisher'),
+        'genres': list(details.get('genres') or []),
+        'item_kind': normalize_item_kind(kind),
+        'url': details.get('url'),
+        'is_vr': True,
+        'identify_path': 'stage_d',
+        'match_mode': match_mode,
+        'ownership_only': True,
+    })
+
+
 def igdb_retry_title_from_store(
     candidate: dict | None,
     already: list[str] | tuple[str, ...] | set[str] | None = None,

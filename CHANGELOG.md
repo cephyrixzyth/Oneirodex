@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Scans find Quest-only games on the Meta Quest store by themselves. When IGDB, Steam, GOG and Epic have nothing, a PC or VR folder is searched on the Meta store and imported under the store's title, with its art, developer and genres ("Golden Gloves Boxing VR" becomes "Golden Gloves"). Meta's own store search is used first; set `BRAVE_SEARCH_API_KEY` to fall back to Brave Search when Meta's search is unavailable. A store link in the folder name or in a `.url` file still works, and Manual Identify has a Meta Quest button that takes a pasted store link.
+- Scans fix their own wrong matches. After each scan of a PC library, games whose folder name disagrees with their title are looked up again, and re-matched in place when another title clearly fits the folder better (up to 25 per scan). Favourites, play state and downloads stay with the game, and folders that were marked as duplicates of the wrong title are identified again. Titles chosen in Manual Identify are never changed.
+
+### Fixed
+
+- VR editions are no longer matched to, or filed as duplicates of, their flat game (Green Hell VR is not Green Hell). Scans search the VR title first and accept the flat title only for VR products.
+- VR games no longer go to review because a store lists the flat game under the same name.
+- Folders with a series number the catalogue leaves out now match (Leisure Suit Larry 9 Box Office Bust is Leisure Suit Larry: Box Office Bust).
+- A folder is no longer called a duplicate because an existing game was matched to the wrong title, or because a name filter cut "Remastered" from its name.
+- Accented and dotted titles (Brütal Legend, D.E.C.A.Y) no longer read as a store disagreement.
+- A store title with a sequel number the folder lacks, or the other way round, is no longer accepted as a spelling variant ("Golden Gloves 2" is not "Golden Gloves").
+
 ## [1.4.0] — 2026-11-23
 
 ### Added

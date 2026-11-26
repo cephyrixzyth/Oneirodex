@@ -70,9 +70,12 @@ def test_glued_vr_peel_3dsenvr():
 
 
 def test_software_search_queries_include_vr_reattach():
+    # 3DSenVR is the VR edition of 3DSen: the VR forms are the queries, the
+    # flat title is not (2026-11-26 scan review).
     queries = build_software_search_queries('3DSenVR')
-    assert queries[0] == '3DSen'
+    assert queries[0] == '3DSenVR'
     assert '3DSen VR' in queries
+    assert '3DSen' not in queries
 
 
 def test_collect_software_candidates_synthetic_non_game(monkeypatch):

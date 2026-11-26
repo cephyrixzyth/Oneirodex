@@ -418,6 +418,35 @@ def _sequel_numeral_variants(name):
     return variants
 
 
+_SERIES_NUMBER_RE = re.compile(r'^(?:[1-9]|1[0-9]|20|ii|iii|iv|vi|vii|viii|ix)$', re.IGNORECASE)
+
+
+def _series_number_subtitle_variants(name):
+    """Colon forms for a series number followed by a subtitle.
+
+    Folders keep the number a catalogue may leave out or set apart with a colon:
+    ``Leisure Suit Larry 9 Box Office Bust`` is IGDB's ``Leisure Suit Larry: Box
+    Office Bust``. Emits ``Head N: Subtitle`` and, last, ``Head: Subtitle``. Needs
+    a head of at least two words and a subtitle of at least two words that is not
+    edition packaging ("Gothic 2 Gold Edition" stays as it is).
+    """
+    if ':' in name:
+        return []
+    words = name.split()
+    for index in range(2, len(words) - 2):
+        if not _SERIES_NUMBER_RE.match(words[index]):
+            continue
+        head = ' '.join(words[:index])
+        tail_words = words[index + 1:]
+        if any(word.lower() in _EDITION_TAIL_TOKENS for word in tail_words):
+            return []
+        if any(_SERIES_NUMBER_RE.match(word) or word.isdigit() for word in tail_words):
+            return []
+        tail = ' '.join(tail_words)
+        return [f'{head} {words[index]}: {tail}', f'{head}: {tail}']
+    return []
+
+
 def _hyphen_subtitle_variants(name):
     """
     Hyphen ↔ space subtitle variant.
@@ -666,6 +695,11 @@ def generate_goty_variants(base_name, *, policy=None):
 
     # Hyphen ↔ space / Agatha-style subtitle (Stage C row 9).
     variants.extend(_hyphen_subtitle_variants(base_name))
+
+    # Series number + subtitle ("Leisure Suit Larry 9 Box Office Bust" →
+    # "Leisure Suit Larry: Box Office Bust"); the numberless form comes last.
+    if enable_sequel:
+        variants.extend(_series_number_subtitle_variants(base_name))
 
     # BE-DET-9 — soft alias / remaster / regional EN↔JP search copies (propose-first).
     variants.extend(expand_fandom_search_variants(base_name))

@@ -218,14 +218,16 @@ export function useManualIdentify() {
     setProviderError('')
     try {
       const data = await getJson('/api/get_next_custom_igdb_id')
-      const provider =
-        searchSource.toLowerCase() === 'epic' ? 'epicgames' : searchSource.toLowerCase()
+      const providerKeys: Record<string, string> = { epic: 'epicgames', 'meta quest': 'meta_quest' }
+      const provider = providerKeys[searchSource.toLowerCase()] || searchSource.toLowerCase()
       setForm((current) => ({
         ...current,
         igdb_id: data.next_id,
         name: row.name || current.name,
         summary: row.summary || current.summary,
         url: row.url || current.url,
+        developer: row.developer || current.developer,
+        publisher: row.publisher || current.publisher,
         provider_urls: { ...current.provider_urls, [provider]: row.url || '' },
       }))
       setCandidates([])

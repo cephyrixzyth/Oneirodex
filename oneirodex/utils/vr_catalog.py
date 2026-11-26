@@ -1,6 +1,52 @@
 """Reusable VR catalogue predicates and cover projection."""
 from __future__ import annotations
 
+import re
+
+# "Green Hell VR", "VR Live …", "cyubeVR", "Crisis VRigade" — VR as its own
+# word, or glued onto the end of a product name. Mid-word "VR" stays a word.
+_VR_TOKEN_RE = re.compile(r'(?:\bVR\b|(?<=[A-Za-z0-9])VR\b)', re.IGNORECASE)
+
+# IGDB platform names that only run VR software.
+_VR_PLATFORM_MARKERS = (
+    'steamvr', 'oculus', 'meta quest', 'playstation vr', 'windows mixed reality',
+    'pico', 'daydream', 'gear vr', 'htc vive', 'valve index',
+)
+
+
+def has_vr_token(name: str | None) -> bool:
+    """True when a title names VR as a word or as a glued suffix."""
+    return bool(_VR_TOKEN_RE.search(name or ''))
+
+
+def _names(values) -> list[str]:
+    out = []
+    for value in values or ():
+        name = value.get('name') if isinstance(value, dict) else value
+        if name:
+            out.append(str(name).casefold())
+    return out
+
+
+def candidate_is_vr(candidate: dict | None) -> bool:
+    """True when a catalogue hit is a VR product.
+
+    Used when a folder says "VR" but the catalogue lists the game without it
+    ("A Fishermans Tale VR" → "A Fisherman's Tale"): the flat title is only
+    accepted for a VR product, so "Green Hell VR" can never become "Green Hell".
+    """
+    if not isinstance(candidate, dict):
+        return False
+    if candidate.get('is_vr') is True or has_vr_token(candidate.get('name')):
+        return True
+    if 'virtual reality' in _names(candidate.get('player_perspectives')):
+        return True
+    return any(
+        name.startswith(marker)
+        for name in _names(candidate.get('platforms'))
+        for marker in _VR_PLATFORM_MARKERS
+    )
+
 
 def vr_profile_link(game_model, profile_model, kinds: tuple[str, ...]):
     from sqlalchemy import select

@@ -20,6 +20,7 @@ export function providerName(source: string) {
   const names: Record<string, string> = {
     steam: 'Steam',
     gog: 'GOG',
+    meta_quest: 'Meta Quest',
     rawg: 'RAWG',
     mobygames: 'MobyGames',
     thegamesdb: 'TheGamesDB',

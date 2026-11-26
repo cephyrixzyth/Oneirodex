@@ -115,6 +115,8 @@ class ManualIdentifyMutationData:
                 from oneirodex.utils.game_core import ensure_manual_identify_taxonomy
                 ensure_manual_identify_taxonomy(game, body.igdb_id)
             game.date_identified = datetime.now(timezone.utc)
+            # A person chose this title: scans must not re-match it (match_audit).
+            game.match_locked = True
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
@@ -200,6 +202,7 @@ class ManualIdentifyMutationData:
             first_release_date=datetime.combine(body.first_release_date, datetime.min.time(), tzinfo=timezone.utc) if body.first_release_date else None,
             video_urls=body.video_urls or None, aggregated_rating=body.aggregated_rating,
             library_uuid=library.uuid,
+            match_locked=True,
             item_kind=normalize_item_kind(body.item_kind) if body.item_kind else ('game' if is_custom_game else None),
             nfo_content=read_first_nfo_content(
                 body.full_disk_path, allowed_bases=allowed_bases, logger=app.logger,

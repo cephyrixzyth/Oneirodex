@@ -13,6 +13,11 @@ const FIELDS = [
     'Hash identify',
     'Keyless console ROM identity lookup after IGDB and local DAT miss. Never enrichment or a download.',
   ],
+  [
+    'meta_quest',
+    'Meta Quest store',
+    "Searches the Meta Quest store for PC and VR folders no other store has, using Meta's store search (and Brave Search when BRAVE_SEARCH_API_KEY is set). Metadata only.",
+  ],
 ] as const
 
 type Providers = Record<(typeof FIELDS)[number][0], boolean>

@@ -18,6 +18,9 @@ from oneirodex.utils.match_scoring import score_candidate
 # Folder titles must be this similar to call same-IGDB a "Duplicate".
 # Below this → treat as Unmatched (different packaging / remaster / bad match).
 DEFAULT_TITLE_THRESHOLD = 0.85
+# How closely an existing game's own folder must agree with its library name
+# before that name may stand in for the folder in a duplicate check.
+LIBRARY_NAME_TRUST_MIN = 0.7
 
 
 def normalize_disk_path(path: str | None) -> str:
@@ -127,8 +130,23 @@ _EDITION_MARKERS = {
 }
 
 
+def _is_vr_edition(label: str) -> bool:
+    from oneirodex.utils.vr_catalog import has_vr_token
+
+    parsed = parse_game_label(label)
+    if parsed.get('had_vr_suffix'):
+        return bool(parsed.get('vr_title'))
+    return has_vr_token(label)
+
+
 def edition_conflict(left: str, right: str) -> str | None:
-    """A provider ID may cover several discs, releases, or localized editions."""
+    """A provider ID may cover several discs, releases, or localized editions.
+
+    A VR edition ("Green Hell VR") is a separate product from the flat game
+    ("Green Hell"), never a second copy of it.
+    """
+    if _is_vr_edition(left or '') != _is_vr_edition(right or ''):
+        return 'vr'
     for category, pattern in _EDITION_MARKERS.items():
         def values(text):
             return {v.casefold().removesuffix('ed') if v.casefold() == 'remastered' else v.casefold()
@@ -204,7 +222,10 @@ def explain_duplicate_match(
             'transforms': list(parse_game_label(label).get('transforms') or []),
         }
 
-    new_label = new_raw_name or folder_basename(new_full_disk_path)
+    # The folder on disk is the evidence. ``new_raw_name`` is the scan-cleaned
+    # name, which release-group filters can cut down ("Monkey Island 2 Lechucks
+    # Revenge Remastered" lost "Remastered"); prefer the folder's own name.
+    new_label = folder_basename(new_full_disk_path) or new_raw_name or ''
     existing_label = folder_basename(existing_path) or (getattr(existing_game, 'name', None) or '')
 
     conflict = edition_conflict(new_label, existing_label)
@@ -222,6 +243,12 @@ def explain_duplicate_match(
 
     score_vs_folder = score_candidate(new_cleaned, existing_cleaned)
     score_vs_library = score_candidate(new_cleaned, library_name) if library_name else 0.0
+    # The library name only counts when the existing game's own folder agrees
+    # with it. A wrong earlier match ("Star Trek Deep Space Nine" filed as "Star
+    # Trek - Armada") otherwise turns every Star Trek folder into its duplicate.
+    # The bar is loose: region or build tags ("Celeste (USA)") still trust it.
+    if library_name and existing_cleaned and score_candidate(existing_cleaned, library_name) < LIBRARY_NAME_TRUST_MIN:
+        score_vs_library = 0.0
     best = max(score_vs_folder, score_vs_library)
     reason = 'title_vs_folder' if score_vs_folder >= score_vs_library else 'title_vs_library_name'
     is_dup = best >= title_threshold

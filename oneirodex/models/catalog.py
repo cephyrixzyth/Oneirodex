@@ -137,6 +137,10 @@ class Game(db.Model):
     input_family = db.Column(db.String(16), nullable=True)
     date_created = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     date_identified = db.Column(db.DateTime, nullable=True)
+    # A title a person chose in manual identify: scans never re-match it.
+    match_locked = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # When a scan last re-checked a folder/title disagreement and kept the match.
+    match_checked_at = db.Column(db.DateTime, nullable=True)
     steam_url = db.Column(db.String, nullable=True)
     times_downloaded = db.Column(db.Integer, default=0)
     nfo_content = db.Column(db.Text, nullable=True)
