@@ -9,13 +9,16 @@ declare global {
   }
 }
 
-export async function requirePrivateVrControl(signal?: AbortSignal) {
+export async function requirePrivateVrControl(
+  signal?: AbortSignal,
+  message = 'Reconnect and reload this page before opening the VR library.',
+) {
   const ready = await window.odPwaPrivacyReady
   const worker = navigator.serviceWorker?.controller
   const legacy = worker && new URL(worker.scriptURL, location.href).pathname === '/vr/sw.js'
   if (signal?.aborted) throw new DOMException('Request cancelled', 'AbortError')
   if (ready === false || (ready !== true && legacy)) {
-    throw new Error('Reconnect and reload this page before opening the VR library.')
+    throw new Error(message)
   }
 }
 

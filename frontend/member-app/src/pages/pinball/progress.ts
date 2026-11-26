@@ -5,6 +5,7 @@ import { validateMoonfall } from './model'
 import type { MoonfallState } from './model'
 
 const path = '/api/room-games/moonfall-pinball/progress'
+const privacyNotReady = 'Reconnect and reload this page before loading or saving game progress.'
 const transport = memberResource((request) => ({
   read: (signal?: AbortSignal) => request<unknown>(path, { signal, cache: 'no-store' }),
   mutate: (method: 'PUT' | 'DELETE', body: unknown, signal?: AbortSignal) =>
@@ -49,7 +50,7 @@ function read(value: unknown): SavedMoonfall {
 }
 
 export async function loadMoonfallProgress(signal?: AbortSignal): Promise<SavedMoonfall> {
-  await requirePrivateVrControl(signal)
+  await requirePrivateVrControl(signal, privacyNotReady)
   return read(await withMemberError(transport.read(signal), 'Could not load game progress'))
 }
 
@@ -60,7 +61,7 @@ export async function saveMoonfallProgress(
 ): Promise<SavedMoonfall> {
   const state = validateMoonfall(value)
   revision(expected)
-  await requirePrivateVrControl(signal)
+  await requirePrivateVrControl(signal, privacyNotReady)
   const result = read(
     await withMemberError(
       transport.mutate('PUT', { revision: expected, state }, signal),
@@ -76,7 +77,7 @@ export async function resetMoonfallProgress(
   signal?: AbortSignal,
 ): Promise<SavedMoonfall> {
   revision(expected)
-  await requirePrivateVrControl(signal)
+  await requirePrivateVrControl(signal, privacyNotReady)
   const result = read(
     await withMemberError(
       transport.mutate('DELETE', { revision: expected }, signal),
