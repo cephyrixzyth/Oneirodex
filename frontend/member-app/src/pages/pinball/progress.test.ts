@@ -22,6 +22,16 @@ afterEach(() => {
 })
 
 describe('member-scoped Moonfall progress transport', () => {
+  it('explains an unready private connection in game terms, not the VR library', async () => {
+    vi.stubGlobal('odPwaPrivacyReady', Promise.resolve(false))
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    await expect(loadMoonfallProgress()).rejects.toThrow(
+      'Reconnect and reload this page before loading or saving game progress.',
+    )
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('uses a private same-origin read and validates the returned save', async () => {
     const fetch = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => response(body()))
     vi.stubGlobal('fetch', fetch)

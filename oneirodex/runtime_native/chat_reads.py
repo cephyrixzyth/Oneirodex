@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from .form_compat import first_form_upload, first_form_value
 from contextlib import nullcontext
+from functools import partial
 from typing import Any, Callable
 
 from fastapi import APIRouter, FastAPI, Request
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse, Response
 
 from .acquire_status import _login_redirect
@@ -1047,11 +1049,12 @@ def create_chat_reads_router(
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
-            auth = request_auth_context(
+            auth = await run_in_threadpool(partial(
+                request_auth_context,
                 request, flask_app.config, find_user=find_user, find_token=find_token,
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
                 login_manager=login_manager,
-            )
+            ))
             response = csrf_error_response(request, auth.session_data, flask_app.config)
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
@@ -1065,7 +1068,7 @@ def create_chat_reads_router(
                 response = JSONResponse(body, status_code=status)
             elif response is None:
                 try:
-                    channel_visible = data.channel_visible(auth.user, channel_id)
+                    channel_visible = await run_in_threadpool(data.channel_visible, auth.user, channel_id)
                 except Exception:  # noqa: BLE001 — keep persistence detail private
                     from oneirodex.runtime_native.db_session import native_db as db
                     from oneirodex.utils.api_contract import api_error_payload
@@ -1099,7 +1102,7 @@ def create_chat_reads_router(
                         attachment_ids = _validated_attachment_ids(payload)
                         if 'attachment_ids' in payload:
                             payload['attachment_ids'] = attachment_ids
-                        message = data.post_message(auth.user, channel_id, payload)
+                        message = await run_in_threadpool(data.post_message, auth.user, channel_id, payload)
                         if message is None:
                             from oneirodex.utils.api_contract import api_error_payload
 
@@ -1144,11 +1147,12 @@ def create_chat_reads_router(
 
         scope = database_scope(flask_app) if database_scope else nullcontext()
         with scope:
-            auth = request_auth_context(
+            auth = await run_in_threadpool(partial(
+                request_auth_context,
                 request, flask_app.config, find_user=find_user, find_token=find_token,
                 commit_token_touch=commit_token_touch, load_user_id=load_user_id,
                 login_manager=login_manager,
-            )
+            ))
             response = csrf_error_response(request, auth.session_data, flask_app.config)
             if response is None and auth.user is None:
                 response = _login_redirect(flask_app, request, login_manager, auth)
@@ -1170,7 +1174,8 @@ def create_chat_reads_router(
                 if not isinstance(payload, dict):
                     payload = {}
                 try:
-                    result = data.toggle_reaction(
+                    result = await run_in_threadpool(
+                        data.toggle_reaction,
                         auth.user, message_id, payload.get('emoji') or '',
                     )
                     if result is None:

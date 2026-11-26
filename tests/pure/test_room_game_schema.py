@@ -91,3 +91,14 @@ class MoonfallSchemaTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class RoomGameRevisionBoundTests(unittest.TestCase):
+    def test_revision_at_the_ceiling_is_invalid_not_a_conflict(self):
+        # The store writes revision + 1 and caps at 2,000,000,000, so the body
+        # rejects the ceiling itself (422) instead of the store answering 409.
+        self.assertEqual(RoomGameDeleteBody.model_validate({'revision': 1_999_999_999}).revision, 1_999_999_999)
+        for body in (RoomGameDeleteBody, RoomGameSaveBody):
+            with self.subTest(body=body.__name__):
+                with self.assertRaises(ValidationError):
+                    body.model_validate({'revision': 2_000_000_000, 'state': fixture()})

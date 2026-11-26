@@ -44,6 +44,12 @@ logs/
 CLAUDE.md
 AGENTS.md
 docs/strategy/
+# Documentation, captures and release evidence are not read by the running app
+# (about 80 MB). docs/openapi/ is: runtime_native/openapi_documents.py serves it.
+docs/*
+!docs/openapi/
+# The test suite never runs inside the runtime image (about 30 MB).
+tests/
 letsrebuild.md
 *.md
 !README.md

@@ -127,6 +127,12 @@ jobs:
       - name: Run get_json() ratchet
         run: python scripts/get_json_lint.py
 
+      # Per-file baseline of synchronous database calls made directly inside
+      # async native handlers (they block the event loop). Fails only when a
+      # file's count climbs above scripts/async_blocking_lint.baseline.json.
+      - name: Run async blocking-call ratchet
+        run: python scripts/async_blocking_lint.py
+
       - name: Run pytest (marker set)
         # Gate = every test not marked `integration`. Flipped from a
         # hand-enumerated file list on 2026-09-17 (docs/dev/ci-gates.md), so a

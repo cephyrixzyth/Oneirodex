@@ -13,6 +13,9 @@ MISSION_LENGTHS = tuple(len(mission['route']) for mission in _CONTENT['missions'
 IMPLEMENTED_ROOM_GAMES = frozenset({'moonfall-pinball'})
 MAX_PROGRESS_BODY = 64 * 1024
 Counter = Annotated[int, Field(ge=0, le=2_000_000_000)]
+# A write stores revision + 1, so the highest revision a client may send is one
+# below the ceiling. Bounding it here answers 422, not a misleading 409.
+Revision = Annotated[int, Field(ge=0, lt=2_000_000_000)]
 
 
 class _StrictSave(BaseModel):
@@ -103,9 +106,9 @@ class MoonfallSave(_StrictSave):
 
 
 class RoomGameSaveBody(_StrictSave):
-    revision: Counter
+    revision: Revision
     state: MoonfallSave
 
 
 class RoomGameDeleteBody(_StrictSave):
-    revision: Counter
+    revision: Revision
