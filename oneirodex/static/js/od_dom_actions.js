@@ -94,6 +94,9 @@
       var controlledId = trigger.getAttribute('aria-controls');
       var panel = controlledId ? document.getElementById(controlledId) : null;
       var root = trigger.closest('.od-pop, .od-topnav__dropdown, .od-dash__add, [data-od-menu-root]');
+      // The click that just opened a menu reaches this listener too; never
+      // treat the trigger itself as "outside" its own menu.
+      if (trigger.contains(target)) return;
       if ((root && root.contains(target)) || (panel && panel.contains(target))) return;
       trigger.click();
     });
