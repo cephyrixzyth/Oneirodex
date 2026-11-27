@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The 3D library rooms look much more realistic. The themed rooms now use real scanned wood for floors and cabinets, velvet-weave upholstery with a fabric sheen, and textured plaster, carpet or deck-plate walls and floors in place of flat colours. Lighting comes mostly from an image-based environment instead of flat ambient light, lamps and glowing trim softly bloom, and colours go through a neutral, photographic tone curve.
+- A new **Graphics** setting in the room controls (Low, Standard, High). Standard adds antialiasing and bloom; High adds ambient occlusion (soft contact shading in corners and under furniture), sharper key shadows and soft lamp shadows. Low renders like before for older hardware. The choice is remembered per member and stays in step with the Moonfall quality setting. Headsets always skip the post-processing for frame rate.
+- three.js updated to 0.187 (folds in the three.js part of Dependabot #298).
+
 ## [1.4.1] — 2026-11-26
 
 ### Added

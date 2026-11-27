@@ -6,6 +6,8 @@ import {
   upholsteredPanel,
 } from './roomGeometry'
 import { READING_DISPLAY as desk } from './roomLayout'
+import type { createRoomMaterialLibrary } from './roomMaterials'
+import { proceduralMaterial, projectTexturedMeshes } from './roomSurfaces'
 
 type Palette = readonly [
   wall: string,
@@ -31,22 +33,128 @@ export const roomArtSlug = (slug: string) =>
   Object.hasOwn(themedWorlds, slug) ? slug : 'oneirodex'
 type Footprint = [x: number, z: number, width: number, depth: number]
 
-function surfaceGrain() {
-  const pixels = new Uint8Array(64 * 64 * 4)
-  let seed = 721
-  for (let y = 0; y < 64; y++)
-    for (let x = 0; x < 64; x++) {
-      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
-      const grain = 206 + ((seed >>> 26) & 31) + (x % 4 === 0 ? 12 : 0)
-      const offset = (y * 64 + x) * 4
-      pixels.set([grain, grain, grain, 255], offset)
+type RoomMaterials = ReturnType<typeof createRoomMaterialLibrary>
+type Finish = {
+  floor: 'wood' | 'panel' | 'carpet' | 'plaster'
+  cabinet: 'wood' | 'lacquer'
+  wall: 'plaster' | 'panel'
+}
+/** Physical finishes per world: what each palette colour is actually made of. */
+const finishes: Record<World, Finish> = {
+  afterglow: { floor: 'carpet', cabinet: 'lacquer', wall: 'plaster' },
+  monochrome: { floor: 'plaster', cabinet: 'lacquer', wall: 'plaster' },
+  greenhouse: { floor: 'wood', cabinet: 'wood', wall: 'plaster' },
+  signal: { floor: 'wood', cabinet: 'wood', wall: 'plaster' },
+  'tape-deck': { floor: 'carpet', cabinet: 'wood', wall: 'plaster' },
+  'deep-space': { floor: 'panel', cabinet: 'lacquer', wall: 'panel' },
+  tideglass: { floor: 'panel', cabinet: 'lacquer', wall: 'panel' },
+}
+// Mean sRGB colour of each scanned colour map, so a tint lands on the palette colour.
+const scannedMean = { walnut: '#726e69', floor: '#a46636' } as const
+const ART = '/static/newstyle/rooms/aurora/materials/'
+
+function scannedTexture(materials: RoomMaterials, name: string, color: boolean, tile: number) {
+  const texture = materials.publicTexture(ART + name + '.jpg', color, 1024)
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.setScalar(1 / tile)
+  return texture
+}
+
+/** Resolve palette colours to textured physical materials; everything else stays a plain finish. */
+function worldMaterials(world: World, palette: Palette, scanned?: RoomMaterials) {
+  const [wall, floor, cabinet, , , upholstery] = palette
+  const finish = finishes[world]
+  const plain = new Map<string, THREE.MeshStandardMaterial>()
+  function wood(role: 'walnut' | 'floor', color: string, tile: number) {
+    if (!scanned) return proceduralMaterial('lacquer', color, 0, 1)
+    const target = new THREE.Color(color),
+      mean = new THREE.Color(scannedMean[role])
+    const tint = new THREE.Color(
+      Math.min(4, target.r / mean.r),
+      Math.min(4, target.g / mean.g),
+      Math.min(4, target.b / mean.b),
+    )
+    const material = scanned.own(
+      new THREE.MeshStandardMaterial({
+        name: 'world-' + role,
+        color: tint,
+        map: scannedTexture(scanned, role + '-color', true, tile),
+        normalMap: scannedTexture(scanned, role + '-normal', false, tile),
+        roughnessMap: scannedTexture(scanned, role + '-roughness', false, tile),
+        normalScale: new THREE.Vector2(0.45, 0.45),
+        roughness: role === 'floor' ? 1 : 0.8,
+      }),
+    )
+    material.userData.boxProjected = true
+    return material
+  }
+  function fabric(color: string) {
+    const material = new THREE.MeshPhysicalMaterial({
+      name: 'world-upholstery',
+      color,
+      roughness: 0.92,
+      sheen: 1,
+      sheenRoughness: 0.45,
+      sheenColor: new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.35),
+    })
+    if (scanned) {
+      material.normalMap = scannedTexture(scanned, 'velvet-normal', false, 0.6)
+      material.roughnessMap = scannedTexture(scanned, 'velvet-roughness', false, 0.6)
+      material.normalScale.setScalar(0.3)
+      material.userData.boxProjected = true
+      scanned.own(material)
     }
-  const map = new THREE.DataTexture(pixels, 64, 64)
-  map.wrapS = map.wrapT = THREE.RepeatWrapping
-  map.repeat.set(5, 5)
-  map.magFilter = THREE.LinearFilter
-  map.needsUpdate = true
-  return map
+    return material
+  }
+  const floorMaterial =
+    finish.floor === 'wood'
+      ? wood('floor', floor, 2.2)
+      : proceduralMaterial(
+          finish.floor,
+          floor,
+          0,
+          finish.floor === 'panel' ? 1.6 : finish.floor === 'carpet' ? 0.5 : 2.5,
+        )
+  if (finish.floor === 'plaster') floorMaterial.roughness = 0.55
+  const surfaces = new Map<string, THREE.MeshStandardMaterial>([
+    [
+      wall,
+      proceduralMaterial(
+        finish.wall,
+        wall,
+        finish.wall === 'panel' ? 0.35 : 0,
+        finish.wall === 'panel' ? 1.8 : 1.4,
+      ),
+    ],
+    [
+      cabinet,
+      finish.cabinet === 'wood'
+        ? wood('walnut', cabinet, 1.1)
+        : proceduralMaterial('lacquer', cabinet, 0.05, 0.8),
+    ],
+    [upholstery, fabric(upholstery)],
+  ])
+  function resolve(color: string, metalness = 0, roughness = 0.65, glow = 0) {
+    if (!glow && metalness <= 0.3) {
+      const found = surfaces.get(color)
+      if (found) return found
+    }
+    const key = [color, metalness, roughness, glow].join(':')
+    let found = plain.get(key)
+    if (!found) {
+      found = new THREE.MeshStandardMaterial({
+        color,
+        metalness,
+        roughness,
+        emissive: glow ? new THREE.Color(color) : new THREE.Color(0),
+        // Light sources read as light: bright enough to bloom with post-processing.
+        emissiveIntensity: glow >= 0.7 ? glow * 4 : glow,
+      })
+      plain.set(key, found)
+    }
+    return found
+  }
+  return { resolve, floorMaterial }
 }
 
 function backdrop(world: World) {
@@ -89,13 +197,19 @@ function backdrop(world: World) {
   })
 }
 
-function createArcadeCabinet(parent: THREE.Group, x: number, yaw: number, palette: Palette) {
+function createArcadeCabinet(
+  parent: THREE.Group,
+  x: number,
+  yaw: number,
+  palette: Palette,
+  resolve?: Parameters<typeof roomBuilder>[1],
+) {
   const cabinet = new THREE.Group()
   cabinet.name = 'arcade-cabinet'
   cabinet.position.set(x, 0, 3.77)
   cabinet.rotation.y = yaw
   parent.add(cabinet)
-  const b = roomBuilder(cabinet)
+  const b = roomBuilder(cabinet, resolve)
   const shape = new THREE.Shape()
   shape.moveTo(-0.4, 0.04)
   shape.lineTo(0.44, 0.04)
@@ -175,20 +289,19 @@ function createArcadeCabinet(parent: THREE.Group, x: number, yaw: number, palett
   }
 }
 
-export function buildThemedRoom(scene: THREE.Scene, slug: string) {
+export function buildThemedRoom(scene: THREE.Scene, slug: string, scanned?: RoomMaterials) {
   if (!Object.hasOwn(themedWorlds, slug)) return null
   const world = slug as World
   const palette = themedWorlds[world]
-  const [wall, floor, cabinet, trim, light, upholstery] = palette
+  const [wall, , cabinet, trim, light, upholstery] = palette
   const root = new THREE.Group()
   root.name = 'room-' + world
   scene.add(root)
   const shell = new THREE.Group()
   root.add(shell)
-  const b = roomBuilder(shell)
-  const grain = surfaceGrain()
-  const floorMaterial = b.material(floor, 0.05, 0.86)
-  floorMaterial.map = grain
+  const surfaces = worldMaterials(world, palette, scanned)
+  const b = roomBuilder(shell, surfaces.resolve)
+  const floorMaterial = surfaces.floorMaterial
   b.mesh('world-floor', new THREE.BoxGeometry(11, 0.13, 10), floorMaterial, 0, -0.07, 0)
   b.box('rear-finished-wall', 11, 4.6, 0.15, 0, 2.3, -4.12, wall)
   b.box('entry-finished-wall', 11, 4.6, 0.15, 0, 2.3, 4.95, wall)
@@ -394,12 +507,13 @@ export function buildThemedRoom(scene: THREE.Scene, slug: string) {
   b.box('lounge-controls-housing', 0.12, 1.49, 1.0, 4.78, 1.55, -0.8, cabinet, 0.14)
   for (const y of [1.05, 2.03])
     b.box('lounge-control-bracket', 0.66, 0.055, 0.11, 5.05, y, -0.8, trim, 0.56)
+  projectTexturedMeshes(shell)
   batchOwnedStaticGroup(shell, new Set(['world-floor', 'pressure-porthole', 'observation-rib']))
 
   const featured = new THREE.Group()
   featured.name = 'room-featured-furniture'
   root.add(featured)
-  const f = roomBuilder(featured)
+  const f = roomBuilder(featured, surfaces.resolve)
   const blocked: Footprint[] = [
     [0, -3.8, 7, 0.78],
     [-4.79, desk.z, 1.11, 2.43],
@@ -415,7 +529,7 @@ export function buildThemedRoom(scene: THREE.Scene, slug: string) {
       [1.35, 0.07],
       [2.65, 0.15],
     ]) {
-      createArcadeCabinet(featured, x, yaw, palette)
+      createArcadeCabinet(featured, x, yaw, palette, surfaces.resolve)
       occupy(x, 3.77, 1.15, 1.2)
     }
     const carpet = f.material('#3a283b', 0, 0.94)
@@ -619,7 +733,7 @@ export function buildThemedRoom(scene: THREE.Scene, slug: string) {
     seat.position.set(3.6, 0, z)
     seat.rotation.y = -Math.PI / 2 + 0.28
     featured.add(seat)
-    const s = roomBuilder(seat)
+    const s = roomBuilder(seat, surfaces.resolve)
     s.box('lounge-seat-plinth', 1.12, 0.16, 0.96, 0, 0.23, 0, cabinet)
     s.mesh(
       'lounge-seat-cushion',
@@ -642,20 +756,26 @@ export function buildThemedRoom(scene: THREE.Scene, slug: string) {
     occupy(3.6, z, 1.16, 1.24)
   }
 
-  const ambient = new THREE.HemisphereLight(light, '#5c4a40', 0.85)
-  const key = new THREE.DirectionalLight('#f0dec8', 1.7)
+  // A low sky/bounce fill: most ambient light now comes from the image-based
+  // environment, so surfaces keep their texture and contact shading.
+  const ambient = new THREE.HemisphereLight(light, '#5c4a40', 0.3)
+  const key = new THREE.DirectionalLight('#f0dec8', 2.4)
   key.position.set(-2, 4.1, 1.6)
   key.castShadow = true
   key.shadow.mapSize.set(1024, 1024)
   Object.assign(key.shadow.camera, { left: -6, right: 6, bottom: -5, top: 5, far: 18 })
   key.shadow.normalBias = 0.028
   root.add(ambient, key)
+  const lamps: THREE.PointLight[] = []
   for (const [x, z, color] of [
     [-2.5, -2, light],
     [2.5, 2.3, world === 'afterglow' ? '#f28aa9' : light],
   ] as const) {
-    const lamp = new THREE.PointLight(color, 8, 6)
+    const lamp = new THREE.PointLight(color, 11, 7.5, 2)
     lamp.position.set(x, 3.23, z)
+    lamp.shadow.mapSize.set(512, 512)
+    lamp.shadow.bias = -0.002
+    lamps.push(lamp)
     root.add(lamp)
     f.mesh(
       'fixture-shade',
@@ -665,6 +785,7 @@ export function buildThemedRoom(scene: THREE.Scene, slug: string) {
       3.42,
       z,
     )
+    // The bulb encloses the lamp, so it must not shadow its own light.
     f.mesh(
       'frosted-fixture-diffuser',
       new THREE.SphereGeometry(0.072, 18, 10),
@@ -672,11 +793,23 @@ export function buildThemedRoom(scene: THREE.Scene, slug: string) {
       x,
       3.26,
       z,
-    )
+    ).castShadow = false
     f.strut('fixture-hanger', point(x, 3.47, z), point(x, 4.52, z), 0.012, trim)
   }
+  projectTexturedMeshes(featured)
   return {
     group: root,
+    /** Low: no shadows at all. High: soft lamp shadows and a sharper key shadow. */
+    setQuality(quality: 'low' | 'standard' | 'high') {
+      key.castShadow = quality !== 'low'
+      const size = quality === 'high' ? 2048 : 1024
+      if (key.shadow.mapSize.x !== size) {
+        key.shadow.map?.dispose()
+        key.shadow.map = null
+        key.shadow.mapSize.set(size, size)
+      }
+      for (const lamp of lamps) lamp.castShadow = quality === 'high'
+    },
     canStandAt(x: number, z: number) {
       return (
         Number.isFinite(x) &&

@@ -11,6 +11,8 @@ import { bindPinballControls } from './pinball/controls'
 import { disposeRoomGroup, roomBuilder, beveledBox } from './roomGeometry'
 import { createObservatoryLighting } from './roomLighting'
 import { createRoomMaterialLibrary } from './roomMaterials'
+import { createRoomPost, roomPixelRatio } from './roomPost'
+import type { RoomQuality } from './roomPost'
 import { instrumentLabelLayout } from './roomLettering'
 import { drawObservatoryStations } from './roomStations'
 
@@ -24,6 +26,8 @@ export interface RoomGame {
   vr_compat?: string | null
 }
 export interface RoomView {
+  /** Graphics tier chosen in the room controls; omitted keeps the current one. */
+  graphics?: RoomQuality
   largeText?: boolean
   comfort?: 'Standard' | 'Seated' | 'Close reach'
   favoriteMessage: string
@@ -41,6 +45,10 @@ export interface RoomOptions {
   theme?: string
   onGameSnapshot?: (snapshot: MoonfallSnapshot) => void
   onGameCommand?: (action: 'pause' | 'resume') => void
+  /** Starting graphics tier. */
+  quality?: RoomQuality
+  /** Called when the tier changes from inside the room (the Moonfall settings menu). */
+  onQualityChange?: (quality: RoomQuality) => void
 }
 export interface RoomGameMenu {
   title: string
@@ -131,7 +139,8 @@ export function createRoom(
     antialias: true,
     powerPreference: 'low-power',
   })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6))
+  let quality: RoomQuality = options.quality || 'standard'
+  renderer.setPixelRatio(roomPixelRatio(quality, window.devicePixelRatio))
   renderer.xr.enabled = true
   renderer.xr.setReferenceSpaceType('local-floor')
   const scene = new THREE.Scene()
@@ -147,8 +156,12 @@ export function createRoom(
   const world = roomArtSlug(theme)
   const sharedMaterials = world === 'oneirodex' ? createRoomMaterialLibrary() : null
   const observatory = sharedMaterials ? furnishObservatory(scene, sharedMaterials) : null
-  const themed = observatory ? null : buildThemedRoom(scene, world)
+  const worldMaterials = observatory ? null : createRoomMaterialLibrary()
+  const themed = observatory ? null : buildThemedRoom(scene, world, worldMaterials || undefined)
   const disposeEnvironment = createObservatoryLighting(renderer, scene)
+  // Themed rooms are lit mostly by the environment probe, so they take more of it.
+  if (themed) scene.environmentIntensity = 0.32
+  const post = createRoomPost(renderer, scene, camera)
   const gallery = new THREE.Group()
   scene.add(gallery)
   const targets: THREE.Mesh[] = []
@@ -157,7 +170,7 @@ export function createRoom(
   let graphicsLost = false
   let windowFocused = true
   let previousFrame: number | undefined
-  let lastQuality = ''
+  let lastGameQuality: RoomQuality | '' = ''
   let xrPauseHeld = false
   let gameMenu: THREE.Group | null = null
   let gameMenuKey = ''
@@ -199,7 +212,7 @@ export function createRoom(
   const render = () => {
     if (!disposed && !graphicsLost && !renderer.xr.isPresenting) {
       if (gameRuntime) table?.update(gameRuntime.readState())
-      renderer.render(scene, camera)
+      post.render()
     }
   }
   function animate(time: number) {
@@ -226,23 +239,16 @@ export function createRoom(
     if (gameRuntime) {
       const state = gameRuntime.readState()
       observatory?.update(time / 1000, state.settings.reducedMotion)
-      observatory?.setQuality(state.settings.quality)
-      if (lastQuality !== state.settings.quality) {
-        lastQuality = state.settings.quality
-        sharedMaterials?.setQuality(state.settings.quality)
-        renderer.shadowMap.enabled = lastQuality !== 'low'
-        renderer.shadowMap.needsUpdate = lastQuality !== 'low'
-        if (!renderer.xr.isPresenting)
-          renderer.setPixelRatio(
-            Math.min(
-              window.devicePixelRatio || 1,
-              lastQuality === 'low' ? 0.6 : lastQuality === 'high' ? 1.6 : 1.3,
-            ),
-          )
+      if (lastGameQuality !== state.settings.quality) {
+        lastGameQuality = state.settings.quality
+        if (lastGameQuality !== quality) {
+          applyQuality(lastGameQuality)
+          options.onQualityChange?.(quality)
+        }
       }
       table?.update(state)
     }
-    renderer.render(scene, camera)
+    post.render()
   }
   function refreshLoop() {
     previousFrame = undefined
@@ -258,6 +264,7 @@ export function createRoom(
     const { width, height } = canvas.getBoundingClientRect()
     if (!width || !height) return
     renderer.setSize(width, height, false)
+    post.setSize(width, height)
     camera.aspect = width / height
     camera.updateProjectionMatrix()
     if (station === 'pinball' && !activeSession) move('pinball')
@@ -308,13 +315,37 @@ export function createRoom(
     }
     render()
   }
+  /** One place that moves every quality-dependent knob together. */
+  function applyQuality(next: RoomQuality) {
+    quality = next
+    sharedMaterials?.setQuality(next)
+    worldMaterials?.setQuality(next)
+    observatory?.setQuality(next)
+    themed?.setQuality(next)
+    renderer.shadowMap.enabled = next !== 'low'
+    renderer.shadowMap.needsUpdate = next !== 'low'
+    post.setQuality(next)
+    if (!renderer.xr.isPresenting) {
+      renderer.setPixelRatio(roomPixelRatio(next, window.devicePixelRatio))
+      const { width, height } = canvas.getBoundingClientRect()
+      if (width && height) post.setSize(width, height)
+    }
+    if (gameRuntime && gameRuntime.readState().settings.quality !== next) {
+      lastGameQuality = next
+      gameRuntime.setSettings({ quality: next })
+    }
+  }
   renderer.shadowMap.enabled = true
   // Architectural shadows are refreshed only when their casters change.
   renderer.shadowMap.autoUpdate = false
   renderer.shadowMap.needsUpdate = true
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
-  renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = observatory ? 1.1 : 1
+  // three r18x removed PCFSoftShadowMap; PCF with a shadow radius is its soft path.
+  renderer.shadowMap.type = THREE.PCFShadowMap
+  // Khronos PBR Neutral keeps authored colours and contrast while still rolling
+  // off bright lamp light, without ACES's hue shifts on saturated themes.
+  renderer.toneMapping = THREE.NeutralToneMapping
+  renderer.toneMappingExposure = observatory ? 1.0 : 1.1
+  applyQuality(quality)
   const loader = new THREE.TextureLoader()
   function plane(
     w: number,
@@ -419,6 +450,7 @@ export function createRoom(
     gallery.clear()
   }
   function update(next: RoomView) {
+    if (next.graphics && next.graphics !== quality) applyQuality(next.graphics)
     renderer.shadowMap.needsUpdate = true
     if (currentView?.selected?.uuid !== next.selected?.uuid) readingPage = 0
     const comfortChanged = currentView?.comfort !== next.comfort
@@ -1008,6 +1040,8 @@ export function createRoom(
       themed?.dispose()
       if (gameMenu) disposeRoomGroup(gameMenu, sharedMaterials?.owned)
       sharedMaterials?.dispose()
+      worldMaterials?.dispose()
+      post.dispose()
       disposeEnvironment?.()
       void activeSession?.end().catch(() => {})
       controllerCleanups.forEach((f) => f())
