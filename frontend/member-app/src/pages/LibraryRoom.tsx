@@ -14,6 +14,12 @@ const stations: { id: Station; name: string }[] = [
 const shelfSize = 4
 const comfortModes = ['Standard', 'Seated', 'Close reach'] as const
 type ComfortMode = (typeof comfortModes)[number]
+const graphicsModes = [
+  ['low', 'Low (fastest)'],
+  ['standard', 'Standard'],
+  ['high', 'High (ambient occlusion)'],
+] as const
+type GraphicsMode = (typeof graphicsModes)[number][0]
 interface Props {
   memberId?: string
   initiallyOpen?: boolean
@@ -86,6 +92,24 @@ export function LibraryRoom({
       /* session only */
     }
   }
+  const [graphics, setGraphics] = useState<GraphicsMode>(() => {
+    try {
+      const value = storageKey && localStorage.getItem(storageKey + '.graphics')
+      return graphicsModes.find(([mode]) => mode === value)?.[0] || 'standard'
+    } catch {
+      return 'standard'
+    }
+  })
+  function chooseGraphics(mode: GraphicsMode) {
+    setGraphics(mode)
+    try {
+      if (storageKey) localStorage.setItem(storageKey + '.graphics', mode)
+    } catch {
+      /* session only */
+    }
+  }
+  const chooseGraphicsRef = useRef(chooseGraphics)
+  chooseGraphicsRef.current = chooseGraphics
   const lastScope = useRef(scope)
   const [open, setOpen] = useState(initiallyOpen)
   const [started, setStarted] = useState(false)
@@ -170,6 +194,7 @@ export function LibraryRoom({
           ? 'Favorite a title at the reading desk'
           : 'No titles on this wall'
   const view: RoomView = {
+    graphics,
     comfort,
     largeText,
     collection: scope === 'collection',
@@ -250,6 +275,10 @@ export function LibraryRoom({
           setProblem,
           {
             theme: effectiveTheme,
+            quality: latest.current.view.graphics,
+            onQualityChange: (mode) => {
+              if (!cancelled) chooseGraphicsRef.current(mode)
+            },
             onGameCommand: (action) => {
               if (!cancelled && owned && engine.current === owned)
                 void session.current?.command(action)
@@ -311,6 +340,7 @@ export function LibraryRoom({
     favoriteMessage,
     comfort,
     largeText,
+    graphics,
   ])
   async function enter() {
     setRequesting(true)
@@ -397,6 +427,19 @@ export function LibraryRoom({
                   >
                     {comfortModes.map((mode) => (
                       <option key={mode}>{mode}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Graphics{' '}
+                  <select
+                    value={graphics}
+                    onChange={(e) => chooseGraphics(e.target.value as GraphicsMode)}
+                  >
+                    {graphicsModes.map(([mode, label]) => (
+                      <option key={mode} value={mode}>
+                        {label}
+                      </option>
                     ))}
                   </select>
                 </label>

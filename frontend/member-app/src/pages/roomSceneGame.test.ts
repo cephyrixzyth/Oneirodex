@@ -1,6 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRoom } from './roomScene'
 vi.mock('./roomLighting', () => ({ createObservatoryLighting: () => vi.fn() }))
+// The mocked renderer has no GL context, so post-processing passes straight through.
+const post = vi.hoisted(() => ({ setQuality: vi.fn() }))
+vi.mock('./roomPost', async () => {
+  const actual = await vi.importActual<typeof import('./roomPost')>('./roomPost')
+  return {
+    ...actual,
+    createRoomPost: (
+      renderer: { render: (s: unknown, c: unknown) => void },
+      scene: unknown,
+      camera: unknown,
+    ) => ({
+      quality: 'standard',
+      active: false,
+      setQuality: post.setQuality,
+      setSize: vi.fn(),
+      render: () => renderer.render(scene, camera),
+      dispose: vi.fn(),
+    }),
+  }
+})
 
 const mock = vi.hoisted(() => ({
   loop: null as ((time: number) => void) | null,
@@ -137,6 +157,27 @@ describe('scene and pinball integration with a fake renderer (no app or GPU)', (
     )
     expect(engine.game).toBeNull()
     expect(mock.scene?.getObjectByName('observatory-dome')).toBeUndefined()
+  })
+
+  it('keeps the room graphics setting and the Moonfall quality setting in step', () => {
+    const changed = vi.fn()
+    const engine = createRoom(canvas, vi.fn(), vi.fn(), vi.fn(), {
+      theme: 'default',
+      quality: 'high',
+      onQualityChange: changed,
+    })
+    cleanup.push(engine.dispose)
+    expect(post.setQuality).toHaveBeenLastCalledWith('high')
+    expect(engine.game!.snapshot().settings.quality).toBe('high')
+    engine.update({ ...view, graphics: 'low' })
+    expect(post.setQuality).toHaveBeenLastCalledWith('low')
+    expect(engine.game!.snapshot().settings.quality).toBe('low')
+    mock.loop!(1000)
+    expect(changed).not.toHaveBeenCalled()
+    engine.game!.setSettings({ quality: 'standard' })
+    mock.loop!(1020)
+    expect(post.setQuality).toHaveBeenLastCalledWith('standard')
+    expect(changed).toHaveBeenCalledWith('standard')
   })
 
   it('pauses on context loss and refuses a blind resume until the room is reopened', () => {
