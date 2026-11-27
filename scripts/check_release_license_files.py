@@ -11,6 +11,7 @@ from pathlib import Path
 REQUIRED_FILES = (
     "LICENSE",
     "oneirodex/setup/fonts/OFL.txt",
+    "oneirodex/setup/fonts/OFL-Inter.txt",
     "oneirodex/static/vendor/THIRD-PARTY-NOTICES.md",
     "oneirodex/static/vendor/webretro/LICENSE",
     "oneirodex/static/vendor/nostalgist/LICENSE",
@@ -24,6 +25,7 @@ REQUIRED_NOTICE_TEXT = (
 )
 PINNED_LICENSE_SHA256 = {
     "oneirodex/setup/fonts/OFL.txt": "705960c3281a5765ecc0b59bd4ed7ca59eed165748076bc2fc3e8fdbfeb944b0",
+    "oneirodex/setup/fonts/OFL-Inter.txt": "7469e4322f66f888004d613d58518f9171bb9fa77777b2da2d1493d9d41faba5",
     "oneirodex/static/vendor/webretro/LICENSE": "51497184189c3cbeeb327d728b3538afbfd5244429e475141f8343d55d50c196",
     "oneirodex/static/vendor/nostalgist/LICENSE": "347bc6dbad70de322984d1acafe7208836c848c6d01387ae77d97dcd556f698d",
     "oneirodex/static/vendor/emulatorjs/LICENSE": "a617fab6d251b3302b1cb2c1c94f52d1c584f6fcb2fc218ec1a475bc08053a61",

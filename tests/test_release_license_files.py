@@ -15,6 +15,7 @@ def test_release_license_inventory_fails_if_emulatorjs_license_is_missing(tmp_pa
     for relative in (
         "LICENSE",
         "oneirodex/setup/fonts/OFL.txt",
+        "oneirodex/setup/fonts/OFL-Inter.txt",
         "oneirodex/static/vendor/THIRD-PARTY-NOTICES.md",
         "oneirodex/static/vendor/webretro/LICENSE",
         "oneirodex/static/vendor/nostalgist/LICENSE",
