@@ -41,7 +41,10 @@
 }
 
 .od-scan-controls > button {
-  justify-self: end;
+  /* Primary submit sits at the start of its own row, like every other admin
+     form. It used to land at the end of column one: the middle of the panel. */
+  grid-column: 1 / -1;
+  justify-self: start;
 }
 
 .od-scan-controls__manual {
