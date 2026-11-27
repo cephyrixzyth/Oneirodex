@@ -194,7 +194,8 @@ def queue_position(job_id: str) -> int | None:
 def find_queued_for_library(library_uuid: str, folder_path: str, *, scan_mode='folders',
                             remove_missing=False, download_missing_images=False,
                             force_updates_extras_scan=False, fetch_hltb=False,
-                            force_hltb_refetch=False) -> ScanJob | None:
+                            force_hltb_refetch=False, recheck_matches=True,
+                            retry_unmatched=True, propose_only=False) -> ScanJob | None:
     """Return an existing Queued job for the same library root, if any."""
     folder_n = _norm_folder(folder_path)
     rows = db.session.execute(
@@ -208,6 +209,9 @@ def find_queued_for_library(library_uuid: str, folder_path: str, *, scan_mode='f
             func.coalesce(ScanJob.setting_force_updates_extras, False) == bool(force_updates_extras_scan),
             ScanJob.setting_fetch_hltb == bool(fetch_hltb),
             ScanJob.setting_force_hltb_refetch == bool(force_hltb_refetch),
+            func.coalesce(ScanJob.setting_recheck_matches, True) == bool(recheck_matches),
+            func.coalesce(ScanJob.setting_retry_unmatched, True) == bool(retry_unmatched),
+            func.coalesce(ScanJob.setting_propose_only, False) == bool(propose_only),
         )
         .order_by(ScanJob.last_run.asc().nullsfirst(), ScanJob.id.asc())
     ).scalars().all()
@@ -441,6 +445,9 @@ def create_scan_job_row(
     force_updates_extras_scan: bool = False,
     fetch_hltb: bool = False,
     force_hltb_refetch: bool = False,
+    recheck_matches: bool = True,
+    retry_unmatched: bool = True,
+    propose_only: bool = False,
     schedule=None,
     schedule_fields=None,
     status: str = 'Queued',
@@ -469,6 +476,9 @@ def create_scan_job_row(
         setting_force_updates_extras=bool(force_updates_extras_scan),
         setting_fetch_hltb=bool(fetch_hltb),
         setting_force_hltb_refetch=bool(force_hltb_refetch),
+        setting_recheck_matches=bool(recheck_matches),
+        setting_retry_unmatched=bool(retry_unmatched),
+        setting_propose_only=bool(propose_only),
         schedule=fields.get('schedule') if fields else (
             schedule if schedule in ('8_hours', '24_hours', '48_hours') else None
         ),
@@ -567,6 +577,9 @@ def start_or_queue_scan(
     force_updates_extras_scan: bool = False,
     fetch_hltb: bool = False,
     force_hltb_refetch: bool = False,
+    recheck_matches: bool = True,
+    retry_unmatched: bool = True,
+    propose_only: bool = False,
     schedule=None,
     schedule_fields=None,
     queue_policy: str = 'queue',
@@ -612,6 +625,8 @@ def start_or_queue_scan(
             library_uuid, folder_path, scan_mode=scan_mode, remove_missing=remove_missing,
             download_missing_images=download_missing_images, force_updates_extras_scan=force_updates_extras_scan,
             fetch_hltb=fetch_hltb, force_hltb_refetch=force_hltb_refetch,
+            recheck_matches=recheck_matches, retry_unmatched=retry_unmatched,
+            propose_only=propose_only,
         )
         if existing_queued:
             # Keep the Queued row's schedule in sync with the latest submit —
@@ -638,6 +653,8 @@ def start_or_queue_scan(
             download_missing_images=download_missing_images,
             force_updates_extras_scan=force_updates_extras_scan,
             fetch_hltb=fetch_hltb, force_hltb_refetch=force_hltb_refetch,
+            recheck_matches=recheck_matches, retry_unmatched=retry_unmatched,
+            propose_only=propose_only,
             schedule=schedule,
             schedule_fields=schedule_fields,
             status='Queued',
@@ -659,6 +676,8 @@ def start_or_queue_scan(
         download_missing_images=download_missing_images,
         force_updates_extras_scan=force_updates_extras_scan,
         fetch_hltb=fetch_hltb, force_hltb_refetch=force_hltb_refetch,
+        recheck_matches=recheck_matches, retry_unmatched=retry_unmatched,
+        propose_only=propose_only,
         schedule=schedule,
         schedule_fields=schedule_fields,
         status='Running',

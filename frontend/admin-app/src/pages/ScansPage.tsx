@@ -361,6 +361,12 @@ export function ScansPage() {
                               scan_mode: job.setting_filefolder ? 'files' : 'folders',
                               remove_missing: Boolean(job.setting_remove),
                               download_missing_images: Boolean(job.setting_download_missing_images),
+                              force_updates_extras_scan: Boolean(job.setting_force_updates_extras),
+                              fetch_hltb: Boolean(job.setting_fetch_hltb),
+                              force_hltb_refetch: Boolean(job.setting_force_hltb_refetch),
+                              recheck_matches: job.setting_recheck_matches !== false,
+                              retry_unmatched: job.setting_retry_unmatched !== false,
+                              propose_only: Boolean(job.setting_propose_only),
                             },
                           })
                         }

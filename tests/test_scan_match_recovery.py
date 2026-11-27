@@ -389,3 +389,48 @@ def test_a_demo_with_the_same_name_does_not_make_an_exact_title_ambiguous():
             patch.object(si, 'search_epic_games', return_value=[]):
         candidate = si.resolve_stage_d_store_candidate(cleaned_name='Voidbound', sources=('steam', 'gog', 'epic'))
     assert candidate['steam_app_id'] == 1
+
+
+def test_scan_options_default_to_old_behaviour_and_follow_the_job_row():
+    from types import SimpleNamespace
+
+    from oneirodex.utils.services.scan_orchestration import scan_job_match_options
+
+    assert scan_job_match_options(None) == (True, True, False)
+    assert scan_job_match_options(SimpleNamespace(
+        setting_recheck_matches=None, setting_retry_unmatched=None, setting_propose_only=None,
+    )) == (True, True, False)
+    assert scan_job_match_options(SimpleNamespace(
+        setting_recheck_matches=False, setting_retry_unmatched=False, setting_propose_only=True,
+    )) == (False, False, True)
+
+
+def test_new_folders_only_skips_plain_misses_too(db_session, scan_library):
+    from oneirodex.utils.services.scan_orchestration import unmatched_paths_to_skip
+
+    plain = _row(db_session, scan_library)
+    ignored = _row(db_session, scan_library, status='Ignore')
+
+    assert unmatched_paths_to_skip(scan_library.uuid) == {ignored.folder_path}
+    assert unmatched_paths_to_skip(scan_library.uuid, retry_unmatched=False) == {
+        plain.folder_path, ignored.folder_path,
+    }
+
+
+def test_scan_job_rows_store_the_matching_options(db_session, scan_library):
+    from oneirodex.utils.scan_queue import create_scan_job_row, find_queued_for_library
+
+    job = create_scan_job_row(
+        folder_path='/storage/_pc', library_uuid=scan_library.uuid,
+        recheck_matches=False, retry_unmatched=False, propose_only=True,
+    )
+    db_session.expire_all()
+    stored = db_session.get(ScanJob, job.id)
+    assert (stored.setting_recheck_matches, stored.setting_retry_unmatched,
+            stored.setting_propose_only) == (False, False, True)
+    # A queued scan only absorbs a request with the same options.
+    assert find_queued_for_library(scan_library.uuid, '/storage/_pc') is None
+    assert find_queued_for_library(
+        scan_library.uuid, '/storage/_pc',
+        recheck_matches=False, retry_unmatched=False, propose_only=True,
+    ).id == job.id

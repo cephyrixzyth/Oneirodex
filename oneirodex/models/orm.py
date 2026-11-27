@@ -25,6 +25,7 @@ from sqlalchemy import (
     UniqueConstraint,
     false,
     text,
+    true,
 )
 from sqlalchemy.orm import DeclarativeBase, backref, relationship
 
@@ -63,6 +64,7 @@ class _ModelRegistry:
     backref = staticmethod(backref)
     relationship = staticmethod(relationship)
     false = staticmethod(false)
+    true = staticmethod(true)
 
     @staticmethod
     def Table(name, *columns, **kwargs):

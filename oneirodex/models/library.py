@@ -78,6 +78,10 @@ class ScanJob(db.Model):
     setting_force_updates_extras = db.Column(db.Boolean, default=False)
     setting_fetch_hltb = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     setting_force_hltb_refetch = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # Per-scan choices from the Scan page. Defaults keep the old behaviour.
+    setting_recheck_matches = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    setting_retry_unmatched = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    setting_propose_only = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     current_processing = db.Column(db.String(255), nullable=True)  # "Processing: Game Name (450/1000)"
     last_progress_update = db.Column(UTCScanTime(), nullable=True)
     # Which process owns the worker thread while this job is Running/Stopping.

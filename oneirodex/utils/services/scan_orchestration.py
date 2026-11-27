@@ -277,6 +277,36 @@ def scan_and_add_games(folder_path, scan_mode='folders', library_uuid=None, remo
                 logger.error(f"[SCAN QUEUE] Safety-net drain failed: {safety_exc}")
 
 
+def scan_job_match_options(job):
+    """``(recheck_matches, retry_unmatched, propose_only)`` chosen for a scan job.
+
+    The Scan page stores them on the job row. A caller without a job, or a row
+    from before the columns existed, keeps the old behaviour (True, True, False).
+    """
+    return (
+        getattr(job, 'setting_recheck_matches', None) is not False,
+        getattr(job, 'setting_retry_unmatched', None) is not False,
+        getattr(job, 'setting_propose_only', None) is True,
+    )
+
+
+def unmatched_paths_to_skip(library_uuid, *, retry_unmatched=True):
+    """Unmatched folders a scan skips.
+
+    Settled rows (ignored, duplicate, reviewed, flagged) are always skipped.
+    With ``retry_unmatched`` off, plain misses are skipped too, so the scan only
+    looks at folders the library has not seen before.
+    """
+    from oneirodex.utils.scanning import settled_unmatched_paths
+
+    paths = settled_unmatched_paths(library_uuid)
+    if not retry_unmatched:
+        paths |= set(db.session.execute(
+            select(UnmatchedFolder.folder_path).where(UnmatchedFolder.library_uuid == library_uuid)
+        ).scalars().all())
+    return paths
+
+
 def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None, remove_missing=False, existing_job=None, download_missing_images=False, force_updates_extras_scan=False, fetch_hltb=False, force_hltb_refetch=False, schedule=None, force_parallel=False, database_scope=None, app=None):
     """Core scan worker. Returns ScanJob id when known."""
     from oneirodex.utils.functions import (
@@ -305,12 +335,13 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
     # Extract local metadata + scan/match policy into a plain dict (thread-safe).
     # We can't pass SQLAlchemy objects across threads, so extract values now.
     match_policy = resolve_scan_match_policy(settings_obj)
+    recheck_matches, retry_unmatched, propose_only = scan_job_match_options(existing_job)
     settings_dict = {
         'use_local_metadata': settings_obj.use_local_metadata if settings_obj else False,
         'write_local_metadata': settings_obj.write_local_metadata if settings_obj else False,
         'use_local_images': settings_obj.use_local_images if settings_obj else False,
         'local_metadata_filename': settings_obj.local_metadata_filename if settings_obj else 'oneirodex.json',
-        'propose_only_scan': match_policy.get('propose_only_scan', False),
+        'propose_only_scan': bool(match_policy.get('propose_only_scan', False) or propose_only),
         'scan_mode': scan_mode,
         # W20-4 — identify/dupe/peel must see admin overrides, not only code defaults.
         **{k: match_policy[k] for k in (
@@ -341,9 +372,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
     )
     # Only folders a person has dealt with are skipped. A plain "Unmatched" row is
     # retried on every scan, so matcher and provider fixes reach old misses.
-    from oneirodex.utils.scanning import settled_unmatched_paths
-
-    existing_unmatched_paths = settled_unmatched_paths(library_uuid)
+    existing_unmatched_paths = unmatched_paths_to_skip(library_uuid, retry_unmatched=retry_unmatched)
     logger.info(f"Prefetched {len(existing_game_paths)} existing games and {len(existing_unmatched_paths)} unmatched folders")
     
     # Use existing job or create new one (before library/extension gates so early
@@ -874,7 +903,7 @@ def _scan_and_add_games_body(folder_path, scan_mode='folders', library_uuid=None
 
     # Re-check games whose folder disagrees with their title and re-match the
     # ones a fresh identify gets clearly right (see utils/match_audit).
-    if not (settings_dict.get('propose_only_scan') or match_policy.get('propose_only_scan')):
+    if recheck_matches and not (settings_dict.get('propose_only_scan') or match_policy.get('propose_only_scan')):
         _recheck_wrong_matches(
             games_in_library, root, library, scan_job_id,
             match_policy=match_policy, settings=settings_dict,

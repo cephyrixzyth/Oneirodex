@@ -141,6 +141,9 @@ class LibraryAdminMutationData:
             database_scope=database_scope,
             fetch_hltb=options.get('fetch_hltb', False),
             force_hltb_refetch=options.get('force_hltb_refetch', False),
+            recheck_matches=options.get('recheck_matches', True),
+            retry_unmatched=options.get('retry_unmatched', True),
+            propose_only=options.get('propose_only', False),
             schedule=options.get('schedule'),
             schedule_fields=options.get('schedule_fields'),
         )
@@ -970,6 +973,9 @@ async def _single_scan(request, app, data, user, *, database_scope=None):
         'force_updates_extras': flag('force_updates_extras', flag('force_updates_extras_scan')),
         'fetch_hltb': flag('fetch_hltb'),
         'force_hltb_refetch': flag('force_hltb_refetch'),
+        'recheck_matches': flag('recheck_matches', True),
+        'retry_unmatched': flag('retry_unmatched', True),
+        'propose_only': flag('propose_only'),
         'queue_policy': parse_queue_policy(policy_raw, force_parallel=force_raw),
         'schedule': schedule,
         'schedule_fields': schedule_fields,
@@ -1082,6 +1088,9 @@ async def _scan(request, app, data, user, *, database_scope=None):
         'force_updates_extras': parse_bool_flag(body.get('force_updates_extras'), default=False),
         'fetch_hltb': parse_bool_flag(body.get('fetch_hltb'), default=False),
         'force_hltb_refetch': parse_bool_flag(body.get('force_hltb_refetch'), default=False),
+        'recheck_matches': parse_bool_flag(body.get('recheck_matches'), default=True),
+        'retry_unmatched': parse_bool_flag(body.get('retry_unmatched'), default=True),
+        'propose_only': parse_bool_flag(body.get('propose_only'), default=False),
         'queue_policy': parse_queue_policy(body.get('queue_policy'), force_parallel=force_raw),
     }
     started = queued = skipped = failed = 0

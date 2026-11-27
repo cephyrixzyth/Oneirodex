@@ -158,3 +158,29 @@ def test_scan_orchestration_drain_keeps_native_scope(monkeypatch):
     scan_orchestration._drain_scan_queue_safe(app, database_scope)
 
     assert calls == [('drain', True, True)]
+
+
+def test_start_or_queue_scan_persists_matching_options(monkeypatch):
+    seen = {}
+    job = SimpleNamespace(id='scan-opts', last_run=None)
+    monkeypatch.setattr(scan_queue, '_application_or_current', lambda selected: object())
+    monkeypatch.setattr(scan_queue, 'reclaim_stale_busy_jobs', lambda: None)
+    monkeypatch.setattr(scan_queue, 'is_scan_busy', lambda: False)
+
+    def create_job(**kwargs):
+        seen.update(kwargs)
+        return job
+
+    monkeypatch.setattr(scan_queue, 'create_scan_job_row', create_job)
+    monkeypatch.setattr(scan_queue, '_has_older_busy_scan', lambda _job: False)
+    monkeypatch.setattr(scan_queue, '_start_job_thread', lambda *args, **kwargs: None)
+    monkeypatch.setattr('oneirodex.utils.event_bus.publish_scan_event', lambda *args: None)
+
+    scan_queue.start_or_queue_scan(
+        folder_path='/storage', library_uuid='lib-1',
+        recheck_matches=False, retry_unmatched=False, propose_only=True,
+    )
+
+    assert (seen['recheck_matches'], seen['retry_unmatched'], seen['propose_only']) == (
+        False, False, True,
+    )

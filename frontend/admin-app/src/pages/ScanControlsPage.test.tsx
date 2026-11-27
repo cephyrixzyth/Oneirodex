@@ -76,6 +76,9 @@ test('loads library and root choices and submits Auto Scan settings through the 
         library_root: 'games',
         scan_mode: 'auto',
         download_missing_images: true,
+        recheck_matches: true,
+        retry_unmatched: true,
+        propose_only: false,
         schedule: 'interval',
         schedule_interval_value: 2,
         schedule_interval_unit: 'hours',
@@ -482,7 +485,8 @@ test('manual deep link keeps both scan workflows and shared setup visible', asyn
 
   expect(await screen.findByRole('heading', { name: 'Scan management' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Manual identify' })).toBeInTheDocument()
-  expect(screen.getByRole('group', { name: 'Scan options' })).toBeInTheDocument()
+  expect(screen.getByRole('group', { name: 'Matching' })).toBeInTheDocument()
+  expect(screen.getByRole('group', { name: 'Library upkeep' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'List games to identify' })).toBeInTheDocument()
   expect(screen.getByLabelText('Remove games whose files are missing')).toBeInTheDocument()
   expect(screen.getByLabelText('Download missing images')).toBeInTheDocument()
@@ -549,4 +553,69 @@ test('confirms linking a listed folder to an existing game before posting', asyn
   )
   expect(await screen.findByText('Linked folder to Metroid Prime.')).toBeInTheDocument()
   expect(screen.queryByRole('link', { name: 'Identify' })).not.toBeInTheDocument()
+})
+
+test('sends the matching options chosen for this scan', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) =>
+    url === '/api/get_libraries'
+      ? [{ uuid: 'lib-1', name: 'Nintendo', last_scan_folder: '' }]
+      : {
+          roots: [
+            {
+              id: 'games',
+              label: 'Games',
+              path: '/games',
+              default: true,
+              exists: true,
+              read: true,
+            },
+          ],
+        },
+  )
+  renderPage()
+  await screen.findByRole('option', { name: 'Nintendo' })
+  fireEvent.click(screen.getByLabelText(/Retry folders left unmatched/))
+  fireEvent.click(screen.getByLabelText(/Review before adding/))
+  expect(screen.getByLabelText(/Re-check existing matches/)).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Start scan' }))
+  await waitFor(() =>
+    expect(scan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings: expect.objectContaining({
+          retry_unmatched: false,
+          propose_only: true,
+          recheck_matches: true,
+        }),
+      }),
+    ),
+  )
+})
+
+test('Browse folders opens the shared server folder popup and fills the folder', async () => {
+  vi.mocked(getJson).mockImplementation(async (url) => {
+    if (url === '/api/get_libraries') return [{ uuid: 'lib-1', name: 'Nintendo' }]
+    if (url === '/api/library_roots')
+      return {
+        roots: [
+          { id: 'games', label: 'Games', path: '/games', default: true, exists: true, read: true },
+        ],
+      }
+    if (String(url).startsWith('/api/browse_folders_ss')) {
+      const path = new URLSearchParams(String(url).split('?')[1]).get('path')
+      return path ? [] : [{ name: 'snes', isDir: true }]
+    }
+    return {}
+  })
+  renderPage()
+  await screen.findByRole('option', { name: 'Nintendo' })
+  const opener = await screen.findByRole('button', { name: 'Browse folders' })
+  await waitFor(() => expect(opener).toBeEnabled())
+  fireEvent.click(opener)
+  const dialog = await screen.findByRole('dialog', { name: 'Choose a scan folder' })
+  expect(dialog).toHaveClass('od-library-browser')
+  fireEvent.click(await screen.findByRole('button', { name: /snes/ }))
+  await screen.findByText('No folders here.')
+  fireEvent.click(screen.getByRole('button', { name: 'Use this folder' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Folder inside scan location')).toHaveValue('snes')
 })
