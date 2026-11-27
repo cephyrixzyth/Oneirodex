@@ -96,7 +96,7 @@ def test_missing_cover_generates_titled_placeholder_file(mock_url_for, tmp_path)
         url = resolve_cover_url(None, title='Chrono Trigger')
 
     assert url.startswith('/static/library/generated/covers/')
-    assert url.endswith('_default_t2.jpg')  # theme slug + placeholder style version
+    assert url.endswith('_default_t3.jpg')  # theme slug + placeholder style version
     generated = list((tmp_path / 'covers').glob('*.jpg'))
     assert len(generated) == 1
     assert generated[0].stat().st_size > 0
