@@ -362,11 +362,6 @@ export function ImagesPage({ embedded = false }: { embedded?: boolean }) {
         <AdminLink className="od-cbtn" to="/scan_management?active_tab=image_queue">
           Image review table
         </AdminLink>
-        {!embedded ? (
-          <AdminLink className="od-cbtn" to="/admin/art_studio">
-            Art studio
-          </AdminLink>
-        ) : null}
         <AdminLink className="od-cbtn" to="/admin/integrations#steamgriddb">
           SteamGridDB settings
         </AdminLink>

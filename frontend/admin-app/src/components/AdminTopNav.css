@@ -304,3 +304,56 @@ body.od-shell-host header.od-topbar .od-topbar__start {
   font-size: var(--od-font-xs);
   color: var(--od-text-muted);
 }
+
+/* ---------------------------------------------------------------------------
+   Page name + fit.
+   The page name is shown once, in the bar: the active section tab when the
+   bar has a switcher, otherwise the title beside the rail toggle (Page.tsx
+   portals it here). Pages no longer repeat it as a large in-page heading.
+   ------------------------------------------------------------------------- */
+body.od-shell-host header.od-topbar .od-topbar__page-title {
+  overflow: hidden;
+  color: var(--od-text);
+  font-size: var(--od-font-md);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A highlighted section tab already names the page; don't say it twice. */
+body.od-shell-host
+  header.od-topbar:has(#od-admin-topbar-slot [aria-current='page'])
+  #od-admin-topbar-title {
+  display: none;
+}
+
+/* Never let centre buttons run under Find tools / the account button. The
+   actions cluster keeps its own width; the centre slot shrinks and its
+   button groups wrap onto a second line instead of overlapping (scrolling
+   would clip the Export / Tools menus that drop down from the bar). */
+@media (min-width: 901px) {
+  body.od-shell-host header.od-topbar .od-topbar__actions {
+    flex: 1 0 auto;
+  }
+
+  body.od-shell-host header.od-topbar .od-topbar__page {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: var(--od-space-1);
+    padding-block: var(--od-space-1);
+  }
+
+  body.od-shell-host header.od-topbar .od-topbar__page > .od-cbtn-group {
+    flex-wrap: wrap;
+    row-gap: var(--od-space-1);
+  }
+}
+
+/* Laptop widths: drop the decorative icons in section tabs first. */
+@media (min-width: 901px) and (max-width: 1440px) {
+  body.od-shell-host header.od-topbar .od-topbar__page .od-cbtn--section svg,
+  body.od-shell-host header.od-topbar .od-topbar__page .od-cbtn--section .od-rail__icon {
+    display: none;
+  }
+}

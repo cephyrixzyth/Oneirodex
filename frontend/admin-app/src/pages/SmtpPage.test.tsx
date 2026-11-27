@@ -34,7 +34,7 @@ test('loads safe settings, saves blank password, and tests the saved connection 
   expect(screen.getByLabelText('Password')).toHaveValue('')
   const saveActions = screen
     .getByRole('button', { name: 'Save Settings' })
-    .closest('.od-admin-actions.od-smtp-actions')
+    .closest('.od-smtp-actions')
   const settingsFields = screen.getByRole('group', { name: 'Connection settings' })
   expect(saveActions).not.toBeNull()
   expect(
