@@ -55,6 +55,9 @@ export function SectionTopNav() {
         : pathname.startsWith('/scan_management')
           ? (() => {
               const tab = new URLSearchParams(search).get('active_tab') || 'auto'
+              // Library tools is its own rail page, not one of the scan views:
+              // showing the scan switcher there lit up "Scanning" on Libraries.
+              if (tab === 'tools') return ''
               if (tab === 'jobs') return 'jobs'
               if (tab === 'unmatched') return 'unmatched'
               if (tab === 'manual' || hash === '#manual-identify') return 'manual'

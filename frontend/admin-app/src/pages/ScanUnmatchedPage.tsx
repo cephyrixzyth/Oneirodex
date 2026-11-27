@@ -43,44 +43,65 @@ export function ScanUnmatchedPage() {
       className="od-scan-unmatched-page"
     >
       <AdminPageActions label="Unmatched folder actions">
-        <Button className="od-cbtn" disabled={loading} onClick={() => void clearRows('Unmatched')}>
-          Clear Unmatched
-        </Button>
-        <Button className="od-cbtn" disabled={loading} onClick={() => void clearRows('all')}>
-          Clear All
-        </Button>
-        <Button
-          className="od-cbtn"
-          disabled={loading}
-          onClick={async () => {
-            try {
-              const result = await postJson('/api/unmatched_folders/reclassify_duplicates', {})
-              setActionStatus(`Fixed ${Number(result.changed_count) || 0} false duplicates.`)
-              setReloadKey((value) => value + 1)
-            } catch (reason) {
-              setError(reason)
-            }
-          }}
-        >
-          Fix false duplicates
-        </Button>
-        <Button
-          className="od-cbtn"
-          disabled={loading}
-          onClick={async () => {
-            try {
-              const result = await postJson('/api/unmatched_folders/backfill_suggested_kind', {})
-              setActionStatus(
-                `Kind hints updated ${Number(result.updated) || 0} of ${Number(result.scanned) || 0} scanned.`,
-              )
-              setReloadKey((value) => value + 1)
-            } catch (reason) {
-              setError(reason)
-            }
-          }}
-        >
-          Backfill kind hints
-        </Button>
+        {/* Maintenance actions share one menu so the top bar fits beside the
+            scan switcher on a laptop-width window (nine buttons used to run
+            under Find tools at 1280px). */}
+        <details className="od-scan-unmatched__export od-scan-unmatched__tools">
+          <summary className="od-cbtn" title="Clean up and re-classify rows">
+            Tools
+          </summary>
+          <div>
+            <Button
+              className="od-cbtn od-scan-unmatched__menu-item"
+              disabled={loading}
+              onClick={() => void clearRows('Unmatched')}
+            >
+              Clear Unmatched
+            </Button>
+            <Button
+              className="od-cbtn od-scan-unmatched__menu-item"
+              disabled={loading}
+              onClick={() => void clearRows('all')}
+            >
+              Clear All
+            </Button>
+            <Button
+              className="od-cbtn od-scan-unmatched__menu-item"
+              disabled={loading}
+              onClick={async () => {
+                try {
+                  const result = await postJson('/api/unmatched_folders/reclassify_duplicates', {})
+                  setActionStatus(`Fixed ${Number(result.changed_count) || 0} false duplicates.`)
+                  setReloadKey((value) => value + 1)
+                } catch (reason) {
+                  setError(reason)
+                }
+              }}
+            >
+              Fix false duplicates
+            </Button>
+            <Button
+              className="od-cbtn od-scan-unmatched__menu-item"
+              disabled={loading}
+              onClick={async () => {
+                try {
+                  const result = await postJson(
+                    '/api/unmatched_folders/backfill_suggested_kind',
+                    {},
+                  )
+                  setActionStatus(
+                    `Kind hints updated ${Number(result.updated) || 0} of ${Number(result.scanned) || 0} scanned.`,
+                  )
+                  setReloadKey((value) => value + 1)
+                } catch (reason) {
+                  setError(reason)
+                }
+              }}
+            >
+              Backfill kind hints
+            </Button>
+          </div>
+        </details>
         <details className="od-scan-unmatched__export">
           <summary className="od-cbtn" title="Download the current filter">
             <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" focusable="false">

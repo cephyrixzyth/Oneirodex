@@ -1,3 +1,4 @@
+import { AdminPageActions } from '../components/AdminPageActions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageStatus } from '@oneirodex/ui'
 
@@ -261,6 +262,9 @@ export function OpsPage() {
   return (
     <div className="od-admin-page od-ops-page">
       <h1 className="od-ops-page__sr-title">Ops</h1>
+      <AdminPageActions slot="title" label="Page title">
+        <span className="od-topbar__page-title">Ops</span>
+      </AdminPageActions>
 
       <PageStatus
         error={error}

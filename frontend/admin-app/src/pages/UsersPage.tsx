@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 
 import { getJson, putJson } from '../api/adminApi'
-import { AdminPageActions } from '../components/AdminPageActions'
 import { useAdminDocumentTitle } from '../components/Page'
 import { CreateUserForm } from '../components/CreateUserForm'
 import { DataTable } from '../components/DataTable'
@@ -11,7 +10,6 @@ import { PM_IGNORE } from '../components/formIgnore'
 import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 
-import { AdminLink } from '../components/AdminLink'
 import { Page } from '../components/Page'
 
 const ROLES = ['user', 'librarian', 'child', 'admin']
@@ -128,18 +126,6 @@ export function UsersPage() {
         </>
       }
     >
-      <AdminPageActions label="User actions">
-        <AdminLink className="od-btn" to="/admin/invites">
-          Invites
-        </AdminLink>
-        <AdminLink className="od-btn" to="/admin/support">
-          Support inbox
-        </AdminLink>
-        <AdminLink className="od-btn" to="/admin/manage_invites">
-          Invite quotas
-        </AdminLink>
-      </AdminPageActions>
-
       <CreateUserForm onCreated={load} title="Create user" />
 
       <PageStatus error={error} errorMessage="Unable to load users." onRetry={load} />

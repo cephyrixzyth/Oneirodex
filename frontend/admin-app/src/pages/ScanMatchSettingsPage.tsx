@@ -10,7 +10,6 @@ import {
 } from '../api/scanMatchSettingsApi'
 import { errorText } from '../utils/errorText'
 import { Page } from '../components/Page'
-import { AdminPageActions } from '../components/AdminPageActions'
 
 import { AdminLink } from '../components/AdminLink'
 
@@ -138,14 +137,6 @@ export function ScanMatchSettingsPage() {
         </>
       }
     >
-      <AdminPageActions label="Scan and matching actions">
-        <AdminLink className="od-cbtn" to="/libraries">
-          Libraries
-        </AdminLink>
-        <AdminLink className="od-cbtn" to="/scan_management">
-          Scan management
-        </AdminLink>
-      </AdminPageActions>
       <PageStatus loading={loading} loadingMessage="Loading scan/match settings…" />
 
       {!loading && degradeReason ? (

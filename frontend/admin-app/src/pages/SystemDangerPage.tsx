@@ -1,8 +1,5 @@
-import { AdminPageActions } from '../components/AdminPageActions'
 import { Page } from '../components/Page'
 import { SystemResetPanel } from '../components/SystemResetPanel'
-
-import { AdminLink } from '../components/AdminLink'
 
 /**
  * System → Danger zone.
@@ -18,12 +15,6 @@ export function SystemDangerPage() {
       title="Danger zone"
       lede="Scoped factory reset for this Oneirodex install. Nothing here deletes game files on disk — only database state you choose. Confirmations are required before anything runs."
     >
-      <AdminPageActions label="Danger zone" slot="trail">
-        <AdminLink className="od-cbtn" to="/admin/ops">
-          Back to Ops
-        </AdminLink>
-      </AdminPageActions>
-
       <SystemResetPanel />
     </Page>
   )

@@ -98,7 +98,7 @@ test('failed save uses PageStatus', async () => {
   expect(await screen.findByRole('alert')).toHaveTextContent('Cannot modify your own role')
 })
 
-test('Invites and Support sit in the top bar when the slot exists (W33-9)', async () => {
+test('the top bar does not repeat rail destinations (Invites, Support inbox, Invite quotas)', async () => {
   const slot = document.createElement('div')
   slot.id = 'od-admin-topbar-slot'
   document.body.appendChild(slot)
@@ -106,16 +106,8 @@ test('Invites and Support sit in the top bar when the slot exists (W33-9)', asyn
   try {
     render(<UsersPage />)
     await screen.findByText('Ada')
-    expect(within(slot).getByRole('link', { name: 'Invites' })).toHaveAttribute(
-      'href',
-      '/admin/invites',
-    )
-    const links = within(slot)
-      .getAllByRole('link')
-      .map((link) => link.textContent!.trim())
-    expect(links).toEqual(['Invites', 'Support inbox', 'Invite quotas'])
-    // Topbar actions are portaled; Create user stays on the page (not a topbar row).
-    expect(within(slot).queryByRole('button', { name: 'Create user' })).toBeNull()
+    // The rail's Users group already links these pages; the bar used to repeat them.
+    expect(within(slot).queryAllByRole('link')).toEqual([])
     expect(screen.getByRole('button', { name: 'Create user' })).toBeInTheDocument()
   } finally {
     slot.remove()
