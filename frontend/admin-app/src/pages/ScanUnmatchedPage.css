@@ -67,12 +67,13 @@
 }
 
 .od-scan-unmatched {
+  /* Filters and results span the whole page column, like every other admin
+     page. A 69rem cap here left the panels centred in a wide empty band once
+     the window was larger than a laptop screen. */
   display: grid;
   gap: 1.375rem;
   min-width: 0;
-  max-width: 69.375rem;
   width: 100%;
-  margin-inline: auto;
   margin-block-start: 0.875rem;
 }
 
@@ -104,13 +105,6 @@
 .od-scan-unmatched__filter-group [aria-pressed='true'] {
   border-color: var(--od-accent);
   background: color-mix(in srgb, var(--od-accent) 22%, transparent);
-}
-
-.od-scan-unmatched__filter--status {
-  min-height: auto;
-  padding: 6px 12px;
-  border-radius: var(--od-radius-sm, 0.25rem);
-  font-size: var(--od-font-md);
 }
 
 .od-scan-unmatched__filter-group[aria-label='Status filter'] {
@@ -337,7 +331,6 @@
 }
 
 .od-scan-unmatched__path {
-  max-width: 36rem;
   overflow-wrap: anywhere;
 }
 
@@ -359,7 +352,6 @@
 .od-scan-unmatched__name-edit input {
   flex: 1 1 12rem;
   min-width: 8rem;
-  max-width: 22rem;
   min-height: auto;
   padding: 0.28rem 0.5rem;
   font-size: var(--od-font-sm);
@@ -400,7 +392,6 @@
 
 .od-scan-unmatched__why {
   display: block;
-  max-width: 17rem;
   margin-top: 0.35rem;
   color: var(--od-text-muted);
   font-size: var(--od-font-xs);

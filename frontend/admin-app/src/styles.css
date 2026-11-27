@@ -191,25 +191,8 @@ body.admin-shell.modal-open > .modal-backdrop {
   background: color-mix(in srgb, var(--od-text) 6%, transparent);
 }
 
-.od-admin-actions.od-smtp-actions {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.75rem;
-  margin: 0.75rem 0;
-}
-
-.od-admin-actions.od-smtp-actions .od-btn {
-  width: 100%;
-  min-height: 2.875rem;
-  padding: 0.7rem 1rem;
-  font-size: var(--od-font-sm);
-  font-weight: 600;
-  border-radius: var(--od-radius-sm);
-  border-color: color-mix(in srgb, var(--od-accent) 48%, transparent);
-  background: color-mix(in srgb, var(--od-accent) 14%, transparent);
-  color: var(--od-text);
-  justify-content: center;
-}
+/* SMTP Save / Test sit in an ordinary `.od-admin-actions-row` now: they used
+   to be full-width 2.9rem slabs, the only page whose actions looked like that. */
 
 /* .od-btn came from od-primitives.css all along; this file defined it twice
    (GT-A4) — here, and again further down with a different fill and weight. The
@@ -859,31 +842,11 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
   stroke-width: 1.75;
 }
 
-.od-igdb-actions .od-btn {
-  min-height: 2.625rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--od-accent) 40%, transparent);
-  border-radius: var(--od-radius-xs);
-  background: color-mix(in srgb, var(--od-accent) 16%, transparent);
-  color: var(--od-text);
-  font-size: var(--od-font-base);
-  font-weight: 600;
-}
-
+/* IGDB Save / Test use the shared button size and variants. They were the
+   only 2.6rem / base-font buttons in the admin, pushed 4rem below the form. */
 .od-igdb-form .od-igdb-actions {
-  gap: 1.25rem;
-  margin-top: calc(var(--od-space-6) * 2 + var(--od-space-4));
-  margin-left: 2px;
-}
-
-.od-igdb-actions .od-btn:hover {
-  border-color: color-mix(in srgb, var(--od-accent) 55%, transparent);
-  background: color-mix(in srgb, var(--od-accent) 22%, transparent);
-}
-
-.od-igdb-actions .od-btn:focus-visible {
-  outline: 2px solid var(--od-focus-ring, var(--od-accent));
-  outline-offset: 2px;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }
 
 .od-admin-actions-row {
@@ -3243,4 +3206,43 @@ body.od-shell-host > #admin-legacy-content.od-admin-legacy:has(.od-admin-fill) {
   .od-admin-main :is(.od-btn, .od-cbtn, summary, .od-directory__group a) {
     min-block-size: 44px;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Page consistency (one heading scale, one button shape, one action edge).
+   Audit of all admin pages found panel headings at 16, 18, 24 and 32px
+   depending on which page stylesheet (or the theme's bare h2 / legend
+   default) won,
+   and primary buttons stretched to the full panel width on grid forms.
+   ------------------------------------------------------------------------- */
+.od-admin-main
+  .od-admin-page
+  :is(
+    h2:not([class]),
+    h2.od-admin-panel-title,
+    h2.od-admin-subhead,
+    fieldset > legend:not([class])
+  ) {
+  margin: 0 0 0.5rem;
+  font-size: var(--od-font-lg, 1.15rem);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.od-admin-main .od-admin-page :is(h3:not([class]), h3.od-admin-panel-title) {
+  margin: 0 0 0.4rem;
+  font-size: var(--od-font-base, 1rem);
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+/* A button that is a direct child of a grid form or panel keeps its own width
+   and sits at the start edge instead of stretching across the panel. Mobile
+   overrides that ask for a full-width tap target still win (they set width). */
+.od-admin-main
+  .od-admin-page
+  :is(form, fieldset, section, .od-admin-panel, .od-admin-card)
+  > :is(button.od-btn, a.od-btn) {
+  justify-self: start;
 }

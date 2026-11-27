@@ -12,6 +12,7 @@ import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 
 import { AdminLink } from '../components/AdminLink'
+import { Page } from '../components/Page'
 
 const ROLES = ['user', 'librarian', 'child', 'admin']
 
@@ -119,12 +120,14 @@ export function UsersPage() {
   const counts = summarizeUsers(users)
 
   return (
-    <div className="od-admin-page">
-      <h1>Users &amp; access</h1>
-      <p className="od-admin-lede">
-        Household accounts from <code>/admin/api/users</code>. Change a member&apos;s role here.
-      </p>
-
+    <Page
+      title="Users & access"
+      lede={
+        <>
+          Household accounts from <code>/admin/api/users</code>. Change a member&apos;s role here.
+        </>
+      }
+    >
       <AdminPageActions label="User actions">
         <AdminLink className="od-btn" to="/admin/invites">
           Invites
@@ -223,6 +226,6 @@ export function UsersPage() {
           emptyMessage="No accounts yet."
         />
       ) : null}
-    </div>
+    </Page>
   )
 }
