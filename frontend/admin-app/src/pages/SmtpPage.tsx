@@ -163,7 +163,7 @@ export function SmtpPage() {
             Save changes before testing. The test checks the saved connection and authentication
             without sending email.
           </p>
-          <div className="od-admin-actions od-smtp-actions">
+          <div className="od-admin-actions-row od-smtp-actions">
             <Button type="submit" variant="primary" disabled={disabled}>
               {busy ? 'Working…' : 'Save Settings'}
             </Button>

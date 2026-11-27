@@ -5,10 +5,7 @@ import { errorText } from '../utils/errorText'
 import { DataTable, type DataTableColumn } from '../components/DataTable'
 import { MetricStrip } from '../components/opsWidgets'
 import { CreateUserForm } from '../components/CreateUserForm'
-import { AdminPageActions } from '../components/AdminPageActions'
 import { Page } from '../components/Page'
-
-import { AdminLink } from '../components/AdminLink'
 
 interface InviteUser {
   user_id?: string
@@ -149,14 +146,6 @@ export function InvitesPage() {
           {saving ? 'Saving…' : 'Adjust quota'}
         </Button>
       </form>
-      <AdminPageActions label="Invite page actions">
-        <AdminLink className="od-cbtn" to="/admin/users">
-          Users
-        </AdminLink>
-        <AdminLink className="od-cbtn" to="/admin/support">
-          Support inbox
-        </AdminLink>
-      </AdminPageActions>
       {/* UID-014. "Unused tokens" is the number that decides whether anyone
           can actually invite someone, so it carries the tone: zero across the
           household means invites are effectively closed, which the table alone

@@ -206,7 +206,8 @@ describe('ScanMatchSettingsPage', () => {
     expect(screen.getByLabelText(/High-confidence threshold/i)).toBeRequired()
     expect(screen.getByLabelText(/Name peel aggressiveness/i)).toHaveClass('od-admin-input')
     expect(fetcher).toHaveBeenCalledTimes(2)
-    expect(screen.getByRole('link', { name: 'Libraries' })).toHaveAttribute('href', '/libraries')
+    // Libraries / Scan management live in the rail; the page no longer repeats them.
+    expect(screen.queryByRole('link', { name: 'Libraries' })).toBeNull()
   })
 
   test('a save failure keeps the draft and pending saves disable editing and resubmission', async () => {

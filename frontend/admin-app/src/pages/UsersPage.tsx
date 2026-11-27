@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 
 import { getJson, putJson } from '../api/adminApi'
-import { AdminPageActions } from '../components/AdminPageActions'
 import { useAdminDocumentTitle } from '../components/Page'
 import { CreateUserForm } from '../components/CreateUserForm'
 import { DataTable } from '../components/DataTable'
@@ -11,7 +10,7 @@ import { PM_IGNORE } from '../components/formIgnore'
 import { errorText } from '../utils/errorText'
 import { showToast } from '../utils/toast'
 
-import { AdminLink } from '../components/AdminLink'
+import { Page } from '../components/Page'
 
 const ROLES = ['user', 'librarian', 'child', 'admin']
 
@@ -119,24 +118,14 @@ export function UsersPage() {
   const counts = summarizeUsers(users)
 
   return (
-    <div className="od-admin-page">
-      <h1>Users &amp; access</h1>
-      <p className="od-admin-lede">
-        Household accounts from <code>/admin/api/users</code>. Change a member&apos;s role here.
-      </p>
-
-      <AdminPageActions label="User actions">
-        <AdminLink className="od-btn" to="/admin/invites">
-          Invites
-        </AdminLink>
-        <AdminLink className="od-btn" to="/admin/support">
-          Support inbox
-        </AdminLink>
-        <AdminLink className="od-btn" to="/admin/manage_invites">
-          Invite quotas
-        </AdminLink>
-      </AdminPageActions>
-
+    <Page
+      title="Users & access"
+      lede={
+        <>
+          Household accounts from <code>/admin/api/users</code>. Change a member&apos;s role here.
+        </>
+      }
+    >
       <CreateUserForm onCreated={load} title="Create user" />
 
       <PageStatus error={error} errorMessage="Unable to load users." onRetry={load} />
@@ -223,6 +212,6 @@ export function UsersPage() {
           emptyMessage="No accounts yet."
         />
       ) : null}
-    </div>
+    </Page>
   )
 }

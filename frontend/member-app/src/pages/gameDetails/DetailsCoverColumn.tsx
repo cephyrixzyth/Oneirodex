@@ -40,8 +40,14 @@ export function DetailsCoverColumn({
       <img className="od-details-page__cover" src={coverUrl(game.cover_url)} alt="" />
       <BadgeStack game={game} preferredCorner="top-left" maxVisible={2} />
       {game.is_admin ? (
+        // `data-od-menu-root` tells the shared outside-click closer in
+        // od_dom_actions.js that this trigger and its panel belong together.
+        // Without it, the click that opened the menu bubbled up to that closer,
+        // which saw an open trigger outside any known menu root and clicked it
+        // shut again in the same event — the menu never appeared.
         <div
           className="od-details-page__admin-menu"
+          data-od-menu-root=""
           ref={adminMenuRef}
           onKeyDown={(event) => {
             if (event.key === 'Escape' && adminMenuOpen) {
@@ -81,7 +87,7 @@ export function DetailsCoverColumn({
             aria-label="Admin actions"
             onClick={() => setAdminMenuOpen((open) => !open)}
           >
-            <span aria-hidden="true">⋮</span>
+            <span aria-hidden="true">☰</span>
           </button>
           {adminMenuOpen ? (
             <div

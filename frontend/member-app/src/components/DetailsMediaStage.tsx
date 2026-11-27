@@ -31,7 +31,8 @@ function stageItems(videoEmbeds: any, shownShots: any) {
 }
 
 /**
- * Compact media stage: primary trailer or first shot + thumbs.
+ * Compact media stage: primary trailer or first shot over one sideways-scrolling
+ * strip of thumbnails.
  * Shots expand into the lightbox; videos use the player's own fullscreen.
  * Never autoplays.
  */

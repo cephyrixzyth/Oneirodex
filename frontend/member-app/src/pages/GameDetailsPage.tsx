@@ -43,6 +43,7 @@ import { DetailsQuickRows } from './gameDetails/DetailsQuickRows'
 import { DetailsSummarySection } from './gameDetails/DetailsSummarySection'
 import { DetailsTranslationsSection } from './gameDetails/DetailsTranslationsSection'
 import { DetailsVersionsSection } from './gameDetails/DetailsVersionsSection'
+import { DetailsTabs } from './gameDetails/DetailsTabs'
 import { useShellConfig } from '@oneirodex/ui'
 import './GameDetailsPage.css'
 
@@ -204,164 +205,155 @@ export function GameDetailsPage() {
         </ol>
       </nav>
 
-      <div className="od-details-page__hero">
-        <DetailsCoverColumn game={game} pathRows={pathRows} setPathModal={setPathModal} />
-        <div className="od-details-page__hero-main">
-          <h1>{game.name}</h1>
-          <p className="od-details-page__meta-line">
-            {[
-              game.developer,
-              game.publisher,
-              game.category,
-              game.first_release_date
-                ? formatLocaleDate(game.first_release_date, { fallback: null })
-                : null,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
-          {game.game_modes?.length || game.player_perspectives?.length ? (
-            <div className="od-details-page__features" aria-label="How this plays">
-              {(game.game_modes || []).map((name: any) => (
-                <TaxonomyChip key={`mode:${name}`} kind="game_mode" name={name} />
-              ))}
-              {(game.player_perspectives || []).map((name: any) => (
-                <TaxonomyChip key={`persp:${name}`} kind="player_perspective" name={name} />
-              ))}
-            </div>
-          ) : null}
-          <div className="od-details-page__chips">
-            {itemKind !== 'game' ? (
-              <span
-                className="chip od-chip"
-                title="Library item kind - gaming software, not a main-game catalog match"
-              >
-                {ITEM_KIND_LABEL[itemKind]}
-              </span>
-            ) : null}
-            {game.local_version ? (
-              <span className="chip od-chip" title="Installed / library version">
-                Version {game.local_version}
-              </span>
-            ) : null}
-            {game.remote_version_summary ? (
-              <span className="chip od-chip" title="Remote / store version summary">
-                Remote {game.remote_version_summary}
-              </span>
-            ) : null}
-            {game.size ? <span className="chip od-chip">{game.size}</span> : null}
-            {discChips.map((chip) => (
-              <span key={chip.key} className="chip od-chip" title={chip.title}>
-                {chip.text}
-              </span>
-            ))}
-            {game.status_label ? <span className="chip od-chip">{game.status_label}</span> : null}
-            {game.rom_region || game.rom_languages ? (
-              <span className="chip od-chip" title="ROM region / languages from filename">
-                {[game.rom_region, game.rom_languages].filter(Boolean).join(' · ') || 'ROM lang'}
-                {game.preferred_locale_matches === true
-                  ? ` · matches ${game.preferred_game_locale || 'en-US'}`
-                  : null}
-                {game.preferred_locale_matches === false
-                  ? ` · no ${game.preferred_game_locale || 'en-US'}`
-                  : null}
-                {game.has_english === false ? ' · no EN' : null}
-              </span>
-            ) : null}
-            {game.freshness_status ? (
-              <span className="chip od-chip">Freshness: {game.freshness_status}</span>
-            ) : null}
-            {/* Companion presence reads as status, so it belongs on the status
-                row rather than floating above the action buttons. */}
-            <span
-              className={`chip od-chip${game.client_connected ? '' : ' od-chip--muted'}`}
-              title={
-                game.client_connected
-                  ? 'Companion client is online'
-                  : 'Companion client offline — install/update/uninstall need it'
-              }
-            >
-              {game.client_connected ? 'Companion online' : 'Companion offline'}
-            </span>
-            {game.hltb_main_story != null ? (
-              <span className="chip od-chip">
-                HLTB main {Number(game.hltb_main_story).toFixed(1)}h
-              </span>
-            ) : null}
-            {game.is_favorite ? <span className="chip od-chip">Favorite</span> : null}
-          </div>
-          <GameActionBar
-            gameUuid={game.uuid}
-            gameName={game.name}
-            lifecycleState={game.lifecycle_state || 'not_downloaded'}
-            clientConnected={Boolean(game.client_connected)}
-            variant="full"
-            showPresence={false}
-            canDownload={canDownload}
-          />
-          {/* Three rows, one per question, instead of one flex-wrap blob.
-              As a single wrapping row the break points moved with the content:
-              a title with four store links put "Check updates & DLC" alone on
-              a third line, one with two links left it hanging half-way along
-              the second, and "Add to collection" sat in a gap beside Play. The
-              groups answer different questions — play it · find it elsewhere ·
-              go and look for changes — so each owns a row and wraps inside
-              itself. Narrow panes reflow within a group rather than shuffling
-              buttons between groups. */}
-          <DetailsQuickRows
-            game={game}
-            playHref={playHref}
-            selectedCore={selectedCore}
-            setSelectedCore={setSelectedCore}
-            firmwareBlocked={firmwareBlocked}
-            firmwareMessage={firmwareMessage}
-            freshnessBusy={freshnessBusy}
-            handleFreshnessCheck={handleFreshnessCheck}
-          />
-          <PlayDiagnostics
-            browser={game.browser_readiness}
-            connected={game.client_connected}
-            gameId={String(game.uuid || '')}
-          />
-          {firmwareBlocked ? (
-            <p className="od-details-page__play-honesty" role="status">
-              <span>{firmwareMessage}</span>
-              {firmwareHint ? (
-                <span className="od-details-page__muted"> {firmwareHint}</span>
-              ) : null}{' '}
-              <Link to={FIRMWARE_HELP_HREF}>Help → Browser play</Link>
-              {game.is_admin ? (
-                <>
-                  {' '}
-                  · <a href={FIRMWARE_ADMIN_HREF}>Admin → Emulators</a>
-                </>
-              ) : null}
+      {/* Top band: who/what/actions on the left, media on the right.
+          The media stage used to start below the summary, which left the hero
+          a short block with a wide empty strip beside its buttons and pushed
+          the screenshots a full screen down. Side by side, the first screen
+          is the whole pitch: cover, title, actions, trailer and shots. */}
+      <div className={`od-details-page__top${hasMedia ? ' od-details-page__top--media' : ''}`}>
+        <div className="od-details-page__hero">
+          <DetailsCoverColumn game={game} pathRows={pathRows} setPathModal={setPathModal} />
+          <div className="od-details-page__hero-main">
+            <h1>{game.name}</h1>
+            <p className="od-details-page__meta-line">
+              {[
+                game.developer,
+                game.publisher,
+                game.category,
+                game.first_release_date
+                  ? formatLocaleDate(game.first_release_date, { fallback: null })
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
-          ) : null}
-          {freshnessError ? (
-            <PageStatus
-              error={freshnessError}
-              errorMessage={`Update check failed: ${String(freshnessError.message || freshnessError)}`}
-              className="od-details-page__muted"
+            {game.game_modes?.length || game.player_perspectives?.length ? (
+              <div className="od-details-page__features" aria-label="How this plays">
+                {(game.game_modes || []).map((name: any) => (
+                  <TaxonomyChip key={`mode:${name}`} kind="game_mode" name={name} />
+                ))}
+                {(game.player_perspectives || []).map((name: any) => (
+                  <TaxonomyChip key={`persp:${name}`} kind="player_perspective" name={name} />
+                ))}
+              </div>
+            ) : null}
+            <div className="od-details-page__chips">
+              {itemKind !== 'game' ? (
+                <span
+                  className="chip od-chip"
+                  title="Library item kind - gaming software, not a main-game catalog match"
+                >
+                  {ITEM_KIND_LABEL[itemKind]}
+                </span>
+              ) : null}
+              {game.local_version ? (
+                <span className="chip od-chip" title="Installed / library version">
+                  Version {game.local_version}
+                </span>
+              ) : null}
+              {game.remote_version_summary ? (
+                <span className="chip od-chip" title="Remote / store version summary">
+                  Remote {game.remote_version_summary}
+                </span>
+              ) : null}
+              {game.size ? <span className="chip od-chip">{game.size}</span> : null}
+              {discChips.map((chip) => (
+                <span key={chip.key} className="chip od-chip" title={chip.title}>
+                  {chip.text}
+                </span>
+              ))}
+              {game.status_label ? <span className="chip od-chip">{game.status_label}</span> : null}
+              {game.rom_region || game.rom_languages ? (
+                <span className="chip od-chip" title="ROM region / languages from filename">
+                  {[game.rom_region, game.rom_languages].filter(Boolean).join(' · ') || 'ROM lang'}
+                  {game.preferred_locale_matches === true
+                    ? ` · matches ${game.preferred_game_locale || 'en-US'}`
+                    : null}
+                  {game.preferred_locale_matches === false
+                    ? ` · no ${game.preferred_game_locale || 'en-US'}`
+                    : null}
+                  {game.has_english === false ? ' · no EN' : null}
+                </span>
+              ) : null}
+              {game.freshness_status ? (
+                <span className="chip od-chip">Freshness: {game.freshness_status}</span>
+              ) : null}
+              {/* Companion presence reads as status, so it belongs on the status
+                  row rather than floating above the action buttons. */}
+              <span
+                className={`chip od-chip${game.client_connected ? '' : ' od-chip--muted'}`}
+                title={
+                  game.client_connected
+                    ? 'Companion client is online'
+                    : 'Companion client offline — install/update/uninstall need it'
+                }
+              >
+                {game.client_connected ? 'Companion online' : 'Companion offline'}
+              </span>
+              {game.hltb_main_story != null ? (
+                <span className="chip od-chip">
+                  HLTB main {Number(game.hltb_main_story).toFixed(1)}h
+                </span>
+              ) : null}
+              {game.is_favorite ? <span className="chip od-chip">Favorite</span> : null}
+            </div>
+            <GameActionBar
+              gameUuid={game.uuid}
+              gameName={game.name}
+              lifecycleState={game.lifecycle_state || 'not_downloaded'}
+              clientConnected={Boolean(game.client_connected)}
+              variant="full"
+              showPresence={false}
+              canDownload={canDownload}
             />
-          ) : null}
+            {/* Three rows, one per question, instead of one flex-wrap blob.
+                As a single wrapping row the break points moved with the content:
+                a title with four store links put "Check updates & DLC" alone on
+                a third line, one with two links left it hanging half-way along
+                the second, and "Add to collection" sat in a gap beside Play. The
+                groups answer different questions — play it · find it elsewhere ·
+                go and look for changes — so each owns a row and wraps inside
+                itself. Narrow panes reflow within a group rather than shuffling
+                buttons between groups. */}
+            <DetailsQuickRows
+              game={game}
+              playHref={playHref}
+              selectedCore={selectedCore}
+              setSelectedCore={setSelectedCore}
+              firmwareBlocked={firmwareBlocked}
+              firmwareMessage={firmwareMessage}
+              freshnessBusy={freshnessBusy}
+              handleFreshnessCheck={handleFreshnessCheck}
+            />
+            <PlayDiagnostics
+              browser={game.browser_readiness}
+              connected={game.client_connected}
+              gameId={String(game.uuid || '')}
+            />
+            {firmwareBlocked ? (
+              <p className="od-details-page__play-honesty" role="status">
+                <span>{firmwareMessage}</span>
+                {firmwareHint ? (
+                  <span className="od-details-page__muted"> {firmwareHint}</span>
+                ) : null}{' '}
+                <Link to={FIRMWARE_HELP_HREF}>Help → Browser play</Link>
+                {game.is_admin ? (
+                  <>
+                    {' '}
+                    · <a href={FIRMWARE_ADMIN_HREF}>Admin → Emulators</a>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+            {freshnessError ? (
+              <PageStatus
+                error={freshnessError}
+                errorMessage={`Update check failed: ${String(freshnessError.message || freshnessError)}`}
+                className="od-details-page__muted"
+              />
+            ) : null}
+          </div>
         </div>
-      </div>
-
-      <div className={`od-details-page__fold${hasMedia ? ' od-details-page__fold--media' : ''}`}>
-        <div className="od-details-page__content-grid">
-          {game.summary ? <DetailsSummarySection summary={game.summary} /> : null}
-
-          {/* Open path rides the section heading, not the path row.
-              A full-height `.od-btn` in the row's third grid column squeezed
-              the path into roughly half the panel, so a normal library path
-              wrapped over six lines inside a box taller than the rest of the
-              facts list — and the button's own column sat mostly empty. The
-              heading line already has unused width, and the action belongs to
-              the section rather than to one line of it. */}
-          <DetailsFactsSection game={game} pathRows={pathRows} setPathModal={setPathModal} />
-        </div>
-
         {hasMedia ? (
           <DetailsMediaStage
             videoEmbeds={videoEmbeds}
@@ -372,82 +364,139 @@ export function GameDetailsPage() {
         ) : null}
       </div>
 
+      <div className="od-details-page__fold">
+        <div className="od-details-page__content-grid">
+          {game.summary || game.storyline ? (
+            <div className="od-details-page__story">
+              {game.summary ? <DetailsSummarySection summary={game.summary} /> : null}
+              {game.storyline ? (
+                <DetailsSummarySection summary={game.storyline} heading="About" variant="about" />
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Open path rides the section heading, not the path row.
+              A full-height `.od-btn` in the row's third grid column squeezed
+              the path into roughly half the panel, so a normal library path
+              wrapped over six lines inside a box taller than the rest of the
+              facts list — and the button's own column sat mostly empty. The
+              heading line already has unused width, and the action belongs to
+              the section rather than to one line of it. */}
+          <DetailsFactsSection game={game} pathRows={pathRows} setPathModal={setPathModal} />
+        </div>
+      </div>
+
       <div className="od-details-page__flow">
-        {game.storyline ? (
-          <section className="od-details-page__section">
-            <h2>About</h2>
-            <p className="od-details-page__about">{game.storyline}</p>
-          </section>
-        ) : null}
-
-        <DetailsStoreSpecs storeSpecs={game.store_specs} />
-
-        {game.show_translations_block ? (
-          <DetailsTranslationsSection
-            game={game}
-            busyVersionKey={busyVersionKey}
-            setBusyVersionKey={setBusyVersionKey}
-            setVersionActionStatus={setVersionActionStatus}
-            setRetryCount={setRetryCount}
-            canDownload={canDownload}
-          />
-        ) : null}
-
-        {baseAndUpdates.length > 0 ? (
-          <DetailsVersionsSection
-            game={game}
-            baseAndUpdates={baseAndUpdates}
-            hasMissingVersions={hasMissingVersions}
-            busyVersionKey={busyVersionKey}
-            setBusyVersionKey={setBusyVersionKey}
-            versionActionStatus={versionActionStatus}
-            setVersionActionStatus={setVersionActionStatus}
-            cleanupBusy={cleanupBusy}
-            handleCleanupOrphans={handleCleanupOrphans}
-            handleVersionDownload={handleVersionDownload}
-            canDownload={canDownload}
-          />
-        ) : null}
-
-        {/* Phase 4 save-state layer: this member's states, each a Resume
-            into the room (which asks before loading). Self-gates on playHref. */}
-        <SavedStatesPanel
-          gameUuid={game.uuid}
-          playHref={supportsWebRetroSaves(playHref) ? playHref : null}
+        {/* Library tools share one tabbed panel — see DetailsTabs. Each panel
+            still self-gates; a tab only shows once its panel renders. */}
+        <DetailsTabs
+          tabs={[
+            {
+              id: 'versions',
+              label: 'Versions',
+              content:
+                baseAndUpdates.length > 0 ? (
+                  <DetailsVersionsSection
+                    game={game}
+                    baseAndUpdates={baseAndUpdates}
+                    hasMissingVersions={hasMissingVersions}
+                    busyVersionKey={busyVersionKey}
+                    setBusyVersionKey={setBusyVersionKey}
+                    versionActionStatus={versionActionStatus}
+                    setVersionActionStatus={setVersionActionStatus}
+                    cleanupBusy={cleanupBusy}
+                    handleCleanupOrphans={handleCleanupOrphans}
+                    handleVersionDownload={handleVersionDownload}
+                    canDownload={canDownload}
+                  />
+                ) : null,
+            },
+            {
+              id: 'translations',
+              label: 'Translations',
+              content: game.show_translations_block ? (
+                <DetailsTranslationsSection
+                  game={game}
+                  busyVersionKey={busyVersionKey}
+                  setBusyVersionKey={setBusyVersionKey}
+                  setVersionActionStatus={setVersionActionStatus}
+                  setRetryCount={setRetryCount}
+                  canDownload={canDownload}
+                />
+              ) : null,
+            },
+            {
+              id: 'extras',
+              label: 'Extras & DLC',
+              content: (
+                <DetailsExtrasSection
+                  game={game}
+                  extrasModel={extrasModel}
+                  busyVersionKey={busyVersionKey}
+                  setBusyVersionKey={setBusyVersionKey}
+                  setVersionActionStatus={setVersionActionStatus}
+                  handleVersionDownload={handleVersionDownload}
+                  canDownload={canDownload}
+                />
+              ),
+            },
+            {
+              // Phase 4 save-state layer: this member's states, each a Resume
+              // into the room (which asks before loading). Self-gates on playHref.
+              id: 'saves',
+              label: 'Saved states',
+              content: (
+                <SavedStatesPanel
+                  gameUuid={game.uuid}
+                  playHref={supportsWebRetroSaves(playHref) ? playHref : null}
+                />
+              ),
+            },
+            {
+              // R1/R2: only renders for a matched set that carries achievements.
+              id: 'achievements',
+              label: 'Achievements',
+              content: <AchievementsPanel gameUuid={game.uuid} />,
+            },
+            {
+              // RetroArch cheats, or FEAT-D2's PC counterpart. The PC panel
+              // self-gates on cheat_surface, so the two never both render.
+              id: 'cheats',
+              label: 'Cheats',
+              content: (
+                <>
+                  {showsRetroarchCheats(game) ? (
+                    <CheatsPanel
+                      gameUuid={game.uuid}
+                      playHref={playHref}
+                      cheatSurface={game.cheat_surface}
+                    />
+                  ) : null}
+                  <PcCheatsPanel
+                    gameUuid={game.uuid}
+                    cheatSurface={game.cheat_surface}
+                    canEdit={Boolean(game.can_edit)}
+                  />
+                </>
+              ),
+            },
+            {
+              // MOD-3 list + INSP-36 loader + INSP-22 browse. Self-gates.
+              id: 'mods',
+              label: 'Mods',
+              content: <ModsPanel gameUuid={game.uuid} canEdit={Boolean(game.can_edit)} />,
+            },
+            {
+              id: 'specs',
+              label: 'Specs',
+              content: <DetailsStoreSpecs storeSpecs={game.store_specs} />,
+            },
+          ]}
         />
 
-        {/* R1/R2: only renders for a matched set that carries achievements. */}
-        <AchievementsPanel gameUuid={game.uuid} />
-
-        {showsRetroarchCheats(game) ? (
-          <CheatsPanel gameUuid={game.uuid} playHref={playHref} cheatSurface={game.cheat_surface} />
-        ) : null}
-
-        {/* FEAT-D2 — the PC counterpart. Self-gates on cheat_surface, so the two
-          panels can never both render for one title. */}
-        <PcCheatsPanel
-          gameUuid={game.uuid}
-          cheatSurface={game.cheat_surface}
-          canEdit={Boolean(game.can_edit)}
-        />
-
-        {/* MOD-3 list + INSP-36 loader + INSP-22 browse. Self-gates: hidden when
-          tracking is off or there is nothing to show and nobody who could add. */}
-        <ModsPanel gameUuid={game.uuid} canEdit={Boolean(game.can_edit)} />
-
-        <DetailsExtrasSection
-          game={game}
-          extrasModel={extrasModel}
-          busyVersionKey={busyVersionKey}
-          setBusyVersionKey={setBusyVersionKey}
-          setVersionActionStatus={setVersionActionStatus}
-          handleVersionDownload={handleVersionDownload}
-          canDownload={canDownload}
-        />
-
-        {/* Related media sits above screenshots and trailer by request — it is
-          context about the game, so it reads before the gallery. Renders
-          nothing when a title has none. */}
+        {/* Related media and "more from" are already horizontal strips; they
+            stay outside the tabs because they are about finding the next thing
+            rather than managing this one. Both render nothing when empty. */}
         <RelatedMediaStrip gameUuid={game.uuid} />
         <DetailsMoreFrom gameUuid={game.uuid} />
 

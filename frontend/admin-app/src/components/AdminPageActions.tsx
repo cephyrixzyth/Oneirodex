@@ -53,5 +53,9 @@ export function AdminPageActions({
     return createPortal(cluster, host)
   }
 
+  // A title with no bar to sit in is not repeated inline: the page's own
+  // (visually hidden) h1 already names it.
+  if (slot === 'title') return null
+
   return <div className="od-admin-actions-row">{children}</div>
 }

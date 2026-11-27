@@ -1,10 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@oneirodex/ui'
 
-/** The summary paragraph with its 8-line clamp and a Show more / Show less toggle. */
-export function DetailsSummarySection({ summary }: { summary: string }) {
+/**
+ * A clamped prose block with a Show more / Show less toggle. Used for both the
+ * Summary and the longer About (storyline) text, so neither can push the page
+ * down by more than a few lines until the reader asks for it.
+ */
+export function DetailsSummarySection({
+  summary,
+  heading = 'Summary',
+  variant = 'summary',
+}: {
+  summary: string
+  heading?: string
+  variant?: 'summary' | 'about'
+}) {
   const [summaryExpanded, setSummaryExpanded] = useState(false)
-  // Whether the summary is actually clipped by the 8-line clamp. Measured rather
+  // Whether the summary is actually clipped by the line clamp. Measured rather
   // than guessed from character count: a character threshold disagrees with the
   // clamp at both ends — short-but-wrapped text got no toggle, and long text that
   // happened to fit still offered one.
@@ -35,11 +47,11 @@ export function DetailsSummarySection({ summary }: { summary: string }) {
   }, [summaryExpanded, summary])
 
   return (
-    <section className="od-details-page__section od-details-page__section--summary">
-      <h2>Summary</h2>
+    <section className={`od-details-page__section od-details-page__section--${variant}`}>
+      <h2>{heading}</h2>
       <p
         ref={summaryRef}
-        className={`od-details-page__summary${summaryExpanded ? ' is-expanded' : ''}`}
+        className={`od-details-page__summary${variant === 'about' ? ' od-details-page__about' : ''}${summaryExpanded ? ' is-expanded' : ''}`}
       >
         {summary}
       </p>
