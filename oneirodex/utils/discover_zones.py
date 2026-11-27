@@ -97,9 +97,10 @@ ZONES: tuple[ZoneSpec, ...] = (
     ZoneSpec(
         slug='elsewhere',
         title='Elsewhere',
-        lede='News, store deals and extras — things that live outside the vault.',
+        lede='News, free games, store deals and extras — things that live outside the vault.',
         rows=(
             'news',
+            'free_games',
             'store_deals',
             'extras_missing',
         ),

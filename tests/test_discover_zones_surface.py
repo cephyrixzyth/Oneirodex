@@ -30,6 +30,7 @@ class TestMembership:
         assert zone_for_row(row('latest_games')) == 'new'
         assert zone_for_row(row('most_downloaded')) == 'popular'
         assert zone_for_row(row('news', family='editorial')) == 'elsewhere'
+        assert zone_for_row(row('free_games', family='editorial')) == 'elsewhere'
 
     def test_named_membership_beats_family(self):
         """`game_updates` is a personal row, but it belongs to New & updated.
