@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Admin pages look the same from page to page: every panel heading uses one size (they ranged from 16 to 32px), SMTP and IGDB Save / Test are ordinary buttons instead of oversized or full-width ones, primary buttons on AI assist, Arr and other forms no longer stretch across the panel, Start scan sits at the left like every other form's submit button, and Users & access is laid out like every other page.
 - Admin pages name themselves once, in the top bar: the highlighted section tab when the bar has one, otherwise the page name beside the menu button. The large title and divider at the top of every page are gone.
 - Top bar buttons always fit: they no longer run under Find tools on a laptop-width window (section icons drop first, then buttons wrap). Unmatched folders' maintenance actions (Clear Unmatched, Clear All, Fix false duplicates, Backfill kind hints) moved into one Tools menu beside Export. Links that repeated sidebar entries (Users, Invites, Scan / match policy, Art & images, Danger zone) are gone, and Library tools no longer lights up Scanning.
+- Discover rows' end caps (the ‹ › scroll controls) are small round buttons in the row's side gutter, styled like the rest of the chrome. They used to be full-height dark slabs that covered the edge of the first and last tile, the row's See all link and part of the scroll bar; tiles scrolled past either end now fade out before they reach the caps.
+
+### Fixed
+
+- **Free games is its own Discover row again.** Store giveaways were folded into the News row, where the server's announcements and the "News" title buried them. The new **Free games** row (Elsewhere zone, right after News) lists live offers, soonest-ending first, and each tile says when the offer ends; See all opens News → Free now. Existing installs get the row on their next start. News now carries only the server's announcements.
 
 ## [1.4.1] — 2026-11-26
 

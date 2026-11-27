@@ -33,6 +33,17 @@
   --od-shelf-bleed: calc(var(--od-tile-h) * (var(--od-tile-hover-scale, 1.25) - 1) / 2 + 6px);
   --od-shelf-bleed-x: calc(var(--od-tile-w) * (var(--od-tile-hover-scale, 1.25) - 1) / 2 + 6px);
 
+  /* The row's side gutter: the page gutter, the hover growth, or room for an
+     end-cap button, whichever is widest. Head, track, scroll bar and the end
+     caps all read this one number, so the caps sit in the gutter beside the
+     first and last resting tile instead of on top of them. */
+  --od-shelf-cap-size: 2rem;
+  --od-shelf-edge: max(
+    var(--od-gutter, 1rem),
+    var(--od-shelf-bleed-x, 0px),
+    calc(var(--od-shelf-cap-size) + var(--od-space-2, 0.5rem))
+  );
+
   /* Custom bar sits in the track's bottom hover bleed, with a clear air gap
      under resting covers so News matches Latest Games (0.1rem read as glued). */
   --od-shelf-scrollbar-gap: 0.45rem;
@@ -70,8 +81,8 @@
   align-items: center;
   min-height: var(--od-control-h, 2.25rem);
   gap: var(--od-space-3, 0.75rem);
-  padding-inline-start: max(var(--od-gutter, 1rem), var(--od-shelf-bleed-x, 0px));
-  padding-inline-end: var(--od-gutter, 1rem);
+  padding-inline-start: var(--od-shelf-edge);
+  padding-inline-end: var(--od-shelf-edge);
 }
 
 /* Title + reason share one letter-bottom line (pure baseline — no optical
@@ -275,10 +286,10 @@
   /* Snap fought custom-bar drags and bumper pans (uneven, often only-forward).
      Wheel-on-tiles already pans the page; arrows and the slider set scrollLeft. */
   scroll-snap-type: none;
-  scroll-padding-inline: max(var(--od-gutter, 1rem), var(--od-shelf-bleed-x, 0px));
+  scroll-padding-inline: var(--od-shelf-edge);
   /* Edge columns need the same per-side growth room as the library shell, or
      badges on the first/last visible tile clip against the gutter. */
-  padding-inline: max(var(--od-gutter, 1rem), var(--od-shelf-bleed-x, 0px));
+  padding-inline: var(--od-shelf-edge);
   overflow-clip-margin: calc(var(--od-shelf-bleed, 0px) + 8px);
   /* Native bar stays hidden: with bottom bleed restored for hover, a native
      bar would sit under that pad again. .od-shelf__hbar is the visible control. */
@@ -297,6 +308,29 @@
   margin-block-end: 0;
 }
 
+/* Tiles scrolled past either end fade out across the gutter instead of
+   running under the end caps, so at rest a cap sits on empty page and never
+   on a cover. While a tile is enlarged the fade lifts, or the grown tile's
+   outer edge would fade with it. */
+.od-shelf__track {
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(var(--od-shelf-edge) * 0.5),
+    black var(--od-shelf-edge),
+    black calc(100% - var(--od-shelf-edge)),
+    transparent calc(100% - var(--od-shelf-edge) * 0.5),
+    transparent 100%
+  );
+}
+
+.od-shelf__track:has(.od-shelf__item[data-fully-visible]:hover),
+.od-shelf__track:has(.od-shelf__item[data-fully-visible]:focus-within),
+.od-shelf__track:has(.game-card[data-overlay-open='true']),
+.od-shelf__track[data-dragging='true'] {
+  mask-image: none;
+}
+
 .od-shelf__track::-webkit-scrollbar {
   display: none;
   height: 0;
@@ -309,8 +343,8 @@
 .od-shelf__hbar {
   position: absolute;
   z-index: 3;
-  left: max(var(--od-gutter, 1rem), var(--od-shelf-bleed-x, 0px));
-  right: max(var(--od-gutter, 1rem), var(--od-shelf-bleed-x, 0px));
+  left: var(--od-shelf-edge);
+  right: var(--od-shelf-edge);
   /* Resting tile bottom sits `bleed` above the scroller foot; park the bar
      `gap` below that line so every row shares the same air under covers. */
   bottom: calc(
@@ -441,70 +475,85 @@
  * sideways out of the edge instead of swelling in place. Uniform origin is
  * the whole point of a row of identical tiles. */
 
-/* ---------- scroll controls ----------
+/* ---------- end caps (scroll controls) ----------
  *
- * Overlaid on the ends of the track rather than placed beside it: a row is as
- * wide as the content pane, and arrows in flow would cost two tiles' worth of
- * width on every shelf on the page.
+ * Each end of a row carries a small round control in the row's side gutter
+ * (`--od-shelf-edge`), vertically centred on the resting tiles. They used to
+ * be full-height slabs fading into the page background: the slab ran from the
+ * top of the hover bleed to the bottom of it, so it lay over the row's Pin /
+ * Hide / See all buttons, over the edge of the first and last tile, and over
+ * the scroll bar, and its flat `--od-bg` fade showed as a dark band on themes
+ * with a wallpaper or a glass content pane. The caps now use the same surface,
+ * border and accent as the rest of the chrome and occupy only the gutter, so
+ * at rest they touch nothing.
  */
 .od-shelf__arrow {
   position: absolute;
-  /* Below the track at rest; the active edge control rises above a grown tile
-     so it remains clickable while the pointer is over the row. */
   z-index: 0;
-  top: 0;
-  bottom: 0;
-  width: calc(var(--od-gutter, 1rem) + var(--od-space-6, 1.5rem));
-  min-width: 2.75rem;
+  /* The viewport's top edge is the track's top edge (its negative margin
+     collapses through), and resting tiles start one hover bleed plus the
+     track's top pad below that. Centre on the tile, not on the bleed. */
+  top: calc(
+    var(--od-space-2, 0.5rem) + var(--od-shelf-bleed, 0px) + var(--od-tile-h, 300px) / 2 -
+      var(--od-shelf-cap-size) / 2
+  );
+  width: var(--od-shelf-cap-size);
+  height: var(--od-shelf-cap-size);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 0;
   padding: 0;
-  font-size: var(--od-font-2xl, 1.5rem);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-circle, 50%);
+  background: color-mix(in srgb, var(--od-surface) 88%, transparent);
+  box-shadow: var(--od-shadow-md, 0 2px 8px rgb(0 0 0 / 0.35));
+  backdrop-filter: blur(6px);
+  font-size: var(--od-font-lg, 1.125rem);
   line-height: 1;
   color: var(--od-text);
   cursor: pointer;
   pointer-events: none;
-  /* Fades the tiles out under the arrow instead of covering them with a slab,
-     which also signals that the row continues past the edge. */
-  background: linear-gradient(
-    to right,
-    var(--od-bg) 35%,
-    color-mix(in srgb, var(--od-bg) 0%, transparent)
-  );
   opacity: 0;
-  transition: opacity 0.16s ease;
+  transition:
+    opacity 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    background-color 0.16s ease;
 }
 
+/* Centred in the gutter, so the cap never reaches the first or last tile. */
 .od-shelf__arrow--start {
-  inset-inline-start: 0;
+  inset-inline-start: calc((var(--od-shelf-edge) - var(--od-shelf-cap-size)) / 2);
 }
 
 .od-shelf__arrow--end {
-  inset-inline-end: 0;
-  /* Fade from the trailing edge. Do not scaleX the whole control — that also
-     mirrored the › glyph so the right arrow pointed left. */
-  background: linear-gradient(
-    to left,
-    var(--od-bg) 35%,
-    color-mix(in srgb, var(--od-bg) 0%, transparent)
-  );
+  inset-inline-end: calc((var(--od-shelf-edge) - var(--od-shelf-cap-size)) / 2);
 }
 
-/* Enabled edge controls stay available before pointer/touch activation. */
+/* Optical centring: the ‹ › glyphs sit a little high and to one side. */
+.od-shelf__arrow > span {
+  display: block;
+  margin-block-start: -0.1em;
+}
+
+/* Enabled caps are always shown; the row loops, so both ends stay live. */
 .od-shelf__arrow:not(:disabled),
 .od-shelf__arrow:focus-visible {
   opacity: 1;
   pointer-events: auto;
-  /* Lift only while clickable. The narrow edge fade may cover a little cover
-     art, but the backward / forward control cannot sit under the tile. */
+  /* Above a grown neighbour tile, so the cap stays clickable mid-hover. */
   z-index: 30;
 }
 
+.od-shelf__arrow:not(:disabled):hover {
+  border-color: var(--od-accent);
+  color: var(--od-accent);
+  background: var(--od-surface-2);
+}
+
 /* While a fully-visible tile is enlarged, hide the bottom slider so the tile
-   keeps its click surface. Keep both edge arrows available: hiding them here
-   made the backward arrow disappear whenever the pointer rested on a card. */
+   keeps its click surface. Keep both end caps available: hiding them here
+   made the backward control disappear whenever the pointer rested on a card. */
 .od-shelf__scroller:has(.od-shelf__item[data-fully-visible]:hover) .od-shelf__hbar,
 .od-shelf__scroller:has(.od-shelf__item[data-fully-visible]:focus-within) .od-shelf__hbar,
 .od-shelf__scroller:has(.game-card[data-overlay-open='true']) .od-shelf__hbar {
@@ -521,11 +570,11 @@
 
 .od-shelf__arrow:focus-visible {
   outline: 2px solid var(--od-focus-ring, var(--od-accent));
-  outline-offset: -4px;
+  outline-offset: 2px;
 }
 
-/* At the end of a row the arrow is inert, so it does not appear at all rather
-   than appearing greyed — there is nothing past the edge to hint at. */
+/* When the row does not overflow the cap is inert, so it does not appear at
+   all rather than appearing greyed — there is nothing past the edge. */
 .od-shelf__arrow:disabled {
   opacity: 0;
   pointer-events: none;

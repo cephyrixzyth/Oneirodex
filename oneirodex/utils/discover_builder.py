@@ -28,7 +28,8 @@ def _more_href(row) -> str:
     """Where this row's "see all" tile goes.
 
     The news row opens the News page — the full list, not a second Discover
-    shelf of the same articles. Genre filter zones open the genre hub — the
+    shelf of the same articles — and the free games row opens its section of
+    it, where the claim buttons live. Genre filter zones open the genre hub — the
     same tile in honest shelves — rather than dumping straight into the catalog.
     Other library filters still deep-link to Game Catalog. Everything else
     keeps its own row page.
@@ -40,6 +41,8 @@ def _more_href(row) -> str:
     # Discover row page that renders NewsCards, not GameGrid.
     if identifier == 'news':
         return '/news'
+    if identifier == 'free_games':
+        return '/news#free-games'
     if item_kind == 'articles' and identifier:
         return f'/discover/{identifier}'
     if row.library_filter:

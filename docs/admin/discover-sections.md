@@ -128,7 +128,8 @@ what everyone else likes — and an admin can reorder or hide them like any othe
 | `friends_playing` | Titles accepted friends played recently | Privacy-gated, see below. Two friends on one title is one tile, dated by whoever played it last |
 | `game_updates` | Titles whose **update files** landed recently | Distinct from `last_updated`, which reads the `Game.last_updated` metadata timestamp |
 | `extras_missing` | Engaged titles whose catalogued extras are **not on the vault** | Played or favourited only — never stats the whole library. Hidden when empty. No sale chrome. Seeded on next init (`display_order` `-15`) |
-| `news` | Announcements and live free-game offers | Carries articles, not games — see [Row kinds](#row-kinds) |
+| `news` | Published announcements | Carries articles, not games — see [Row kinds](#row-kinds) |
+| `free_games` | **Free games** — live free-to-keep store giveaways, soonest-ending first, each tile showing when the offer ends. Expired offers never show. Empty (and hidden) when `ENABLE_FREE_GAMES` is off. See all opens News → Free now. Seeded on next start (`display_order` `-9`). | Carries articles, not games |
 
 Every one of these states **why it is there** under the row title. That line is
 required for any ranked row: an unexplained recommendation reads as an ad, and a

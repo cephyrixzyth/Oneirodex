@@ -54,7 +54,12 @@ function badgeFor(item: any) {
  */
 export function NewsCard({ item }: LooseProps) {
   const badge = badgeFor(item)
-  const when = whenLabel(item.published_at)
+  // A giveaway's useful date is when it stops being free, not when the poller
+  // last saw it.
+  const when =
+    item.kind === 'free_game' && item.ends_at
+      ? `Until ${whenLabel(item.ends_at)}`
+      : whenLabel(item.published_at)
   const [fit, setFit] = useState('cover')
   // The art actually shown. Starts on the 2:3 candidate; a load error swaps
   // once to the store thumbnail rather than leaving an empty frame when a

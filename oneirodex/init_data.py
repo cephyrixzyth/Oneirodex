@@ -454,6 +454,12 @@ def initialize_discovery_sections():
             'display_order': -10
         },
         {
+            'name': 'Free games',
+            'identifier': 'free_games',
+            'is_visible': True,
+            'display_order': -9
+        },
+        {
             'name': 'Deep discounts',
             'identifier': 'store_deals',
             'is_visible': True,

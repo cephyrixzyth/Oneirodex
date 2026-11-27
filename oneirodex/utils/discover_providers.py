@@ -412,20 +412,23 @@ def _game_updates(user, limit):
 
 
 def _news_items(user, limit):
-    """Announcements and live free-game offers, newest first.
+    """Published announcements, newest first.
 
     Returns article payloads rather than ``Game`` rows — this row is the reason
     ``RowSpec.item_kind`` exists. None of it needs hydration, so it reaches the
     client as selected.
-    """
-    articles = []
 
+    Live free-game offers used to ride along here, which buried them: a busy
+    announcement week pushed them off the visible tiles and the row was titled
+    "News", so nobody went looking. They have their own ``free_games`` row now.
+    """
     announcements = db.session.execute(
         select(Announcement)
         .where(Announcement.published.is_(True))
         .order_by(Announcement.created_at.desc())
         .limit(limit)
     ).scalars().all()
+    articles = []
     for row in announcements:
         body = row.body or ''
         articles.append({
@@ -437,19 +440,41 @@ def _news_items(user, limit):
             'href': '/news',
             'published_at': row.created_at.isoformat() if row.created_at else None,
         })
+    return articles[:limit]
 
+
+def _free_games_enabled() -> bool:
+    """The admin switch for the free-games feed (Admin → Features)."""
+    try:
+        from flask import current_app
+
+        return bool(current_app.config.get('ENABLE_FREE_GAMES', True))
+    except Exception:  # noqa: BLE001 — no app context means the default
+        return True
+
+
+def _free_game_items(user, limit):
+    """Live free-to-keep store giveaways, the soonest-ending first.
+
+    A giveaway with a deadline is the one worth seeing today, so offers that
+    end soonest lead and open-ended ones follow, newest first. An offer whose
+    end has passed is dropped even if the poller has not caught up yet: an
+    expired giveaway on a "free now" row is worse than a shorter row.
+    """
+    if not _free_games_enabled():
+        return []
     now = datetime.now(timezone.utc)
     offers = db.session.execute(
         select(FreeGameOffer)
         .where(FreeGameOffer.active.is_(True))
         .order_by(FreeGameOffer.last_seen_at.desc())
-        .limit(limit)
+        .limit(max(limit, 1) * 2)
     ).scalars().all()
+    articles = []
     for row in offers:
         ends = row.ends_at
         if ends is not None and ends.tzinfo is None:
             ends = ends.replace(tzinfo=timezone.utc)
-        # An expired giveaway on a "free now" row is worse than a shorter row.
         if ends is not None and ends < now:
             continue
         articles.append({
@@ -462,9 +487,14 @@ def _news_items(user, limit):
             'href': '/news#free-games',
             'store': row.store,
             'published_at': row.last_seen_at.isoformat() if row.last_seen_at else None,
+            'ends_at': ends.isoformat() if ends is not None else None,
+            '_ends_sort': ends,
         })
-
+    far = datetime.max.replace(tzinfo=timezone.utc)
     articles.sort(key=lambda item: item.get('published_at') or '', reverse=True)
+    articles.sort(key=lambda item: item['_ends_sort'] or far)
+    for item in articles:
+        item.pop('_ends_sort', None)
     return articles[:limit]
 
 
@@ -514,9 +544,20 @@ register(
         item_kind='articles',
         family='editorial',
         priority=0.85,
-        reason='From the server and the stores',
+        reason='From the people who run this server',
     ),
     _news_items,
+)
+register(
+    RowSpec(
+        'free_games',
+        item_kind='articles',
+        family='editorial',
+        priority=0.84,
+        reason='Free to keep on the stores right now',
+        min_fill=1,
+    ),
+    _free_game_items,
 )
 
 

@@ -498,6 +498,7 @@ class InitializationManager:
             {'name': 'Recently Updated Files', 'identifier': 'game_updates', 'is_visible': True, 'display_order': -20},
             {'name': 'Extras not on the vault', 'identifier': 'extras_missing', 'is_visible': True, 'display_order': -15},
             {'name': 'News', 'identifier': 'news', 'is_visible': True, 'display_order': -10},
+            {'name': 'Free games', 'identifier': 'free_games', 'is_visible': True, 'display_order': -9},
             {
                 'name': 'Deep discounts',
                 'identifier': 'store_deals',

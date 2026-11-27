@@ -48,6 +48,7 @@ PERSONAL_SHELVES = {
     'friends_playing': ('Friends Are Playing', -30),
     'game_updates': ('Recently Updated Files', -20),
     'news': ('News', -10),
+    'free_games': ('Free games', -9),
 }
 
 
@@ -411,6 +412,40 @@ class TestNewsRow:
 
         assert 'Draft nobody should see' not in [item['title'] for item in items]
 
+    def test_free_offers_are_not_buried_in_news(self, app, db_session, member):
+        """Giveaways have their own row; News is the server's announcements."""
+        from oneirodex.utils.discover_providers import resolve_identifier
+
+        db_session.add(
+            FreeGameOffer(
+                store='epic',
+                external_id=f'news-{uuid4().hex[:8]}',
+                title='Giveaway Not In News',
+                active=True,
+                ends_at=NOW + timedelta(days=2),
+                last_seen_at=NOW,
+            )
+        )
+        db_session.commit()
+
+        with app.app_context(), app.test_request_context('/'):
+            row = resolve_identifier('news')
+            titles = [item['title'] for item in row.select(member, 20)]
+
+        assert 'Giveaway Not In News' not in titles
+
+
+class TestFreeGamesRow:
+    def test_is_a_registered_article_row(self, app):
+        from oneirodex.utils.discover_providers import resolve_identifier
+
+        with app.app_context():
+            row = resolve_identifier('free_games')
+            assert row is not None
+            assert row.spec.item_kind == 'articles'
+            assert row.spec.reason
+            assert row.title == 'Free games'
+
     def test_an_expired_giveaway_is_dropped(self, app, db_session, member):
         """A "free now" row showing a finished giveaway is worse than a short row."""
         from oneirodex.utils.discover_providers import resolve_identifier
@@ -438,11 +473,90 @@ class TestNewsRow:
         db_session.commit()
 
         with app.app_context(), app.test_request_context('/'):
-            row = resolve_identifier('news')
+            row = resolve_identifier('free_games')
             titles = [item['title'] for item in row.select(member, 20)]
 
         assert 'Giveaway Still Running' in titles
         assert 'Giveaway That Ended' not in titles
+
+    def test_soonest_ending_offer_leads(self, app, db_session, member):
+        from oneirodex.utils.discover_providers import resolve_identifier
+
+        tag = uuid4().hex[:8]
+        for title, ends in (
+            (f'Open ended {tag}', None),
+            (f'Ends later {tag}', NOW + timedelta(days=6)),
+            (f'Ends soon {tag}', NOW + timedelta(hours=10)),
+        ):
+            db_session.add(
+                FreeGameOffer(
+                    store='steam',
+                    external_id=f'{title}',
+                    title=title,
+                    active=True,
+                    ends_at=ends,
+                    last_seen_at=NOW,
+                )
+            )
+        db_session.commit()
+
+        with app.app_context(), app.test_request_context('/'):
+            row = resolve_identifier('free_games')
+            items = [i for i in row.select(member, 40) if i['title'].endswith(tag)]
+
+        assert [i['title'] for i in items] == [
+            f'Ends soon {tag}',
+            f'Ends later {tag}',
+            f'Open ended {tag}',
+        ]
+        assert items[0]['kind'] == 'free_game'
+        assert items[0]['ends_at']
+        assert items[0]['href'] == '/news#free-games'
+
+    def test_switched_off_feed_shows_nothing(self, app, db_session, member):
+        from oneirodex.utils.discover_providers import resolve_identifier
+
+        db_session.add(
+            FreeGameOffer(
+                store='gog',
+                external_id=f'off-{uuid4().hex[:8]}',
+                title='Hidden When Disabled',
+                active=True,
+                last_seen_at=NOW,
+            )
+        )
+        db_session.commit()
+
+        previous = app.config.get('ENABLE_FREE_GAMES', True)
+        app.config['ENABLE_FREE_GAMES'] = False
+        try:
+            with app.app_context(), app.test_request_context('/'):
+                row = resolve_identifier('free_games')
+                titles = [item['title'] for item in row.select(member, 20)]
+        finally:
+            app.config['ENABLE_FREE_GAMES'] = previous
+
+        assert 'Hidden When Disabled' not in titles
+
+    def test_see_all_opens_the_free_games_section_of_news(self, app, db_session, member):
+        from oneirodex.utils.discover_builder import build_discover_row
+
+        db_session.add(
+            FreeGameOffer(
+                store='epic',
+                external_id=f'href-{uuid4().hex[:8]}',
+                title='Has A See All',
+                active=True,
+                last_seen_at=NOW,
+            )
+        )
+        db_session.commit()
+
+        with app.app_context(), app.test_request_context('/'):
+            payload = build_discover_row(member, 'free_games', limit=10)
+
+        assert payload['item_kind'] == 'articles'
+        assert payload['more_href'] == '/news#free-games'
 
 
 class TestArticleRowPayload:
@@ -499,7 +613,9 @@ class TestArticleRowPayload:
         from oneirodex.utils.discover_providers import resolve_identifier
 
         with app.app_context():
-            for identifier in ('continue_playing', 'friends_playing', 'game_updates', 'news'):
+            for identifier in (
+                'continue_playing', 'friends_playing', 'game_updates', 'news', 'free_games',
+            ):
                 row = resolve_identifier(identifier)
                 if row is None:
                     continue
