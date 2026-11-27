@@ -152,20 +152,24 @@ test('child account details preserve download actions as disabled while the serv
   renderDetails(detailsPayload.uuid, 'child')
 
   expect(await screen.findByRole('heading', { name: 'Celeste' })).toBeInTheDocument()
-  const downloadButtons = screen.getAllByRole('button', { name: /^Download$/i })
+  // Versions and Extras live in separate tabs; the inactive one is hidden.
+  await screen.findByRole('tab', { name: 'Extras & DLC' })
+  const downloadButtons = screen.getAllByRole('button', { name: /^Download$/i, hidden: true })
   expect(downloadButtons).toHaveLength(3)
   downloadButtons.forEach((button) => {
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('aria-describedby')
   })
-  expect(screen.getByRole('button', { name: /^Download patch$/i })).toBeDisabled()
-  expect(screen.getByRole('button', { name: /^Download patch$/i })).toHaveAttribute(
+  expect(screen.getByRole('button', { name: /^Download patch$/i, hidden: true })).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^Download patch$/i, hidden: true })).toHaveAttribute(
     'aria-describedby',
   )
-  screen.getAllByRole('button', { name: /^Apply with companion$/i }).forEach((button) => {
-    expect(button).toBeDisabled()
-    expect(button).toHaveAttribute('aria-describedby')
-  })
+  screen
+    .getAllByRole('button', { name: /^Apply with companion$/i, hidden: true })
+    .forEach((button) => {
+      expect(button).toBeDisabled()
+      expect(button).toHaveAttribute('aria-describedby')
+    })
   expect(screen.getByRole('button', { name: /^Install$/i })).toHaveAttribute(
     'aria-disabled',
     'true',
@@ -227,6 +231,7 @@ test('shows Cheats panel only when cheat_surface is retroarch', async () => {
   })
 
   renderDetails()
+  await userEvent.click(await screen.findByRole('tab', { name: 'Cheats' }))
   expect(await screen.findByRole('heading', { name: 'Cheats' })).toBeInTheDocument()
   const playLinks = screen.getAllByRole('link', { name: /Play in browser/i })
   expect(playLinks.length).toBeGreaterThanOrEqual(1)
@@ -343,7 +348,7 @@ test('admin path rows show the full library folder string', async () => {
   expect(pathValue?.textContent).toBe(fullPath)
 })
 
-test('admin ⋮ menu exposes Edit Details / Edit Images', async () => {
+test('admin ☰ menu exposes Edit Details / Edit Images', async () => {
   const user = userEvent.setup()
   stubFetch((url: any) => {
     if (String(url).includes('/details')) {
@@ -380,6 +385,12 @@ test('admin ⋮ menu exposes Edit Details / Edit Images', async () => {
   expect(coverWrap).toBeTruthy()
   const adminBtn = within(coverWrap! as HTMLElement).getByRole('button', { name: 'Admin actions' })
   expect(adminBtn).toHaveAttribute('data-chrome-anchor', 'top-right')
+  // The shared outside-click closer (od_dom_actions.js) shuts any open
+  // aria-haspopup trigger that is not inside a known menu root — including on
+  // the very click that opened it. The wrapper must mark itself as one.
+  expect(adminBtn.closest('[data-od-menu-root]')).toBe(
+    container.querySelector('.od-details-page__admin-menu'),
+  )
   expect(
     container.querySelector('.od-details-page__hero-main .od-details-page__admin-menu'),
   ).toBeNull()
@@ -418,6 +429,7 @@ test('media stage is the only gallery and its still opens the lightbox', async (
   renderDetails()
 
   expect(await screen.findByTitle('Primary trailer')).toBeInTheDocument()
+  await userEvent.click(await screen.findByRole('tab', { name: 'Extras & DLC' }))
   expect(screen.getByRole('heading', { name: 'Extras & DLC' })).toBeInTheDocument()
   expect(screen.getByText(/Extra: artbook/i)).toBeInTheDocument()
 
@@ -840,31 +852,67 @@ test('librarian capability can remove missing versions via cleanup_orphans', asy
 })
 
 /**
- * Summary and Details read down the left of the fold, media sits to their
- * right, and everything after that runs full width below — so the flow is a
- * sibling of the fold, not a third column inside the content grid.
+ * The media stage sits beside the hero in the top band; Summary/About and the
+ * Details rail share the fold below it; the library tools follow in the flow
+ * as tabs, never inside the content grid.
  */
-test('summary and facts share the fold with the media stage', async () => {
+test('media sits in the top band and the tools follow as tabs', async () => {
   renderDetails()
 
   expect(await screen.findByRole('heading', { name: 'Celeste' })).toBeInTheDocument()
+  const top = document.querySelector('.od-details-page__top')
+  expect(top).toBeTruthy()
+  expect(top!.querySelector('.od-details-page__hero')).toBeTruthy()
+  expect(top!.querySelector('.od-details-media')).toBeTruthy()
+
   const fold = document.querySelector('.od-details-page__fold')
-  expect(fold).toBeTruthy()
   const grid = fold!.querySelector('.od-details-page__content-grid')
   expect(grid).toBeTruthy()
   expect(grid!.querySelector('.od-details-page__section--summary')).toBeTruthy()
   expect(grid!.querySelector('.od-details-page__section--facts')).toBeTruthy()
-  expect(fold!.querySelector('.od-details-media')).toBeTruthy()
 
   const flow = document.querySelector('.od-details-page__flow')
   expect(flow).toBeTruthy()
   expect(grid!.contains(flow)).toBe(false)
+  const tabs = within(flow! as HTMLElement).getByRole('tablist', { name: 'Library tools' })
+  expect(await within(tabs).findByRole('tab', { name: 'Versions' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+  expect(within(tabs).getByRole('tab', { name: 'Extras & DLC' })).toBeInTheDocument()
   expect(
     within(flow! as HTMLElement).getByRole('heading', { name: 'Versions' }),
   ).toBeInTheDocument()
+
+  await userEvent.click(within(tabs).getByRole('tab', { name: 'Extras & DLC' }))
   expect(
     within(flow! as HTMLElement).getByRole('heading', { name: 'Extras & DLC' }),
   ).toBeInTheDocument()
+  expect(within(flow! as HTMLElement).queryByRole('heading', { name: 'Versions' })).toBeNull()
+})
+
+test('screenshot thumbnails form one horizontal strip', async () => {
+  stubFetch((url: any) => {
+    if (String(url).includes('/details')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ...detailsPayload,
+            trailers: [],
+            video_urls: [],
+            screenshots: ['/s/1.jpg', '/s/2.jpg', '/s/3.jpg', '/s/4.jpg'],
+          }),
+      })
+    }
+    return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) })
+  })
+  renderDetails()
+
+  expect(await screen.findByRole('heading', { name: 'Celeste' })).toBeInTheDocument()
+  const strip = document.querySelector('.od-details-media__thumbs')
+  expect(strip).toBeTruthy()
+  expect(strip!.querySelectorAll('.od-details-media__thumb')).toHaveLength(4)
 })
 
 test('facts rail stays in the grid when there is no summary', async () => {
@@ -969,6 +1017,7 @@ test('renders About, capability chips, and store specs when present', async () =
   renderDetails()
 
   expect(await screen.findByRole('heading', { name: 'About' })).toBeInTheDocument()
+  await userEvent.click(await screen.findByRole('tab', { name: 'Specs' }))
   expect(screen.getByText('A mountain, a bird, and a lot of climbing.')).toBeInTheDocument()
   expect(screen.getAllByRole('link', { name: 'Single-player' })[0]).toHaveAttribute(
     'href',
@@ -995,6 +1044,6 @@ test('media stage sits beside the summary when trailers exist', async () => {
     'src',
     'https://www.youtube.com/embed/abc123DEF',
   )
-  expect(document.querySelector('.od-details-page__fold--media')).toBeTruthy()
+  expect(document.querySelector('.od-details-page__top--media')).toBeTruthy()
   expect(document.querySelector('.od-details-page__content-grid')).toBeTruthy()
 })

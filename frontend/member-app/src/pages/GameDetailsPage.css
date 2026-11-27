@@ -49,38 +49,37 @@
   margin-bottom: var(--od-space-4);
 }
 
-.od-details-page__fold--media {
+/* Top band: hero (cover + title + actions) beside the media stage.
+ *
+ * The stage used to open below the summary, so the first screen was a short
+ * hero with a wide empty strip to the right of its buttons, and the shots were
+ * a scroll away. Without media the hero simply takes the full width. */
+.od-details-page__top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  gap: 1.6rem 2rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--od-space-5) var(--od-space-6);
   align-items: start;
   margin-bottom: var(--od-space-5);
 }
 
-.od-details-page__fold--media .od-details-page__content-grid {
-  grid-template-columns: 1fr;
-  grid-column: 1;
-  grid-row: 1;
+.od-details-page__top--media {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+}
+
+.od-details-page__top > .od-details-page__hero {
   margin-bottom: 0;
 }
 
-.od-details-page__fold--media .od-details-page__section--summary {
-  grid-column: auto;
-  grid-row: auto;
-}
-
-.od-details-page__fold--media .od-details-page__section--facts {
-  grid-column: auto;
-  grid-row: auto;
-}
-
-.od-details-page__fold--media .od-details-media {
-  grid-column: 2;
-  grid-row: 1;
+/* Stage height follows the hero's rather than the other way round: a 16:9
+   stage in the wider half is about as tall as cover + actions. */
+.od-details-page__top .od-details-media {
   align-self: start;
 }
 
-.od-details-page__about,
+.od-details-page__summary.od-details-page__about {
+  -webkit-line-clamp: 3;
+}
+
 .od-details-page__req-text {
   white-space: pre-wrap;
   margin: 0;
@@ -127,10 +126,10 @@
 
 .od-details-page__hero {
   display: grid;
-  grid-template-columns: minmax(140px, 220px) 1fr;
-  gap: 20px;
+  grid-template-columns: minmax(120px, 190px) minmax(0, 1fr);
+  gap: var(--od-space-5);
   align-items: start;
-  margin-bottom: 28px;
+  margin-bottom: var(--od-space-5);
 }
 
 .od-details-page__cover-wrap {
@@ -197,7 +196,9 @@
   height: 2.25rem;
   min-width: 2.25rem;
   padding: 0;
-  border-radius: var(--od-radius-pill);
+  /* Rounded square, like the tile menu button and every other menu trigger —
+     a circle read as a status dot rather than a control. */
+  border-radius: var(--od-radius-sm);
   border: 1px solid color-mix(in srgb, var(--od-border) 100%, transparent);
   background: color-mix(in srgb, var(--od-surface) 78%, transparent);
   color: var(--od-text);
@@ -364,7 +365,7 @@
 }
 
 .od-details-page__section {
-  margin-bottom: 28px;
+  margin-bottom: var(--od-space-5);
 }
 
 .od-details-page__section h2 {
@@ -372,81 +373,53 @@
   font-size: var(--od-font-lg);
 }
 
-/* Two-column body (UX-B4).
- *
- * Without media this is the whole body: summary + flow down column 1, facts
- * as a rail in column 2, so later sections climb beside the rail rather than
- * waiting for it to finish.
- *
- * With media the fold takes over the columns — summary and facts stack in the
- * grid on the left, the stage sits to their right, and the flow drops out to
- * run full width below. See `.od-details-page__fold--media` above.
- *
- * `grid-row: 1 / -1` does not work here: -1 is the last *explicit* line, and
- * this grid has no explicit rows. Facts spans the two implicit rows we create
- * (summary + flow), or the single flow row when there is no summary. */
+/* Two-column body (UX-B4): Summary and About read down the left, the Details
+ * facts sit as a rail on the right. Everything after this — the library tools
+ * tabs, related media, more from — runs full width in the flow below. */
 .od-details-page__content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
-  gap: 1.6rem 2rem;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem);
+  gap: var(--od-space-5) var(--od-space-6);
   align-items: start;
-  margin-bottom: 8px;
+  margin-bottom: var(--od-space-5);
 }
 
-.od-details-page__fold--media .od-details-page__content-grid {
-  grid-template-columns: 1fr;
-  gap: 1.6rem;
-}
-
-.od-details-page__section--summary {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.od-details-page__section--facts {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: start;
-}
-
-.od-details-page__fold--media .od-details-page__section--summary {
-  grid-column: 1;
-  grid-row: auto;
-}
-
-.od-details-page__fold--media .od-details-page__section--facts {
-  grid-column: 1;
-  grid-row: auto;
-  align-self: auto;
-}
-
-.od-details-page__flow {
+.od-details-page__story {
   grid-column: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.6rem;
+  gap: var(--od-space-4);
 }
 
-.od-details-page__content-grid:has(.od-details-page__section--summary) .od-details-page__flow {
-  grid-row: 2;
+.od-details-page__story > .od-details-page__section {
+  margin-bottom: 0;
 }
 
-.od-details-page__content-grid:not(:has(.od-details-page__section--summary))
-  .od-details-page__section--facts {
-  grid-row: 1;
+.od-details-page__section--facts {
+  grid-column: 2;
+  align-self: start;
 }
 
-.od-details-page__fold--media .od-details-page__flow {
-  grid-column: auto;
-  grid-row: auto;
+/* No summary or storyline: the facts take the whole row instead of sitting in
+   a rail beside nothing. */
+.od-details-page__content-grid:not(:has(.od-details-page__story)) .od-details-page__section--facts {
+  grid-column: 1 / -1;
+}
+
+.od-details-page__flow {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--od-space-5);
 }
 
 /* Gap or margin, not both — the grid (and the flow column) already space
  * their children. The class keeps its margin for any section rendered
  * outside this grid. */
 .od-details-page__content-grid > .od-details-page__section,
-.od-details-page__flow > .od-details-page__section {
+.od-details-page__flow > .od-details-page__section,
+.od-details-tabs__panel > .od-details-page__section {
   margin-bottom: 0;
 }
 
@@ -520,7 +493,7 @@
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 8;
+  -webkit-line-clamp: 5;
   overflow: hidden;
 }
 
@@ -690,28 +663,37 @@
   opacity: 0.7;
 }
 
-@media (max-width: 900px) {
-  .od-details-page__fold--media {
-    grid-template-columns: 1fr;
+/* The top band needs room for three things side by side (cover, actions,
+   stage); below this the stage drops under the hero, capped so a 16:9 frame
+   does not fill the whole screen on its own. */
+@media (max-width: 1180px) {
+  .od-details-page__top--media {
+    grid-template-columns: minmax(0, 1fr);
   }
 
+  .od-details-page__top .od-details-media {
+    max-width: 46rem;
+  }
+}
+
+@media (max-width: 900px) {
   .od-details-page__hero {
     grid-template-columns: 1fr;
   }
 
+  /* Stacked, the cover is a thumbnail above the title, not a poster that
+     fills the first screen on a phone. */
   .od-details-page__cover-wrap {
-    max-width: 220px;
+    max-width: 150px;
   }
 
   .od-details-page__content-grid {
     grid-template-columns: 1fr;
   }
 
-  .od-details-page__section--summary,
-  .od-details-page__section--facts,
-  .od-details-page__flow {
+  .od-details-page__story,
+  .od-details-page__section--facts {
     grid-column: auto;
-    grid-row: auto;
   }
 
   .od-details-page__summary {
@@ -824,4 +806,92 @@
   .od-details-page__backdrop {
     display: none;
   }
+}
+
+/* ---------- library tools tabs ----------
+ *
+ * Versions, saves, cheats, mods and extras share one panel — see DetailsTabs.
+ * Each panel keeps its own h2 for screen readers and in-page anchors, but the
+ * tab already says it, so the visible copy is dropped. */
+.od-details-tabs {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--od-border) 100%, transparent);
+  border-radius: var(--od-radius-lg);
+  background: color-mix(in srgb, var(--od-surface) 55%, transparent);
+}
+
+.od-details-tabs[hidden] {
+  display: none;
+}
+
+.od-details-tabs__list {
+  display: flex;
+  gap: var(--od-space-1);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding: var(--od-space-2) var(--od-space-3) 0;
+  border-bottom: 1px solid var(--od-border);
+}
+
+.od-details-tabs__tab {
+  flex: 0 0 auto;
+  padding: var(--od-space-2) var(--od-space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--od-radius-sm) var(--od-radius-sm) 0 0;
+  background: transparent;
+  color: var(--od-text);
+  font: inherit;
+  font-size: var(--od-font-sm);
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.od-details-tabs__tab:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--od-accent) 10%, transparent);
+}
+
+.od-details-tabs__tab:focus-visible {
+  outline: 2px solid var(--od-accent);
+  outline-offset: -2px;
+  opacity: 1;
+}
+
+.od-details-tabs__tab[aria-selected='true'] {
+  opacity: 1;
+  border-bottom-color: var(--od-accent);
+  font-weight: 600;
+}
+
+.od-details-tabs__panel {
+  padding: var(--od-space-4);
+  min-width: 0;
+}
+
+.od-details-tabs__panel[hidden] {
+  display: none;
+}
+
+.od-details-tabs__panel > * {
+  margin-bottom: 0;
+}
+
+.od-details-tabs__panel > * > h2:first-child:not(.od-details-page__section-head),
+.od-details-tabs__panel > * > .od-details-page__section-head:first-child > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A heading row that also carries actions keeps the actions, just not the
+   repeated title. */
+.od-details-tabs__panel > * > .od-details-page__section-head:first-child {
+  justify-content: flex-end;
 }
