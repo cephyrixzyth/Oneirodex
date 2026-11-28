@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.4.1-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.4.1" /></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.5.0-2fd67b?style=flat-square&labelColor=0b0d10" alt="Version 1.5.0" /></a>
   <a href="https://github.com/cephyrixzyth/oneirodex"><img src="https://img.shields.io/badge/github-cephyrixzyth%2Foneirodex-141820?style=flat-square&logo=github&labelColor=0b0d10" alt="GitHub" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/port-5006-141820?style=flat-square&labelColor=0b0d10" alt="Port 5006" /></a>
   <a href="#-quick-start"><img src="https://img.shields.io/badge/docker-compose-2496ED?style=flat-square&logo=docker&logoColor=white&labelColor=0b0d10" alt="Docker Compose" /></a>
@@ -44,8 +44,8 @@ Oneirodex is a **FastAPI + React** server you run at home or on a NAS. Point it 
 Screenshots show **real Oneirodex UI** with synthetic catalog and chat data. The video walkthroughs were recorded on 2026-10-14 with five legal free ROMs; their visual details predate the 1.3.3 artwork.
 
 <table>
-<tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.4.1</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
-<tr><td>🐳 <b>Containers</b></td><td><code>oneirodex-app</code> · <code>oneirodex-db</code> · optional <code>oneirodex-livekit</code></td><td>🖼️ <b>Image</b></td><td>local Compose build <code>oneirodex:1.4.1</code></td></tr>
+<tr><td>🏷️ <b>Release</b></td><td><a href="CHANGELOG.md">1.5.0</a> · <a href="VERSION"><code>VERSION</code></a></td><td>🌐 <b>Default URL</b></td><td><code>http://localhost:5006</code></td></tr>
+<tr><td>🐳 <b>Containers</b></td><td><code>oneirodex-app</code> · <code>oneirodex-db</code> · optional <code>oneirodex-livekit</code></td><td>🖼️ <b>Image</b></td><td>local Compose build <code>oneirodex:1.5.0</code></td></tr>
 <tr><td>📦 <b>Package</b></td><td><code>oneirodex/</code> — FastAPI under uvicorn</td><td>🧩 <b>Front ends</b></td><td>member · admin · ops-glance SPAs, Tauri desktop, Quest PWA</td></tr>
 </table>
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-11-28
+
 ### Changed
 
 - Scan page: **Browse folders** opens the same folder picker popup as Libraries (it used to spill an unstyled folder list across the page). The picker starts in the folder already typed, lets you switch scan location, and both pages now share one component. The location dialog no longer leaves a large gap under the location switcher when there is more than one location.
@@ -21,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Admin pages name themselves once, in the top bar: the highlighted section tab when the bar has one, otherwise the page name beside the menu button. The large title and divider at the top of every page are gone.
 - Top bar buttons always fit: they no longer run under Find tools on a laptop-width window (section icons drop first, then buttons wrap). Unmatched folders' maintenance actions (Clear Unmatched, Clear All, Fix false duplicates, Backfill kind hints) moved into one Tools menu beside Export. Links that repeated sidebar entries (Users, Invites, Scan / match policy, Art & images, Danger zone) are gone, and Library tools no longer lights up Scanning.
 - Discover rows' end caps (the ‹ › scroll controls) are small round buttons in the row's side gutter, styled like the rest of the chrome. They used to be full-height dark slabs that covered the edge of the first and last tile, the row's See all link and part of the scroll bar; tiles scrolled past either end now fade out before they reach the caps.
+- Game details page: screenshots sit in one horizontal strip, the admin ☰ menu on the page opens reliably, and library tools for the game moved into the details tabs.
 
 ### Fixed
 
