@@ -559,6 +559,24 @@ def test_single_scan_resolves_location_and_preserves_scan_options(native_client)
     assert scan[3]['download_missing_images'] is True
     assert scan[3]['force_updates_extras'] is True
     assert scan[3]['fetch_hltb'] is True
+    # Options the request leaves out keep the old behaviour.
+    assert scan[3]['recheck_matches'] is True
+    assert scan[3]['retry_unmatched'] is True
+    assert scan[3]['propose_only'] is False
+
+
+def test_single_scan_passes_matching_options(native_client):
+    runtime, data = native_client
+    response = _request(runtime, 'POST', '/api/admin/libraries/scan', json={
+        'library_uuid': 'lib-1', 'folder': '/safe/root/one',
+        'recheck_matches': False, 'retry_unmatched': 'false', 'propose_only': True,
+    })
+
+    assert response.status_code == 200
+    scan = next(call for call in data.calls if call[0] == 'scan')
+    assert scan[3]['recheck_matches'] is False
+    assert scan[3]['retry_unmatched'] is False
+    assert scan[3]['propose_only'] is True
 
 
 def test_library_update_uuid_route_does_not_capture_static_scan_actions(native_client):

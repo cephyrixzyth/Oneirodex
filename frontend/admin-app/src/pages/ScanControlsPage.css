@@ -28,6 +28,7 @@
 .od-scan-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: var(--od-space-4);
   max-width: none;
 }
@@ -35,16 +36,41 @@
 .od-scan-controls > h2,
 .od-scan-controls > p,
 .od-scan-controls > .od-page-status,
-.od-scan-controls__path,
-.od-scan-controls__schedule {
+.od-scan-controls__schedule,
+.od-scan-controls__actions {
   grid-column: 1 / -1;
 }
 
-.od-scan-controls > button {
-  /* Primary submit sits at the start of its own row, like every other admin
-     form. It used to land at the end of column one: the middle of the panel. */
-  grid-column: 1 / -1;
-  justify-self: start;
+/* One action row, start edge, like every other admin form (PR #311). */
+.od-scan-controls__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--od-space-3);
+}
+
+/* The folder field and its Browse button share one row and one height, the
+   same pairing as "Folder path inside the server" on Libraries. */
+.od-scan-controls__folder-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--od-space-2);
+  /* The label-to-control gap lives on the row, so the input and the button
+     start and end on the same lines. */
+  margin-block-start: 0.35rem;
+}
+
+.od-scan-controls .od-scan-controls__folder-row > input.od-admin-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.od-scan-controls__folder-row > .od-btn {
+  flex: none;
+  min-height: 0;
+  padding-block: 0;
+  white-space: nowrap;
 }
 
 .od-scan-controls__manual {
@@ -70,7 +96,6 @@
 }
 
 .od-scan-controls__links,
-.od-scan-controls__path,
 .od-scan-controls__interval,
 .od-scan-controls__schedule {
   display: flex;
@@ -79,7 +104,6 @@
   gap: var(--od-space-3);
 }
 
-.od-scan-controls__path > .od-admin-field,
 .od-scan-controls__schedule > .od-admin-field,
 .od-scan-controls__interval > .od-admin-field {
   flex: 1 1 14rem;
@@ -89,7 +113,6 @@
   display: grid;
   align-content: start;
   gap: var(--od-space-2);
-  flex: 1 1 14rem;
 }
 
 .od-scan-controls__root-status {
@@ -98,8 +121,10 @@
 
 .od-scan-controls__options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--od-space-2);
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  align-self: stretch;
+  gap: var(--od-space-3);
   margin: 0;
   padding: var(--od-space-4);
   border: 1px solid var(--od-border);
@@ -114,7 +139,9 @@
   font-weight: 650;
 }
 
-.od-scan-controls__options label {
+/* Two classes: `.od-admin-panel label { display: block }` loads later and
+   used to drop each checkbox onto its own line above its text. */
+.od-scan-controls .od-scan-controls__options label {
   display: flex;
   align-items: flex-start;
   gap: var(--od-space-2);
@@ -122,28 +149,19 @@
 }
 
 .od-scan-controls__options input {
+  flex: none;
   accent-color: var(--od-accent);
   margin-block-start: 0.2em;
 }
 
-.od-scan-controls__browser-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--od-space-4);
-}
-
-.od-scan-controls__browser-head h2 {
-  margin: 0;
-  color: var(--od-text);
-}
-
-.od-scan-controls__browser-list {
+.od-scan-controls__options label > span {
   display: grid;
-  gap: var(--od-space-2);
-  max-height: min(55vh, 32rem);
-  overflow: auto;
-  padding-block: var(--od-space-3);
+  gap: 0.15rem;
+}
+
+.od-scan-controls__options small {
+  color: var(--od-text-muted);
+  font-size: var(--od-font-sm, 0.85rem);
 }
 
 @media (max-width: 40rem) {
@@ -159,25 +177,20 @@
   .od-scan-controls > h2,
   .od-scan-controls > p,
   .od-scan-controls > .od-page-status,
-  .od-scan-controls__path,
-  .od-scan-controls__schedule {
+  .od-scan-controls__schedule,
+  .od-scan-controls__actions {
     grid-column: auto;
   }
 
-  .od-scan-controls > button {
-    justify-self: stretch;
+  .od-scan-controls__actions > .od-btn {
+    flex: 1 1 auto;
   }
 
   .od-scan-controls__links > * {
     flex: 1 1 auto;
   }
-  .od-scan-controls__path > *,
   .od-scan-controls__schedule > *,
   .od-scan-controls__interval > * {
     width: 100%;
-  }
-
-  .od-scan-controls__options {
-    grid-template-columns: minmax(0, 1fr);
   }
 }

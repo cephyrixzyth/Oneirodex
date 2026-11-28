@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import { ScanFolderBrowser } from './ScanFolderBrowser'
 
 import { Button, PageStatus } from '@oneirodex/ui'
 import { useLocation } from 'react-router-dom'
 import { AdminLink } from '../components/AdminLink'
 import { Page } from '../components/Page'
 import { ScanConflictModal } from '../components/ScanConflictModal'
+import { ServerFolderBrowser } from '../components/ServerFolderBrowser'
+import { ScanOptionsFields } from './ScanOptionsFields'
 import './ScanControlsPage.css'
 import { useScanControls, type Schedule } from './useScanControls'
 
@@ -33,6 +34,12 @@ export function ScanControlsPage() {
     setFetchHltb,
     forceHltb,
     setForceHltb,
+    recheckMatches,
+    setRecheckMatches,
+    retryUnmatched,
+    setRetryUnmatched,
+    proposeOnly,
+    setProposeOnly,
     schedule,
     setSchedule,
     interval,
@@ -67,20 +74,12 @@ export function ScanControlsPage() {
     setRevision,
     browseOpen,
     setBrowseOpen,
-    browsePath,
-    browseItems,
-    browseBusy,
-    browseError,
-    browseTitleId,
-    closeBrowseRef,
     conflictOpen,
     scanning,
     scanError,
     clearScanError,
     onConflictChoose,
     onConflictClose,
-    browse,
-    openBrowser,
     submit,
     invalidateManualPreview,
     listManualCandidates,
@@ -88,7 +87,6 @@ export function ScanControlsPage() {
     searchExistingGames,
     linkExistingGame,
     activeRoot,
-    browseParts,
   } = useScanControls()
   useEffect(() => {
     // Wait for the scan controls data to settle before scrolling. The admin
@@ -166,56 +164,6 @@ export function ScanControlsPage() {
             ))}
           </select>
         </label>
-        <div className="od-scan-controls__path">
-          <div className="od-scan-controls__root">
-            <label className="od-admin-field">
-              Scan location
-              <select
-                className="od-admin-input"
-                value={rootId}
-                onChange={(event) => {
-                  invalidateManualPreview()
-                  setRootId(event.target.value)
-                }}
-                required
-                disabled={loading || scanning}
-              >
-                {roots.map((root) => (
-                  <option key={root.id} value={root.id} disabled={!root.exists || !root.read}>
-                    {root.label}
-                    {!root.exists || !root.read ? ' · unavailable' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {activeRoot && (!activeRoot.exists || !activeRoot.read) ? (
-              <p className="od-admin-hint od-scan-controls__root-status">
-                {!activeRoot.exists ? 'Not mounted right now' : 'This location is not readable'}:{' '}
-                {activeRoot.path}
-              </p>
-            ) : null}
-          </div>
-          <label className="od-admin-field">
-            Folder inside scan location
-            <input
-              className="od-admin-input"
-              value={folder}
-              onChange={(event) => {
-                invalidateManualPreview()
-                setFolder(event.target.value)
-              }}
-              placeholder="Leave blank to scan the location root"
-              disabled={scanning}
-            />
-          </label>
-          <Button
-            type="button"
-            onClick={() => void openBrowser()}
-            disabled={!activeRoot?.exists || !activeRoot.read || scanning}
-          >
-            Browse folders
-          </Button>
-        </div>
         <label className="od-admin-field">
           Game layout
           <select
@@ -232,54 +180,65 @@ export function ScanControlsPage() {
             <option value="files">Game files</option>
           </select>
         </label>
-        <fieldset className="od-scan-controls__options">
-          <legend>Scan options</legend>
-          <label>
+        <div className="od-scan-controls__root">
+          <label className="od-admin-field">
+            Scan location
+            <select
+              className="od-admin-input"
+              value={rootId}
+              onChange={(event) => {
+                invalidateManualPreview()
+                setRootId(event.target.value)
+              }}
+              required
+              disabled={loading || scanning}
+            >
+              {roots.map((root) => (
+                <option key={root.id} value={root.id} disabled={!root.exists || !root.read}>
+                  {root.label}
+                  {!root.exists || !root.read ? ' · unavailable' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          {activeRoot && (!activeRoot.exists || !activeRoot.read) ? (
+            <p className="od-admin-hint od-scan-controls__root-status">
+              {!activeRoot.exists ? 'Not mounted right now' : 'This location is not readable'}:{' '}
+              {activeRoot.path}
+            </p>
+          ) : null}
+        </div>
+        <div className="od-admin-field od-scan-controls__folder">
+          <label htmlFor="od-scan-folder">Folder inside scan location</label>
+          <div className="od-scan-controls__folder-row">
             <input
-              type="checkbox"
-              checked={removeMissing}
-              onChange={(event) => setRemoveMissing(event.target.checked)}
+              id="od-scan-folder"
+              className="od-admin-input"
+              value={folder}
+              onChange={(event) => {
+                invalidateManualPreview()
+                setFolder(event.target.value)
+              }}
+              placeholder="Leave blank to scan the location root"
               disabled={scanning}
-            />{' '}
-            Remove games whose files are missing
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={downloadImages}
-              onChange={(event) => setDownloadImages(event.target.checked)}
-              disabled={scanning}
-            />{' '}
-            Download missing images
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={updateExtras}
-              onChange={(event) => setUpdateExtras(event.target.checked)}
-              disabled={scanning}
-            />{' '}
-            Check existing games for new updates and extras
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={fetchHltb}
-              onChange={(event) => setFetchHltb(event.target.checked)}
-              disabled={scanning}
-            />{' '}
-            Fetch HowLongToBeat data
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={forceHltb}
-              onChange={(event) => setForceHltb(event.target.checked)}
-              disabled={scanning || !fetchHltb}
-            />{' '}
-            Refetch HowLongToBeat for existing games
-          </label>
-        </fieldset>
+            />
+            <Button
+              type="button"
+              className="od-btn--secondary"
+              onClick={() => setBrowseOpen(true)}
+              disabled={!activeRoot?.exists || !activeRoot.read || scanning}
+            >
+              Browse folders
+            </Button>
+          </div>
+        </div>
+        <ScanOptionsFields
+          disabled={scanning}
+          {...{ retryUnmatched, setRetryUnmatched, recheckMatches, setRecheckMatches }}
+          {...{ proposeOnly, setProposeOnly, removeMissing, setRemoveMissing }}
+          {...{ downloadImages, setDownloadImages, updateExtras, setUpdateExtras }}
+          {...{ fetchHltb, setFetchHltb, forceHltb, setForceHltb }}
+        />
         <div className="od-scan-controls__schedule">
           <label className="od-admin-field">
             Repeat schedule
@@ -346,13 +305,15 @@ export function ScanControlsPage() {
             </label>
           ) : null}
         </div>
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={loading || Boolean(loadError) || !libraryUuid || !rootId || scanning}
-        >
-          {scanning ? 'Starting scan…' : schedule ? 'Start and schedule scan' : 'Start scan'}
-        </Button>
+        <div className="od-scan-controls__actions">
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={loading || Boolean(loadError) || !libraryUuid || !rootId || scanning}
+          >
+            {scanning ? 'Starting scan…' : schedule ? 'Start and schedule scan' : 'Start scan'}
+          </Button>
+        </div>
       </form>
       <section
         id="manual-identify"
@@ -534,20 +495,17 @@ export function ScanControlsPage() {
           <PageStatus announcement="status">{linkStatus}</PageStatus>
         ) : null}
       </section>
-      <ScanFolderBrowser
-        browseOpen={browseOpen}
-        setBrowseOpen={setBrowseOpen}
-        browseTitleId={browseTitleId}
-        closeBrowseRef={closeBrowseRef}
-        browse={browse}
-        activeRoot={activeRoot}
-        browseParts={browseParts}
-        browseError={browseError}
-        browseBusy={browseBusy}
-        browseItems={browseItems}
-        browsePath={browsePath}
-        invalidateManualPreview={invalidateManualPreview}
-        setFolder={setFolder}
+      <ServerFolderBrowser
+        open={browseOpen}
+        onClose={() => setBrowseOpen(false)}
+        title="Choose a scan folder"
+        initialRootId={rootId}
+        initialPath={folder}
+        onSelect={({ root, relativePath }) => {
+          invalidateManualPreview()
+          setRootId(root.id)
+          setFolder(relativePath)
+        }}
       />
       <ScanConflictModal
         open={conflictOpen}

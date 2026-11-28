@@ -163,6 +163,14 @@ def create_scan_job_reads_router(
                             'setting_remove': bool(job.setting_remove),
                             'setting_filefolder': bool(job.setting_filefolder),
                             'setting_download_missing_images': bool(job.setting_download_missing_images),
+                            # getattr: lightweight job rows (tests, older readers)
+                            # may not carry the newer per-scan options.
+                            'setting_force_updates_extras': bool(getattr(job, 'setting_force_updates_extras', False)),
+                            'setting_fetch_hltb': bool(getattr(job, 'setting_fetch_hltb', False)),
+                            'setting_force_hltb_refetch': bool(getattr(job, 'setting_force_hltb_refetch', False)),
+                            'setting_recheck_matches': getattr(job, 'setting_recheck_matches', None) is not False,
+                            'setting_retry_unmatched': getattr(job, 'setting_retry_unmatched', None) is not False,
+                            'setting_propose_only': getattr(job, 'setting_propose_only', None) is True,
                             'current_processing': job.current_processing,
                             'error_message': job.error_message or '',
                             'last_run': job.last_run.strftime('%Y-%m-%d %H:%M:%S') if job.last_run else 'Not Available',

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation } from 'react-router-dom'
 import { confirmAction } from '@oneirodex/ui'
 import { getJson, postJson } from '../api/adminApi'
@@ -14,7 +14,6 @@ type Root = {
   exists: boolean
   read: boolean
 }
-type Folder = { name: string; isDir: boolean }
 type GameHit = { uuid: string; name: string; full_disk_path?: string | null }
 export type Schedule = '' | '8_hours' | '24_hours' | '48_hours' | 'interval' | 'cron'
 
@@ -33,6 +32,9 @@ export function useScanControls() {
   const [updateExtras, setUpdateExtras] = useState(false)
   const [fetchHltb, setFetchHltb] = useState(true)
   const [forceHltb, setForceHltb] = useState(false)
+  const [recheckMatches, setRecheckMatches] = useState(true)
+  const [retryUnmatched, setRetryUnmatched] = useState(true)
+  const [proposeOnly, setProposeOnly] = useState(false)
   const [schedule, setSchedule] = useState<Schedule>('')
   const [interval, setInterval] = useState(6)
   const [unit, setUnit] = useState<'hours' | 'minutes'>('hours')
@@ -55,12 +57,6 @@ export function useScanControls() {
   const [loadError, setLoadError] = useState('')
   const [revision, setRevision] = useState(0)
   const [browseOpen, setBrowseOpen] = useState(false)
-  const [browsePath, setBrowsePath] = useState('')
-  const [browseItems, setBrowseItems] = useState<Folder[]>([])
-  const [browseBusy, setBrowseBusy] = useState(false)
-  const [browseError, setBrowseError] = useState('')
-  const browseTitleId = useId()
-  const closeBrowseRef = useRef<HTMLButtonElement | null>(null)
   const {
     conflictOpen,
     scanning,
@@ -145,31 +141,6 @@ export function useScanControls() {
     }
   }, [search])
 
-  async function browse(path: string, nextRoot = rootId) {
-    setBrowseBusy(true)
-    setBrowseError('')
-    try {
-      const query = new URLSearchParams({ root: nextRoot, path })
-      const payload = await getJson(`/api/browse_folders_ss?${query}`)
-      if (!Array.isArray(payload)) throw new Error('Folder browser returned an invalid response.')
-      setRootId(nextRoot)
-      setBrowsePath(path)
-      setBrowseItems((payload as Folder[]).filter((item) => item.isDir))
-    } catch (error) {
-      setBrowseError(errorText(error) || 'Unable to browse this scan location.')
-    } finally {
-      setBrowseBusy(false)
-    }
-  }
-
-  async function openBrowser() {
-    const selectedRoot =
-      roots.find((root) => root.id === rootId) || roots.find((root) => root.default) || roots[0]
-    if (!selectedRoot) return
-    setBrowseOpen(true)
-    await browse('', selectedRoot.id)
-  }
-
   function submit(event: FormEvent) {
     event.preventDefault()
     if (loading || loadError || !libraryUuid || scanning) return
@@ -185,6 +156,9 @@ export function useScanControls() {
         force_updates_extras_scan: updateExtras,
         fetch_hltb: fetchHltb,
         force_hltb_refetch: forceHltb,
+        recheck_matches: recheckMatches,
+        retry_unmatched: retryUnmatched,
+        propose_only: proposeOnly,
         schedule,
         schedule_interval_value: interval,
         schedule_interval_unit: unit,
@@ -308,7 +282,6 @@ export function useScanControls() {
   }
 
   const activeRoot = roots.find((root) => root.id === rootId)
-  const browseParts = browsePath.split('/').filter(Boolean)
 
   return {
     search,
@@ -336,6 +309,12 @@ export function useScanControls() {
     setFetchHltb,
     forceHltb,
     setForceHltb,
+    recheckMatches,
+    setRecheckMatches,
+    retryUnmatched,
+    setRetryUnmatched,
+    proposeOnly,
+    setProposeOnly,
     schedule,
     setSchedule,
     interval,
@@ -380,16 +359,6 @@ export function useScanControls() {
     setRevision,
     browseOpen,
     setBrowseOpen,
-    browsePath,
-    setBrowsePath,
-    browseItems,
-    setBrowseItems,
-    browseBusy,
-    setBrowseBusy,
-    browseError,
-    setBrowseError,
-    browseTitleId,
-    closeBrowseRef,
     conflictOpen,
     scanning,
     scanError,
@@ -397,8 +366,6 @@ export function useScanControls() {
     startScan,
     onConflictChoose,
     onConflictClose,
-    browse,
-    openBrowser,
     submit,
     invalidateManualPreview,
     listManualCandidates,
@@ -406,6 +373,5 @@ export function useScanControls() {
     searchExistingGames,
     linkExistingGame,
     activeRoot,
-    browseParts,
   }
 }
