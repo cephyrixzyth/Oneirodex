@@ -54,6 +54,72 @@ _BRAVE_PAGES_TO_READ = 3
 _token_lock = threading.Lock()
 _token: dict = {'value': None, 'at': 0.0}
 
+# Circuit breaker. Meta's search is undocumented: when it changes, every
+# unmatched PC folder would pay for a token page and two POSTs on every scan.
+# After a few failures in a row a backend rests, then gets one more try.
+BREAKER_FAILURES = 3
+BREAKER_COOLDOWN_SEC = 60 * 60
+_breaker_lock = threading.Lock()
+_breakers: dict = {}
+
+# A scan asks the same title more than once (identify, then the re-check pass
+# or a released duplicate). Answers are kept briefly so it asks Meta once.
+_RESULT_TTL_SEC = 15 * 60
+_RESULT_CACHE_MAX = 512
+_result_lock = threading.Lock()
+_results: dict = {}
+
+
+def _breaker_open(name: str) -> bool:
+    with _breaker_lock:
+        state = _breakers.get(name)
+        if not state or state['failures'] < BREAKER_FAILURES:
+            return False
+        if time.monotonic() - state['at'] >= BREAKER_COOLDOWN_SEC:
+            # Half-open: let one call through; a failure re-opens it.
+            state['failures'] = BREAKER_FAILURES - 1
+            return False
+        return True
+
+
+def _breaker_record(name: str, ok: bool) -> None:
+    with _breaker_lock:
+        if ok:
+            _breakers.pop(name, None)
+            return
+        state = _breakers.setdefault(name, {'failures': 0, 'at': 0.0})
+        state['failures'] += 1
+        state['at'] = time.monotonic()
+        if state['failures'] == BREAKER_FAILURES:
+            logger.warning(
+                'Meta store search: %s failed %d times in a row; pausing it for %d minutes',
+                name, BREAKER_FAILURES, BREAKER_COOLDOWN_SEC // 60,
+            )
+
+
+def reset_search_state() -> None:
+    """Forget breaker failures and cached answers (tests, settings changes)."""
+    with _breaker_lock:
+        _breakers.clear()
+    with _result_lock:
+        _results.clear()
+
+
+def _cached_results(key: str):
+    with _result_lock:
+        entry = _results.get(key)
+        if entry and time.monotonic() - entry[0] < _RESULT_TTL_SEC:
+            return entry[1]
+        _results.pop(key, None)
+    return None
+
+
+def _cache_results(key: str, hits: list[dict]) -> None:
+    with _result_lock:
+        if len(_results) >= _RESULT_CACHE_MAX:
+            _results.pop(next(iter(_results)))
+        _results[key] = (time.monotonic(), hits)
+
 
 def _env_flag(name: str, default: bool = True) -> bool:
     raw = (os.getenv(name) or '').strip().lower()
@@ -203,10 +269,11 @@ def _post_site_search(query: str, limit: int, token: str) -> list[dict] | None:
 
 def search_meta_site(query: str, limit: int = 10) -> list[dict] | None:
     """Meta's own store search. None when it could not be asked or read."""
-    if not meta_site_search_enabled():
+    if not meta_site_search_enabled() or _breaker_open('meta_site'):
         return None
     token = _site_token()
     if not token:
+        _breaker_record('meta_site', ok=False)
         return None
     hits = _post_site_search(query, limit, token)
     if hits is None:
@@ -214,6 +281,7 @@ def search_meta_site(query: str, limit: int = 10) -> list[dict] | None:
         token = _site_token(refresh=True)
         if token:
             hits = _post_site_search(query, limit, token)
+    _breaker_record('meta_site', ok=hits is not None)
     if hits is None:
         logger.warning('Meta store search unavailable; falling back if a web search key is set')
     return hits
@@ -238,7 +306,7 @@ def parse_brave_results(payload: dict | None) -> list[str]:
 def search_meta_via_brave(query: str, limit: int = 10) -> list[dict] | None:
     """``site:meta.com/experiences`` web search, then each top page's real title."""
     api_key = brave_search_api_key()
-    if not api_key:
+    if not api_key or _breaker_open('brave'):
         return None
     from oneirodex.utils.http_retry import request_with_backoff
 
@@ -251,11 +319,14 @@ def search_meta_via_brave(query: str, limit: int = 10) -> list[dict] | None:
         headers={'Accept': 'application/json', 'X-Subscription-Token': api_key},
     )
     if resp is None:
+        _breaker_record('brave', ok=False)
         return None
     try:
         payload = resp.json()
     except ValueError:
+        _breaker_record('brave', ok=False)
         return None
+    _breaker_record('brave', ok=True)
     hits: list[dict] = []
     for app_id in parse_brave_results(payload)[:_BRAVE_PAGES_TO_READ]:
         details = fetch_meta_store_app(app_id)
@@ -289,13 +360,20 @@ def search_meta_store(query: str | None, limit: int = 10) -> list[dict]:
         return []
     if not _live_search_allowed():
         return []
+    key = f'{int(limit)}:{text.casefold()}'
+    cached = _cached_results(key)
+    if cached is not None:
+        return cached
     hits = search_meta_site(text, limit)
-    if hits:
-        return hits
-    fallback = search_meta_via_brave(text, limit)
-    if fallback is not None:
-        return fallback
-    return hits or []
+    if not hits:
+        fallback = search_meta_via_brave(text, limit)
+        if fallback is not None:
+            hits = fallback
+    if hits is None:
+        # Neither backend answered: don't cache, the next ask may work.
+        return []
+    _cache_results(key, hits)
+    return hits
 
 
 def search_backends_configured() -> bool:

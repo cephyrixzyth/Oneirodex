@@ -28,30 +28,34 @@ _MIN_INTERVAL_SEC = {
 }
 
 
-def throttle(host_key):
-    """Wait out the per-host minimum interval (for callers that are not GETs)."""
+def _reserve_slot(host_key):
+    """Book this host's next request time, then wait for it outside the lock.
+
+    The lock only guards the bookkeeping. Sleeping while holding it made every
+    host wait behind the slowest one: a 1.5 s Meta store gap also stalled IGDB
+    and Steam lookups in parallel scans.
+    """
     min_interval = _MIN_INTERVAL_SEC.get(host_key, 0.5)
     with _lock:
         now = time.monotonic()
-        wait = min_interval - (now - _last_request_at.get(host_key, 0.0))
-        if wait > 0:
-            time.sleep(wait)
-        _last_request_at[host_key] = time.monotonic()
+        slot = max(now, _last_request_at.get(host_key, 0.0) + min_interval)
+        _last_request_at[host_key] = slot
+    wait = slot - now
+    if wait > 0:
+        time.sleep(wait)
+
+
+def throttle(host_key):
+    """Wait out the per-host minimum interval (for callers that are not GETs)."""
+    _reserve_slot(host_key)
 
 
 def request_with_backoff(url, *, host_key, params=None, timeout=5, max_retries=3, headers=None):
     """GET with per-host min interval and exponential backoff on 429/5xx/timeout."""
-    min_interval = _MIN_INTERVAL_SEC.get(host_key, 0.5)
     last_exc = None
 
     for attempt in range(max_retries):
-        with _lock:
-            now = time.monotonic()
-            last = _last_request_at.get(host_key, 0.0)
-            wait = min_interval - (now - last)
-            if wait > 0:
-                time.sleep(wait)
-            _last_request_at[host_key] = time.monotonic()
+        _reserve_slot(host_key)
 
         try:
             # Every host_key here is a public metadata/store provider, so the

@@ -445,12 +445,28 @@ def _news_items(user, limit):
 
 def _free_games_enabled() -> bool:
     """The admin switch for the free-games feed (Admin → Features)."""
-    try:
-        from flask import current_app
+    from oneirodex.runtime_native.runtime_context import get_runtime_config
 
-        return bool(current_app.config.get('ENABLE_FREE_GAMES', True))
-    except Exception:  # noqa: BLE001 — no app context means the default
-        return True
+    # The native runtime config is the live one. Flask is a dev-only
+    # dependency, so the old ``flask.current_app`` lookup raised ImportError in
+    # the Docker image and the switch always read as on.
+    config = get_runtime_config()
+    if config is None:
+        try:
+            from flask import current_app
+
+            config = current_app.config
+        except (ImportError, RuntimeError):
+            config = None
+    if config is not None:
+        return _config_flag(config.get('ENABLE_FREE_GAMES', True))
+    return _config_flag(os.getenv('ENABLE_FREE_GAMES', 'true'))
+
+
+def _config_flag(value) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() not in ('0', 'false', 'no', 'off', '')
+    return bool(value)
 
 
 def _free_game_items(user, limit):

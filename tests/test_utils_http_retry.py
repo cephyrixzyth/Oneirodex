@@ -78,3 +78,45 @@ def test_exhausted_request_log_omits_exception_url_and_credentials(
     assert 'http_retry exhausted for provider: ConnectionError' in logged
     assert secret not in logged
     assert 'provider.example' not in logged
+
+
+def test_rate_limit_waits_do_not_block_other_hosts(monkeypatch):
+    """A slow host's gap must not hold the shared lock (it stalled IGDB/Steam)."""
+    import threading
+
+    from oneirodex.utils import http_retry
+
+    monkeypatch.setitem(http_retry._last_request_at, 'meta_store', 0.0)
+    sleeping = threading.Event()
+    release = threading.Event()
+
+    def fake_sleep(seconds):
+        sleeping.set()
+        release.wait(2)
+
+    monkeypatch.setattr(http_retry.time, 'sleep', fake_sleep)
+    http_retry._last_request_at['meta_store'] = http_retry.time.monotonic()
+    worker = threading.Thread(target=http_retry.throttle, args=('meta_store',))
+    worker.start()
+    assert sleeping.wait(2)
+    try:
+        # The lock is free while meta_store waits.
+        assert http_retry._lock.acquire(timeout=0.5)
+        http_retry._lock.release()
+    finally:
+        release.set()
+        worker.join(2)
+
+
+def test_rate_limit_spaces_back_to_back_requests(monkeypatch):
+    from oneirodex.utils import http_retry
+
+    waits = []
+    monkeypatch.setattr(http_retry.time, 'sleep', waits.append)
+    clock = [5000.0]
+    monkeypatch.setattr(http_retry.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setitem(http_retry._last_request_at, 'meta_store', 0.0)
+    http_retry.throttle('meta_store')
+    http_retry.throttle('meta_store')
+    http_retry.throttle('meta_store')
+    assert waits == [1.5, 3.0]
