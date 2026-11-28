@@ -51,6 +51,10 @@ REPLACEMENT_MARGIN = 0.05
 _EVIDENCE_MATCH_MODES = frozenset({'meta_search_title_prefix', 'store_link'})
 RECHECK_AFTER = timedelta(days=30)
 MAX_REIDENTIFY_PER_SCAN = 25
+# resolve_folder_identity could not ask its sources (IGDB down, store lookup
+# error). Unlike None ("asked, no confident answer") this must not be stamped
+# as checked, or an outage hides wrong matches for RECHECK_AFTER.
+UNCHECKED = {'kind': 'unchecked'}
 
 
 def _now():
@@ -130,8 +134,8 @@ def resolve_folder_identity(game, library, forms: dict, *, match_policy: dict | 
     """What a fresh scan would match this folder to, without creating anything.
 
     Returns ``{'kind': 'igdb', 'payload': <IGDB game>}``, ``{'kind': 'store',
-    'candidate': <Stage D candidate>}`` or None (no confident answer, or IGDB
-    could not be asked).
+    'candidate': <Stage D candidate>}``, None (no confident answer) or
+    :data:`UNCHECKED` (IGDB or the store lookup could not be asked).
     """
     from oneirodex.utils.clients.igdb import IgdbUnavailable
     from oneirodex.utils.gamenames import generate_goty_variants
@@ -194,7 +198,7 @@ def resolve_folder_identity(game, library, forms: dict, *, match_policy: dict | 
                     return {'kind': 'igdb', 'payload': best}
     except IgdbUnavailable as exc:
         logger.warning('Match check skipped for %r: IGDB unavailable (%s)', game.name, exc)
-        return None
+        return UNCHECKED
 
     meta_app_id = parsed.get('meta_app_id')
     if not meta_app_id:
@@ -215,7 +219,7 @@ def resolve_folder_identity(game, library, forms: dict, *, match_policy: dict | 
         )
     except Exception as exc:  # noqa: BLE001 — a store miss must not break the scan
         logger.warning('Match check store lookup failed for %r: %s', game.name, exc)
-        store = None
+        return UNCHECKED
     if not store:
         return None
 
@@ -349,6 +353,9 @@ def recheck_game_match(game, library, *, match_policy=None, allowed_bases=None, 
     if is_person_chosen(game, allowed_bases=allowed_bases):
         return None
     result = resolve_folder_identity(game, library, forms, match_policy=match_policy)
+    if result is UNCHECKED:
+        # Nothing was learned; try again on the next scan.
+        return None
     stamp = now or _now()
     if result is None or _same_identity(game, result) or not _better_fit(forms, game, result):
         game.match_checked_at = _naive(stamp)

@@ -284,6 +284,8 @@ def apply_triage_title(game_uuid: str, title: str, *, config=None) -> dict[str, 
             'name': new_name,
         }
     game.name = new_name
+    # An admin chose this title: scans must not re-match it (match_audit).
+    game.match_locked = True
     db.session.commit()
     try:
         log_system_event(

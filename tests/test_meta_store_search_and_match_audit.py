@@ -21,6 +21,8 @@ from oneirodex.utils.meta_store import parse_meta_store_page
 from oneirodex.utils.meta_store_search import (
     parse_brave_results,
     parse_site_search_response,
+    reset_search_state,
+    search_meta_site,
     search_meta_store,
 )
 from oneirodex.utils.software_identify import (
@@ -29,6 +31,14 @@ from oneirodex.utils.software_identify import (
     meta_tail_corroborated,
     resolve_meta_store_search_candidate,
 )
+
+@pytest.fixture(autouse=True)
+def _fresh_search_state():
+    """Breaker counts and cached answers are module state; keep tests apart."""
+    reset_search_state()
+    yield
+    reset_search_state()
+
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'meta_store_golden_gloves.html'
 GOLDEN_GLOVES_ID = '5682829115084320'
@@ -111,6 +121,61 @@ def test_search_stays_offline_in_tests(app):
     with patch('oneirodex.utils.meta_store_search.search_meta_site') as site:
         assert search_meta_store('golden gloves') == []
     site.assert_not_called()
+
+
+def test_search_answers_are_cached_for_the_scan(app):
+    with patch('oneirodex.utils.meta_store_search._live_search_allowed', return_value=True), \
+            patch('oneirodex.utils.meta_store_search.search_meta_site', return_value=SEARCH_HITS) as site:
+        assert search_meta_store('Golden Gloves') == SEARCH_HITS
+        assert search_meta_store('golden gloves') == SEARCH_HITS
+    site.assert_called_once()
+
+
+def test_failed_search_is_not_cached(app):
+    with patch('oneirodex.utils.meta_store_search._live_search_allowed', return_value=True), \
+            patch('oneirodex.utils.meta_store_search.search_meta_site', return_value=None) as site, \
+            patch('oneirodex.utils.meta_store_search.search_meta_via_brave', return_value=None):
+        assert search_meta_store('golden gloves') == []
+        assert search_meta_store('golden gloves') == []
+    assert site.call_count == 2
+
+
+def test_meta_site_search_pauses_after_repeated_failures(app, monkeypatch):
+    """A changed Meta endpoint must not cost every folder of every scan."""
+    from oneirodex.utils import meta_store_search as mss
+
+    monkeypatch.setattr(mss, '_site_token', lambda refresh=False: 'tok')
+    posts = []
+    monkeypatch.setattr(mss, '_post_site_search', lambda q, limit, token: posts.append(q))
+    clock = [1000.0]
+    monkeypatch.setattr(mss.time, 'monotonic', lambda: clock[0])
+
+    for _ in range(mss.BREAKER_FAILURES):
+        assert search_meta_site('x') is None
+    calls = len(posts)
+    assert search_meta_site('x') is None
+    assert len(posts) == calls  # breaker open: not asked
+
+    clock[0] += mss.BREAKER_COOLDOWN_SEC + 1
+    assert search_meta_site('x') is None
+    assert len(posts) > calls  # one retry after the cool-down
+    calls = len(posts)
+    assert search_meta_site('x') is None
+    assert len(posts) == calls  # that retry failed: open again
+
+
+def test_meta_site_search_success_resets_the_breaker(app, monkeypatch):
+    from oneirodex.utils import meta_store_search as mss
+
+    monkeypatch.setattr(mss, '_site_token', lambda refresh=False: 'tok')
+    # Two failed searches (each: a post, a token refresh, a second post)...
+    answers = iter([None, None, None, None, SEARCH_HITS])
+    monkeypatch.setattr(mss, '_post_site_search', lambda q, limit, token: next(answers))
+    assert search_meta_site('x') is None
+    assert search_meta_site('x') is None
+    # ...then one that works clears the count.
+    assert search_meta_site('x') == SEARCH_HITS
+    assert not mss._breaker_open('meta_site')
 
 
 # --- scoring Meta hits like the other stores ---------------------------------
@@ -319,6 +384,31 @@ def test_rescan_keeps_a_match_nothing_fits_better(app, db_session, pc_library):
         assert audit_library_matches([game], pc_library) == []
     assert game.igdb_id == 1020 and game.name == 'Grand Theft Auto V'
     assert game.match_checked_at is not None
+
+
+@pytest.mark.integration
+def test_igdb_outage_does_not_mark_games_checked(app, db_session, pc_library):
+    """Nothing was searched, so the next scan must try again."""
+    from oneirodex.utils.clients.igdb import IgdbUnavailable
+
+    game = _game(db_session, pc_library, name='Star Trek: Armada', igdb_id=1100,
+                 path='/pc/_g/Star Trek Deep Space Nine Dominion Wars')
+    with patch('oneirodex.utils.services.scan_identify.search_igdb_for_game',
+               side_effect=IgdbUnavailable('down')):
+        assert audit_library_matches([game], pc_library) == []
+    assert game.match_checked_at is None
+    assert game.name == 'Star Trek: Armada'
+
+
+@pytest.mark.integration
+def test_store_lookup_error_does_not_mark_games_checked(app, db_session, pc_library):
+    game = _game(db_session, pc_library, name='Star Trek: Armada', igdb_id=1101,
+                 path='/pc/_g/Star Trek Deep Space Nine Dominion Wars')
+    with patch('oneirodex.utils.services.scan_identify.search_igdb_for_game', return_value=[]), \
+            patch('oneirodex.utils.software_identify.resolve_stage_d_store_candidate',
+                  side_effect=RuntimeError('store down')):
+        assert audit_library_matches([game], pc_library) == []
+    assert game.match_checked_at is None
 
 
 @pytest.mark.integration

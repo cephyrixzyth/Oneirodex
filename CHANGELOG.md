@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-11-28
+
+### Fixed
+
+- **Wrong matches are no longer hidden for a month after an IGDB outage.** The post-scan check that fixes wrong matches marked a game as checked even when IGDB or a store lookup could not be reached, so it skipped that game for 30 days. It now tries again on the next scan.
+- **Turning off Free games now hides the Discover Free games row** in the Docker image. The row read its switch through a library only present in development installs, so it always showed, including stale giveaways with no end date.
+- **Scans no longer slow to a crawl if Meta changes its store search.** After three failed searches in a row, Meta store search (and the Brave fallback) pauses for an hour instead of being retried for every unmatched PC folder, and answers are reused for 15 minutes so one scan asks Meta about a title once.
+- **Parallel scans no longer wait on each other's rate limits.** A pause between requests to one site (for example the Meta store's 1.5 s) used to hold up IGDB, Steam and every other lookup in other scans at the same time.
+- A title applied from AI triage is now kept by later scans, like one chosen in manual identify.
+
 ## [1.5.0] — 2026-11-28
 
 ### Changed
